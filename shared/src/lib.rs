@@ -27,6 +27,13 @@ pub use namada_core::proto;
 pub mod types;
 pub mod vm;
 
+pub mod eth_bridge {
+    //! Namada Ethereum bridge re-exports.
+    pub use ethers;
+    pub use namada_core::types::ethereum_structs as structs;
+    pub use namada_ethereum_bridge::*;
+}
+
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;

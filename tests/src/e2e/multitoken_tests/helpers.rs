@@ -1,11 +1,11 @@
 //! Helpers for use in multitoken tests.
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
 use namada_core::types::address::Address;
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_core::types::{storage, token};
 use namada_test_utils::tx_data::TxWriteData;
 use namada_test_utils::TestWasms;
@@ -15,7 +15,7 @@ use regex::Regex;
 
 use super::setup::constants::NAM;
 use super::setup::{Bin, NamadaCmd, Test};
-use crate::e2e::setup::constants::ALBERT;
+use crate::e2e::setup::constants::{ALBERT, ALBERT_KEY};
 use crate::run;
 
 const MULTITOKEN_KEY_SEGMENT: &str = "tokens";
@@ -24,6 +24,7 @@ const RED_TOKEN_KEY_SEGMENT: &str = "red";
 const MULTITOKEN_RED_TOKEN_SUB_PREFIX: &str = "tokens/red";
 
 const ARBITRARY_SIGNER: &str = ALBERT;
+const ARBITRARY_SIGNER_KEY: &str = ALBERT_KEY;
 
 /// Initializes a VP to represent a multitoken account.
 pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
@@ -113,8 +114,8 @@ pub fn mint_red_tokens(
     let tx_code_path = tx_code_path.to_string_lossy().to_string();
     let tx_args = vec![
         "tx",
-        "--signer",
-        ARBITRARY_SIGNER,
+        "--signing-keys",
+        ARBITRARY_SIGNER_KEY,
         "--code-path",
         &tx_code_path,
         "--data-path",
@@ -135,10 +136,10 @@ pub fn attempt_red_tokens_transfer(
     multitoken: &str,
     from: &str,
     to: &str,
-    signer: &str,
+    signing_keys: &str,
     amount: &token::Amount,
 ) -> Result<NamadaCmd> {
-    let amount = amount.to_string();
+    let amount = amount.to_string_native();
     let transfer_args = vec![
         "transfer",
         "--token",
@@ -149,8 +150,8 @@ pub fn attempt_red_tokens_transfer(
         from,
         "--target",
         to,
-        "--signer",
-        signer,
+        "--signing-keys",
+        signing_keys,
         "--amount",
         &amount,
         "--ledger-address",
@@ -184,6 +185,6 @@ pub fn fetch_red_token_balance(
     println!("Got balance for {}: {}", owner_alias, matched);
     let decimal = decimal_regex.find(&matched).unwrap().as_str();
     client_balance.assert_success();
-    token::Amount::from_str(decimal)
+    token::Amount::from_str(decimal, NATIVE_MAX_DECIMAL_PLACES)
         .wrap_err(format!("Failed to parse {}", matched))
 }

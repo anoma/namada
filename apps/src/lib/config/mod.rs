@@ -1,5 +1,6 @@
 //! Node and client configuration
 
+pub mod ethereum_bridge;
 pub mod genesis;
 pub mod global;
 pub mod utils;
@@ -95,6 +96,7 @@ pub struct Ledger {
     pub chain_id: ChainId,
     pub shell: Shell,
     pub cometbft: TendermintConfig,
+    pub ethereum_bridge: ethereum_bridge::ledger::Config,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -151,6 +153,7 @@ impl Ledger {
                 tendermint_mode: mode,
             },
             cometbft: tendermint_config,
+            ethereum_bridge: ethereum_bridge::ledger::Config::default(),
         }
     }
 
@@ -390,7 +393,7 @@ moniker = "technodrome"
 # allows them to catchup quickly by downloading blocks in parallel
 # and verifying their commits
 #
-# Deprecated: this key will be removed and BlockSync will be enabled 
+# Deprecated: this key will be removed and BlockSync will be enabled
 # unconditionally in the next major release.
 block_sync = true
 
@@ -736,7 +739,7 @@ chunk_fetchers = "4"
 [blocksync]
 
 # Block Sync version to use:
-# 
+#
 # In v0.37, v1 and v2 of the block sync protocols were deprecated.
 # Please use v0 instead.
 #

@@ -69,7 +69,7 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{self, PosParams};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
@@ -78,6 +78,7 @@ use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
@@ -88,6 +89,7 @@ use prost::Message;
 use setup::constants::*;
 
 use super::helpers::wait_for_wasm_pre_compile;
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
@@ -95,6 +97,20 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup_two_single_node_nets()?;
+    set_ethereum_bridge_mode(
+        &test_a,
+        &test_a.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test_b,
+        &test_b.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // Run Chain A
     let mut ledger_a = run_as!(
@@ -703,7 +719,7 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         ALBERT_KEY,
         port_channel_id_a,
         None,
@@ -773,6 +789,7 @@ fn transfer_received_token(
         .to_string();
 
     let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
         "transfer",
         "--source",
@@ -784,7 +801,7 @@ fn transfer_received_token(
         "--sub-prefix",
         &sub_prefix,
         "--amount",
-        "50000",
+        &amount,
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -830,7 +847,7 @@ fn transfer_back(
         BERTHA,
         &receiver,
         NAM,
-        &Amount::whole(50000),
+        &Amount::native_whole(50000),
         BERTHA_KEY,
         port_channel_id_b,
         Some(sub_prefix),
@@ -891,7 +908,7 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         ALBERT_KEY,
         port_channel_id_a,
         None,
@@ -1044,7 +1061,7 @@ fn transfer(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
     let receiver = receiver.to_string();
-    let amount = amount.to_string();
+    let amount = amount.to_string_native();
     let port_id = port_channel_id.port_id.to_string();
     let channel_id = port_channel_id.channel_id.to_string();
     let mut tx_args = vec![

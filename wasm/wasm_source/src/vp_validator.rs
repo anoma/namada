@@ -17,7 +17,7 @@ use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
-    Token(&'a Address),
+    Token { owner: &'a Address },
     PoS,
     Vp(&'a Address),
     GovernanceVote(&'a Address),
@@ -26,12 +26,12 @@ enum KeyType<'a> {
 
 impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = token::is_any_token_balance_key(key) {
-            Self::Token(address)
-        } else if let Some((_, address)) =
+        if let Some([_, owner]) = token::is_any_token_balance_key(key) {
+            Self::Token { owner }
+        } else if let Some((_, [_, owner])) =
             token::is_any_multitoken_balance_key(key)
         {
-            Self::Token(address)
+            Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::is_vote_key(key) {
@@ -74,7 +74,7 @@ fn validate_tx(
     for key in keys_changed.iter() {
         let key_type: KeyType = key.into();
         let is_valid = match key_type {
-            KeyType::Token(owner) => {
+            KeyType::Token { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
                         ctx.read_pre(key)?.unwrap_or_default();
@@ -82,9 +82,9 @@ fn validate_tx(
                         ctx.read_post(key)?.unwrap_or_default();
                     let change = post.change() - pre.change();
                     // debit has to signed, credit doesn't
-                    let valid = change >= 0 || *valid_sig;
+                    let valid = change.non_negative() || *valid_sig;
                     debug_log!(
-                        "token key: {}, change: {}, valid_sig: {}, valid \
+                        "token key: {}, change: {:?}, valid_sig: {}, valid \
                          modification: {}",
                         key,
                         change,
@@ -186,6 +186,7 @@ mod tests {
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::proto::{Code, Data, MultiSignature};
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
@@ -199,7 +200,6 @@ mod tests {
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
-    use rust_decimal::Decimal;
     use storage::testing::arb_account_storage_key_no_vp;
 
     use super::*;
@@ -230,7 +230,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
@@ -238,7 +238,19 @@ mod tests {
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
@@ -278,7 +290,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -286,6 +298,18 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -328,7 +352,7 @@ mod tests {
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -337,6 +361,19 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -360,8 +397,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));
@@ -384,10 +422,12 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from(10_098_123);
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = Decimal::new(5, 2);
-        let max_commission_rate_change = Decimal::new(1, 2);
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
@@ -395,6 +435,8 @@ mod tests {
             consensus_key,
             commission_rate,
             max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -407,9 +449,9 @@ mod tests {
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
-        let bond_amount = token::Amount::from(5_098_123);
-        let unbond_amount = token::Amount::from(3_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
@@ -418,6 +460,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -431,7 +481,7 @@ mod tests {
             tx::ctx()
                 .change_validator_commission_rate(
                     &validator,
-                    &Decimal::new(6, 2),
+                    &Dec::new(6, 2).unwrap(),
                 )
                 .unwrap();
         });
@@ -456,10 +506,10 @@ mod tests {
         // Init PoS genesis
         let pos_params = PosParams::default();
         let validator = address::testing::established_address_3();
-        let initial_stake = token::Amount::from(10_098_123);
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
-        let commission_rate = Decimal::new(5, 2);
-        let max_commission_rate_change = Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
 
         let genesis_validators = [GenesisValidator {
             address: validator.clone(),
@@ -467,6 +517,14 @@ mod tests {
             consensus_key,
             commission_rate,
             max_commission_rate_change,
+            eth_hot_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
+            eth_cold_key: key::common::PublicKey::Secp256k1(
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to(),
+            ),
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -479,9 +537,9 @@ mod tests {
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
-        let bond_amount = token::Amount::from(5_098_123);
-        let unbond_amount = token::Amount::from(3_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
+        let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
@@ -490,6 +548,14 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(
+            &mut tx_env.wl_storage,
+            &token,
+            None,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -503,7 +569,7 @@ mod tests {
             tx::ctx()
                 .change_validator_commission_rate(
                     &validator,
-                    &Decimal::new(6, 2),
+                    &Dec::new(6, 2).unwrap(),
                 )
                 .unwrap();
         });
@@ -513,8 +579,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[secret_key],
             &pks_map,
         )));
@@ -540,7 +607,7 @@ mod tests {
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &target, &token]);
@@ -548,6 +615,10 @@ mod tests {
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
         tx_env.credit_tokens(&source, &token, None, amount);
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -671,11 +742,8 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::SectionSignature(MultiSignature::new(
-                tx.data_sechash(),
-                &[keypair],
-                &pks_map,
-            )));
+            tx.set_code(Code::new(vec![]));
+            tx.add_section(Section::SectionSignature(MultiSignature::new(vec![*tx.data_sechash(), *tx.code_sechash()], &[keypair], &pks_map)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
@@ -756,8 +824,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));
@@ -810,8 +879,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));
@@ -865,8 +935,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));
@@ -920,8 +991,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));
@@ -974,15 +1046,10 @@ mod tests {
 
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
-        tx.set_code(Code::from_hash(vp_hash));
+        tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.data_sechash(),
-            &[keypair.clone()],
-            &pks_map,
-        )));
-        tx.add_section(Section::SectionSignature(MultiSignature::new(
-            tx.code_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &[keypair],
             &pks_map,
         )));

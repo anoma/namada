@@ -24,11 +24,13 @@ use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
@@ -36,7 +38,7 @@ use setup::constants::*;
 use super::helpers::{
     get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
 };
-use super::setup::get_all_wasms_hashes;
+use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
 };
@@ -49,6 +51,15 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
 
     // Start the ledger as a validator
@@ -82,6 +93,21 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         |genesis| setup::set_validators(2, genesis, default_port_offset),
         None,
     )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
     let args = ["ledger"];
@@ -134,6 +160,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -182,6 +209,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
     let test = setup::single_node_net()?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -217,6 +252,14 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -361,6 +404,14 @@ fn stop_ledger_at_height() -> Result<()> {
 fn ledger_txs_and_queries() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -374,7 +425,10 @@ fn ledger_txs_and_queries() -> Result<()> {
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
         sub_prefix: None,
-        amount: token::Amount::whole(10),
+        amount: token::DenominatedAmount {
+            amount: token::Amount::native_whole(10),
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        },
         key: None,
         shielded: None,
     }
@@ -409,7 +463,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-        // Submit a token transfer tx (from an implicit account)
+        // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
             "transfer",
             "--source",
@@ -428,6 +482,26 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--signing-keys",
             DAEWON,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // Submit a token transfer tx (from a secp256k1 implicit account)
+        vec![
+            "transfer",
+            "--source",
+            ESTER,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
             "--node",
             &validator_one_rpc,
         ],
@@ -513,7 +587,9 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     for tx_args in &txs_args {
         for &dry_run in &[true, false] {
-            let tx_args = if dry_run {
+            let tx_args = if dry_run && tx_args[0] == "tx" {
+                continue;
+            } else if dry_run {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
@@ -553,7 +629,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     }
     let christel = find_address(&test, CHRISTEL)?;
     // as setup in `genesis/e2e-tests-single-node.toml`
-    let christel_balance = token::Amount::whole(1000000);
+    let christel_balance = token::Amount::native_whole(1000000);
     let nam = find_address(&test, NAM)?;
     let storage_key = token::balance_key(&nam, &christel).to_string();
     let query_args_and_expected_response = vec![
@@ -618,6 +694,13 @@ fn masp_txs_and_queries() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -630,7 +713,6 @@ fn masp_txs_and_queries() -> Result<()> {
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // the extra argument in the tuple is for flagging extra checks below
-
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -857,7 +939,7 @@ fn masp_txs_and_queries() -> Result<()> {
             } else {
                 tx_args.clone()
             };
-            let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
+            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
@@ -890,7 +972,7 @@ fn masp_pinned_txs() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(60),
+                epochs_per_year: epochs_per_year_from_min_duration(120),
                 ..genesis.parameters
             };
             GenesisConfig {
@@ -900,6 +982,13 @@ fn masp_pinned_txs() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -952,6 +1041,9 @@ fn masp_pinned_txs() -> Result<()> {
     client.exp_string("has not yet been consumed")?;
     client.assert_success();
 
+    // Wait till epoch boundary
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
     // Send 20 BTC from Albert to PPA(C)
     let mut client = run!(
         test,
@@ -971,8 +1063,14 @@ fn masp_pinned_txs() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
+
+    // Wait till epoch boundary
+    // This makes it more consistent for some reason?
+    let _ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // Assert PPA(C) has the 20 BTC transaction pinned to it
     let mut client = run!(
@@ -1042,6 +1140,10 @@ fn masp_pinned_txs() -> Result<()> {
 
 #[test]
 fn masp_incentives() -> Result<()> {
+    // The number of decimal places used by BTC amounts.
+    const BTC_DENOMINATION: u8 = 8;
+    // The number of decimal places used by ETH amounts.
+    const ETH_DENOMINATION: u8 = 18;
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
@@ -1051,7 +1153,7 @@ fn masp_incentives() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 240 } else { 60 },
+                    if is_debug_mode() { 340 } else { 85 },
                 ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
@@ -1063,6 +1165,13 @@ fn masp_incentives() -> Result<()> {
         },
         None,
     )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -1096,6 +1205,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1112,7 +1223,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1130,7 +1241,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1153,13 +1264,13 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
 
-    let amt20 = token::Amount::from_str("20").unwrap();
-    let amt30 = token::Amount::from_str("30").unwrap();
+    let amt20 = token::Amount::from_uint(20, BTC_DENOMINATION).unwrap();
+    let amt10 = token::Amount::from_uint(10, ETH_DENOMINATION).unwrap();
 
     // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
     let mut client = run!(
@@ -1174,12 +1285,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
@@ -1195,12 +1308,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1219,7 +1334,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("btc: 20")?;
     client.assert_success();
@@ -1237,12 +1352,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
@@ -1258,18 +1375,20 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
     let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from Albert to PA(B)
+    // Send 10 ETH from Albert to PA(B)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1282,16 +1401,18 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "30",
+            "10",
             "--node",
             &validator_one_rpc
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
-    // Assert ETH balance at VK(B) is 30
+    // Assert ETH balance at VK(B) is 10
     let mut client = run!(
         test,
         Bin::Client,
@@ -1304,9 +1425,9 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string("eth: 30")?;
+    client.exp_string("eth: 10")?;
     client.assert_success();
 
     // Assert NAM balance at VK(B) is 0
@@ -1322,7 +1443,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1330,7 +1451,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Assert ETH balance at VK(B) is 30
+    // Assert ETH balance at VK(B) is 10
     let mut client = run!(
         test,
         Bin::Client,
@@ -1343,12 +1464,12 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string("eth: 30")?;
+    client.exp_string("eth: 10")?;
     client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_4-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1361,16 +1482,18 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_4-epoch_0)+30*ETH_reward*(epoch_4-epoch_3)
+    // 20*BTC_reward*(epoch_4-epoch_0)+10*ETH_reward*(epoch_4-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1383,19 +1506,21 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
     // Wait till epoch boundary
     let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30 ETH from SK(B) to Christel
+    // Send 10 ETH from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
@@ -1408,7 +1533,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "30",
+            "10",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -1416,6 +1541,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1432,14 +1559,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded eth balance found")?;
     client.assert_success();
 
-    let mut ep = get_epoch(&test, &validator_one_rpc)?;
+    // let mut ep = get_epoch(&test, &validator_one_rpc)?;
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(ep-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1452,17 +1579,19 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
-    ep = get_epoch(&test, &validator_one_rpc)?;
+    // ep = get_epoch(&test, &validator_one_rpc)?;
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_5-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1475,13 +1604,15 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep5.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1508,6 +1639,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1524,7 +1657,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded btc balance found")?;
     client.assert_success();
@@ -1542,12 +1675,14 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
@@ -1564,13 +1699,15 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary
@@ -1589,15 +1726,17 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)
-    ))?;
+    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated))?;
     client.assert_success();
 
-    // Assert NAM balance at VK(B) is 30*ETH_reward*(epoch_5-epoch_3)
+    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1610,16 +1749,18 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        (amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)
-    ))?;
+    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+30*ETH_reward*(epoch_5-epoch_3)
+    // 20*BTC_reward*(epoch_6-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
     let mut client = run!(
         test,
         Bin::Client,
@@ -1632,20 +1773,22 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
-    client.exp_string(&format!(
-        "nam: {}",
-        ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
-            + ((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
-    ))?;
+    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let denominated = DenominatedAmount {
+        amount: amt,
+        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+    };
+    client.exp_string(&format!("nam: {}", denominated,))?;
     client.assert_success();
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
     let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
-    // Send 30*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
+    // Send 10*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
     let mut client = run!(
         test,
         Bin::Client,
@@ -1658,7 +1801,8 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt30 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0)).to_string(),
+            &((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0))
+                .to_string_native(),
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -1666,6 +1810,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1685,7 +1831,8 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0)).to_string(),
+            &((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+                .to_string_native(),
             "--signing-keys",
             ALBERT_KEY,
             "--node",
@@ -1693,6 +1840,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(300)
     )?;
+    client.exp_string("Transaction accepted")?;
+    client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is valid")?;
     client.assert_success();
 
@@ -1709,7 +1858,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1727,7 +1876,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("No shielded nam balance found")?;
     client.assert_success();
@@ -1745,7 +1894,7 @@ fn masp_incentives() -> Result<()> {
             "--node",
             &validator_one_rpc
         ],
-        Some(300)
+        Some(60)
     )?;
     client.exp_string("nam: 0")?;
     client.assert_success();
@@ -1762,6 +1911,14 @@ fn masp_incentives() -> Result<()> {
 #[test]
 fn invalid_transactions() -> Result<()> {
     let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -1827,6 +1984,8 @@ fn invalid_transactions() -> Result<()> {
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
+    // Wait for a block by which time the RPC should be ready
+    ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
     // we need to wait for the rpc endpoint to start
@@ -1845,7 +2004,7 @@ fn invalid_transactions() -> Result<()> {
         "--token",
         BERTHA,
         "--amount",
-        "1_000_000.1",
+        "1000000.1",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -1907,6 +2066,14 @@ fn pos_bonds() -> Result<()> {
         None,
     )?;
 
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
     // 1. Run the ledger node
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
@@ -1936,6 +2103,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1960,6 +2128,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -1983,7 +2152,8 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Amount 5100 withdrawable starting from epoch ")?;
+    client
+        .exp_string("Amount 5100.000000 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -2007,7 +2177,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 3200 withdrawable starting from epoch ";
+    let expected = "Amount 3200.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
@@ -2054,6 +2224,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2076,6 +2247,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
     Ok(())
@@ -2087,7 +2259,7 @@ fn pos_rewards() -> Result<()> {
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
-                min_num_of_blocks: 3,
+                min_num_of_blocks: 4,
                 epochs_per_year: 31_536_000,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
@@ -2106,6 +2278,16 @@ fn pos_rewards() -> Result<()> {
         },
         None,
     )?;
+
+    for i in 0..3 {
+        set_ethereum_bridge_mode(
+            &test,
+            &test.net.chain_id,
+            &Who::Validator(i),
+            ethereum_bridge::ledger::Mode::Off,
+            None,
+        );
+    }
 
     // 1. Run 3 genesis validator ledger nodes
     let mut validator_0 =
@@ -2156,6 +2338,7 @@ fn pos_rewards() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2193,6 +2376,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2307,6 +2491,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2344,6 +2529,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -2368,18 +2554,19 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
+    let (_, res) = client
+        .exp_regex(r"withdrawable starting from epoch [0-9]+")
+        .unwrap();
+    let withdraw_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
     client.assert_success();
 
-    // 6. Wait for epoch 7
-    let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    // 6. Wait for withdraw_epoch
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
-            panic!("Timed out waiting for epoch: {}", 7);
-        }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
-        if epoch >= Epoch(7) {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        if epoch >= withdraw_epoch {
             break;
         }
     }
@@ -2388,11 +2575,11 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(
-        "All bonds total active: 200088\r
-All bonds total: 200088\r
-All unbonds total active: 412\r
-All unbonds total: 412\r
-All unbonds total withdrawable: 412\r",
+        "All bonds total active: 200088.000000\r
+All bonds total: 200088.000000\r
+All unbonds total active: 412.000000\r
+All unbonds total: 412.000000\r
+All unbonds total withdrawable: 412.000000\r",
     )?;
     client.assert_success();
 
@@ -2641,7 +2828,7 @@ fn pos_init_validator() -> Result<()> {
         find_bonded_stake(&test, new_validator, &non_validator_rpc)?;
     assert_eq!(
         bonded_stake,
-        token::Amount::whole(validator_stake + delegation)
+        token::Amount::native_whole(validator_stake + delegation)
     );
 
     Ok(())
@@ -2658,6 +2845,14 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),
     )?);
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -2965,7 +3160,7 @@ fn proposal_submission() -> Result<()> {
     // 9. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3030,7 +3225,7 @@ fn proposal_submission() -> Result<()> {
     // 11. Query the proposal and check the result
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 25 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3049,7 +3244,7 @@ fn proposal_submission() -> Result<()> {
     // 12. Wait proposal grace and check proposal author funds
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 < 31 {
-        sleep(1);
+        sleep(10);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -3333,7 +3528,7 @@ fn pgf_governance_proposal() -> Result<()> {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(1),
                 max_proposal_bytes: Default::default(),
-                min_num_of_blocks: 1,
+                min_num_of_blocks: 4,
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
@@ -3345,6 +3540,14 @@ fn pgf_governance_proposal() -> Result<()> {
         },
         None,
     )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     let namadac_help = vec!["--help"];
 
@@ -3380,7 +3583,8 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3397,7 +3601,8 @@ fn pgf_governance_proposal() -> Result<()> {
         "--ledger-address",
         &validator_one_rpc,
     ];
-    client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3503,6 +3708,7 @@ fn pgf_governance_proposal() -> Result<()> {
         submit_proposal_vote,
         Some(15)
     )?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3522,7 +3728,9 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3541,7 +3749,11 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    client = run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
+    // this is valid because the client filter ALBERT delegation and there are
+    // none
+    let mut client =
+        run!(test, Bin::Client, submit_proposal_vote_delagator, Some(15))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -3626,7 +3838,42 @@ fn pgf_governance_proposal() -> Result<()> {
 /// 4. Tally offline
 #[test]
 fn proposal_offline() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let working_dir = setup::working_dir();
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(1),
+                max_proposal_bytes: Default::default(),
+                min_num_of_blocks: 4,
+                max_expected_time_per_block: 1,
+                vp_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("vp_"),
+                )),
+                // Enable tx whitelist to test the execution of a
+                // non-whitelisted tx by governance
+                tx_whitelist: Some(get_all_wasms_hashes(
+                    &working_dir,
+                    Some("tx_"),
+                )),
+                ..genesis.parameters
+            };
+
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let mut ledger =
@@ -3656,6 +3903,7 @@ fn proposal_offline() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -4028,6 +4276,8 @@ fn test_genesis_validators() -> Result<()> {
 
     // We have to update the ports in the configs again, because the ones from
     // `join-network` use the defaults
+    //
+    // TODO: use `update_actor_config` from `setup`, instead
     let update_config = |ix: u8, mut config: Config| {
         let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
         let p2p_addr =
@@ -4099,9 +4349,19 @@ fn test_genesis_validators() -> Result<()> {
     non_validator.exp_string("Namada ledger node started")?;
     non_validator.exp_string("This node is not a validator")?;
 
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
+
     wait_for_wasm_pre_compile(&mut validator_0)?;
     wait_for_wasm_pre_compile(&mut validator_1)?;
     wait_for_wasm_pre_compile(&mut non_validator)?;
+
+    // Wait for a first block
+    validator_0.exp_string("Committed block hash")?;
+    validator_1.exp_string("Committed block hash")?;
+    non_validator.exp_string("Committed block hash")?;
 
     let bg_validator_0 = validator_0.background();
     let bg_validator_1 = validator_1.background();
@@ -4130,6 +4390,7 @@ fn test_genesis_validators() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
@@ -4201,6 +4462,21 @@ fn double_signing_gets_slashed() -> Result<()> {
         |genesis| setup::set_validators(2, genesis, default_port_offset),
         None,
     )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run 2 genesis validator ledger nodes
     let args = ["ledger"];

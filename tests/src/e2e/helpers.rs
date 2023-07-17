@@ -1,15 +1,20 @@
 //! E2E test helpers
 
+use std::future::Future;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{env, time};
 
+use borsh::BorshDeserialize;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
+use namada::ledger::queries::{Rpc, RPC};
+use namada::tendermint_rpc::HttpClient;
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
@@ -17,6 +22,7 @@ use namada::types::token;
 use namada_apps::config::genesis::genesis_config;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
 use super::setup::{
     self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
@@ -25,12 +31,35 @@ use super::setup::{
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
 use crate::{run, run_as};
 
+/// Instantiate a new [`HttpClient`] to perform RPC requests with.
+#[allow(dead_code)]
+pub async fn rpc_client_do<'fut, 'usr, U, A, F, R>(
+    ledger_address: &str,
+    user_data: U,
+    mut action: A,
+) -> R
+where
+    'usr: 'fut,
+    U: 'usr,
+    A: FnMut(Rpc, HttpClient, U) -> F,
+    F: Future<Output = R> + 'fut,
+{
+    let client =
+        HttpClient::new(ledger_address).expect("Invalid ledger address");
+    action(RPC, client, user_data).await
+}
+
 /// Sets up a test chain with a single validator node running in the background,
 /// and returns the [`Test`] handle and [`NamadaBgCmd`] for the validator node.
 /// It blocks until the node is ready to receive RPC requests from
 /// `namadac`.
 pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
     let test = setup::single_node_net()?;
+    run_single_node_test_from(test)
+}
+
+/// Same as [`setup_single_node_test`], but use a pre-existing test directory.
+pub fn run_single_node_test_from(test: Test) -> Result<(Test, NamadaBgCmd)> {
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_string("Namada ledger node started")?;
@@ -41,6 +70,7 @@ pub fn setup_single_node_test() -> Result<(Test, NamadaBgCmd)> {
     Ok((test, ledger.background()))
 }
 
+/// Initialize an established account.
 pub fn init_established_account(
     test: &Test,
     rpc_addr: &str,
@@ -89,6 +119,41 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
     })?;
     println!("Found {}", address);
     Ok(address)
+}
+
+/// Find the balance of specific token for an account.
+#[allow(dead_code)]
+pub fn find_balance(
+    test: &Test,
+    node: &Who,
+    token: &Address,
+    owner: &Address,
+) -> Result<token::Amount> {
+    let ledger_address = get_actor_rpc(test, node);
+    let balance_key = token::balance_key(token, owner);
+    let mut bytes = run!(
+        test,
+        Bin::Client,
+        &[
+            "query-bytes",
+            "--storage-key",
+            &balance_key.to_string(),
+            "--ledger-address",
+            &ledger_address,
+        ],
+        Some(10)
+    )?;
+    let (_, matched) = bytes.exp_regex("Found data: 0x.*")?;
+    let data_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1[2..]
+        .to_string();
+    let amount =
+        token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
+    bytes.assert_success();
+    Ok(amount)
 }
 
 /// Find the address of the node's RPC endpoint.
@@ -192,12 +257,13 @@ pub fn find_bonded_stake(
         .rsplit_once(' ')
         .unwrap()
         .1;
-    token::Amount::from_str(bonded_stake_str).map_err(|e| {
-        eyre!(format!(
-            "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
-            bonded_stake_str, matched, e, unread
-        ))
-    })
+    token::Amount::from_str(bonded_stake_str, NATIVE_MAX_DECIMAL_PLACES)
+        .map_err(|e| {
+            eyre!(format!(
+                "Bonded stake: {} parsed from {}, Error: {}\n\nOutput: {}",
+                bonded_stake_str, matched, e, unread
+            ))
+        })
 }
 
 /// Get the last committed epoch.
@@ -345,7 +411,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     }
 }
 
-fn strip_trailing_newline(input: &str) -> &str {
+pub(crate) fn strip_trailing_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")
         .or_else(|| input.strip_suffix('\n'))

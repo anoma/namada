@@ -1,5 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
+use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::transaction::pos::InitValidator;
 use namada_core::types::{key, token};
@@ -7,9 +8,9 @@ pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, change_validator_commission_rate,
     read_pos_params, unbond_tokens, unjail_validator, withdraw_tokens,
+    BecomeValidator,
 };
 pub use namada_proof_of_stake::{parameters, types};
-use rust_decimal::Decimal;
 
 use super::*;
 
@@ -56,7 +57,7 @@ impl Ctx {
     pub fn change_validator_commission_rate(
         &mut self,
         validator: &Address,
-        rate: &Decimal,
+        rate: &Dec,
     ) -> TxResult {
         let current_epoch = self.get_block_epoch()?;
         change_validator_commission_rate(self, validator, *rate, current_epoch)
@@ -76,6 +77,8 @@ impl Ctx {
             account_keys,
             threshold,
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             protocol_key,
             dkg_key,
             commission_rate,
@@ -97,17 +100,21 @@ impl Ctx {
         self.write(&protocol_pk_key, &protocol_key)?;
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);
         self.write(&dkg_pk_key, &dkg_key)?;
+        let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
+        let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
 
         let params = read_pos_params(self)?;
-        become_validator(
-            self,
-            &params,
-            &validator_address,
-            &consensus_key,
+        become_validator(BecomeValidator {
+            storage: self,
+            params: &params,
+            address: &validator_address,
+            consensus_key: &consensus_key,
+            eth_cold_key: &eth_cold_key,
+            eth_hot_key: &eth_hot_key,
             current_epoch,
             commission_rate,
             max_commission_rate_change,
-        )?;
+        })?;
 
         Ok(validator_address)
     }

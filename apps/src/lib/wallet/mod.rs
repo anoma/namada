@@ -188,29 +188,47 @@ pub fn read_and_confirm_passphrase_tty(
 /// we should re-use a keypair already in the wallet
 pub fn gen_validator_keys<U: WalletUtils>(
     wallet: &mut Wallet<U>,
+    eth_bridge_pk: Option<common::PublicKey>,
     protocol_pk: Option<common::PublicKey>,
-    scheme: SchemeType,
+    protocol_key_scheme: SchemeType,
 ) -> Result<ValidatorKeys, FindKeyError> {
-    let protocol_keypair = protocol_pk.map(|pk| {
-        wallet
-            .find_key_by_pkh(&PublicKeyHash::from(&pk), None)
-            .ok()
-            .or_else(|| {
-                wallet
-                    .store_mut()
-                    .validator_data()
-                    .take()
-                    .map(|data| data.keys.protocol_keypair.clone())
-            })
-            .ok_or(FindKeyError::KeyNotFound)
-    });
-    match protocol_keypair {
-        Some(Err(err)) => Err(err),
-        other => Ok(store::gen_validator_keys(
-            other.map(|res| res.unwrap()),
-            scheme,
-        )),
-    }
+    let protocol_keypair = find_secret_key(wallet, protocol_pk, |data| {
+        data.keys.protocol_keypair.clone()
+    })?;
+    let eth_bridge_keypair = find_secret_key(wallet, eth_bridge_pk, |data| {
+        data.keys.eth_bridge_keypair.clone()
+    })?;
+    Ok(store::gen_validator_keys(
+        eth_bridge_keypair,
+        protocol_keypair,
+        protocol_key_scheme,
+    ))
+}
+
+/// Find a corresponding [`common::SecretKey`] in [`Wallet`], for some
+/// [`common::PublicKey`].
+///
+/// If a key was provided in `maybe_pk`, and it's found in [`Wallet`], we use
+/// `extract_key` to retrieve it from [`ValidatorData`].
+fn find_secret_key<F, U>(
+    wallet: &mut Wallet<U>,
+    maybe_pk: Option<common::PublicKey>,
+    extract_key: F,
+) -> Result<Option<common::SecretKey>, FindKeyError>
+where
+    F: Fn(&ValidatorData) -> common::SecretKey,
+    U: WalletUtils,
+{
+    maybe_pk
+        .map(|pk| {
+            wallet
+                // TODO: optionally encrypt validator keys
+                .find_key_by_pkh(&PublicKeyHash::from(&pk), None)
+                .ok()
+                .or_else(|| wallet.get_validator_data().map(extract_key))
+                .ok_or(FindKeyError::KeyNotFound)
+        })
+        .transpose()
 }
 
 /// Add addresses from a genesis configuration.

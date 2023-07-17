@@ -236,7 +236,7 @@ where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    let storage_iter = storage.db.iter_optional_prefix(Some(prefix)).peekable();
+    let storage_iter = storage.db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_pre(prefix).peekable();
     (
         PrefixIter {
@@ -261,7 +261,7 @@ where
     D: DB + for<'iter_> DBIter<'iter_>,
     H: StorageHasher,
 {
-    let storage_iter = storage.db.iter_optional_prefix(Some(prefix)).peekable();
+    let storage_iter = storage.db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_post(prefix).peekable();
     (
         PrefixIter {
@@ -464,6 +464,8 @@ where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
 {
+    // N.B. Calling this when testing pre- and post- reads in
+    // regards to testing native vps is incorrect.
     fn write_bytes(
         &mut self,
         key: &storage::Key,
@@ -498,6 +500,8 @@ mod tests {
 
     use super::*;
     use crate::ledger::storage::testing::TestWlStorage;
+    use crate::types::address::InternalAddress;
+    use crate::types::storage::DbKeySeg;
 
     proptest! {
         // Generate arb valid input for `test_prefix_iters_aux`
@@ -548,6 +552,12 @@ mod tests {
             // Deletes have to be applied last
             if let Level::BlockWriteLog(WlMod::Delete) = val {
                 expected_pre.remove(key);
+            } else if let Level::BlockWriteLog(WlMod::DeletePrefix) = val {
+                expected_pre.retain(|expected_key, _val| {
+                    // Remove matching prefixes except for VPs
+                    expected_key.is_validity_predicate().is_some()
+                        || expected_key.split_prefix(key).is_none()
+                })
             }
         }
 
@@ -582,6 +592,12 @@ mod tests {
             // Deletes have to be applied last
             if let Level::TxWriteLog(WlMod::Delete) = val {
                 expected_post.remove(key);
+            } else if let Level::TxWriteLog(WlMod::DeletePrefix) = val {
+                expected_post.retain(|expected_key, _val| {
+                    // Remove matching prefixes except for VPs
+                    expected_key.is_validity_predicate().is_some()
+                        || expected_key.split_prefix(key).is_none()
+                })
             }
         }
 
@@ -602,10 +618,12 @@ mod tests {
     }
 
     fn apply_to_wl_storage(s: &mut TestWlStorage, kvs: &[KeyVal<i8>]) {
+        // Apply writes first
         for (key, val) in kvs {
             match val {
-                Level::TxWriteLog(WlMod::Delete)
-                | Level::BlockWriteLog(WlMod::Delete) => {}
+                Level::TxWriteLog(WlMod::Delete | WlMod::DeletePrefix)
+                | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
+                }
                 Level::TxWriteLog(WlMod::Write(val)) => {
                     s.write_log.write(key, val.try_to_vec().unwrap()).unwrap();
                 }
@@ -620,13 +638,34 @@ mod tests {
                 }
             }
         }
+        // Then apply deletions
         for (key, val) in kvs {
             match val {
                 Level::TxWriteLog(WlMod::Delete) => {
                     s.write_log.delete(key).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Delete) => {
-                    s.write_log.protocol_delete(key).unwrap();
+                    s.delete(key).unwrap();
+                }
+                Level::TxWriteLog(WlMod::DeletePrefix) => {
+                    // Find keys matching the prefix
+                    let keys = storage_api::iter_prefix_bytes(s, key)
+                        .unwrap()
+                        .map(|res| {
+                            let (key, _val) = res.unwrap();
+                            key
+                        })
+                        .collect::<Vec<storage::Key>>();
+                    // Delete the matching keys
+                    for key in keys {
+                        // Skip validity predicates which cannot be deleted
+                        if key.is_validity_predicate().is_none() {
+                            s.write_log.delete(&key).unwrap();
+                        }
+                    }
+                }
+                Level::BlockWriteLog(WlMod::DeletePrefix) => {
+                    s.delete_prefix(key).unwrap();
                 }
                 _ => {}
             }
@@ -649,6 +688,7 @@ mod tests {
     enum WlMod<VAL> {
         Write(VAL),
         Delete,
+        DeletePrefix,
     }
 
     fn arb_key_vals(len: usize) -> impl Strategy<Value = Vec<KeyVal<i8>>> {
@@ -659,7 +699,16 @@ mod tests {
         )
         .prop_map(|kvs| {
             kvs.into_iter()
-                .map(|(key, val)| (key, Level::Storage(val)))
+                .filter_map(|(key, val)| {
+                    if let DbKeySeg::AddressSeg(Address::Internal(
+                        InternalAddress::EthBridgePool,
+                    )) = key.segments[0]
+                    {
+                        None
+                    } else {
+                        Some((key, Level::Storage(val)))
+                    }
+                })
                 .collect::<Vec<_>>()
         });
 
@@ -675,9 +724,22 @@ mod tests {
             1..len / 3,
         );
 
+        // Select some indices to delete prefix
+        let delete_prefix = prop::collection::vec(
+            (
+                any::<prop::sample::Index>(),
+                any::<bool>(),
+                // An arbitrary number of key segments to drop from a selected
+                // key to obtain the prefix. Because `arb_key` generates `2..5`
+                // segments, we can drop one less of its upper bound.
+                (2_usize..4),
+            ),
+            1..len / 4,
+        );
+
         // Combine them all together
-        (storage_kvs, overrides, deletes).prop_map(
-            |(mut kvs, overrides, deletes)| {
+        (storage_kvs, overrides, deletes, delete_prefix).prop_map(
+            |(mut kvs, overrides, deletes, delete_prefix)| {
                 for (ix, val, is_tx) in overrides {
                     let (key, _) = ix.get(&kvs);
                     let wl_mod = WlMod::Write(val);
@@ -702,6 +764,32 @@ mod tests {
                         Level::BlockWriteLog(wl_mod)
                     };
                     kvs.push((key.clone(), lvl));
+                }
+                for (ix, is_tx, num_of_seg_to_drop) in delete_prefix {
+                    let (key, _) = ix.get(&kvs);
+                    let wl_mod = WlMod::DeletePrefix;
+                    let lvl = if is_tx {
+                        Level::TxWriteLog(wl_mod)
+                    } else {
+                        Level::BlockWriteLog(wl_mod)
+                    };
+                    // Keep at least one segment
+                    let num_of_seg_to_keep = std::cmp::max(
+                        1,
+                        key.segments
+                            .len()
+                            .checked_sub(num_of_seg_to_drop)
+                            .unwrap_or_default(),
+                    );
+                    let prefix = storage::Key {
+                        segments: key
+                            .segments
+                            .iter()
+                            .take(num_of_seg_to_keep)
+                            .cloned()
+                            .collect(),
+                    };
+                    kvs.push((prefix, lvl));
                 }
                 kvs
             },

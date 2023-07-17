@@ -68,7 +68,8 @@ where
         let total_stake =
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)
                 .map_err(|msg| Error::BadProposal(id, msg.to_string()))?;
-        let total_stake = VotePower::from(u64::from(total_stake));
+        let total_stake = VotePower::try_from(total_stake)
+            .expect("Voting power exceeds NAM supply");
         let tally_result = compute_tally(votes, total_stake, &proposal_type)
             .map_err(|msg| Error::BadProposal(id, msg.to_string()))?
             .result;
@@ -161,15 +162,14 @@ where
                 .wl_storage
                 .write(&pending_execution_key, ())
                 .expect("Should be able to write to storage.");
-            let tx_result = protocol::apply_tx(
+            let tx_result = protocol::dispatch_tx(
                 tx,
                 0, /*  this is used to compute the fee
                     * based on the code size. We dont
                     * need it here. */
                 TxIndex::default(),
                 &mut BlockGasMeter::default(),
-                &mut shell.wl_storage.write_log,
-                &shell.wl_storage.storage,
+                &mut shell.wl_storage,
                 &mut shell.vp_wasm_cache,
                 &mut shell.tx_wasm_cache,
             );

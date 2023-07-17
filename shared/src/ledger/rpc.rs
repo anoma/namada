@@ -1,5 +1,8 @@
 //! SDK RPC queries
+
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::ops::ControlFlow;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -11,11 +14,13 @@ use namada_core::ledger::testnet_pow;
 use namada_core::types::account::Account;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::Amount;
+use namada_core::types::token::{
+    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+};
 use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
 use serde::Serialize;
-use tokio::time::Duration;
 
+use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
 use crate::ledger::governance::parameters::GovParams;
 use crate::ledger::governance::storage as gov_storage;
@@ -23,10 +28,12 @@ use crate::ledger::native_vp::governance::utils::Votes;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
+use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
+use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::common;
@@ -38,47 +45,49 @@ use crate::types::{storage, token};
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C: crate::ledger::queries::Client + Sync>(
+pub async fn query_tx_status<C>(
     client: &C,
     status: TxEventQuery<'_>,
-    deadline: Duration,
-) -> Event {
-    const ONE_SECOND: Duration = Duration::from_secs(1);
-    // sleep for the duration of `backoff`,
-    // and update the underlying value
-    async fn sleep_update(query: TxEventQuery<'_>, backoff: &mut Duration) {
-        tracing::debug!(
-            ?query,
-            duration = ?backoff,
-            "Retrying tx status query after timeout",
-        );
-        // simple linear backoff - if an event is not available,
-        // increase the backoff duration by one second
-        async_std::task::sleep(*backoff).await;
-        *backoff += ONE_SECOND;
+    deadline: time::Instant,
+) -> Halt<Event>
+where
+    C: crate::ledger::queries::Client + Sync,
+{
+    time::Sleep {
+        strategy: time::LinearBackoff {
+            delta: time::Duration::from_secs(1),
+        },
     }
-
-    let mut backoff = ONE_SECOND;
-    loop {
+    .timeout(deadline, || async {
         tracing::debug!(query = ?status, "Querying tx status");
         let maybe_event = match query_tx_events(client, status).await {
             Ok(response) => response,
-            Err(_err) => {
-                // tracing::debug!(%err, "ABCI query failed");
-                sleep_update(status, &mut backoff).await;
-                continue;
+            Err(err) => {
+                tracing::debug!(
+                    query = ?status,
+                    %err,
+                    "ABCI query failed, retrying tx status query \
+                     after timeout",
+                );
+                return ControlFlow::Continue(());
             }
         };
         if let Some(e) = maybe_event {
-            break e;
-        } else if deadline < backoff {
-            panic!(
-                "Transaction status query deadline of {deadline:?} exceeded"
-            );
+            tracing::debug!(event = ?e, "Found tx event");
+            ControlFlow::Break(e)
         } else {
-            sleep_update(status, &mut backoff).await;
+            tracing::debug!(
+                query = ?status,
+                "No tx events found, retrying tx status query \
+                 after timeout",
+            );
+            ControlFlow::Continue(())
         }
-    }
+    })
+    .await
+    .try_halt(|_| {
+        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
+    })
 }
 
 /// Query the epoch of the last committed block
@@ -86,6 +95,18 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Epoch {
     unwrap_client_response::<C, _>(RPC.shell().epoch(client).await)
+}
+
+/// Query the epoch of the given block height, if it exists.
+/// Will return none if the input block height is greater than
+/// the latest committed block height.
+pub async fn query_epoch_at_height<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    height: BlockHeight,
+) -> Option<Epoch> {
+    unwrap_client_response::<C, _>(
+        RPC.shell().epoch_at_height(client, &height).await,
+    )
 }
 
 /// Query the last committed block, if any.
@@ -213,6 +234,8 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
+    Option<Key>,
+    MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
     MerklePath<Node>,
@@ -632,7 +655,8 @@ pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
                 let amount: VotePower =
                     get_validator_stake(client, epoch, &voter_address)
                         .await
-                        .into();
+                        .try_into()
+                        .expect("Amount of bonds");
                 yay_validators.insert(voter_address, (amount, vote));
             } else if !validators.contains(&voter_address) {
                 let validator_address =
@@ -803,15 +827,18 @@ pub async fn query_and_print_unbonds<
         }
     }
     if total_withdrawable != token::Amount::default() {
-        println!("Total withdrawable now: {total_withdrawable}.");
+        println!(
+            "Total withdrawable now: {}.",
+            total_withdrawable.to_string_native()
+        );
     }
     if !not_yet_withdrawable.is_empty() {
         println!("Current epoch: {current_epoch}.")
     }
     for (withdraw_epoch, amount) in not_yet_withdrawable {
         println!(
-            "Amount {amount} withdrawable starting from epoch \
-             {withdraw_epoch}."
+            "Amount {} withdrawable starting from epoch {withdraw_epoch}.",
+            amount.to_string_native()
         );
     }
 }
@@ -886,7 +913,8 @@ pub async fn get_governance_parameters<
         .expect("Parameter should be definied.");
 
     GovParams {
-        min_proposal_fund: u64::from(min_proposal_fund),
+        min_proposal_fund: u128::try_from(min_proposal_fund)
+            .expect("Amount out of bounds") as u64,
         max_proposal_code_size,
         min_proposal_period,
         max_proposal_period,
@@ -948,4 +976,135 @@ pub async fn enriched_bonds_and_unbonds<
             )
             .await,
     )
+}
+
+/// Get the correct representation of the amount given the token type.
+pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    amount: InputAmount,
+    token: &Address,
+    sub_prefix: &Option<Key>,
+    force: bool,
+) -> Option<token::DenominatedAmount> {
+    let input_amount = match amount {
+        InputAmount::Unvalidated(amt) => amt.canonical(),
+        InputAmount::Validated(amt) => return Some(amt),
+    };
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, token, sub_prefix)
+            .await,
+    )
+    .or_else(|| {
+        if force {
+            println!(
+                "No denomination found for token: {token}, but --force was \
+                 passed. Defaulting to the provided denomination."
+            );
+            Some(input_amount.denom)
+        } else {
+            println!(
+                "No denomination found for token: {token}, the input \
+                 arguments could not be parsed."
+            );
+            None
+        }
+    })?;
+    if denom < input_amount.denom && !force {
+        println!(
+            "The input amount contained a higher precision than allowed by \
+             {token}."
+        );
+        None
+    } else {
+        match input_amount.increase_precision(denom) {
+            Ok(res) => Some(res),
+            Err(_) => {
+                println!(
+                    "The amount provided requires more the 256 bits to \
+                     represent."
+                );
+                None
+            }
+        }
+    }
+}
+
+/// Wait for a first block and node to be synced.
+pub async fn wait_until_node_is_synched<C>(client: &C) -> Halt<()>
+where
+    C: crate::ledger::queries::Client + Sync,
+{
+    let height_one = Height::try_from(1_u64).unwrap();
+    let try_count = Cell::new(1_u64);
+    const MAX_TRIES: usize = 5;
+
+    time::Sleep {
+        strategy: time::ExponentialBackoff {
+            base: 2,
+            as_duration: time::Duration::from_secs,
+        },
+    }
+    .retry(MAX_TRIES, || async {
+        let node_status = client.status().await;
+        match node_status {
+            Ok(status) => {
+                let latest_block_height = status.sync_info.latest_block_height;
+                let is_catching_up = status.sync_info.catching_up;
+                let is_at_least_height_one = latest_block_height >= height_one;
+                if is_at_least_height_one && !is_catching_up {
+                    return ControlFlow::Break(Ok(()));
+                }
+                println!(
+                    " Waiting for {} ({}/{} tries)...",
+                    if is_at_least_height_one {
+                        "a first block"
+                    } else {
+                        "node to sync"
+                    },
+                    try_count.get(),
+                    MAX_TRIES,
+                );
+                try_count.set(try_count.get() + 1);
+                ControlFlow::Continue(())
+            }
+            Err(e) => {
+                eprintln!("Failed to query node status with error: {}", e);
+                ControlFlow::Break(Err(()))
+            }
+        }
+    })
+    .await
+    // maybe time out
+    .try_halt(|_| {
+        println!("Node is still catching up, wait for it to finish synching.");
+    })?
+    // error querying rpc
+    .try_halt(|_| ())
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+pub async fn format_denominated_amount<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    token: &TokenAddress,
+    amount: token::Amount,
+) -> String {
+    let denom = unwrap_client_response::<C, Option<Denomination>>(
+        RPC.vp()
+            .token()
+            .denomination(client, &token.address, &token.sub_prefix)
+            .await,
+    )
+    .unwrap_or_else(|| {
+        println!(
+            "No denomination found for token: {token}, defaulting to zero \
+             decimal places"
+        );
+        0.into()
+    });
+    DenominatedAmount { amount, denom }.to_string()
 }

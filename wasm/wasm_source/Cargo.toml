@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm"
 resolver = "2"
-version = "0.17.4"
+version = "0.19.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,7 +13,9 @@ crate-type = ["cdylib"]
 # Newly added wasms should also be added into the Makefile `$(wasms)` list.
 [features]
 tx_bond = ["namada_tx_prelude"]
+tx_bridge_pool = ["namada_tx_prelude"]
 tx_change_validator_commission = ["namada_tx_prelude"]
+tx_from_intent = ["namada_tx_prelude"]
 tx_ibc = ["namada_tx_prelude"]
 tx_init_account = ["namada_tx_prelude"]
 tx_init_proposal = ["namada_tx_prelude"]
@@ -25,23 +27,22 @@ tx_unjail_validator = ["namada_tx_prelude"]
 tx_update_account = ["namada_tx_prelude"]
 tx_vote_proposal = ["namada_tx_prelude"]
 tx_withdraw = ["namada_tx_prelude"]
-vp_implicit = ["namada_vp_prelude", "once_cell", "rust_decimal"]
+vp_implicit = ["namada_vp_prelude", "once_cell"]
 vp_masp = ["namada_vp_prelude", "masp_primitives"]
 vp_testnet_faucet = ["namada_vp_prelude", "once_cell"]
 vp_token = ["namada_vp_prelude"]
-vp_user = ["namada_vp_prelude", "once_cell", "rust_decimal"]
-vp_validator = ["namada_vp_prelude", "once_cell", "rust_decimal"]
+vp_user = ["namada_vp_prelude", "once_cell"]
+vp_validator = ["namada_vp_prelude", "once_cell"]
 
 [dependencies]
 namada_tx_prelude = {path = "../../tx_prelude", optional = true}
 namada_vp_prelude = {path = "../../vp_prelude", optional = true}
 borsh = "0.9.0"
 once_cell = {version = "1.8.0", optional = true}
-rust_decimal = {version = "=1.26.1", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "cfea8c95d3f73077ca3e25380fd27e5b46e828fd", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]
@@ -53,4 +54,3 @@ namada_vp_prelude = {path = "../../vp_prelude"}
 proptest = "1.2.0"
 tracing = "0.1.30"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
-rust_decimal = "1.26.1"

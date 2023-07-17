@@ -464,7 +464,7 @@ where
 /// Called from tx wasm to request to use the given gas amount
 pub fn tx_charge_gas<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    used_gas: i32,
+    used_gas: i64,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -506,7 +506,7 @@ where
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    used_gas: i32,
+    used_gas: i64,
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
@@ -1970,7 +1970,8 @@ pub mod testing {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::ledger::storage::{self, StorageHasher};
+    use crate::ledger::storage::traits::StorageHasher;
+    use crate::ledger::storage::{self};
     use crate::vm::memory::testing::NativeMemory;
 
     /// Setup a transaction environment

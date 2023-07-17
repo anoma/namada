@@ -1,14 +1,18 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 use std::path::PathBuf;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::PairingEngine;
+use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
@@ -21,14 +25,17 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
+use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
-use crate::types::key::*;
-use crate::types::storage::Epoch;
+use crate::types::keccak::{keccak_hash, KeccakHash};
+use crate::types::key::{self, *};
+use crate::types::storage::{Epoch, Key};
 use crate::types::time::DateTimeUtc;
+use crate::types::token::MaspDenom;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::token::Transfer;
 #[cfg(feature = "ferveo-tpke")]
@@ -62,6 +69,168 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// This can be used to sign an arbitrary tx. The signature is produced and
+/// verified on the tx data concatenated with the tx code, however the tx code
+/// itself is not part of this structure.
+///
+/// Because the signature is not checked by the ledger, we don't inline it into
+/// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
+/// which can then be checked by a validity predicate wasm.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+pub struct SignedTxData {
+    /// The original tx data bytes, if any
+    pub data: Option<Vec<u8>>,
+    /// The signature is produced on the tx data concatenated with the tx code
+    /// and the timestamp.
+    pub sig: common::Signature,
+}
+
+/// A serialization method to provide to [`Signed`], such
+/// that we may sign serialized data.
+///
+/// This is a higher level version of [`key::SignableBytes`].
+pub trait Signable<T> {
+    /// A byte vector containing the serialized data.
+    type Output: key::SignableBytes;
+
+    /// The hashing algorithm to use to sign serialized
+    /// data with.
+    type Hasher: 'static + StorageHasher;
+
+    /// Encodes `data` as a byte vector, with some arbitrary serialization
+    /// method.
+    ///
+    /// The returned output *must* be deterministic based on
+    /// `data`, so that two callers signing the same `data` will be
+    /// signing the same `Self::Output`.
+    fn as_signable(data: &T) -> Self::Output;
+}
+
+/// Tag type that indicates we should use [`BorshSerialize`]
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SerializeWithBorsh;
+
+/// Tag type that indicates we should use ABI serialization
+/// to sign data in a [`Signed`] wrapper.
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct SignableEthMessage;
+
+impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
+    type Hasher = Sha256Hasher;
+    type Output = Vec<u8>;
+
+    fn as_signable(data: &T) -> Vec<u8> {
+        data.try_to_vec()
+            .expect("Encoding data for signing shouldn't fail")
+    }
+}
+
+impl Signable<KeccakHash> for SignableEthMessage {
+    type Hasher = KeccakHasher;
+    type Output = KeccakHash;
+
+    fn as_signable(hash: &KeccakHash) -> KeccakHash {
+        keccak_hash({
+            let mut eth_message = Vec::from("\x19Ethereum Signed Message:\n32");
+            eth_message.extend_from_slice(hash.as_ref());
+            eth_message
+        })
+    }
+}
+
+/// A generic signed data wrapper for serialize-able types.
+///
+/// The default serialization method is [`BorshSerialize`].
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct Signed<T, S = SerializeWithBorsh> {
+    /// Arbitrary data to be signed
+    pub data: T,
+    /// The signature of the data
+    pub sig: common::Signature,
+    /// The method to serialize the data with,
+    /// before it being signed
+    _serialization: PhantomData<S>,
+}
+
+impl<S, T: Eq> Eq for Signed<T, S> {}
+
+impl<S, T: PartialEq> PartialEq for Signed<T, S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data && self.sig == other.sig
+    }
+}
+
+impl<S, T: Hash> Hash for Signed<T, S> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.sig.hash(state);
+    }
+}
+
+impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.partial_cmp(&other.data)
+    }
+}
+
+impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
+    fn add_definitions_recursively(
+        definitions: &mut HashMap<Declaration, Definition>,
+    ) {
+        let fields = borsh::schema::Fields::NamedFields(borsh::maybestd::vec![
+            ("data".to_string(), T::declaration()),
+            ("sig".to_string(), <common::Signature>::declaration())
+        ]);
+        let definition = borsh::schema::Definition::Struct { fields };
+        Self::add_definition(Self::declaration(), definition, definitions);
+        T::add_definitions_recursively(definitions);
+        <common::Signature>::add_definitions_recursively(definitions);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        format!("Signed<{}>", T::declaration())
+    }
+}
+
+impl<T, S> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance from an existing signature.
+    #[inline]
+    pub fn new_from(data: T, sig: common::Signature) -> Self {
+        Self {
+            data,
+            sig,
+            _serialization: PhantomData,
+        }
+    }
+}
+
+impl<T, S: Signable<T>> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance.
+    pub fn new(keypair: &common::SecretKey, data: T) -> Self {
+        let to_sign = S::as_signable(&data);
+        let sig =
+            common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign);
+        Self::new_from(data, sig)
+    }
+
+    /// Verify that the data has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify(
+        &self,
+        pk: &common::PublicKey,
+    ) -> std::result::Result<(), VerifySigError> {
+        let signed_bytes = S::as_signable(&self.data);
+        common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+            pk,
+            &signed_bytes,
+            &self.sig,
+        )
+    }
+}
 
 /// A section representing transaction data
 #[derive(
@@ -227,6 +396,24 @@ impl SignatureIndex {
     pub fn to_vec(&self) -> Vec<Self> {
         vec![self.clone()]
     }
+
+    pub fn verify(
+        &self,
+        public_key_index_map: &AccountPublicKeysMap,
+        data: &impl SignableBytes,
+    ) -> std::result::Result<(), VerifySigError> {
+        let public_key =
+            public_key_index_map.get_public_key_from_index(self.index);
+        if let Some(public_key) = public_key {
+            common::SigScheme::verify_signature(
+                &public_key,
+                data,
+                &self.signature,
+            )
+        } else {
+            Err(VerifySigError::MissingData)
+        }
+    }
 }
 
 impl Ord for SignatureIndex {
@@ -253,7 +440,7 @@ impl PartialOrd for SignatureIndex {
 )]
 pub struct MultiSignature {
     /// The hash of the section being signed
-    target: crate::types::hash::Hash,
+    targets: Vec<crate::types::hash::Hash>,
     /// The signature over the above hash
     pub signatures: BTreeSet<SignatureIndex>,
 }
@@ -261,10 +448,16 @@ pub struct MultiSignature {
 impl MultiSignature {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
-        target: &crate::types::hash::Hash,
+        targets: Vec<crate::types::hash::Hash>,
         secret_keys: &[common::SecretKey],
         public_keys_index_map: &AccountPublicKeysMap,
     ) -> Self {
+        let target = Self {
+            targets: targets.clone(),
+            signatures: BTreeSet::new(),
+        }
+        .get_hash();
+
         let signatures_public_keys_map =
             secret_keys.iter().map(|secret_key: &common::SecretKey| {
                 let signature = common::SigScheme::sign(secret_key, target);
@@ -282,12 +475,11 @@ impl MultiSignature {
             .collect::<BTreeSet<SignatureIndex>>();
 
         Self {
-            target: *target,
+            targets,
             signatures,
         }
     }
 
-    // TODO: check conversion
     pub fn total_signatures(&self) -> u8 {
         self.signatures.len() as u8
     }
@@ -299,6 +491,21 @@ impl MultiSignature {
                 .expect("unable to serialize multisignature section"),
         );
         hasher
+    }
+
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
+
+    pub fn get_raw_hash(&self) -> crate::types::hash::Hash {
+        Self {
+            signatures: BTreeSet::new(),
+            ..self.clone()
+        }
+        .get_hash()
     }
 }
 
@@ -314,21 +521,22 @@ impl MultiSignature {
 )]
 pub struct Signature {
     /// The hash of the section being signed
-    target: crate::types::hash::Hash,
-    /// The signature over the above hash
-    pub signature: common::Signature,
+    targets: Vec<crate::types::hash::Hash>,
+    /// The signature over the above hashes
+    pub signature: Option<common::Signature>,
 }
 
 impl Signature {
     pub fn new(
-        target: &crate::types::hash::Hash,
-        secret_key: &common::SecretKey,
+        targets: Vec<crate::types::hash::Hash>,
+        sec_key: &common::SecretKey,
     ) -> Self {
-        let signature = common::SigScheme::sign(secret_key, target);
-        Self {
-            target: *target,
-            signature,
-        }
+        let mut sec = Self {
+            targets,
+            signature: None,
+        };
+        sec.signature = Some(common::SigScheme::sign(sec_key, sec.get_hash()));
+        sec
     }
 
     /// Hash this signature section
@@ -338,6 +546,31 @@ impl Signature {
                 .expect("unable to serialize signature section"),
         );
         hasher
+    }
+
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
+
+    /// Verify that the signature contained in this section is valid
+    pub fn verify_signature(
+        &self,
+        public_key: &common::PublicKey,
+    ) -> std::result::Result<(), VerifySigError> {
+        let signature =
+            self.signature.as_ref().ok_or(VerifySigError::MissingData)?;
+        common::SigScheme::verify_signature(
+            public_key,
+            &Self {
+                signature: None,
+                ..self.clone()
+            }
+            .get_hash(),
+            signature,
+        )
     }
 }
 
@@ -583,7 +816,7 @@ pub struct MaspBuilder {
     pub target: crate::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types: HashSet<(Address, Epoch)>,
+    pub asset_types: HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
@@ -657,6 +890,8 @@ pub enum Section {
     /// A section providing the auxiliary inputs used to construct a MASP
     /// transaction. Only send to wallet, never send to protocol.
     MaspBuilder(MaspBuilder),
+    /// Wrap a header with a section for the purposes of computing hashes
+    Header(Header),
 }
 
 impl Section {
@@ -680,17 +915,14 @@ impl Section {
                 hasher.update(tx.txid().as_ref());
                 hasher
             }
+            Self::Header(header) => header.hash(hasher),
         }
     }
 
-    /// Sign over the hash of this section and return a signature section that
-    /// can be added to the container transaction
-    pub fn sign(&self, sec_key: &common::SecretKey) -> Signature {
-        let mut hasher = Sha256::new();
-        self.hash(&mut hasher);
-        Signature::new(
-            &crate::types::hash::Hash(hasher.finalize().into()),
-            sec_key,
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
         )
     }
 
@@ -938,9 +1170,16 @@ impl Tx {
 
     /// Get the transaction header hash
     pub fn header_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(
-            self.header.hash(&mut Sha256::new()).finalize_reset().into(),
-        )
+        Section::Header(self.header.clone()).get_hash()
+    }
+
+    /// Get hashes of all the sections in this transaction
+    pub fn sechashes(&self) -> Vec<crate::types::hash::Hash> {
+        let mut hashes = vec![self.header_hash()];
+        for sec in &self.sections {
+            hashes.push(sec.get_hash());
+        }
+        hashes
     }
 
     /// Update the header whilst maintaining existing cross-references
@@ -953,13 +1192,13 @@ impl Tx {
     pub fn get_section(
         &self,
         hash: &crate::types::hash::Hash,
-    ) -> Option<&Section> {
+    ) -> Option<Cow<Section>> {
+        if self.header_hash() == *hash {
+            return Some(Cow::Owned(Section::Header(self.header.clone())));
+        }
         for section in &self.sections {
-            let sechash = crate::types::hash::Hash(
-                section.hash(&mut Sha256::new()).finalize_reset().into(),
-            );
-            if sechash == *hash {
-                return Some(section);
+            if section.get_hash() == *hash {
+                return Some(Cow::Borrowed(section));
             }
         }
         None
@@ -983,7 +1222,11 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header
     pub fn code(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.code_sechash()) {
+        match self
+            .get_section(self.code_sechash())
+            .as_ref()
+            .map(Cow::as_ref)
+        {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
         }
@@ -992,10 +1235,7 @@ impl Tx {
     /// Add the given code to the transaction and set code hash in the header
     pub fn set_code(&mut self, code: Code) -> &mut Section {
         let sec = Section::Code(code);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_code_sechash(hash);
+        self.set_code_sechash(sec.get_hash());
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
@@ -1013,17 +1253,18 @@ impl Tx {
     /// Add the given code to the transaction and set the hash in the header
     pub fn set_data(&mut self, data: Data) -> &mut Section {
         let sec = Section::Data(data);
-        let mut hasher = Sha256::new();
-        sec.hash(&mut hasher);
-        let hash = crate::types::hash::Hash(hasher.finalize().into());
-        self.set_data_sechash(hash);
+        self.set_data_sechash(sec.get_hash());
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
     }
 
     /// Get the data designated by the transaction data hash in the header
     pub fn data(&self) -> Option<Vec<u8>> {
-        match self.get_section(self.data_sechash()) {
+        match self
+            .get_section(self.data_sechash())
+            .as_ref()
+            .map(Cow::as_ref)
+        {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -1044,7 +1285,7 @@ impl Tx {
     /// public key
     pub fn verify_section_signatures(
         &self,
-        hash: &crate::types::hash::Hash,
+        hashes: &[crate::types::hash::Hash],
         public_keys_index_map: AccountPublicKeysMap,
         threshold: u8,
         max_signatures: Option<u8>,
@@ -1054,39 +1295,46 @@ impl Tx {
 
         for section in &self.sections {
             if let Section::SectionSignature(signatures) = section {
-                if signatures.target == *hash {
-                    if signatures.total_signatures() > max_signatures {
+                if !hashes.iter().all(|x| {
+                    signatures.targets.contains(x) || section.get_hash() == *x
+                }) {
+                    return Err(Error::InvalidSectionSignature(
+                        "missing target hash.".to_string(),
+                    ));
+                }
+
+                for target in &signatures.targets {
+                    if self.get_section(target).is_none() {
                         return Err(Error::InvalidSectionSignature(
-                            "too many signatures.".to_string(),
+                            "Missing target section.".to_string(),
                         ));
                     }
+                }
 
-                    if signatures.total_signatures() < threshold {
-                        return Err(Error::InvalidSectionSignature(
-                            "too few signatures.".to_string(),
-                        ));
+                if signatures.total_signatures() > max_signatures {
+                    return Err(Error::InvalidSectionSignature(
+                        "too many signatures.".to_string(),
+                    ));
+                }
+
+                if signatures.total_signatures() < threshold {
+                    return Err(Error::InvalidSectionSignature(
+                        "too few signatures.".to_string(),
+                    ));
+                }
+
+                for signature_index in &signatures.signatures {
+                    let is_valid_signature = signature_index
+                        .verify(
+                            &public_keys_index_map,
+                            &signatures.get_raw_hash(),
+                        )
+                        .is_ok();
+                    if is_valid_signature {
+                        valid_signatures += 1;
                     }
-
-                    for signature_index in &signatures.signatures {
-                        let public_key: Option<common::PublicKey> =
-                            public_keys_index_map.get_public_key_from_index(
-                                signature_index.index,
-                            );
-                        if let Some(public_key) = public_key {
-                            let is_valid_signature =
-                                common::SigScheme::verify_signature_raw(
-                                    &public_key,
-                                    hash.as_ref(),
-                                    &signature_index.signature,
-                                )
-                                .is_ok();
-                            if is_valid_signature {
-                                valid_signatures += 1;
-                            }
-                            if valid_signatures >= threshold {
-                                return Ok(());
-                            }
-                        }
+                    if valid_signatures >= threshold {
+                        return Ok(());
                     }
                 }
             }
@@ -1096,24 +1344,37 @@ impl Tx {
         ))
     }
 
+    /// Verify that the sections with the given hashes have been signed together
+    /// by the given public key. I.e. this function looks for one signature that
+    /// covers over the given slice of hashes.
     pub fn verify_signature(
         &self,
         public_key: &common::PublicKey,
-        hash: &crate::types::hash::Hash,
-    ) -> std::result::Result<(), Error> {
+        hashes: &[crate::types::hash::Hash],
+    ) -> Result<&Signature> {
         for section in &self.sections {
             if let Section::Signature(signature) = section {
-                if signature.target == *hash {
-                    return common::SigScheme::verify_signature_raw(
-                        public_key,
-                        hash.as_ref(),
-                        &signature.signature,
-                    )
-                    .map_err(|_| {
-                        Error::InvalidSectionSignature(
-                            "invalid signature".to_string(),
-                        )
-                    });
+                // Check that the hashes being
+                // checked are a subset of those in this section
+                if hashes.iter().all(|x| {
+                    signature.targets.contains(x) || section.get_hash() == *x
+                }) {
+                    // Ensure that all the sections the signature signs over are
+                    // present
+                    for target in &signature.targets {
+                        if self.get_section(target).is_none() {
+                            return Err(Error::InvalidSectionSignature(
+                                "Target section is missing.".to_string(),
+                            ));
+                        }
+                    }
+                    // Finally verify that the signature itself is valid
+                    return signature
+                        .verify_signature(public_key)
+                        .map(|_| signature)
+                        .map_err(|e| {
+                            Error::InvalidSectionSignature(e.to_string())
+                        });
                 }
             }
         }
@@ -1171,7 +1432,8 @@ impl Tx {
         // Iterate backwrds to sidestep the effects of deletion on indexing
         for i in (0..self.sections.len()).rev() {
             match &self.sections[i] {
-                Section::Signature(sig) if sig.target == header_hash => {}
+                Section::Signature(sig)
+                    if sig.targets.contains(&header_hash) => {}
                 // Add eligible section to the list of sections to encrypt
                 _ => plaintexts.push(self.sections.remove(i)),
             }
@@ -1195,35 +1457,35 @@ impl Tx {
     /// the Tx and verify it is of the appropriate form. This means
     /// 1. The wrapper tx is indeed signed
     /// 2. The signature is valid
-    pub fn validate_header(&self) -> std::result::Result<(), TxError> {
+    pub fn validate_tx(
+        &self,
+    ) -> std::result::Result<Option<&Signature>, TxError> {
         match &self.header.tx_type {
             // verify signature and extract signed data
-            TxType::Wrapper(wrapper) => {
-                self.verify_signature(&wrapper.pk, &self.header_hash())
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "WrapperTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(())
-            }
+            TxType::Wrapper(wrapper) => self
+                .verify_signature(&wrapper.pk, &self.sechashes())
+                .map(Option::Some)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "WrapperTx signature verification failed: {}",
+                        err
+                    ))
+                }),
             // verify signature and extract signed data
             #[cfg(feature = "ferveo-tpke")]
-            TxType::Protocol(protocol) => {
-                self.verify_signature(&protocol.pk, &self.header_hash())
-                    .map_err(|err| {
-                        TxError::SigError(format!(
-                            "ProtocolTx signature verification failed: {}",
-                            err
-                        ))
-                    })?;
-                Ok(())
-            }
+            TxType::Protocol(protocol) => self
+                .verify_signature(&protocol.pk, &self.sechashes())
+                .map(Option::Some)
+                .map_err(|err| {
+                    TxError::SigError(format!(
+                        "ProtocolTx signature verification failed: {}",
+                        err
+                    ))
+                }),
             // we extract the signed data, but don't check the signature
-            TxType::Decrypted(_) => Ok(()),
+            TxType::Decrypted(_) => Ok(None),
             // return as is
-            TxType::Raw => Ok(()),
+            TxType::Raw => Ok(None),
         }
     }
 

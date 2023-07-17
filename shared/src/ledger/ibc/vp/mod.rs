@@ -224,23 +224,40 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 #[cfg(any(test, feature = "testing"))]
 pub fn get_dummy_genesis_validator()
 -> namada_proof_of_stake::types::GenesisValidator {
-    use rust_decimal::prelude::Decimal;
-
     use crate::core::types::address::testing::established_address_1;
-    use crate::types::key::testing::common_sk_from_simple_seed;
+    use crate::core::types::dec::Dec;
+    use crate::core::types::key::testing::common_sk_from_simple_seed;
+    use crate::types::key;
     use crate::types::token::Amount;
 
     let address = established_address_1();
-    let tokens = Amount::whole(1);
+    let tokens = Amount::native_whole(1);
     let consensus_sk = common_sk_from_simple_seed(0);
     let consensus_key = consensus_sk.to_public();
 
-    let commission_rate = Decimal::new(1, 1);
-    let max_commission_rate_change = Decimal::new(1, 1);
+    let commission_rate =
+        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+    let max_commission_rate_change =
+        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+
+    let eth_hot_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_hot_key = eth_hot_sk.to_public();
+
+    let eth_cold_sk =
+        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+            key::secp256k1::SigScheme,
+        >());
+    let eth_cold_key = eth_cold_sk.to_public();
+
     namada_proof_of_stake::types::GenesisValidator {
         address,
         tokens,
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         commission_rate,
         max_commission_rate_change,
     }
@@ -719,11 +736,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let ctx = Ctx::new(
@@ -797,11 +810,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
 
@@ -939,11 +948,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
 
@@ -1051,11 +1056,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1151,11 +1152,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
 
@@ -1283,11 +1280,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1395,11 +1388,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1484,11 +1473,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1609,11 +1594,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1735,11 +1716,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1845,11 +1822,7 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.code_sechash(),
-            &keypair_1(),
-        )));
-        outer_tx.add_section(Section::Signature(Signature::new(
-            outer_tx.data_sechash(),
+            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -1953,11 +1926,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -2011,7 +1980,7 @@ mod tests {
         // init balance
         let sender = established_address_1();
         let balance_key = balance_key(&nam(), &sender);
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2094,11 +2063,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -2273,11 +2238,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -2421,11 +2382,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -2476,7 +2433,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2574,11 +2531,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);
@@ -2629,7 +2582,7 @@ mod tests {
         // init the escrow balance
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::IbcEscrow));
-        let amount = Amount::whole(100);
+        let amount = Amount::native_whole(100);
         wl_storage
             .write_log
             .write(&balance_key, amount.try_to_vec().unwrap())
@@ -2727,11 +2680,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
-            &keypair_1(),
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.code_sechash(), *tx.data_sechash()],
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new(0);

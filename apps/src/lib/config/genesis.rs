@@ -6,16 +6,23 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
+use namada::ledger::eth_bridge::EthereumBridgeConfig;
+#[cfg(feature = "dev")]
+use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{GenesisValidator, PosParams};
+use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
+#[cfg(feature = "dev")]
+use namada::types::address::wnam;
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
+#[cfg(feature = "dev")]
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
+use namada::types::token::Denomination;
 use namada::types::{storage, token};
-use rust_decimal::Decimal;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -31,20 +38,20 @@ pub mod genesis_config {
     use namada::core::ledger::testnet_pow;
     use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
     use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
+    use namada::types::token::Denomination;
     use namada::types::{storage, token};
-    use rust_decimal::Decimal;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, Genesis, ImplicitAccount, Parameters, TokenAccount,
-        Validator,
+        EstablishedAccount, EthereumBridgeConfig, Genesis, ImplicitAccount,
+        Parameters, TokenAccount, Validator,
     };
     use crate::cli;
 
@@ -131,6 +138,8 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
+        // Ethereum bridge config
+        pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -138,22 +147,16 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct GovernanceParamsConfig {
         // Min funds to stake to submit a proposal
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_fund: u64,
         // Maximum size of proposal in kibibytes (KiB)
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_code_size: u64,
         // Minimum proposal period length in epochs
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_period: u64,
         // Maximum proposal period length in epochs
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
-        // XXX: u64 doesn't work with toml-rs!
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
-        // XXX: u64 doesn't work with toml-rs!
         pub min_proposal_grace_epochs: u64,
     }
 
@@ -170,6 +173,10 @@ pub mod genesis_config {
     pub struct ValidatorConfig {
         // Public key for consensus. (default: generate)
         pub consensus_public_key: Option<HexString>,
+        // Public key (cold) for eth governance. (default: generate)
+        pub eth_cold_key: Option<HexString>,
+        // Public key (hot) for eth bridge. (default: generate)
+        pub eth_hot_key: Option<HexString>,
         // Public key for validator account. (default: generate)
         pub account_public_key: Option<HexString>,
         // Public protocol signing key for validator account. (default:
@@ -180,16 +187,14 @@ pub mod genesis_config {
         // Validator address (default: generate).
         pub address: Option<String>,
         // Total number of tokens held at genesis.
-        // XXX: u64 doesn't work with toml-rs!
         pub tokens: Option<u64>,
         // Unstaked balance at genesis.
-        // XXX: u64 doesn't work with toml-rs!
         pub non_staked_balance: Option<u64>,
         /// Commission rate charged on rewards for delegators (bounded inside
         /// 0-1)
-        pub commission_rate: Option<Decimal>,
+        pub commission_rate: Option<Dec>,
         /// Maximum change in commission rate permitted per epoch
-        pub max_commission_rate_change: Option<Decimal>,
+        pub max_commission_rate_change: Option<Dec>,
         // Filename of validator VP. (default: default validator VP)
         pub validator_vp: Option<String>,
         // IP:port of the validator. (used in generation only)
@@ -203,11 +208,12 @@ pub mod genesis_config {
     pub struct TokenAccountConfig {
         // Address of token account (default: generate).
         pub address: Option<String>,
+        // The number of decimal places amounts of this token has
+        pub denom: Denomination,
         // Filename of token account VP. (default: token VP)
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
-        // XXX: u64 doesn't work with toml-rs!
-        pub balances: Option<HashMap<String, u64>>,
+        pub balances: Option<HashMap<String, token::Amount>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -244,7 +250,6 @@ pub mod genesis_config {
         /// serialization overhead in Tendermint blocks.
         pub max_proposal_bytes: ProposalBytes,
         /// Minimum number of blocks per epoch.
-        // XXX: u64 doesn't work with toml-rs!
         pub min_num_of_blocks: u64,
         /// Maximum duration per block (in seconds).
         // TODO: this is i64 because datetime wants it
@@ -262,9 +267,9 @@ pub mod genesis_config {
         /// Max signature per transaction
         pub max_signatures_per_transaction: u8,
         /// PoS gain p
-        pub pos_gain_p: Decimal,
+        pub pos_gain_p: Dec,
         /// PoS gain d
-        pub pos_gain_d: Decimal,
+        pub pos_gain_d: Dec,
         #[cfg(not(feature = "mainnet"))]
         /// Fix wrapper tx fees
         pub wrapper_tx_fees: Option<token::Amount>,
@@ -273,39 +278,33 @@ pub mod genesis_config {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PosParamsConfig {
         // Maximum number of consensus validators.
-        // XXX: u64 doesn't work with toml-rs!
         pub max_validator_slots: u64,
         // Pipeline length (in epochs).
-        // XXX: u64 doesn't work with toml-rs!
         pub pipeline_len: u64,
         // Unbonding length (in epochs).
-        // XXX: u64 doesn't work with toml-rs!
         pub unbonding_len: u64,
         // Votes per token.
-        // XXX: u64 doesn't work with toml-rs!
-        pub tm_votes_per_token: Decimal,
+        pub tm_votes_per_token: Dec,
         // Reward for proposing a block.
-        // XXX: u64 doesn't work with toml-rs!
-        pub block_proposer_reward: Decimal,
+        pub block_proposer_reward: Dec,
         // Reward for voting on a block.
-        // XXX: u64 doesn't work with toml-rs!
-        pub block_vote_reward: Decimal,
+        pub block_vote_reward: Dec,
         // Maximum staking APY
-        // XXX: u64 doesn't work with toml-rs!
-        pub max_inflation_rate: Decimal,
+        pub max_inflation_rate: Dec,
         // Target ratio of staked NAM tokens to total NAM tokens
-        pub target_staked_ratio: Decimal,
+        pub target_staked_ratio: Dec,
         // Portion of a validator's stake that should be slashed on a
         // duplicate vote.
-        // XXX: u64 doesn't work with toml-rs!
-        pub duplicate_vote_min_slash_rate: Decimal,
+        pub duplicate_vote_min_slash_rate: Dec,
         // Portion of a validator's stake that should be slashed on a
         // light client attack.
-        // XXX: u64 doesn't work with toml-rs!
-        pub light_client_attack_min_slash_rate: Decimal,
+        pub light_client_attack_min_slash_rate: Dec,
         /// Number of epochs above and below (separately) the current epoch to
         /// consider when doing cubic slashing
         pub cubic_slashing_window_length: u64,
+        /// The minimum amount of bonded tokens that a validator needs to be in
+        /// either the `consensus` or `below_capacity` validator sets
+        pub validator_stake_threshold: token::Amount,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -325,9 +324,23 @@ pub mod genesis_config {
             pos_data: GenesisValidator {
                 address: Address::decode(config.address.as_ref().unwrap())
                     .unwrap(),
-                tokens: token::Amount::whole(config.tokens.unwrap_or_default()),
+                tokens: token::Amount::native_whole(
+                    config.tokens.unwrap_or_default(),
+                ),
                 consensus_key: config
                     .consensus_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_cold_key: config
+                    .eth_cold_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
+                eth_hot_key: config
+                    .eth_hot_key
                     .as_ref()
                     .unwrap()
                     .to_public_key()
@@ -335,21 +348,13 @@ pub mod genesis_config {
                 commission_rate: config
                     .commission_rate
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect("Commission rate must be between 0.0 and 1.0"),
                 max_commission_rate_change: config
                     .max_commission_rate_change
                     .and_then(|rate| {
-                        if rate >= Decimal::ZERO && rate <= Decimal::ONE {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect(
                         "Max commission rate change must be between 0.0 and \
@@ -374,7 +379,7 @@ pub mod genesis_config {
                 .unwrap()
                 .to_dkg_public_key()
                 .unwrap(),
-            non_staked_balance: token::Amount::whole(
+            non_staked_balance: token::Amount::native_whole(
                 config.non_staked_balance.unwrap_or_default(),
             ),
             validator_vp_code_path: validator_vp_config.filename.to_owned(),
@@ -399,6 +404,7 @@ pub mod genesis_config {
 
         TokenAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
+            denom: config.denom,
             vp_code_path: token_vp_config.filename.to_owned(),
             vp_sha256: token_vp_config
                 .sha256
@@ -464,7 +470,9 @@ pub mod genesis_config {
                                 }
                             }
                         },
-                        token::Amount::whole(*amount),
+                        token::Amount::from_uint(*amount, config.denom).expect(
+                            "expected a balance that fits into 256 bits",
+                        ),
                     )
                 })
                 .collect(),
@@ -536,6 +544,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             wasm,
+            ethereum_bridge_params,
         } = config;
 
         let native_token = Address::decode(
@@ -617,8 +626,8 @@ pub mod genesis_config {
                 .max_signatures_per_transaction,
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
-            staked_ratio: Decimal::ZERO,
-            pos_inflation_amount: 0,
+            staked_ratio: Dec::zero(),
+            pos_inflation_amount: token::Amount::zero(),
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
@@ -652,6 +661,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         } = pos_params;
         let pos_params = PosParams {
             max_validator_slots,
@@ -665,6 +675,7 @@ pub mod genesis_config {
             duplicate_vote_min_slash_rate,
             light_client_attack_min_slash_rate,
             cubic_slashing_window_length,
+            validator_stake_threshold,
         };
 
         let mut genesis = Genesis {
@@ -681,6 +692,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            ethereum_bridge_params,
         };
         genesis.init();
         genesis
@@ -733,6 +745,8 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovParams,
+    // Ethereum bridge config
+    pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
 
 impl Genesis {
@@ -803,6 +817,8 @@ pub struct EstablishedAccount {
 pub struct TokenAccount {
     /// Address
     pub address: Address,
+    /// The number of decimal places amounts of this token has
+    pub denom: Denomination,
     /// Validity predicate code WASM
     pub vp_code_path: String,
     /// Expected SHA-256 hash of the validity predicate wasm
@@ -863,13 +879,13 @@ pub struct Parameters {
     /// Maximum amount of signatures per transaction
     pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
-    pub pos_gain_p: Decimal,
+    pub pos_gain_p: Dec,
     /// PoS gain d (read only)
-    pub pos_gain_d: Decimal,
+    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Decimal,
+    pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: u64,
+    pub pos_inflation_amount: token::Amount,
     /// Fixed Wrapper tx fees
     #[cfg(not(feature = "mainnet"))]
     pub wrapper_tx_fees: Option<token::Amount>,
@@ -890,7 +906,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
     use namada::types::address::{
         self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
-    use rust_decimal_macros::dec;
 
     use crate::wallet;
 
@@ -906,20 +921,32 @@ pub fn genesis(num_validators: u64) -> Genesis {
     // Use hard-coded keys for the first validator to avoid breaking other code
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
+    let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
+        90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
+        65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
+    ])
+    .unwrap();
+
+    let eth_cold_keypair =
+        common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
     let address = wallet::defaults::validator_address();
-    let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
+    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+        wallet::defaults::validator_keys();
     let validator = Validator {
         pos_data: GenesisValidator {
             address,
-            tokens: token::Amount::whole(200_000),
+            tokens: token::Amount::native_whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
-            commission_rate: dec!(0.05),
-            max_commission_rate_change: dec!(0.01),
+            commission_rate: Dec::new(5, 2).expect("This can't fail"),
+            max_commission_rate_change: Dec::new(1, 2)
+                .expect("This can't fail"),
+            eth_cold_key: eth_cold_keypair.ref_to(),
+            eth_hot_key: eth_bridge_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
         protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
-        non_staked_balance: token::Amount::whole(100_000),
+        non_staked_balance: token::Amount::native_whole(100_000),
         // TODO replace with https://github.com/anoma/namada/issues/25)
         validator_vp_code_path: vp_user_path.into(),
         validator_vp_sha256: Default::default(),
@@ -934,20 +961,25 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .unwrap();
         let account_keypair = consensus_keypair.clone();
         let address = address::gen_established_address("validator account");
-        let (protocol_keypair, dkg_keypair) =
+        let eth_cold_keypair =
+            common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
+        let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
         let validator = Validator {
             pos_data: GenesisValidator {
                 address,
-                tokens: token::Amount::whole(200_000),
+                tokens: token::Amount::native_whole(200_000),
                 consensus_key: consensus_keypair.ref_to(),
-                commission_rate: dec!(0.05),
-                max_commission_rate_change: dec!(0.01),
+                commission_rate: Dec::new(5, 2).expect("This can't fail"),
+                max_commission_rate_change: Dec::new(1, 2)
+                    .expect("This can't fail"),
+                eth_cold_key: eth_cold_keypair.ref_to(),
+                eth_hot_key: eth_bridge_keypair.ref_to(),
             },
             account_key: account_keypair.ref_to(),
             protocol_key: protocol_keypair.ref_to(),
             dkg_public_key: dkg_keypair.public(),
-            non_staked_balance: token::Amount::whole(100_000),
+            non_staked_balance: token::Amount::native_whole(100_000),
             // TODO replace with https://github.com/anoma/namada/issues/25)
             validator_vp_code_path: vp_user_path.into(),
             validator_vp_sha256: Default::default(),
@@ -969,12 +1001,12 @@ pub fn genesis(num_validators: u64) -> Genesis {
         max_signatures_per_transaction: 15,
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
-        pos_gain_p: dec!(0.1),
-        pos_gain_d: dec!(0.1),
-        staked_ratio: dec!(0.0),
-        pos_inflation_amount: 0,
+        pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
+        pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
+        staked_ratio: Dec::zero(),
+        pos_inflation_amount: token::Amount::zero(),
         #[cfg(not(feature = "mainnet"))]
-        wrapper_tx_fees: Some(token::Amount::whole(0)),
+        wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),
@@ -1004,11 +1036,16 @@ pub fn genesis(num_validators: u64) -> Genesis {
         public_key: None,
         storage: HashMap::default(),
     };
-    let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().ref_to(),
-    }];
-    let default_user_tokens = token::Amount::whole(1_000_000);
-    let default_key_tokens = token::Amount::whole(1_000);
+    let implicit_accounts = vec![
+        ImplicitAccount {
+            public_key: wallet::defaults::daewon_keypair().ref_to(),
+        },
+        ImplicitAccount {
+            public_key: wallet::defaults::ester_keypair().ref_to(),
+        },
+    ];
+    let default_user_tokens = token::Amount::native_whole(1_000_000);
+    let default_key_tokens = token::Amount::native_whole(1_000);
     let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
@@ -1035,23 +1072,24 @@ pub fn genesis(num_validators: u64) -> Genesis {
     }
 
     /// Deprecated function, soon to be deleted. Generates default tokens
-    fn tokens() -> HashMap<Address, &'static str> {
+    fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
         vec![
-            (nam(), "NAM"),
-            (btc(), "BTC"),
-            (eth(), "ETH"),
-            (dot(), "DOT"),
-            (schnitzel(), "Schnitzel"),
-            (apfel(), "Apfel"),
-            (kartoffel(), "Kartoffel"),
+            (nam(), ("NAM", 6.into())),
+            (btc(), ("BTC", 8.into())),
+            (eth(), ("ETH", 18.into())),
+            (dot(), ("DOT", 10.into())),
+            (schnitzel(), ("Schnitzel", 6.into())),
+            (apfel(), ("Apfel", 6.into())),
+            (kartoffel(), ("Kartoffel", 6.into())),
         ]
         .into_iter()
         .collect()
     }
     let token_accounts = tokens()
-        .into_keys()
-        .map(|address| TokenAccount {
+        .into_iter()
+        .map(|(address, (_, denom))| TokenAccount {
             address,
+            denom,
             vp_code_path: vp_token_path.into(),
             vp_sha256: Default::default(),
             balances: balances.clone(),
@@ -1066,6 +1104,21 @@ pub fn genesis(num_validators: u64) -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovParams::default(),
+        ethereum_bridge_params: Some(EthereumBridgeConfig {
+            eth_start_height: Default::default(),
+            min_confirmations: Default::default(),
+            contracts: Contracts {
+                native_erc20: wnam(),
+                bridge: UpgradeableContract {
+                    address: EthAddress([0; 20]),
+                    version: Default::default(),
+                },
+                governance: UpgradeableContract {
+                    address: EthAddress([1; 20]),
+                    version: Default::default(),
+                },
+            },
+        }),
         native_token: address::nam(),
         #[cfg(not(feature = "mainnet"))]
         faucet_pow_difficulty: None,
@@ -1093,11 +1146,30 @@ pub mod tests {
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let (protocol_keypair, dkg_keypair) =
+        let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
+
+        // TODO: derive validator eth address from an eth keypair
+        let eth_cold_gov_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
+        let eth_hot_bridge_keypair: common::SecretKey =
+            secp256k1::SigScheme::generate(&mut rng)
+                .try_to_sk()
+                .unwrap();
+
         println!("address: {}", address);
         println!("keypair: {:?}", kp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
         println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
+        println!(
+            "eth_cold_gov_keypair: {:?}",
+            eth_cold_gov_keypair.try_to_vec().unwrap()
+        );
+        println!(
+            "eth_hot_bridge_keypair: {:?}",
+            eth_hot_bridge_keypair.try_to_vec().unwrap()
+        );
     }
 }

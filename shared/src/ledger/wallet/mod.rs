@@ -289,16 +289,24 @@ impl<U: WalletUtils> Wallet<U> {
         self.store.add_validator_data(address, keys);
     }
 
-    /// Returns the validator data, if it exists.
+    /// Returns a reference to the validator data, if it exists.
     pub fn get_validator_data(&self) -> Option<&ValidatorData> {
         self.store.get_validator_data()
     }
 
-    /// Returns the validator data, if it exists.  the save function
-    /// cannot be called after using this method as it involves a
-    /// partial move
-    pub fn take_validator_data(&mut self) -> Option<&mut ValidatorData> {
-        self.store.validator_data()
+    /// Returns a mut reference to the validator data, if it exists.
+    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
+        self.store.get_validator_data_mut()
+    }
+
+    /// Take the validator data, if it exists.
+    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+        self.store.take_validator_data()
+    }
+
+    /// Returns the validator data, if it exists.
+    pub fn into_validator_data(self) -> Option<ValidatorData> {
+        self.store.into_validator_data()
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.

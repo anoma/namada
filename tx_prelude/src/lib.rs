@@ -16,6 +16,7 @@ use core::slice;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use namada_core::ledger::eth_bridge;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
 pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
@@ -28,12 +29,13 @@ pub use namada_core::ledger::tx_env::TxEnv;
 pub use namada_core::proto::{Section, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
+pub use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::TxIndex;
 pub use namada_core::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-pub use namada_core::types::*;
+pub use namada_core::types::{eth_bridge_pool, *};
 pub use namada_macros::transaction;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};

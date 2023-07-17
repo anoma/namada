@@ -2,7 +2,6 @@
 pub mod storage;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use rust_decimal::Decimal;
 use thiserror::Error;
 
 use super::storage::types;
@@ -10,11 +9,14 @@ use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
 use crate::ledger::storage::{self as ledger_storage};
 use crate::types::address::{Address, InternalAddress};
 use crate::types::chain::ProposalBytes;
+use crate::types::dec::Dec;
 use crate::types::hash::Hash;
 use crate::types::time::DurationSecs;
 use crate::types::token;
 
-const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
+/// The internal address for storage keys representing parameters than
+/// can be changed via governance.
+pub const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
 
 /// Protocol parameters
 #[derive(
@@ -47,13 +49,13 @@ pub struct Parameters {
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
-    pub pos_gain_p: Decimal,
+    pub pos_gain_p: Dec,
     /// PoS gain d (read only)
-    pub pos_gain_d: Decimal,
+    pub pos_gain_d: Dec,
     /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Decimal,
+    pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: u64,
+    pub pos_inflation_amount: token::Amount,
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
@@ -198,7 +200,7 @@ impl Parameters {
         {
             let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
             let wrapper_tx_fees =
-                wrapper_tx_fees.unwrap_or(token::Amount::whole(100));
+                wrapper_tx_fees.unwrap_or(token::Amount::native_whole(100));
             storage.write(&wrapper_tx_fees_key, wrapper_tx_fees)?;
         }
         Ok(())
@@ -297,7 +299,7 @@ where
 /// cost.
 pub fn update_pos_gain_p_parameter<S>(
     storage: &mut S,
-    value: &Decimal,
+    value: &Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -310,7 +312,7 @@ where
 /// cost.
 pub fn update_pos_gain_d_parameter<S>(
     storage: &mut S,
-    value: &Decimal,
+    value: &Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -323,7 +325,7 @@ where
 /// gas cost.
 pub fn update_staked_ratio_parameter<S>(
     storage: &mut S,
-    value: &Decimal,
+    value: &Dec,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -412,7 +414,7 @@ where
     storage.read(&wrapper_tx_fees_key)
 }
 
-// Read the all the parameters from storage. Returns the parameters and gas
+/// Read all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<S>(storage: &S) -> storage_api::Result<Parameters>
 where
@@ -479,28 +481,28 @@ where
     // read PoS gain P
     let pos_gain_p_key = storage::get_pos_gain_p_key();
     let value = storage.read(&pos_gain_p_key)?;
-    let pos_gain_p: Decimal = value
+    let pos_gain_p = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
     // read PoS gain D
     let pos_gain_d_key = storage::get_pos_gain_d_key();
     let value = storage.read(&pos_gain_d_key)?;
-    let pos_gain_d: Decimal = value
+    let pos_gain_d = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
     // read staked ratio
     let staked_ratio_key = storage::get_staked_ratio_key();
     let value = storage.read(&staked_ratio_key)?;
-    let staked_ratio: Decimal = value
+    let staked_ratio = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
     // read PoS inflation rate
     let pos_inflation_key = storage::get_pos_inflation_amount_key();
     let value = storage.read(&pos_inflation_key)?;
-    let pos_inflation_amount: u64 = value
+    let pos_inflation_amount = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 

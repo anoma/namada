@@ -1,5 +1,78 @@
 # CHANGELOG
 
+## v0.19.0
+
+Namada 0.19.0 is a minor releasing addressing the integration with the namada trustless ethereum bridge.
+
+## v0.18.1
+
+Namada 0.18.1 is a patch release that addresses transaction format changes and minor ledger storage improvements.
+
+### BUG FIXES
+
+- Fixed bug that allowed transactions to be modified without invalidating
+  transaction hash ([\#1607](https://github.com/anoma/namada/pull/1607))
+- Move the content and code of init proposal transactions
+  into separare section to reduce tx size for hardware wallets
+  ([\#1611](https://github.com/anoma/namada/pull/1611))
+
+### FEATURES
+
+- Storage: Add a function to delete key-vals matching a given prefix.
+  ([\#1632](https://github.com/anoma/namada/pull/1632))
+
+### IMPROVEMENTS
+
+- Separate the transaction building, signing, and submission
+  actions in the SDKs API to enable hardware wallet usage
+  ([\#1498](https://github.com/anoma/namada/pull/1498))
+- Disable encryption when sending transactions
+  ([\#1636](https://github.com/anoma/namada/pull/1636))
+- Storage: Ensure that prefix iterator only returns key-
+  vals in which the prefix key segments are matched fully.
+  ([\#1642](https://github.com/anoma/namada/pull/1642))
+
+## v0.18.0
+
+Namada 0.18.0 is a minor release primarily addressing a major change in the token amount representation, the addition of a new validator set category, and other minor improvements to the ledger stability.
+
+### BUG FIXES
+
+- PoS: Ensure that when a validator is slashed, it gets removed from
+  validator set in the same epoch in Namada state as in CometBFT's state.
+  ([\#1582](https://github.com/anoma/namada/pull/1582))
+- Fix signature verification with secp256k1 in WASM VPs.
+  ([\#1599](https://github.com/anoma/namada/pull/1599))
+- Storage: Fix iterator without a prefix.
+  ([\#1615](https://github.com/anoma/namada/pull/1615))
+
+### FEATURES
+
+- Adds a third validator set, the below threshold set, which contains
+  all validators whose stake is below some parameterizable threshold.
+  ([#1576](https://github.com/anoma/namada/pull/1576))
+- Added `NAMADA_LOG_DIR` env var for logging to file(s) and `NAMADA_LOG_ROLLING`
+  for setting rolling logs frequency. The rolling frequency can be set to
+  never, minutely, hourly or daily. If not set, the default is never.
+  ([\#1578](https://github.com/anoma/namada/pull/1578))
+
+### IMPROVEMENTS
+
+- Update clap to the latest version.
+  ([\#64](https://github.com/anoma/namada/issues/64))
+- Updated wasmer to v2.3.0 and switched from pwasm-utils to wasm-instrument.
+  ([\#1604](https://github.com/anoma/namada/pull/1604))
+
+## v0.17.5
+
+Namada 0.17.5 is a maintenance release chiefly addressing MASP
+parameter validation.
+
+### IMPROVEMENTS
+
+- Check MASP parameters are correct in the ledger node.
+  ([#1619](https://github.com/anoma/namada/pull/1619))
+
 ## v0.17.4
 
 Namada 0.17.4 is a minor release improving the codebase by bumping the rust toolchain.
@@ -88,6 +161,9 @@ wallet address derivation, transaction structure and the ledger stability.
 
 ### BUG FIXES
 
+- Fixed the PrefixIter order of iteration in the write-
+  log to always match the iteration order in the storage.
+  ([#1141](https://github.com/anoma/namada/pull/1141))
 - Persists a newly added storage field for epoch update blocks delay to be
   available after node restart when not `None` which may break consensus.
   ([\#1455](https://github.com/anoma/namada/pull/1455))
@@ -1023,6 +1099,20 @@ Anoma 0.6.0 is a scheduled minor release.
   file and it is missing ([#1044](https://github.com/anoma/anoma/pull/1044))
 - Wallet: various store and API changes and additions for genesis setup.
   ([#1063](https://github.com/anoma/anoma/pull/1063))
+- Ledger: Updated the version of Tendermint used for ABCI++ ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Add full support for ProcessProposal and FinalizeBlock
+    - Updated the shims
+    - Updated `tendermint-rs`, `ibc-rs`, and `tower-abci` deps
+    - Updated the proto definitions
+    - Added Tendermint's new method of a BFT timestamping
+    - Updated the format of Tendermint's new config
+    - Fixed booting up the tendermint node in the ledger with correct settings
+    - Refactored storage to account for the fact that tendermint no longer passes in block headers
+- Client: Configured Tendermints new event log and JSON RPC API for events querying ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Added necessary config parameters to our tendermint node's configuration
+    - Wrote a jsonrpc client for querying tendermint's event logs
+    - Refactored how txs are submitted in the client when the `ABCI-plus-plus` feature is
+      set to use jsonrpc calls instead of websockets.
 
 ### MISCELLANEOUS
 

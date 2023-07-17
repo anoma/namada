@@ -3,8 +3,9 @@
 #[cfg(any(test, feature = "dev"))]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
-    christel_address, christel_keypair, daewon_address, daewon_keypair, keys,
-    validator_address, validator_keypair, validator_keys,
+    christel_address, christel_keypair, daewon_address, daewon_keypair,
+    ester_address, ester_keypair, keys, validator_address, validator_keypair,
+    validator_keys,
 };
 use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pos};
@@ -20,7 +21,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos".into(), pos::ADDRESS),
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), governance::ADDRESS),
-        ("eth_bridge".into(), eth_bridge::vp::ADDRESS),
+        ("eth_bridge".into(), eth_bridge::ADDRESS),
     ];
     // Genesis validators
     let validator_addresses =
@@ -81,13 +82,23 @@ mod dev {
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
 
-    /// Generate a new protocol signing keypair and DKG session keypair
-    pub fn validator_keys() -> (common::SecretKey, DkgKeypair) {
+    /// Generate a new protocol signing keypair, eth hot key and DKG session
+    /// keypair
+    pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
+    {
+        // ed25519 bytes
         let bytes: [u8; 33] = [
             0, 200, 107, 23, 252, 78, 80, 8, 164, 142, 3, 194, 33, 12, 250,
             169, 211, 127, 47, 13, 194, 54, 199, 81, 102, 246, 189, 119, 144,
             25, 27, 113, 222,
         ];
+        // secp256k1 bytes
+        let eth_bridge_key_bytes = [
+            1, 117, 93, 118, 129, 202, 67, 51, 62, 202, 196, 130, 244, 5, 44,
+            88, 200, 121, 169, 11, 227, 79, 223, 74, 88, 49, 132, 213, 59, 64,
+            20, 13, 82,
+        ];
+        // DkgKeypair
         let dkg_bytes = [
             32, 0, 0, 0, 210, 193, 55, 24, 92, 233, 23, 2, 73, 204, 221, 107,
             110, 222, 192, 136, 54, 24, 108, 236, 137, 27, 121, 142, 142, 7,
@@ -96,6 +107,8 @@ mod dev {
 
         (
             BorshDeserialize::deserialize(&mut bytes.as_ref()).unwrap(),
+            BorshDeserialize::deserialize(&mut eth_bridge_key_bytes.as_ref())
+                .unwrap(),
             BorshDeserialize::deserialize(&mut dkg_bytes.as_ref()).unwrap(),
         )
     }
@@ -107,6 +120,7 @@ mod dev {
             ("bertha".into(), bertha_keypair()),
             ("christel".into(), christel_keypair()),
             ("daewon".into(), daewon_keypair()),
+            ("ester".into(), ester_keypair()),
             ("validator".into(), validator_keypair()),
         ]
     }
@@ -137,6 +151,7 @@ mod dev {
             ("bertha".into(), bertha_address()),
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
+            ("ester".into(), ester_address()),
         ];
         let token_addresses = tokens()
             .into_iter()
@@ -164,6 +179,11 @@ mod dev {
     pub fn daewon_address() -> Address {
         // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
         (&daewon_keypair().ref_to()).into()
+    }
+
+    /// An implicit user address for testing & development
+    pub fn ester_address() -> Address {
+        (&ester_keypair().ref_to()).into()
     }
 
     /// An established validator address for testing & development
@@ -217,6 +237,18 @@ mod dev {
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
+    }
+
+    pub fn ester_keypair() -> common::SecretKey {
+        // generated from
+        // [`namada::types::key::secp256k1::gen_keypair`]
+        let bytes = [
+            54, 144, 147, 226, 3, 93, 132, 247, 42, 126, 90, 23, 200, 155, 122,
+            147, 139, 93, 8, 204, 135, 178, 40, 152, 5, 227, 175, 204, 102,
+            239, 154, 66,
+        ];
+        let sk = secp256k1::SecretKey::try_from_slice(&bytes).unwrap();
+        sk.try_to_sk().unwrap()
     }
 
     pub fn validator_keypair() -> common::SecretKey {

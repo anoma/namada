@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use parity_wasm::elements;
-use pwasm_utils::{self, rules};
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
 
@@ -97,7 +96,7 @@ where
 {
     let tx_code = tx
         .get_section(tx.code_sechash())
-        .and_then(Section::code_sec)
+        .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingCode)?;
     let (module, store) = match tx_code.code {
         Commitment::Hash(code_hash) => {
@@ -325,13 +324,6 @@ where
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
-        let vp_code_hash = match Hash::try_from(&vp_code_hash[..]) {
-            Ok(hash) => hash,
-            Err(err) => {
-                tracing::warn!("VP wasm code hash error {}", err);
-                return HostEnvResult::Fail;
-            }
-        };
         match self.eval_native_result(ctx, vp_code_hash, input_data) {
             Ok(ok) => HostEnvResult::from(ok),
             Err(err) => {
@@ -400,11 +392,16 @@ pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
 pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
         .map_err(Error::DeserializationError)?;
+    let module = wasm_instrument::gas_metering::inject(
+        module,
+        wasm_instrument::gas_metering::host_function::Injector::new(
+            "env", "gas",
+        ),
+        &get_gas_rules(),
+    )
+    .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
-        pwasm_utils::inject_gas_counter(module, &get_gas_rules(), "env")
-            .map_err(|_original_module| Error::GasMeterInjection)?;
-    let module =
-        pwasm_utils::stack_height::inject_limiter(module, WASM_STACK_LIMIT)
+        wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
             .map_err(|_original_module| Error::StackLimiterInjection)?;
     elements::serialize(module).map_err(Error::SerializationError)
 }
@@ -461,8 +458,15 @@ where
 }
 
 /// Get the gas rules used to meter wasm operations
-fn get_gas_rules() -> rules::Set {
-    rules::Set::default().with_grow_cost(1)
+fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
+    let instruction_cost = 1;
+    let memory_grow_cost = 1;
+    let call_per_local_cost = 1;
+    wasm_instrument::gas_metering::ConstantCostRules::new(
+        instruction_cost,
+        memory_grow_cost,
+        call_per_local_cost,
+    )
 }
 
 #[cfg(test)]
@@ -485,10 +489,10 @@ mod tests {
     /// execution is aborted.
     #[test]
     fn test_tx_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 3 stack
-        // heights, this should hit the stack limit. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 3 - 1;
+        // Because each call into `$loop` inside the wasm consumes 5 stack
+        // heights except for the terminal call, this should hit the stack
+        // limit.
+        let loops = WASM_STACK_LIMIT / 5 - 1;
 
         let error = loop_in_tx_wasm(loops).expect_err(&format!(
             "Expecting runtime error \"unreachable\" caused by stack-height \
@@ -506,10 +510,10 @@ mod tests {
     /// is aborted.
     #[test]
     fn test_vp_stack_limiter() {
-        // Because each call into `$loop` inside the wasm consumes 3 stack
-        // heights, this should hit the stack limit. If we were to subtract
-        // one from this value, we should be just under the limit.
-        let loops = WASM_STACK_LIMIT / 3 - 1;
+        // Because each call into `$loop` inside the wasm consumes 5 stack
+        // heights except for the terminal call, this should hit the stack
+        // limit.
+        let loops = WASM_STACK_LIMIT / 5 - 1;
 
         let error = loop_in_vp_wasm(loops).expect_err(
             "Expecting runtime error caused by stack-height overflow. Got",
