@@ -7,6 +7,8 @@ use namada_core::types::token;
 use namada_core::types::uint::Uint;
 use thiserror::Error;
 
+use crate::types::EpochBounds;
+
 /// Proof-of-Stake system parameters, set at genesis and can only be changed via
 /// governance
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
@@ -167,11 +169,11 @@ impl PosParams {
     pub fn cubic_slash_epoch_window(
         &self,
         infraction_epoch: Epoch,
-    ) -> (Epoch, Epoch) {
+    ) -> EpochBounds {
         let start = infraction_epoch
             .sub_or_default(Epoch(self.cubic_slashing_window_length));
         let end = infraction_epoch + self.cubic_slashing_window_length;
-        (start, end)
+        EpochBounds { start, end }
     }
 }
 

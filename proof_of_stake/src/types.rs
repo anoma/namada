@@ -532,6 +532,16 @@ impl Display for SlashType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// Holds a pair of epochs used to establish bounds for some operation
+/// TODO: determine if deriving Ord is appropriate or if an impl needed
+pub struct EpochBounds {
+    /// The start epoch
+    pub start: Epoch,
+    /// The end epoch
+    pub end: Epoch,
+}
+
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens
 pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
