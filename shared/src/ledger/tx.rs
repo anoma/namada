@@ -48,8 +48,8 @@ use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
-use crate::vm;
 use crate::vm::WasmValidationError;
+use crate::{display_line, edisplay, vm};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -347,7 +347,7 @@ pub async fn build_reveal_pk<
     let public_key = public_key;
     if !is_reveal_pk_needed::<C, U>(client, &public_key, &args).await? {
         let addr: Address = (&public_key).into();
-        println!("PK for {addr} is already revealed, nothing to do.");
+        display_line!("PK for {addr} is already revealed, nothing to do.");
         Ok(None)
     } else {
         // If not, submit it
@@ -395,7 +395,9 @@ pub async fn build_reveal_pk_aux<
     args: &args::Tx,
 ) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     let addr: Address = public_key.into();
-    println!("Submitting a tx to reveal the public key for address {addr}...");
+    display_line!(
+        "Submitting a tx to reveal the public key for address {addr}..."
+    );
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
 
     let tx_code_hash = query_wasm_code_hash(
@@ -452,12 +454,12 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
         lift_rpc_error(rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await)?;
 
     if response.code == 0.into() {
-        println!("Transaction added to mempool: {:?}", response);
+        display_line!("Transaction added to mempool: {:?}", response);
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
-            println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
+            display_line!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
+            display_line!("Inner transaction hash: {:?}", decrypted_tx_hash);
         }
         Ok(response)
     } else {
@@ -513,7 +515,7 @@ where
             .proceed_or(Error::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
-        println!(
+        display_line!(
             "Transaction accepted with result: {}",
             serde_json::to_string_pretty(&parsed).unwrap()
         );
@@ -528,7 +530,7 @@ where
                 .await
                 .proceed_or(Error::AppliedTimeout)?;
             let parsed = TxResponse::from_event(event);
-            println!(
+            display_line!(
                 "Transaction applied with result: {}",
                 serde_json::to_string_pretty(&parsed).unwrap()
             );
@@ -573,7 +575,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
     let len = initialized_accounts.len();
     if len != 0 {
         // Store newly initialized account addresses in the wallet
-        println!(
+        display_line!(
             "The transaction initialized {} new account{}",
             len,
             if len == 1 { "" } else { "s" }
@@ -604,12 +606,13 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
             );
             match added {
                 Some(new_alias) if new_alias != encoded => {
-                    println!(
+                    display_line!(
                         "Added alias {} for address {}.",
-                        new_alias, encoded
+                        new_alias,
+                        encoded
                     );
                 }
-                _ => println!("No alias added for address {}.", encoded),
+                _ => display_line!("No alias added for address {}.", encoded),
             };
         }
     }
@@ -640,7 +643,7 @@ pub async fn build_validator_commission_change<
     let validator = args.validator.clone();
     if rpc::is_validator(client, &validator).await {
         if args.rate < Dec::zero() || args.rate > Dec::one() {
-            eprintln!("Invalid new commission rate, received {}", args.rate);
+            edisplay!("Invalid new commission rate, received {}", args.rate);
             return Err(Error::InvalidCommissionRate(args.rate));
         }
 
@@ -660,7 +663,7 @@ pub async fn build_validator_commission_change<
                 if args.rate.abs_diff(&commission_rate)
                     > max_commission_change_per_epoch
                 {
-                    eprintln!(
+                    edisplay!(
                         "New rate is too large of a change with respect to \
                          the predecessor epoch in which the rate will take \
                          effect."
@@ -671,14 +674,14 @@ pub async fn build_validator_commission_change<
                 }
             }
             None => {
-                eprintln!("Error retrieving from storage");
+                edisplay!("Error retrieving from storage");
                 if !args.tx.force {
                     return Err(Error::Retrieval);
                 }
             }
         }
     } else {
-        eprintln!("The given address {validator} is not a validator.");
+        edisplay!("The given address {validator} is not a validator.");
         if !args.tx.force {
             return Err(Error::InvalidValidatorAddress(validator));
         }
@@ -719,7 +722,7 @@ pub async fn build_unjail_validator<
     args: args::TxUnjailValidator,
 ) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
     if !rpc::is_validator(client, &args.validator).await {
-        eprintln!("The given address {} is not a validator.", &args.validator);
+        edisplay!("The given address {} is not a validator.", &args.validator);
         if !args.tx.force {
             return Err(Error::InvalidValidatorAddress(args.validator.clone()));
         }
@@ -764,7 +767,7 @@ pub async fn submit_unjail_validator<
     args: args::TxUnjailValidator,
 ) -> Result<(), Error> {
     if !rpc::is_validator(client, &args.validator).await {
-        eprintln!("The given address {} is not a validator.", &args.validator);
+        edisplay!("The given address {} is not a validator.", &args.validator);
         if !args.tx.force {
             return Err(Error::InvalidValidatorAddress(args.validator.clone()));
         }
@@ -832,7 +835,7 @@ pub async fn build_withdraw<
     )
     .await;
     if tokens.is_zero() {
-        eprintln!(
+        edisplay!(
             "There are no unbonded bonds ready to withdraw in the current \
              epoch {}.",
             epoch
@@ -842,11 +845,11 @@ pub async fn build_withdraw<
             return Err(Error::NoUnbondReady(epoch));
         }
     } else {
-        println!(
+        display_line!(
             "Found {} tokens that can be withdrawn.",
             tokens.to_string_native()
         );
-        println!("Submitting transaction to withdraw them...");
+        display_line!("Submitting transaction to withdraw them...");
     }
 
     let data = pos::Withdraw { validator, source };
@@ -903,13 +906,13 @@ pub async fn build_unbond<
 
         let bond_amount =
             rpc::query_bond(client, &bond_source, &args.validator, None).await;
-        println!(
+        display_line!(
             "Bond amount available for unbonding: {} NAM",
             bond_amount.to_string_native()
         );
 
         if args.amount > bond_amount {
-            eprintln!(
+            edisplay!(
                 "The total bonds of the source {} is lower than the amount to \
                  be unbonded. Amount to unbond is {} and the total bonds is \
                  {}.",
@@ -994,7 +997,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
         match latest_withdraw_epoch_post.cmp(&latest_withdraw_epoch_pre) {
             std::cmp::Ordering::Less => {
                 if args.tx.force {
-                    eprintln!(
+                    edisplay!(
                         "Unexpected behavior reading the unbonds data has \
                          occurred"
                     );
@@ -1003,7 +1006,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
                 }
             }
             std::cmp::Ordering::Equal => {
-                println!(
+                display_line!(
                     "Amount {} withdrawable starting from epoch {}",
                     (latest_withdraw_amount_post - latest_withdraw_amount_pre)
                         .to_string_native(),
@@ -1011,7 +1014,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
                 );
             }
             std::cmp::Ordering::Greater => {
-                println!(
+                display_line!(
                     "Amount {} withdrawable starting from epoch {}",
                     latest_withdraw_amount_post.to_string_native(),
                     latest_withdraw_epoch_post,
@@ -1019,7 +1022,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
             }
         }
     } else {
-        println!(
+        display_line!(
             "Amount {} withdrawable starting from epoch {}",
             latest_withdraw_amount_post.to_string_native(),
             latest_withdraw_epoch_post,
@@ -1566,7 +1569,7 @@ pub async fn build_update_vp<
             let exists = rpc::known_address::<C>(client, &addr).await;
             if !exists {
                 if args.tx.force {
-                    eprintln!("The address {} doesn't exist on chain.", addr);
+                    edisplay!("The address {} doesn't exist on chain.", addr);
                     Ok(())
                 } else {
                     Err(Error::LocationDoesNotExist(addr.clone()))
@@ -1577,7 +1580,7 @@ pub async fn build_update_vp<
         }
         Address::Implicit(_) => {
             if args.tx.force {
-                eprintln!(
+                edisplay!(
                     "A validity predicate of an implicit address cannot be \
                      directly updated. You can use an established address for \
                      this purpose."
@@ -1589,7 +1592,7 @@ pub async fn build_update_vp<
         }
         Address::Internal(_) => {
             if args.tx.force {
-                eprintln!(
+                edisplay!(
                     "A validity predicate of an internal address cannot be \
                      directly updated."
                 );
@@ -1695,7 +1698,7 @@ async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
     let is_validator = rpc::is_validator(client, &validator).await;
     if !is_validator {
         if force {
-            eprintln!(
+            edisplay!(
                 "The address {} doesn't belong to any known validator account.",
                 validator
             );
@@ -1725,7 +1728,7 @@ where
     let addr_exists = rpc::known_address::<C>(client, &addr).await;
     if !addr_exists {
         if force {
-            eprintln!("{}", message);
+            edisplay!("{}", message);
             Ok(addr)
         } else {
             Err(err(addr))
@@ -1812,7 +1815,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
         Some(balance) => {
             if balance < amount {
                 if force {
-                    eprintln!(
+                    edisplay!(
                         "The balance of the source {} of token {} is lower \
                          than the amount to be transferred. Amount to \
                          transfer is {} and the balance is {}.",
@@ -1836,9 +1839,10 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
         }
         None => {
             if force {
-                eprintln!(
+                edisplay!(
                     "No balance found for the source {} of token {}",
-                    source, token
+                    source,
+                    token
                 );
                 Ok(())
             } else {
@@ -1855,7 +1859,7 @@ fn validate_untrusted_code_err(
 ) -> Result<(), Error> {
     if let Err(err) = vm::validate_untrusted_wasm(vp_code) {
         if force {
-            eprintln!("Validity predicate code validation failed with {}", err);
+            edisplay!("Validity predicate code validation failed with {}", err);
             Ok(())
         } else {
             Err(Error::WasmValidationFailure(err))

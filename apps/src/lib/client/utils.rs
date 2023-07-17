@@ -15,6 +15,7 @@ use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
+use namada::{display_line, edisplay};
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
@@ -47,41 +48,6 @@ const DEFAULT_NETWORK_CONFIGS_SERVER: &str =
 /// We do pre-genesis validator set up in this directory
 pub const PRE_GENESIS_DIR: &str = "pre-genesis";
 
-/// Environment variable set to reduce the amount of printing the CLI
-/// tools perform. Extra prints, while good for UI, clog up test tooling.
-pub const REDUCED_CLI_PRINTING: &str = "REDUCED_CLI_PRINTING";
-
-macro_rules! cli_print {
-    ($($arg:tt)*) => {{
-        if std::env::var(REDUCED_CLI_PRINTING)
-        .map(|v| if v.to_lowercase().trim() == "true" {
-            false
-        } else {
-            true
-        }).unwrap_or(true) {
-            let mut stdout = std::io::stdout().lock();
-            _ = stdout.write_all(format!("{}", std::format_args!($($arg)*)).as_bytes());
-            _ = stdout.flush();
-        }
-    }};
-}
-
-#[allow(unused)]
-macro_rules! cli_println {
-    ($($arg:tt)*) => {{
-        if std::env::var(REDUCED_CLI_PRINTING)
-        .map(|v| if v.to_lowercase().trim() == "true" {
-            false
-        } else {
-            true
-        }).unwrap_or(true) {
-            let mut stdout = std::io::stdout().lock();
-            _ = stdout.write_all(format!("{}\n", std::format_args!($($arg)*)).as_bytes());
-            _ = stdout.flush();
-        }
-    }};
-}
-
 /// Configure Namada to join an existing network. The chain must be released in
 /// the <https://github.com/heliaxdev/anoma-network-config> repository.
 pub async fn join_network(
@@ -108,7 +74,7 @@ pub async fn join_network(
             .await
             .is_ok()
         {
-            eprintln!("The chain directory for {} already exists.", chain_id);
+            edisplay!("The chain directory for {} already exists.", chain_id);
             cli::safe_exit(1);
         }
     }
@@ -121,7 +87,7 @@ pub async fn join_network(
             match alias {
                 std::path::Component::Normal(alias) => {
                     let alias = alias.to_string_lossy().to_string();
-                    println!(
+                    display_line!(
                         "Using {alias} parsed from the given \
                          --pre-genesis-path"
                     );
@@ -146,7 +112,7 @@ pub async fn join_network(
             (
                 validator_alias,
                 pre_genesis::load(&pre_genesis_dir).unwrap_or_else(|err| {
-                    eprintln!(
+                    edisplay!(
                         "Error loading validator pre-genesis wallet {err}",
                     );
                     cli::safe_exit(1)
@@ -171,11 +137,11 @@ pub async fn join_network(
     );
 
     // Read or download the release archive
-    println!("Downloading config release from {} ...", release_url);
+    display_line!("Downloading config release from {} ...", release_url);
     let release = match download_file(release_url).await {
         Ok(contents) => contents,
         Err(error) => {
-            eprintln!("Error downloading release: {}", error);
+            edisplay!("Error downloading release: {}", error);
             cli::safe_exit(1);
         }
     };
@@ -285,7 +251,7 @@ pub async fn join_network(
             .tendermint_node_key
             .try_to_sk()
             .unwrap_or_else(|_err| {
-                eprintln!(
+                edisplay!(
                     "Tendermint node key must be common (need to change?)"
                 );
                 cli::safe_exit(1)
@@ -300,7 +266,7 @@ pub async fn join_network(
             &tendermint_node_key.ref_to(),
             &genesis_config,
         ) {
-            eprintln!(
+            edisplay!(
                 "The current validator is not valid for chain {}.",
                 chain_id.as_str()
             );
@@ -313,7 +279,7 @@ pub async fn join_network(
         let address = wallet
             .find_address(&validator_alias)
             .unwrap_or_else(|| {
-                eprintln!(
+                edisplay!(
                     "Unable to find validator address for alias \
                      {validator_alias}"
                 );
@@ -377,7 +343,7 @@ pub async fn join_network(
         fetch_wasms_aux(&base_dir, &chain_id).await;
     }
 
-    println!("Successfully configured for chain ID {}", chain_id);
+    display_line!("Successfully configured for chain ID {}", chain_id);
 }
 
 pub async fn fetch_wasms(
@@ -388,7 +354,7 @@ pub async fn fetch_wasms(
 }
 
 pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
-    println!("Fetching wasms for chain ID {}...", chain_id);
+    display_line!("Fetching wasms for chain ID {}...", chain_id);
     let wasm_dir = {
         let mut path = base_dir.to_owned();
         path.push(chain_id.as_str());
@@ -526,7 +492,7 @@ pub fn init_network(
         )
         .unwrap_or_else(|| {
             let alias = format!("{}-consensus-key", name);
-            println!("Generating validator {} consensus key...", name);
+            display_line!("Generating validator {} consensus key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
@@ -546,7 +512,7 @@ pub fn init_network(
         )
         .unwrap_or_else(|| {
             let alias = format!("{}-account-key", name);
-            println!("Generating validator {} account key...", name);
+            display_line!("Generating validator {} account key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
@@ -562,7 +528,10 @@ pub fn init_network(
         )
         .unwrap_or_else(|| {
             let alias = format!("{}-protocol-key", name);
-            println!("Generating validator {} protocol signing key...", name);
+            display_line!(
+                "Generating validator {} protocol signing key...",
+                name
+            );
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
@@ -578,7 +547,7 @@ pub fn init_network(
         )
         .unwrap_or_else(|| {
             let alias = format!("{}-eth-hot-key", name);
-            println!("Generating validator {} eth hot key...", name);
+            display_line!("Generating validator {} eth hot key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
@@ -600,7 +569,7 @@ pub fn init_network(
         )
         .unwrap_or_else(|| {
             let alias = format!("{}-eth-cold-key", name);
-            println!("Generating validator {} eth cold key...", name);
+            display_line!("Generating validator {} eth cold key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair) = wallet
@@ -622,12 +591,12 @@ pub fn init_network(
             .map(|key| {
                 key.to_dkg_public_key().unwrap_or_else(|err| {
                     let label = format!("validator {name} DKG key");
-                    eprintln!("Invalid {label} key: {}", err);
+                    edisplay!("Invalid {label} key: {}", err);
                     cli::safe_exit(1)
                 })
             })
             .unwrap_or_else(|| {
-                println!(
+                display_line!(
                     "Generating validator {} DKG session keypair...",
                     name
                 );
@@ -694,7 +663,7 @@ pub fn init_network(
     if let Some(implicit) = &mut config.implicit {
         implicit.iter_mut().for_each(|(name, config)| {
             if config.public_key.is_none() {
-                println!(
+                display_line!(
                     "Generating implicit account {} key and address ...",
                     name
                 );
@@ -890,8 +859,8 @@ pub fn init_network(
         .write(&global_args.base_dir, &chain_id, true)
         .unwrap();
 
-    println!("Derived chain ID: {}", chain_id);
-    println!(
+    display_line!("Derived chain ID: {}", chain_id);
+    display_line!(
         "Genesis file generated at {}",
         genesis_path.to_string_lossy()
     );
@@ -941,7 +910,7 @@ pub fn init_network(
             GzEncoder::new(compressed_file, Compression::default());
         encoder.write_all(&release.into_inner().unwrap()).unwrap();
         encoder.finish().unwrap();
-        println!(
+        display_line!(
             "Release archive created at {}",
             release_file.to_string_lossy()
         );
@@ -960,7 +929,10 @@ fn init_established_account(
         wallet.add_address(&name, address, true);
     }
     if config.public_key.is_none() {
-        println!("Generating established account {} key...", name.as_ref());
+        display_line!(
+            "Generating established account {} key...",
+            name.as_ref()
+        );
         let password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         let (_alias, keypair) = wallet
@@ -987,14 +959,14 @@ pub fn pk_to_tm_address(
     args::PkToTmAddress { public_key }: args::PkToTmAddress,
 ) {
     let tm_addr = tm_consensus_key_raw_hash(&public_key);
-    println!("{tm_addr}");
+    display_line!("{tm_addr}");
 }
 
 pub fn default_base_dir(
     _global_args: args::Global,
     _args: args::DefaultBaseDir,
 ) {
-    println!(
+    display_line!(
         "{}",
         get_default_namada_folder().to_str().expect(
             "expected a default namada folder to be possible to determine"
@@ -1017,11 +989,11 @@ pub fn init_genesis_validator(
 ) {
     // Validate the commission rate data
     if commission_rate > Dec::one() {
-        eprintln!("The validator commission rate must not exceed 1.0 or 100%");
+        edisplay!("The validator commission rate must not exceed 1.0 or 100%");
         cli::safe_exit(1)
     }
     if max_commission_rate_change > Dec::one() {
-        eprintln!(
+        edisplay!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
         );
@@ -1029,20 +1001,20 @@ pub fn init_genesis_validator(
     }
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
-    println!("Generating validator keys...");
+    display_line!("Generating validator keys...");
     let pre_genesis = pre_genesis::gen_and_store(
         key_scheme,
         unsafe_dont_encrypt,
         &pre_genesis_dir,
     )
     .unwrap_or_else(|err| {
-        eprintln!(
+        edisplay!(
             "Unable to generate the validator pre-genesis wallet: {}",
             err
         );
         cli::safe_exit(1)
     });
-    println!(
+    display_line!(
         "The validator's keys were stored in the wallet at {}",
         pre_genesis::validator_file_name(&pre_genesis_dir).to_string_lossy()
     );
@@ -1092,21 +1064,21 @@ pub fn init_genesis_validator(
         )]),
     };
     let genesis_part = toml::to_string(&validator_config).unwrap();
-    println!("Your public partial pre-genesis TOML configuration:");
-    println!();
-    println!("{genesis_part}");
+    display_line!("Your public partial pre-genesis TOML configuration:");
+    display_line!();
+    display_line!("{genesis_part}");
 
     let file_name = validator_pre_genesis_file(&pre_genesis_dir);
     fs::write(&file_name, genesis_part).unwrap_or_else(|err| {
-        eprintln!(
+        edisplay!(
             "Couldn't write partial pre-genesis file to {}. Failed with: {}",
             file_name.to_string_lossy(),
             err
         );
         cli::safe_exit(1)
     });
-    println!();
-    println!(
+    display_line!();
+    display_line!(
         "Pre-genesis TOML written to {}",
         file_name.to_string_lossy()
     );
@@ -1127,7 +1099,7 @@ fn try_parse_public_key(
     let label = label.as_ref();
     value.as_ref().map(|key| {
         key.to_public_key().unwrap_or_else(|err| {
-            eprintln!("Invalid {label} key: {}", err);
+            edisplay!("Invalid {label} key: {}", err);
             cli::safe_exit(1)
         })
     })
@@ -1204,14 +1176,14 @@ where
     print!("{}", msg);
     _ = std::io::stdout().flush();
     for c in spinny_wheel.chars().cycle() {
-        cli_print!("{}", c);
+        print!("{}", c);
         std::thread::sleep(std::time::Duration::from_secs(1));
-        cli_print!("{}", (8u8 as char));
+        print!("{}", (8u8 as char));
         if task.is_finished() {
             break;
         }
     }
-    println!();
+    display_line!();
     task.join().unwrap()
 }
 

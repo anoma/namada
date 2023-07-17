@@ -26,6 +26,7 @@ use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
+use namada::{display_line, edisplay};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -163,7 +164,7 @@ where
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
     let account_key = account_key.unwrap_or_else(|| {
-        println!("Generating validator account key...");
+        display_line!("Generating validator account key...");
         let password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         ctx.wallet
@@ -184,12 +185,12 @@ where
         .map(|key| match key {
             common::SecretKey::Ed25519(_) => key,
             common::SecretKey::Secp256k1(_) => {
-                eprintln!("Consensus key can only be ed25519");
+                edisplay!("Consensus key can only be ed25519");
                 safe_exit(1)
             }
         })
         .unwrap_or_else(|| {
-            println!("Generating consensus key...");
+            display_line!("Generating consensus key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
@@ -210,12 +211,12 @@ where
         .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
-                eprintln!("Eth cold key can only be secp256k1");
+                edisplay!("Eth cold key can only be secp256k1");
                 safe_exit(1)
             }
         })
         .unwrap_or_else(|| {
-            println!("Generating Eth cold key...");
+            display_line!("Generating Eth cold key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
@@ -237,12 +238,12 @@ where
         .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
-                eprintln!("Eth hot key can only be secp256k1");
+                edisplay!("Eth hot key can only be secp256k1");
                 safe_exit(1)
             }
         })
         .unwrap_or_else(|| {
-            println!("Generating Eth hot key...");
+            display_line!("Generating Eth hot key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             ctx.wallet
@@ -261,7 +262,7 @@ where
         });
 
     if protocol_key.is_none() {
-        println!("Generating protocol signing key...");
+        display_line!("Generating protocol signing key...");
     }
     // Generate the validator keys
     let validator_keys = gen_validator_keys(
@@ -287,7 +288,7 @@ where
 
     // Validate the commission rate data
     if commission_rate > Dec::one() || commission_rate < Dec::zero() {
-        eprintln!(
+        edisplay!(
             "The validator commission rate must not exceed 1.0 or 100%, and \
              it must be 0 or positive"
         );
@@ -298,7 +299,7 @@ where
     if max_commission_rate_change > Dec::one()
         || max_commission_rate_change < Dec::zero()
     {
-        eprintln!(
+        edisplay!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
         );
@@ -358,12 +359,12 @@ where
                 if let Some(alias) = ctx.wallet.find_alias(validator_address) {
                     (alias.clone(), validator_address.clone())
                 } else {
-                    eprintln!("Expected one account to be created");
+                    edisplay!("Expected one account to be created");
                     safe_exit(1)
                 }
             }
             _ => {
-                eprintln!("Expected one account to be created");
+                edisplay!("Expected one account to be created");
                 safe_exit(1)
             }
         };
@@ -371,7 +372,7 @@ where
         ctx.wallet
             .add_validator_data(validator_address, validator_keys);
         crate::wallet::save(&ctx.wallet)
-            .unwrap_or_else(|err| eprintln!("{}", err));
+            .unwrap_or_else(|err| edisplay!("{}", err));
 
         let tendermint_home = ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
@@ -393,24 +394,24 @@ where
             .await
             .expect("Pos parameter should be defined.");
 
-        println!();
-        println!(
+        display_line!();
+        display_line!(
             "The validator's addresses and keys were stored in the wallet:"
         );
-        println!("  Validator address \"{}\"", validator_address_alias);
-        println!("  Validator account key \"{}\"", validator_key_alias);
-        println!("  Consensus key \"{}\"", consensus_key_alias);
-        println!(
+        display_line!("  Validator address \"{}\"", validator_address_alias);
+        display_line!("  Validator account key \"{}\"", validator_key_alias);
+        display_line!("  Consensus key \"{}\"", consensus_key_alias);
+        display_line!(
             "The ledger node has been setup to use this validator's address \
              and consensus key."
         );
-        println!(
+        display_line!(
             "Your validator will be active in {} epochs. Be sure to restart \
              your node for the changes to take effect!",
             pos_params.pipeline_len
         );
     } else {
-        println!("Transaction dry run. No addresses have been saved.");
+        display_line!("Transaction dry run. No addresses have been saved.");
     }
     Ok(())
 }
@@ -439,10 +440,12 @@ impl CLIShieldedUtils {
             && convert_path.exists()
             && output_path.exists())
         {
-            println!("MASP parameters not present, downloading...");
+            display_line!("MASP parameters not present, downloading...");
             masp_proofs::download_masp_parameters(None)
                 .expect("MASP parameters not present or downloadable");
-            println!("MASP parameter download complete, resuming execution...");
+            display_line!(
+                "MASP parameter download complete, resuming execution..."
+            );
         }
         // Finally initialize a shielded context with the supplied directory
         let utils = Self { context_dir };
@@ -560,7 +563,7 @@ pub async fn submit_transfer(
                 tx_epoch.unwrap() != submission_epoch =>
             {
                 // Then we probably straddled an epoch boundary. Let's retry...
-                eprintln!(
+                edisplay!(
                     "MASP transaction rejected and this may be due to the \
                      epoch changing. Attempting to resubmit transaction.",
                 );
@@ -614,14 +617,14 @@ where
             % governance_parameters.min_proposal_period
             != 0
     {
-        println!("{}", proposal.voting_start_epoch <= current_epoch);
-        println!(
+        display_line!("{}", proposal.voting_start_epoch <= current_epoch);
+        display_line!(
             "{}",
             proposal.voting_start_epoch.0
                 % governance_parameters.min_proposal_period
                 == 0
         );
-        eprintln!(
+        edisplay!(
             "Invalid proposal start epoch: {} must be greater than current \
              epoch {} and a multiple of {}",
             proposal.voting_start_epoch,
@@ -638,7 +641,7 @@ where
             > governance_parameters.max_proposal_period
         || proposal.voting_end_epoch.0 % 3 != 0
     {
-        eprintln!(
+        edisplay!(
             "Invalid proposal end epoch: difference between proposal start \
              and end epoch must be at least {} and at max {} and end epoch \
              must be a multiple of {}",
@@ -653,7 +656,7 @@ where
         || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
             < governance_parameters.min_proposal_grace_epochs
     {
-        eprintln!(
+        edisplay!(
             "Invalid proposal grace epoch: difference between proposal grace \
              and end epoch must be at least {}",
             governance_parameters.min_proposal_grace_epochs
@@ -678,13 +681,13 @@ where
         let out = File::create(&proposal_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_proposal) {
             Ok(_) => {
-                println!(
+                display_line!(
                     "Proposal created: {}.",
                     proposal_filename.to_string_lossy()
                 );
             }
             Err(e) => {
-                eprintln!("Error while creating proposal file: {}.", e);
+                edisplay!("Error while creating proposal file: {}.", e);
                 safe_exit(1)
             }
         }
@@ -696,7 +699,7 @@ where
             if let Ok(data) = tx_data {
                 data
             } else {
-                eprintln!("Invalid data for init proposal transaction.");
+                edisplay!("Invalid data for init proposal transaction.");
                 safe_exit(1)
             };
 
@@ -711,7 +714,7 @@ where
             )
             .unwrap()
         {
-            eprintln!(
+            edisplay!(
                 "Address {} doesn't have enough funds.",
                 &proposal.author
             );
@@ -721,7 +724,7 @@ where
         if init_proposal_content.len()
             > governance_parameters.max_proposal_content_size as usize
         {
-            eprintln!("Proposal content size too big.",);
+            edisplay!("Proposal content size too big.",);
             safe_exit(1);
         }
 
@@ -790,7 +793,7 @@ where
     let signer = if let Some(addr) = &args.tx.signer {
         addr
     } else {
-        eprintln!("Missing mandatory argument --signer.");
+        edisplay!("Missing mandatory argument --signer.");
         safe_exit(1)
     };
 
@@ -830,7 +833,7 @@ where
 
                 let msg = splits.next().expect("Missing message to sign");
                 if splits.next().is_some() {
-                    eprintln!("Unexpected argument after message");
+                    edisplay!("Unexpected argument after message");
                     safe_exit(1);
                 }
 
@@ -846,14 +849,14 @@ where
         }
         "nay" => ProposalVote::Nay,
         _ => {
-            eprintln!("Vote must be either yay or nay");
+            edisplay!("Vote must be either yay or nay");
             safe_exit(1);
         }
     };
 
     if args.offline {
         if !proposal_vote.is_default_vote() {
-            eprintln!(
+            edisplay!(
                 "Wrong vote type for offline proposal. Just vote yay or nay!"
             );
             safe_exit(1);
@@ -868,7 +871,7 @@ where
             .await
             .expect("Public key should exist.");
         if !proposal.check_signature(&public_key) {
-            eprintln!("Proposal signature mismatch!");
+            edisplay!("Proposal signature mismatch!");
             safe_exit(1)
         }
 
@@ -889,14 +892,14 @@ where
         let out = File::create(&proposal_vote_filename).unwrap();
         match serde_json::to_writer_pretty(out, &offline_vote) {
             Ok(_) => {
-                println!(
+                display_line!(
                     "Proposal vote created: {}.",
                     proposal_vote_filename.to_string_lossy()
                 );
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Error while creating proposal vote file: {}.", e);
+                edisplay!("Error while creating proposal vote file: {}.", e);
                 safe_exit(1)
             }
         }
@@ -926,9 +929,10 @@ where
 
         if let ProposalVote::Yay(ref vote_type) = proposal_vote {
             if &proposal_type != vote_type {
-                eprintln!(
+                edisplay!(
                     "Expected vote of type {}, found {}",
-                    proposal_type, args.vote
+                    proposal_type,
+                    args.vote
                 );
                 safe_exit(1);
             } else if let VoteType::PGFCouncil(set) = vote_type {
@@ -941,7 +945,7 @@ where
                             if !rpc::query_has_storage_key::<C>(client, &vp_key)
                                 .await
                             {
-                                eprintln!(
+                                edisplay!(
                                     "Proposed PGF council {} cannot be found \
                                      in storage",
                                     address
@@ -950,7 +954,7 @@ where
                             }
                         }
                         _ => {
-                            eprintln!(
+                            edisplay!(
                                 "PGF council vote contains a non-established \
                                  address: {}",
                                 address
@@ -965,10 +969,11 @@ where
         match proposal_start_epoch {
             Some(epoch) => {
                 if current_epoch < epoch {
-                    eprintln!(
+                    edisplay!(
                         "Current epoch {} is not greater than proposal start \
                          epoch {}",
-                        current_epoch, epoch
+                        current_epoch,
+                        epoch
                     );
 
                     if !args.tx.force {
@@ -1047,7 +1052,7 @@ where
                 Ok(())
             }
             None => {
-                eprintln!(
+                edisplay!(
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );

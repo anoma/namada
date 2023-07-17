@@ -74,6 +74,7 @@ use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
+use crate::{display_line, edisplay};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -296,7 +297,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 /// use the default.
 pub fn get_params_dir() -> PathBuf {
     if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        println!("Using {} as masp parameter folder.", params_dir);
+        display_line!("Using {} as masp parameter folder.", params_dir);
         PathBuf::from(params_dir)
     } else {
         masp_proofs::default_params_folder().unwrap()
@@ -1018,7 +1019,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         );
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
-            eprintln!(
+            edisplay!(
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
                 masp_asset
@@ -1093,7 +1094,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 if let (Some((conv, _wit, usage)), false) =
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
-                    println!(
+                    display_line!(
                         "converting current asset type to latest asset type..."
                     );
                     // Not at the target asset type, not at the latest asset
@@ -1114,7 +1115,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     conversions.get_mut(&target_asset_type),
                     at_target_asset_type,
                 ) {
-                    println!(
+                    display_line!(
                         "converting latest asset type to target asset type..."
                     );
                     // Not at the target asset type, yet at the latest asset
@@ -1306,16 +1307,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(client, owner, viewing_key).await?;
-        println!("Pinned balance: {:?}", amt);
+        display_line!("Pinned balance: {:?}", amt);
         // Establish connection with which to do exchange rate queries
         let amount = self.decode_all_amounts(client, amt).await;
-        println!("Decoded pinned balance: {:?}", amount);
+        display_line!("Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(client, amount, ep, HashMap::new())
             .await
             .0;
-        println!("Exchanged amount: {:?}", computed_amount);
+        display_line!("Exchanged amount: {:?}", computed_amount);
         Ok((self.decode_all_amounts(client, computed_amount).await, ep))
     }
 
