@@ -286,8 +286,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Reconstruct a WlStorage with the current WriteLog to account for prior modifications
-    let mut temp_wl_storage = TempWlStorage::new(storage);
-    temp_wl_storage.write_log = write_log.clone();  //FIXME: can avoid this clone? Only if I pass WlStorage to apply_tx instead of the write log and storage split. But if I do that I might screw upa ll of the calls to write! Actually not, I'm already taking care of them here, I would just need to double check the calls in apply_tx
+    let mut temp_wl_storage = TempWlStorage::new_from_mut_wl(storage, write_log);
     
     // Unshield funds if requested
         let unexpected_unshielding_tx =    if let Some(transaction ) = masp_transaction {
@@ -381,7 +380,6 @@ where
 
     // Commit tx write log even in case of subsequent errors
     temp_wl_storage.write_log.commit_tx();
-    *write_log = temp_wl_storage.write_log;
 
     if unexpected_unshielding_tx{
         Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))

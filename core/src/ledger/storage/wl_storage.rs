@@ -1,6 +1,7 @@
 //! Storage with write log.
 
 use std::iter::Peekable;
+use std::ops::{Deref, DerefMut};
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::ledger::parameters::EpochDuration;
@@ -26,6 +27,33 @@ where
     pub storage: Storage<D, H>,
 }
 
+#[derive(Debug)]
+/// The write log used in a `TempWlStorage` instance, can be owned (and empty) or can be the mutable reference to an already existing `WriteLog`
+pub enum TempWriteLog<'wl> {
+    Owned(WriteLog),
+    MutBorrow(&'wl mut WriteLog),
+}
+
+impl<'wl> Deref for TempWriteLog<'wl> {
+    type Target = WriteLog;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(wl) => wl,
+            Self::MutBorrow(wl_ref) => wl_ref,
+        }
+    }
+}
+
+impl<'wl> DerefMut for TempWriteLog<'wl> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Owned(wl) => wl,
+            Self::MutBorrow(wl_ref) => wl_ref,
+        }
+    }
+}
+
 /// Temporary storage that can be used for changes that will never be committed
 /// to the DB. This is useful for the shell `PrepareProposal` and
 /// `ProcessProposal` handlers that should not change state, but need to apply
@@ -37,7 +65,7 @@ where
     H: StorageHasher,
 {
     /// Write log
-    pub write_log: WriteLog,
+    pub write_log: TempWriteLog<'a>,
     /// Storage provides access to DB
     pub storage: &'a Storage<D, H>,
 }
@@ -51,7 +79,19 @@ where
     /// DB.
     pub fn new(storage: &'a Storage<D, H>) -> Self {
         Self {
-            write_log: WriteLog::default(),
+            write_log: TempWriteLog::Owned(WriteLog::default()),
+            storage,
+        }
+    }
+
+    /// Create a temp storage that can mutated in memory, but never committed to
+    /// DB. Initialized the write log with the provided one
+    pub fn new_from_mut_wl(
+        storage: &'a Storage<D, H>,
+        write_log: &'a mut WriteLog,
+    ) -> Self {
+        Self {
+            write_log: TempWriteLog::MutBorrow(write_log),
             storage,
         }
     }
