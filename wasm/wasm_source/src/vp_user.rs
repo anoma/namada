@@ -530,6 +530,8 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
@@ -1006,8 +1008,8 @@ mod tests {
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
         tx_env.init_parameters(
             None,
-            None,
             Some(vec![vp_hash.to_string()]),
+            None,
             None,
         );
 

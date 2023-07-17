@@ -1025,8 +1025,8 @@ mod tests {
         // hardcoded hash of VP_ALWAYS_TRUE_WASM
         tx_env.init_parameters(
             None,
-            None,
             Some(vec![vp_hash.to_string()]),
+            None,
             None,
         );
 
