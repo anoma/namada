@@ -2420,8 +2420,11 @@ mod test_finalize_block {
         );
 
         // Advance to the processing epoch
-        let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
         loop {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
             next_block_for_inflation(
                 &mut shell,
                 pkh1.clone(),
@@ -2960,10 +2963,14 @@ mod test_finalize_block {
                 total_voting_power: Default::default(),
             },
         ];
+        let votes = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
         next_block_for_inflation(
             &mut shell,
             pkh1.clone(),
-            votes.clone(),
+            votes,
             Some(misbehaviors),
         );
         assert_eq!(current_epoch.0, 7_u64);
