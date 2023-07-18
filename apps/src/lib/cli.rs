@@ -7,12 +7,12 @@
 //! respectively.
 
 pub mod context;
-pub mod utils;
+pub(super) mod utils;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-pub use utils::safe_exit;
 use utils::*;
+pub use utils::{dispatch_prompt, safe_exit, TESTIN};
 
 pub use self::context::Context;
 

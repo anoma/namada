@@ -11,16 +11,19 @@ use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
+use namada_apps::node::ledger::shell::testing::node::MockNode;
+use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
 use namada_core::types::address::Address;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use toml::value::Table;
 
-use super::node::MockNode;
 use crate::e2e::setup::{
-    copy_wasm_to_chain_dir, get_all_wasms_hashes, TestDir, ENV_VAR_KEEP_TEMP,
-    SINGLE_NODE_NET_GENESIS,
+    copy_wasm_to_chain_dir, get_all_wasms_hashes, SINGLE_NODE_NET_GENESIS,
 };
+
+/// Env. var for keeping temporary files created by the integration tests
+const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
 
 /// Setup a network with a single genesis validator node.
 pub fn setup() -> Result<MockNode> {
@@ -36,14 +39,7 @@ pub fn initialize_genesis(
         Ok(val) => val.to_ascii_lowercase() != "false",
         _ => false,
     };
-    let test_dir = {
-        std::env::set_var(ENV_VAR_KEEP_TEMP, "true");
-        let dir = TestDir::new();
-        if !keep_temp {
-            std::env::remove_var(ENV_VAR_KEEP_TEMP)
-        }
-        dir
-    };
+    let test_dir = TestDir::new();
 
     // Open the source genesis file
     let mut genesis = genesis_config::open_genesis_config(

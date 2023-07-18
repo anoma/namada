@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Command as App;
@@ -9,24 +7,24 @@ use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::ledger::signing;
 use namada::ledger::tx::ProcessTxResponse;
 use namada::types::control_flow::ProceedOrElse;
-use namada_apps::cli;
-use namada_apps::cli::args::{CliToSdk, CliToSdkCtxless, Global};
-use namada_apps::cli::cmds::{
+
+use super::node::MockNode;
+use crate::cli;
+use crate::cli::args::{CliToSdk, CliToSdkCtxless, Global};
+use crate::cli::cmds::{
     Namada, NamadaClient, NamadaClientWithContext, NamadaRelayer,
 };
-use namada_apps::cli::utils::Cmd;
-use namada_apps::cli::{args, cmds, Context};
-use namada_apps::client::tx::submit_reveal_aux;
-use namada_apps::client::{rpc, tx};
-use namada_apps::wallet::cli_utils::{
+use crate::cli::utils::Cmd;
+use crate::cli::{args, cmds, Context};
+use crate::client::tx::submit_reveal_aux;
+use crate::client::{rpc, tx};
+use crate::node::ledger::shell::testing::utils::Bin;
+use crate::wallet::cli_utils::{
     address_add, address_key_add, address_key_find, address_list,
     address_or_alias_find, key_and_address_gen, key_and_address_restore,
     key_export, key_find, key_list, payment_address_gen,
     payment_addresses_list, spending_key_gen, spending_keys_list,
 };
-
-use crate::e2e::setup::Bin;
-use crate::integration::node::MockNode;
 
 pub fn run(
     node: &MockNode,
@@ -115,7 +113,7 @@ impl MockNode {
                         tx::submit_custom::<MockNode>(self, &mut ctx, args)
                             .await?;
                         if !dry_run {
-                            namada_apps::wallet::save(&ctx.wallet)
+                            crate::wallet::save(&ctx.wallet)
                                 .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
                             println!(
@@ -126,7 +124,7 @@ impl MockNode {
                     }
                     NamadaClientWithContext::TxTransfer(args) => {
                         let args = args.0.to_sdk(&mut ctx);
-                        submit_transfer(self, &mut ctx, args).await?;
+                        tx::submit_transfer(self, ctx, args).await?;
                     }
                     NamadaClientWithContext::TxIbcTransfer(args) => {
                         let args = args.0.to_sdk(&mut ctx);
@@ -150,7 +148,7 @@ impl MockNode {
                         )
                         .await?;
                         if !dry_run {
-                            namada_apps::wallet::save(&ctx.wallet)
+                            crate::wallet::save(&ctx.wallet)
                                 .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
                             println!(
@@ -405,7 +403,7 @@ impl MockNode {
                 let dry_run = args.tx.dry_run;
                 tx::submit_custom::<MockNode>(self, &mut ctx, args).await?;
                 if !dry_run {
-                    namada_apps::wallet::save(&ctx.wallet)
+                    crate::wallet::save(&ctx.wallet)
                         .unwrap_or_else(|err| eprintln!("{}", err));
                 } else {
                     println!(
@@ -544,82 +542,6 @@ impl MockNode {
     }
 }
 
-struct TempFile(PathBuf);
-impl TempFile {
-    fn new(path: PathBuf) -> (Self, File) {
-        let f = File::create(&path).unwrap();
-        (Self(path), f)
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        _ = std::fs::remove_file(&self.0);
-    }
-}
-
-/// Test helper that captures stdout of
-/// a process.
-pub struct CapturedOutput<T = ()> {
-    pub output: String,
-    pub result: T,
-    input: String,
-}
-
-impl CapturedOutput {
-    pub fn with_input(input: String) -> Self {
-        Self {
-            output: "".to_string(),
-            result: (),
-            input,
-        }
-    }
-}
-
-impl<T> CapturedOutput<T> {
-    pub(crate) fn of<F>(func: F) -> Self
-    where
-        F: FnOnce() -> T,
-    {
-        std::io::set_output_capture(Some(Default::default()));
-        let mut capture = Self {
-            output: Default::default(),
-            result: func(),
-            input: Default::default(),
-        };
-        let captured = std::io::set_output_capture(None);
-        let captured = captured.unwrap();
-        let captured = Arc::try_unwrap(captured).unwrap();
-        let captured = captured.into_inner().unwrap();
-        capture.output = String::from_utf8(captured).unwrap();
-        capture
-    }
-
-    pub fn run<U, F>(&self, func: F) -> CapturedOutput<U>
-    where
-        F: FnOnce() -> U,
-    {
-        use std::io::Write;
-        let _temp = {
-            let (temp, mut f) = TempFile::new(PathBuf::from("stdin.mock"));
-            write!(&mut f, "{}", self.input).unwrap();
-            temp
-        };
-        CapturedOutput::of(func)
-    }
-
-    /// Check if the captured output contains the regex.
-    pub fn matches(&self, needle: regex::Regex) -> bool {
-        needle.captures(&self.output).is_some()
-    }
-
-    /// Check if the captured output contains the string.
-    pub fn contains(&self, needle: &str) -> bool {
-        let needle = regex::Regex::new(needle).unwrap();
-        self.matches(needle)
-    }
-}
-
 async fn submit_transfer(
     client: &MockNode,
     ctx: &mut Context,
@@ -650,14 +572,14 @@ async fn submit_transfer(
             resp.code == 1.to_string() &&
             // And the its submission epoch doesn't match construction epoch
             tx_epoch.unwrap() != submission_epoch =>
-        {
-            // Then we probably straddled an epoch boundary
-            println!(
-                "MASP transaction rejected and this may be due to the \
+            {
+                // Then we probably straddled an epoch boundary
+                println!(
+                    "MASP transaction rejected and this may be due to the \
                 epoch changing. Attempting to resubmit transaction.",
-            );
+                );
 
-        }
+            }
         _ => {}
     }
     Ok(())

@@ -3,20 +3,20 @@ use std::path::PathBuf;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada_apps::client::tx::CLIShieldedUtils;
+use namada_apps::node::ledger::shell::testing::client::run;
+use namada_apps::node::ledger::shell::testing::utils::Bin;
 use namada_core::types::address::{btc, eth, masp_rewards};
 use namada_core::types::token;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use test_log::test;
 
-use super::client::run;
 use super::setup;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
 };
-use crate::e2e::setup::Bin;
-use crate::integration::client::CapturedOutput;
+use crate::integration::utils::CapturedOutput;
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.

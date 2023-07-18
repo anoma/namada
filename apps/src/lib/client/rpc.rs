@@ -50,10 +50,10 @@ use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
 use namada::types::{storage, token};
 use tokio::time::Instant;
 
-use crate::cli::utils::prompt;
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::prompt;
 use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
@@ -440,8 +440,7 @@ pub async fn query_pinned_balance<
         }
         // If a suitable viewing key was not found, then demand it from the user
         if balance == pinned_error {
-            let vk_str =
-                prompt(&format!("Enter the viewing key for {}: ", owner));
+            let vk_str = prompt!("Enter the viewing key for {}: ", owner);
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {

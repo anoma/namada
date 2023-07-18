@@ -13,6 +13,9 @@ mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
 mod stats;
+#[cfg(any(test, feature = "testing"))]
+#[allow(dead_code)]
+pub mod testing;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
@@ -368,9 +371,9 @@ where
 {
     /// The id of the current chain
     #[allow(dead_code)]
-    pub chain_id: ChainId,
+    chain_id: ChainId,
     /// The persistent storage with write log
-    pub wl_storage: WlStorage<D, H>,
+    pub(super) wl_storage: WlStorage<D, H>,
     /// Gas meter for the current block
     gas_meter: BlockGasMeter,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
@@ -378,16 +381,16 @@ where
     byzantine_validators: Vec<Evidence>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
-    pub base_dir: PathBuf,
+    base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
-    pub wasm_dir: PathBuf,
+    pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
     #[allow(dead_code)]
     mode: ShellMode,
     /// VP WASM compilation cache
-    pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
+    pub(super) vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
-    pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
+    pub(super) tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     /// Taken from config `storage_read_past_height_limit`. When set, will
     /// limit the how many block heights in the past can the storage be
     /// queried for reading values.
@@ -1395,7 +1398,7 @@ where
 /// Helper functions and types for writing unit tests
 /// for the shell
 #[cfg(test)]
-pub mod test_utils {
+mod test_utils {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
