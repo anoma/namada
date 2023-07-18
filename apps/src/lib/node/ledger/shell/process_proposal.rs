@@ -1576,7 +1576,8 @@ mod test_process_proposal {
         assert_eq!(
             response.result.info,
             String::from(
-                "WrapperTx signature verification failed: The wrapper signature is invalid."
+                "WrapperTx signature verification failed: The wrapper \
+                 signature is invalid."
             )
         );
     }
@@ -1624,7 +1625,9 @@ mod test_process_proposal {
                 } else {
                     panic!("Test failed")
                 };
-                let expected_error = "WrapperTx signature verification failed: The wrapper signature is invalid.";
+                let expected_error = "WrapperTx signature verification \
+                                      failed: The wrapper signature is \
+                                      invalid.";
                 assert_eq!(
                     response.result.code,
                     u32::from(ErrorCodes::InvalidSig)

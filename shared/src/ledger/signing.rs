@@ -233,6 +233,9 @@ pub async fn sign_tx<U: WalletUtils>(
     // Sign over the transaction targets
     tx.add_section(Section::SectionSignature(multisignature_section));
 
+    // Remove all the sensitive sections
+    tx.protocol_filter();
+
     let fee_payer = match &args.fee_payer {
         Some(keypair) => keypair,
         None => {

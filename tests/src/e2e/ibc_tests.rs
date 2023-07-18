@@ -220,7 +220,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
         consensus_state: make_consensus_state(test_b, height)?.into(),
         signer: Signer::from_str("test_a").expect("invalid signer"),
     };
-    let height_a = submit_ibc_tx(test_a, message, ALBERT, ALBERT_KEY, true)?;
+    let height_a = submit_ibc_tx(test_a, message, ALBERT, ALBERT_KEY, false)?;
 
     let height = query_height(test_a)?;
     let client_state = make_client_state(test_a, height);
@@ -230,7 +230,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
         consensus_state: make_consensus_state(test_a, height)?.into(),
         signer: Signer::from_str("test_b").expect("invalid signer"),
     };
-    let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, true)?;
+    let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, false)?;
 
     // convert the client IDs from `ibc_relayer_type` to `ibc`
     let client_id_a = match get_event(test_a, height_a)? {
@@ -852,7 +852,7 @@ fn transfer_back(
         port_channel_id_b,
         Some(sub_prefix),
         None,
-        true,
+        false,
     )?;
     let packet = match get_event(test_b, height)? {
         Some(IbcEvent::SendPacket(event)) => event.packet,

@@ -769,7 +769,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            ("Transaction is valid", true),
+            ("Transaction is valid", false),
         ),
         // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
