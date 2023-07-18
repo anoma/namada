@@ -300,10 +300,10 @@ mod tests {
     use super::super::storage::{
         ack_key, calc_hash, channel_counter_key, channel_key,
         client_connections_key, client_counter_key, client_state_key,
-        client_type_key, client_update_height_key, client_update_timestamp_key,
-        commitment_key, connection_counter_key, connection_key,
-        consensus_state_key, ibc_denom_key, next_sequence_ack_key,
-        next_sequence_recv_key, next_sequence_send_key, receipt_key,
+        client_update_height_key, client_update_timestamp_key, commitment_key,
+        connection_counter_key, connection_key, consensus_state_key,
+        ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
+        next_sequence_send_key, receipt_key,
     };
     use super::{get_dummy_header, *};
     use crate::core::ledger::storage::testing::TestWlStorage;
@@ -319,6 +319,9 @@ mod tests {
     use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::applications::transfer::packet::PacketData;
     use crate::ibc::applications::transfer::VERSION;
+    use crate::ibc::core::events::{
+        IbcEvent as RawIbcEvent, MessageEvent, ModuleEvent,
+    };
     use crate::ibc::core::ics02_client::client_state::ClientState;
     use crate::ibc::core::ics02_client::events::{CreateClient, UpdateClient};
     use crate::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
@@ -347,36 +350,30 @@ mod tests {
         OpenTry as ChanOpenTry, ReceivePacket, SendPacket, TimeoutPacket,
         WriteAcknowledgement,
     };
-    use crate::ibc::core::ics04_channel::msgs::acknowledgement::{
-        Acknowledgement, MsgAcknowledgement,
+    use crate::ibc::core::ics04_channel::msgs::{
+        MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
+        MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
+        MsgTimeoutOnClose,
     };
-    use crate::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-    use crate::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-    use crate::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-    use crate::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-    use crate::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-    use crate::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-    use crate::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
-    use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
+    use crate::ibc::core::ics04_channel::packet::{
+        Acknowledgement, Packet, Sequence,
+    };
     use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
     use crate::ibc::core::ics04_channel::Version as ChanVersion;
     use crate::ibc::core::ics23_commitment::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
     use crate::ibc::core::ics24_host::identifier::{
-        ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+        ChannelId, ClientId, ConnectionId, PortId,
     };
-    use crate::ibc::events::{IbcEvent as RawIbcEvent, ModuleEvent};
+    use crate::ibc::core::timestamp::Timestamp;
+    use crate::ibc::core::Msg;
     use crate::ibc::mock::client_state::{
         client_type, MockClientState, MOCK_CLIENT_TYPE,
     };
     use crate::ibc::mock::consensus_state::MockConsensusState;
     use crate::ibc::mock::header::MockHeader;
-    use crate::ibc::signer::Signer;
-    use crate::ibc::timestamp::Timestamp;
-    use crate::ibc::tx_msg::Msg;
     use crate::ibc::Height;
-    use crate::ibc_proto::cosmos::base::v1beta1::Coin;
     use crate::ibc_proto::google::protobuf::Any;
     use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
     use crate::ibc_proto::protobuf::Protobuf;
@@ -449,12 +446,6 @@ mod tests {
     fn insert_init_client(wl_storage: &mut TestWlStorage) {
         // insert a mock client type
         let client_id = get_client_id();
-        let client_type_key = client_type_key(&client_id);
-        let client_type = client_type().as_str().as_bytes().to_vec();
-        wl_storage
-            .write_log
-            .write(&client_type_key, client_type)
-            .expect("write failed");
         // insert a mock client state
         let client_state_key = client_state_key(&get_client_id());
         let height = Height::new(0, 1).unwrap();
@@ -463,8 +454,7 @@ mod tests {
             timestamp: Timestamp::now(),
         };
         let client_state = MockClientState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&client_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -472,8 +462,7 @@ mod tests {
         // insert a mock consensus state
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -501,23 +490,13 @@ mod tests {
             Height::new(0, host_height.0).expect("invalid height");
         wl_storage
             .write_log
-            .write(
-                &client_update_height_key,
-                host_height.encode_vec().expect("encoding failed"),
-            )
+            .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
         wl_storage.write_log.commit_tx();
     }
 
     fn get_connection_id() -> ConnectionId {
         ConnectionId::new(0)
-    }
-
-    fn get_port_channel_id() -> PortChannelId {
-        PortChannelId {
-            port_id: get_port_id(),
-            channel_id: get_channel_id(),
-        }
     }
 
     fn get_port_id() -> PortId {
@@ -536,6 +515,7 @@ mod tests {
             vec![ConnVersion::default()],
             Duration::new(0, 0),
         )
+        .unwrap()
     }
 
     fn get_conn_counterparty() -> ConnCounterparty {
@@ -559,6 +539,7 @@ mod tests {
             vec![get_connection_id()],
             ChanVersion::new(VERSION.to_string()),
         )
+        .unwrap()
     }
 
     fn get_channel_counterparty() -> ChanCounterparty {
@@ -605,14 +586,7 @@ mod tests {
         sequence: Sequence,
         counterparty: &ChanCounterparty,
     ) -> Packet {
-        let coin: PrefixedCoin =
-            msg.token.clone().try_into().expect("invalid token");
-        let packet_data = PacketData {
-            token: coin,
-            sender: msg.sender.clone(),
-            receiver: msg.receiver.clone(),
-        };
-        let data = serde_json::to_vec(&packet_data)
+        let data = serde_json::to_vec(&msg.packet_data)
             .expect("Encoding PacketData failed");
 
         Packet {
@@ -662,27 +636,17 @@ mod tests {
             timestamp: Timestamp::now(),
         };
         let client_id = get_client_id();
-        // client type
-        let client_type_key = client_type_key(&client_id);
-        let client_type = client_type();
-        let bytes = client_type.as_str().as_bytes().to_vec();
-        wl_storage
-            .write_log
-            .write(&client_type_key, bytes)
-            .expect("write failed");
-        keys_changed.insert(client_type_key);
         // message
         let client_state = MockClientState::new(header);
         let consensus_state = MockConsensusState::new(header);
         let msg = MsgCreateClient {
             client_state: client_state.into(),
             consensus_state: consensus_state.clone().into(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
         // client state
         let client_state_key = client_state_key(&get_client_id());
-        let bytes = Protobuf::<Any>::encode_vec(&client_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -690,8 +654,7 @@ mod tests {
         keys_changed.insert(client_state_key);
         // client consensus
         let consensus_key = consensus_state_key(&client_id, height);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -722,10 +685,7 @@ mod tests {
             Height::new(0, host_height.0).expect("invalid height");
         wl_storage
             .write_log
-            .write(
-                &client_update_height_key,
-                host_height.encode_vec().expect("encoding failed"),
-            )
+            .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
         keys_changed.insert(client_update_height_key);
         // client counter
@@ -735,10 +695,12 @@ mod tests {
 
         let event = RawIbcEvent::CreateClient(CreateClient::new(
             client_id,
-            client_type,
+            client_type(),
             client_state.latest_height(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -805,23 +767,22 @@ mod tests {
             height,
             timestamp: Timestamp::now(),
         };
-        let client_id = get_client_id();
-        // insert only client type
-        let client_type_key = client_type_key(&client_id);
-        let client_type = client_type();
-        let bytes = client_type.as_str().as_bytes().to_vec();
+        // insert only client state
+        let client_state = MockClientState::new(header);
+        let client_state_key = client_state_key(&get_client_id());
+        let bytes = Protobuf::<Any>::encode_vec(&client_state);
         wl_storage
             .write_log
-            .write(&client_type_key, bytes)
+            .write(&client_state_key, bytes)
             .expect("write failed");
-        keys_changed.insert(client_type_key);
+        keys_changed.insert(client_state_key);
         let client_state = MockClientState::new(header);
         let consensus_state = MockConsensusState::new(header);
         // make a correct message
         let msg = MsgCreateClient {
             client_state: client_state.into(),
             consensus_state: consensus_state.into(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         let tx_index = TxIndex::default();
@@ -893,12 +854,11 @@ mod tests {
         let msg = MsgUpdateClient {
             client_id: client_id.clone(),
             header: header.into(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
         // client state
         let client_state = MockClientState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&client_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&client_state);
         wl_storage
             .write_log
             .write(&client_state_key, bytes)
@@ -907,8 +867,7 @@ mod tests {
         // consensus state
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
-        let bytes = Protobuf::<Any>::encode_vec(&consensus_state)
-            .expect("encoding failed");
+        let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
         wl_storage
             .write_log
             .write(&consensus_key, bytes)
@@ -939,10 +898,7 @@ mod tests {
             Height::new(0, host_height.0).expect("invalid height");
         wl_storage
             .write_log
-            .write(
-                &client_update_height_key,
-                host_height.encode_vec().expect("encoding failed"),
-            )
+            .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
         keys_changed.insert(client_update_height_key);
         // event
@@ -954,7 +910,9 @@ mod tests {
             vec![consensus_height],
             header.into(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1025,7 +983,7 @@ mod tests {
             counterparty,
             version: Some(ConnVersion::default()),
             delay_period: Duration::new(100, 0),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // insert an INIT connection
@@ -1037,8 +995,9 @@ mod tests {
             msg.counterparty.clone(),
             vec![msg.version.clone().unwrap()],
             msg.delay_period,
-        );
-        let bytes = conn.encode_vec().expect("encoding failed");
+        )
+        .expect("invalid connection");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1063,7 +1022,9 @@ mod tests {
             msg.client_id_on_a.clone(),
             msg.counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1132,7 +1093,7 @@ mod tests {
             counterparty,
             version: Some(ConnVersion::default()),
             delay_period: Duration::new(100, 0),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // insert an Init connection
@@ -1144,8 +1105,9 @@ mod tests {
             msg.counterparty.clone(),
             vec![msg.version.clone().unwrap()],
             msg.delay_period,
-        );
-        let bytes = conn.encode_vec().expect("encoding failed");
+        )
+        .expect("invalid connection");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1260,8 +1222,9 @@ mod tests {
             msg.counterparty.clone(),
             msg.versions_on_a.clone(),
             msg.delay_period,
-        );
-        let bytes = conn.encode_vec().expect("encoding failed");
+        )
+        .expect("invalid connection");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1287,7 +1250,9 @@ mod tests {
             msg.counterparty.connection_id().cloned().unwrap(),
             msg.counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1340,7 +1305,7 @@ mod tests {
         // insert an Init connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Init);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1359,7 +1324,7 @@ mod tests {
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1386,7 +1351,7 @@ mod tests {
             proofs_height_on_b: proof_height,
             consensus_height_of_a_on_b: client_state.latest_height(),
             version: ConnVersion::default(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
         // event
         let event = RawIbcEvent::OpenAckConnection(ConnOpenAck::new(
@@ -1395,7 +1360,9 @@ mod tests {
             msg.conn_id_on_b.clone(),
             counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1447,7 +1414,7 @@ mod tests {
         // insert a TryOpen connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::TryOpen);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1457,7 +1424,7 @@ mod tests {
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1470,7 +1437,7 @@ mod tests {
             conn_id_on_b: get_connection_id(),
             proof_conn_end_on_a: dummy_proof(),
             proof_height_on_a: proof_height,
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
         // event
         let counterparty = get_conn_counterparty();
@@ -1480,7 +1447,9 @@ mod tests {
             counterparty.connection_id().cloned().unwrap(),
             counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1533,7 +1502,7 @@ mod tests {
         let conn_id = get_connection_id();
         let conn_key = connection_key(&conn_id);
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1556,12 +1525,12 @@ mod tests {
             connection_hops_on_a: vec![conn_id.clone()],
             port_id_on_b: get_port_id(),
             ordering: Order::Unordered,
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
             version_proposal: ChanVersion::new(VERSION.to_string()),
         };
 
         // insert an Init channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let mut counterparty = get_channel_counterparty();
         counterparty.channel_id = None;
         let channel = ChannelEnd::new(
@@ -1570,8 +1539,9 @@ mod tests {
             counterparty.clone(),
             msg.connection_hops_on_a.clone(),
             msg.version_proposal.clone(),
-        );
-        let bytes = channel.encode_vec().expect("encoding failed");
+        )
+        .unwrap();
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1582,15 +1552,15 @@ mod tests {
         increment_counter(&mut wl_storage, &chan_counter_key);
         keys_changed.insert(chan_counter_key);
         // sequences
-        let port_channel_id =
-            PortChannelId::new(get_channel_id(), msg.port_id_on_a.clone());
-        let send_key = next_sequence_send_key(&port_channel_id);
+        let channel_id = get_channel_id();
+        let port_id = msg.port_id_on_a.clone();
+        let send_key = next_sequence_send_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &send_key);
         keys_changed.insert(send_key);
-        let recv_key = next_sequence_recv_key(&port_channel_id);
+        let recv_key = next_sequence_recv_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &recv_key);
         keys_changed.insert(recv_key);
-        let ack_key = next_sequence_ack_key(&port_channel_id);
+        let ack_key = next_sequence_ack_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &ack_key);
         keys_changed.insert(ack_key);
         // event
@@ -1601,7 +1571,9 @@ mod tests {
             conn_id,
             msg.version_proposal.clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1653,7 +1625,7 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
@@ -1684,15 +1656,14 @@ mod tests {
             proof_chan_end_on_a: dummy_proof(),
             proof_height_on_a: proof_height,
             ordering: Order::Unordered,
-            signer: Signer::from_str("account0").expect("invalid signer"),
-            previous_channel_id: ChannelId::default().to_string(),
+            signer: "account0".to_string().into(),
             version_proposal: ChanVersion::default(),
         };
 
         // insert a TryOpen channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::TryOpen, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1703,15 +1674,15 @@ mod tests {
         increment_counter(&mut wl_storage, &chan_counter_key);
         keys_changed.insert(chan_counter_key);
         // sequences
-        let port_channel_id =
-            PortChannelId::new(get_channel_id(), msg.port_id_on_a.clone());
-        let send_key = next_sequence_send_key(&port_channel_id);
+        let channel_id = get_channel_id();
+        let port_id = msg.port_id_on_a.clone();
+        let send_key = next_sequence_send_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &send_key);
         keys_changed.insert(send_key);
-        let recv_key = next_sequence_recv_key(&port_channel_id);
+        let recv_key = next_sequence_recv_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &recv_key);
         keys_changed.insert(recv_key);
-        let ack_key = next_sequence_ack_key(&port_channel_id);
+        let ack_key = next_sequence_ack_key(&port_id, &channel_id);
         increment_counter(&mut wl_storage, &ack_key);
         keys_changed.insert(ack_key);
         // event
@@ -1723,7 +1694,9 @@ mod tests {
             conn_id,
             msg.version_supported_on_a.clone(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1775,15 +1748,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an Init channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Init, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1810,12 +1783,12 @@ mod tests {
             version_on_b: ChanVersion::new(VERSION.to_string()),
             proof_chan_end_on_b: dummy_proof(),
             proof_height_on_b: proof_height,
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1829,7 +1802,9 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1881,15 +1856,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert a TryOpen channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::TryOpen, Order::Ordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1913,12 +1888,12 @@ mod tests {
             chan_id_on_b: get_channel_id(),
             proof_chan_end_on_a: dummy_proof(),
             proof_height_on_a: proof_height,
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Ordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -1933,7 +1908,9 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1988,15 +1965,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an Open channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -2025,19 +2002,21 @@ mod tests {
         let msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
-            token: Coin {
-                denom: nam().to_string(),
-                amount: 100u64.to_string(),
+            packet_data: PacketData {
+                token: PrefixedCoin {
+                    denom: nam().to_string().parse().unwrap(),
+                    amount: 100u64.into(),
+                },
+                sender: sender.to_string().into(),
+                receiver: "receiver".to_string().into(),
+                memo: "memo".to_string().into(),
             },
-            sender: Signer::from_str(&sender.to_string())
-                .expect("invalid signer"),
-            receiver: Signer::from_str("receiver").expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
             timeout_timestamp_on_b: Timestamp::none(),
         };
 
         // the sequence send
-        let seq_key = next_sequence_send_key(&get_port_channel_id());
+        let seq_key = next_sequence_send_key(&get_port_id(), &get_channel_id());
         let sequence = get_next_seq(&wl_storage, &seq_key);
         wl_storage
             .write_log
@@ -2058,10 +2037,13 @@ mod tests {
         keys_changed.insert(commitment_key);
         // event
         let transfer_event = TransferEvent {
-            sender: msg.sender.clone(),
-            receiver: msg.receiver.clone(),
+            sender: msg.packet_data.sender.clone(),
+            receiver: msg.packet_data.receiver.clone(),
+            amount: msg.packet_data.token.amount,
+            denom: msg.packet_data.token.denom.clone(),
+            memo: msg.packet_data.memo.clone(),
         };
-        let event = RawIbcEvent::AppModule(ModuleEvent::from(transfer_event));
+        let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2070,7 +2052,9 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2122,15 +2106,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an open channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -2148,17 +2132,18 @@ mod tests {
             .unwrap();
 
         // prepare data
-        let receiver = established_address_1();
         let transfer_msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
-            token: Coin {
-                denom: nam().to_string(),
-                amount: 100u64.to_string(),
+            packet_data: PacketData {
+                token: PrefixedCoin {
+                    denom: nam().to_string().parse().unwrap(),
+                    amount: 100u64.into(),
+                },
+                sender: "sender".to_string().into(),
+                receiver: established_address_1().to_string().into(),
+                memo: "memo".to_string().into(),
             },
-            sender: Signer::from_str("sender").expect("invalid signer"),
-            receiver: Signer::from_str(&receiver.to_string())
-                .expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
             timeout_timestamp_on_b: Timestamp::none(),
         };
@@ -2173,7 +2158,7 @@ mod tests {
             packet: packet.clone(),
             proof_commitment_on_a: dummy_proof(),
             proof_height_on_a: Height::new(0, 1).unwrap(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // the sequence send
@@ -2203,8 +2188,7 @@ mod tests {
             .expect("write failed");
         keys_changed.insert(ack_key);
         // denom
-        let mut coin: PrefixedCoin =
-            transfer_msg.token.try_into().expect("invalid token");
+        let mut coin = transfer_msg.packet_data.token;
         coin.denom.add_trace_prefix(TracePrefix::new(
             packet.port_id_on_b.clone(),
             packet.chan_id_on_b.clone(),
@@ -2222,8 +2206,7 @@ mod tests {
             trace_hash: Some(trace_hash),
             denom: coin.denom,
         };
-        let event =
-            RawIbcEvent::AppModule(ModuleEvent::from(denom_trace_event));
+        let event = RawIbcEvent::Module(ModuleEvent::from(denom_trace_event));
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2232,7 +2215,9 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2245,7 +2230,9 @@ mod tests {
                 acknowledgement,
                 get_connection_id(),
             ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2297,15 +2284,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an Open channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -2315,13 +2302,15 @@ mod tests {
         let transfer_msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
-            token: Coin {
-                denom: nam().to_string(),
-                amount: 100u64.to_string(),
+            packet_data: PacketData {
+                token: PrefixedCoin {
+                    denom: nam().to_string().parse().unwrap(),
+                    amount: 100u64.into(),
+                },
+                sender: sender.to_string().into(),
+                receiver: "receiver".to_string().into(),
+                memo: "memo".to_string().into(),
             },
-            sender: Signer::from_str(&sender.to_string())
-                .expect("invalid signer"),
-            receiver: Signer::from_str("receiver").expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
             timeout_timestamp_on_b: Timestamp::none(),
         };
@@ -2356,13 +2345,12 @@ mod tests {
 
         // prepare data
         let transfer_ack = TokenTransferAcknowledgement::success();
-        let acknowledgement = Acknowledgement::from(transfer_ack.clone());
         let msg = MsgAcknowledgement {
             packet: packet.clone(),
-            acknowledgement,
+            acknowledgement: transfer_ack.clone().into(),
             proof_acked_on_b: dummy_proof(),
             proof_height_on_b: Height::new(0, 1).unwrap(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // delete the commitment
@@ -2375,12 +2363,14 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let ack_event = AckEvent {
+            sender: data.sender,
             receiver: data.receiver,
             denom: data.token.denom,
             amount: data.token.amount,
+            memo: data.memo,
             acknowledgement: transfer_ack,
         };
-        let event = RawIbcEvent::AppModule(ModuleEvent::from(ack_event));
+        let event = RawIbcEvent::Module(ModuleEvent::from(ack_event));
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2389,7 +2379,9 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2441,15 +2433,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an Open channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -2463,17 +2455,18 @@ mod tests {
             .write(&balance_key, amount.try_to_vec().unwrap())
             .expect("write failed");
         // commitment
-        let sender = established_address_1();
         let transfer_msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
-            token: Coin {
-                denom: nam().to_string(),
-                amount: 100u64.to_string(),
+            packet_data: PacketData {
+                token: PrefixedCoin {
+                    denom: nam().to_string().parse().unwrap(),
+                    amount: 100u64.into(),
+                },
+                sender: established_address_1().to_string().into(),
+                receiver: "receiver".to_string().into(),
+                memo: "memo".to_string().into(),
             },
-            sender: Signer::from_str(&sender.to_string())
-                .expect("invalid signer"),
-            receiver: Signer::from_str("receiver").expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
             timeout_timestamp_on_b: (Timestamp::now() - Duration::new(10, 0))
                 .unwrap(),
@@ -2513,7 +2506,7 @@ mod tests {
             next_seq_recv_on_b: sequence,
             proof_unreceived_on_b: dummy_proof(),
             proof_height_on_b: Height::new(0, 1).unwrap(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // delete the commitment
@@ -2529,8 +2522,9 @@ mod tests {
             refund_receiver: data.sender,
             refund_denom: data.token.denom,
             refund_amount: data.token.amount,
+            memo: data.memo,
         };
-        let event = RawIbcEvent::AppModule(ModuleEvent::from(timeout_event));
+        let event = RawIbcEvent::Module(ModuleEvent::from(timeout_event));
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2538,7 +2532,9 @@ mod tests {
             packet,
             Order::Unordered,
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2590,15 +2586,15 @@ mod tests {
         // insert an open connection
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
-        let bytes = conn.encode_vec().expect("encoding failed");
+        let bytes = conn.encode_vec();
         wl_storage
             .write_log
             .write(&conn_key, bytes)
             .expect("write failed");
         // insert an Open channel
-        let channel_key = channel_key(&get_port_channel_id());
+        let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
-        let bytes = channel.encode_vec().expect("encoding failed");
+        let bytes = channel.encode_vec();
         wl_storage
             .write_log
             .write(&channel_key, bytes)
@@ -2616,13 +2612,15 @@ mod tests {
         let transfer_msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
-            token: Coin {
-                denom: nam().to_string(),
-                amount: 100u64.to_string(),
+            packet_data: PacketData {
+                token: PrefixedCoin {
+                    denom: nam().to_string().parse().unwrap(),
+                    amount: 100u64.into(),
+                },
+                sender: sender.to_string().into(),
+                receiver: "receiver".to_string().into(),
+                memo: "memo".to_string().into(),
             },
-            sender: Signer::from_str(&sender.to_string())
-                .expect("invalid signer"),
-            receiver: Signer::from_str("receiver").expect("invalid signer"),
             timeout_height_on_b: TimeoutHeight::Never,
             timeout_timestamp_on_b: Timestamp::none(),
         };
@@ -2662,7 +2660,7 @@ mod tests {
             proof_unreceived_on_b: dummy_proof(),
             proof_close_on_b: dummy_proof(),
             proof_height_on_b: Height::new(0, 1).unwrap(),
-            signer: Signer::from_str("account0").expect("invalid signer"),
+            signer: "account0".to_string().into(),
         };
 
         // delete the commitment
@@ -2678,8 +2676,9 @@ mod tests {
             refund_receiver: data.sender,
             refund_denom: data.token.denom,
             refund_amount: data.token.amount,
+            memo: data.memo,
         };
-        let event = RawIbcEvent::AppModule(ModuleEvent::from(timeout_event));
+        let event = RawIbcEvent::Module(ModuleEvent::from(timeout_event));
         wl_storage
             .write_log
             .emit_ibc_event(event.try_into().unwrap());
@@ -2687,7 +2686,9 @@ mod tests {
             packet,
             Order::Unordered,
         ));
-        let message_event = RawIbcEvent::Message(event.event_type());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            event.event_type().to_string(),
+        ));
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());

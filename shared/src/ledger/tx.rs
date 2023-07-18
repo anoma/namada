@@ -1,7 +1,6 @@
 //! SDK functions to construct different types of transactions
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::str::FromStr;
 use std::time::Duration;
 
 use borsh::BorshSerialize;
@@ -15,7 +14,9 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::Amount;
-use namada_core::types::address::{masp, masp_tx_key, Address};
+use namada_core::types::address::{
+    masp, masp_tx_key, Address, InternalAddress,
+};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
@@ -25,14 +26,15 @@ use thiserror::Error;
 
 use super::rpc::query_wasm_code_hash;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::applications::transfer::packet::PacketData;
+use crate::ibc::applications::transfer::PrefixedCoin;
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use crate::ibc::signer::Signer;
-use crate::ibc::timestamp::Timestamp as IbcTimestamp;
-use crate::ibc::tx_msg::Msg;
+use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
+use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
-use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
+use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
@@ -1196,13 +1198,21 @@ pub async fn build_ibc_transfer<
             .await?;
     // We cannot check the receiver
 
-    let token = args.token;
+    let token_hash = match &args.token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash.clone(),
+        _ => return Err(Error::TokenDoesNotExist(args.token)),
+    };
+    let ibc_denom_key = ibc_denom_key(token_hash);
+    let ibc_denom =
+        rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
+            .await
+            .ok_or_else(|| Error::TokenDoesNotExist(args.token.clone()))?;
 
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let balance_key = token::balance_key(&args.token, &source);
 
     check_balance_too_low_err(
-        &token,
+        &args.token,
         &source,
         args.amount,
         balance_key,
@@ -1223,9 +1233,15 @@ pub async fn build_ibc_transfer<
         .next()
         .expect("invalid amount")
         .to_string();
-    let token = Coin {
-        denom: token.to_string(),
-        amount,
+    let token = PrefixedCoin {
+        denom: ibc_denom.parse().expect("Invalid IBC denom"),
+        amount: amount.parse().expect("Invalid amount"),
+    };
+    let packet_data = PacketData {
+        token,
+        sender: source.to_string().into(),
+        receiver: args.receiver.into(),
+        memo: args.memo.unwrap_or_default().into(),
     };
 
     // this height should be that of the destination chain, not this chain
@@ -1250,9 +1266,7 @@ pub async fn build_ibc_transfer<
     let msg = MsgTransfer {
         port_id_on_a: args.port_id,
         chan_id_on_a: args.channel_id,
-        token,
-        sender: Signer::from_str(&source.to_string()).expect("invalid signer"),
-        receiver: Signer::from_str(&args.receiver).expect("invalid signer"),
+        packet_data,
         timeout_height_on_b: timeout_height,
         timeout_timestamp_on_b: timeout_timestamp,
     };

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::ibc::signer::Signer;
+use crate::ibc::Signer;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key;
 use crate::types::key::PublicKeyHash;

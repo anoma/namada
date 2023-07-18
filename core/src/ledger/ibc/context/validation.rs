@@ -4,8 +4,6 @@ use prost::Message;
 
 use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::core::ics02_client::client_state::downcast_client_state;
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
@@ -25,12 +23,12 @@ use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::{ContextError, ValidationContext};
 use crate::ibc::hosts::tendermint::ValidateSelfClientContext;
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::MockClientState;
-use crate::ibc::timestamp::Timestamp;
-use crate::ibc::Height;
+use crate::ibc::{Height, Signer};
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
@@ -260,14 +258,8 @@ where
     ) -> Result<(), ContextError> {
         #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
         {
-            let client_state = self
-                .decode_client_state(counterparty_client_state.clone())
-                .map_err(|_| ClientError::Other {
-                    description: "Decoding the client state failed".to_string(),
-                })?;
-
-            if let Some(_mock) =
-                downcast_client_state::<MockClientState>(client_state.as_ref())
+            if MockClientState::try_from(counterparty_client_state.clone())
+                .is_ok()
             {
                 return Ok(());
             }
@@ -495,6 +487,14 @@ where
             }
             _ => unreachable!("The parameter should be initialized"),
         }
+    }
+
+    fn validate_message_signer(
+        &self,
+        _signer: &Signer,
+    ) -> Result<(), ContextError> {
+        // The signer of a transaction should be validated
+        Ok(())
     }
 }
 

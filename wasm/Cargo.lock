@@ -706,7 +706,17 @@ name = "borsh"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
 dependencies = [
- "borsh-derive",
+ "borsh-derive 0.9.4",
+ "hashbrown 0.11.2",
+]
+
+[[package]]
+name = "borsh"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
+dependencies = [
+ "borsh-derive 0.10.3",
  "hashbrown 0.11.2",
 ]
 
@@ -715,8 +725,21 @@ name = "borsh-derive"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
 dependencies = [
- "borsh-derive-internal",
- "borsh-schema-derive-internal",
+ "borsh-derive-internal 0.9.4",
+ "borsh-schema-derive-internal 0.9.4",
+ "proc-macro-crate 0.1.5",
+ "proc-macro2",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "borsh-derive"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
+dependencies = [
+ "borsh-derive-internal 0.10.3",
+ "borsh-schema-derive-internal 0.10.3",
  "proc-macro-crate 0.1.5",
  "proc-macro2",
  "syn 1.0.109",
@@ -733,9 +756,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "borsh-derive-internal"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "borsh-schema-derive-internal"
 version = "0.9.4"
 source = "git+https://github.com/heliaxdev/borsh-rs.git?rev=cd5223e5103c4f139e0c54cf8259b7ec5ec4073a#cd5223e5103c4f139e0c54cf8259b7ec5ec4073a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "borsh-schema-derive-internal"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2197,7 +2242,7 @@ dependencies = [
  "bincode",
  "blake2",
  "blake2b_simd",
- "borsh",
+ "borsh 0.9.4",
  "digest 0.10.6",
  "ed25519-dalek",
  "either",
@@ -2915,8 +2960,8 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.36.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=634f4ede136d045dd6f1ff8f4984dd0006aa15f0#634f4ede136d045dd6f1ff8f4984dd0006aa15f0"
+version = "0.41.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=1797c2b38eb4a718a63a171f59948f08b427bb1f#1797c2b38eb4a718a63a171f59948f08b427bb1f"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",
@@ -2924,7 +2969,7 @@ dependencies = [
  "displaydoc",
  "dyn-clone",
  "erased-serde",
- "ibc-proto",
+ "ibc-proto 0.30.0",
  "ics23",
  "num-traits",
  "parking_lot",
@@ -2961,6 +3006,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ibc-proto"
+version = "0.30.0"
+source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=349582059c0cf1f4cdce9e93b33552687c9df54a#349582059c0cf1f4cdce9e93b33552687c9df54a"
+dependencies = [
+ "base64 0.21.0",
+ "borsh 0.10.3",
+ "bytes",
+ "flex-error",
+ "parity-scale-codec",
+ "prost",
+ "scale-info",
+ "serde",
+ "subtle-encoding",
+ "tendermint-proto",
+]
+
+[[package]]
 name = "ibc-relayer"
 version = "0.22.0"
 source = "git+https://github.com/heliaxdev/hermes.git?rev=fea6928dace1af3e38c5b223f933c1d07720811d#fea6928dace1af3e38c5b223f933c1d07720811d"
@@ -2985,7 +3047,7 @@ dependencies = [
  "http",
  "humantime",
  "humantime-serde",
- "ibc-proto",
+ "ibc-proto 0.26.0",
  "ibc-relayer-types",
  "itertools",
  "moka",
@@ -3029,7 +3091,7 @@ dependencies = [
  "dyn-clone",
  "erased-serde",
  "flex-error",
- "ibc-proto",
+ "ibc-proto 0.26.0",
  "ics23",
  "itertools",
  "num-rational 0.4.1",
@@ -3149,7 +3211,7 @@ name = "index-set"
 version = "0.7.1"
 source = "git+https://github.com/heliaxdev/index-set?tag=v0.7.1#dc24cdbbe3664514d59f1a4c4031863fc565f1c2"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "serde",
 ]
 
@@ -3471,7 +3533,7 @@ name = "masp_note_encryption"
 version = "0.2.0"
 source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "chacha20 0.9.1",
  "chacha20poly1305",
  "cipher 0.4.4",
@@ -3490,7 +3552,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "bls12_381",
- "borsh",
+ "borsh 0.9.4",
  "byteorder",
  "ff 0.12.1",
  "fpe",
@@ -3711,7 +3773,7 @@ version = "0.20.0"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh",
+ "borsh 0.9.4",
  "circular-queue",
  "clru",
  "data-encoding",
@@ -3773,7 +3835,7 @@ dependencies = [
  "ark-ec",
  "ark-serialize",
  "bech32 0.8.1",
- "borsh",
+ "borsh 0.9.4",
  "chrono",
  "data-encoding",
  "derivative",
@@ -3785,7 +3847,7 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "ibc",
- "ibc-proto",
+ "ibc-proto 0.30.0",
  "ics23",
  "impl-num-traits",
  "index-set",
@@ -3821,7 +3883,7 @@ dependencies = [
 name = "namada_ethereum_bridge"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "ethers",
  "eyre",
  "itertools",
@@ -3850,7 +3912,7 @@ dependencies = [
 name = "namada_proof_of_stake"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "data-encoding",
  "derivative",
  "namada_core",
@@ -3864,7 +3926,7 @@ dependencies = [
 name = "namada_test_utils"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "namada_core",
  "strum",
 ]
@@ -3903,7 +3965,7 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "masp_primitives",
  "namada_core",
  "namada_macros",
@@ -3917,7 +3979,7 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "masp_primitives",
  "namada_core",
 ]
@@ -3926,7 +3988,7 @@ dependencies = [
 name = "namada_vp_prelude"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "namada_core",
  "namada_macros",
  "namada_proof_of_stake",
@@ -3939,7 +4001,7 @@ dependencies = [
 name = "namada_wasm"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "getrandom 0.2.9",
  "masp_primitives",
  "namada",
@@ -5744,7 +5806,7 @@ name = "sparse-merkle-tree"
 version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=e086b235ed6e68929bf73f617dd61cd17b000a56#e086b235ed6e68929bf73f617dd61cd17b000a56"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "cfg-if 1.0.0",
  "ics23",
  "sha2 0.9.9",
@@ -6490,7 +6552,7 @@ dependencies = [
 name = "tx_template"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "getrandom 0.2.9",
  "namada_tests",
  "namada_tx_prelude",
@@ -6637,7 +6699,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_template"
 version = "0.20.0"
 dependencies = [
- "borsh",
+ "borsh 0.9.4",
  "getrandom 0.2.9",
  "namada_tests",
  "namada_vp_prelude",

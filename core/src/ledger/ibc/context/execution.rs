@@ -3,8 +3,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::super::{IbcActions, IbcCommonContext};
+use crate::ibc::core::events::IbcEvent;
 use crate::ibc::core::ics02_client::client_state::ClientState;
-use crate::ibc::core::ics02_client::client_type::ClientType;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -18,12 +18,11 @@ use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
-    ClientStatePath, ClientTypePath, CommitmentPath, ConnectionPath, Path,
-    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
+    ClientStatePath, CommitmentPath, ConnectionPath, Path, ReceiptPath,
+    SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::{ContextError, ExecutionContext, ValidationContext};
-use crate::ibc::events::IbcEvent;
-use crate::ibc::timestamp::Timestamp;
 use crate::ibc::Height;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
@@ -33,25 +32,6 @@ impl<C> ExecutionContext for IbcActions<'_, C>
 where
     C: IbcCommonContext,
 {
-    fn store_client_type(
-        &mut self,
-        client_type_path: ClientTypePath,
-        client_type: ClientType,
-    ) -> Result<(), ContextError> {
-        let path = Path::ClientType(client_type_path);
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = client_type.as_str().as_bytes().to_vec();
-        self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Writing the client state failed: Key {}",
-                    key
-                ),
-            })
-        })
-    }
-
     fn store_client_state(
         &mut self,
         client_state_path: ClientStatePath,
@@ -60,7 +40,7 @@ where
         let path = Path::ClientState(client_state_path);
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let bytes = client_state.encode_vec().expect("encoding shouldn't fail");
+        let bytes = client_state.encode_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
@@ -79,9 +59,7 @@ where
         let path = Path::ClientConsensusState(consensus_state_path);
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let bytes = consensus_state
-            .encode_vec()
-            .expect("encoding shouldn't fail");
+        let bytes = consensus_state.encode_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
@@ -140,7 +118,7 @@ where
         host_height: Height,
     ) -> Result<(), ContextError> {
         let key = storage::client_update_height_key(&client_id);
-        let bytes = host_height.encode_vec().expect("encoding shouldn't fail");
+        let bytes = host_height.encode_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: format!(
@@ -159,9 +137,7 @@ where
         let path = Path::Connection(connection_path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let bytes = connection_end
-            .encode_vec()
-            .expect("encoding shouldn't fail");
+        let bytes = connection_end.encode_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(
@@ -321,7 +297,7 @@ where
         let path = Path::ChannelEnd(path.clone());
         let key = storage::ibc_key(path.to_string())
             .expect("Creating a key for the client state shouldn't fail");
-        let bytes = channel_end.encode_vec().expect("encoding shouldn't fail");
+        let bytes = channel_end.encode_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!(

@@ -153,3 +153,6 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.dev]
+debug-assertions = false
