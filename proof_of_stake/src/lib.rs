@@ -3444,8 +3444,10 @@ where
             }
         }
     }
+    // Safe sub cause `validator_set_update_epoch > current_epoch`
+    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
     // Set the validator state as `Jailed` thru the pipeline epoch
-    for offset in 1..=params.pipeline_len {
+    for offset in start_offset..=params.pipeline_len {
         validator_state_handle(validator).set(
             storage,
             ValidatorState::Jailed,
