@@ -308,13 +308,15 @@ mod tests {
     use super::{get_dummy_header, *};
     use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::nam;
-    use crate::core::types::address::testing::established_address_1;
+    use crate::core::types::address::testing::{
+        established_address_1, established_address_2,
+    };
     use crate::core::types::storage::Epoch;
     use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
     use crate::ibc::applications::transfer::coin::PrefixedCoin;
     use crate::ibc::applications::transfer::denom::TracePrefix;
     use crate::ibc::applications::transfer::events::{
-        AckEvent, DenomTraceEvent, TimeoutEvent, TransferEvent,
+        AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
     use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::applications::transfer::packet::PacketData;
@@ -698,9 +700,7 @@ mod tests {
             client_type(),
             client_state.latest_height(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Client);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -910,9 +910,7 @@ mod tests {
             vec![consensus_height],
             header.into(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Client);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1022,9 +1020,7 @@ mod tests {
             msg.client_id_on_a.clone(),
             msg.counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1250,9 +1246,7 @@ mod tests {
             msg.counterparty.connection_id().cloned().unwrap(),
             msg.counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1360,9 +1354,7 @@ mod tests {
             msg.conn_id_on_b.clone(),
             counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1447,9 +1439,7 @@ mod tests {
             counterparty.connection_id().cloned().unwrap(),
             counterparty.client_id().clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1571,9 +1561,7 @@ mod tests {
             conn_id,
             msg.version_proposal.clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1694,9 +1682,7 @@ mod tests {
             conn_id,
             msg.version_supported_on_a.clone(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1802,9 +1788,7 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -1908,9 +1892,7 @@ mod tests {
             counterparty.channel_id().cloned().unwrap(),
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2011,7 +1993,7 @@ mod tests {
                 receiver: "receiver".to_string().into(),
                 memo: "memo".to_string().into(),
             },
-            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),
         };
 
@@ -2052,9 +2034,7 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2132,6 +2112,8 @@ mod tests {
             .unwrap();
 
         // prepare data
+        let sender = established_address_1();
+        let receiver = established_address_2();
         let transfer_msg = MsgTransfer {
             port_id_on_a: get_port_id(),
             chan_id_on_a: get_channel_id(),
@@ -2140,11 +2122,11 @@ mod tests {
                     denom: nam().to_string().parse().unwrap(),
                     amount: 100u64.into(),
                 },
-                sender: "sender".to_string().into(),
-                receiver: established_address_1().to_string().into(),
+                sender: sender.to_string().into(),
+                receiver: receiver.to_string().into(),
                 memo: "memo".to_string().into(),
             },
-            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),
         };
         let counterparty = get_channel_counterparty();
@@ -2202,6 +2184,18 @@ mod tests {
             .expect("write failed");
         keys_changed.insert(denom_key);
         // event
+        let recv_event = RecvEvent {
+            sender: sender.to_string().into(),
+            receiver: receiver.to_string().into(),
+            denom: nam().to_string().parse().unwrap(),
+            amount: 100u64.into(),
+            memo: "memo".to_string().into(),
+            success: true,
+        };
+        let event = RawIbcEvent::Module(ModuleEvent::from(recv_event));
+        wl_storage
+            .write_log
+            .emit_ibc_event(event.try_into().unwrap());
         let denom_trace_event = DenomTraceEvent {
             trace_hash: Some(trace_hash),
             denom: coin.denom,
@@ -2215,9 +2209,7 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2230,9 +2222,7 @@ mod tests {
                 acknowledgement,
                 get_connection_id(),
             ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2311,7 +2301,7 @@ mod tests {
                 receiver: "receiver".to_string().into(),
                 memo: "memo".to_string().into(),
             },
-            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),
         };
         let sequence = 1.into();
@@ -2379,9 +2369,7 @@ mod tests {
             Order::Unordered,
             get_connection_id(),
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2532,9 +2520,7 @@ mod tests {
             packet,
             Order::Unordered,
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());
@@ -2621,7 +2607,7 @@ mod tests {
                 receiver: "receiver".to_string().into(),
                 memo: "memo".to_string().into(),
             },
-            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
             timeout_timestamp_on_b: Timestamp::none(),
         };
         let sequence = 1.into();
@@ -2686,9 +2672,7 @@ mod tests {
             packet,
             Order::Unordered,
         ));
-        let message_event = RawIbcEvent::Message(MessageEvent::Module(
-            event.event_type().to_string(),
-        ));
+        let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         wl_storage
             .write_log
             .emit_ibc_event(message_event.try_into().unwrap());

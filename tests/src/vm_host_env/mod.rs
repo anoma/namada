@@ -1217,8 +1217,7 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let hashed_denom = ibc_token.to_string();
-        let msg = ibc::msg_transfer(port_id, channel_id, hashed_denom, &sender);
+        let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 

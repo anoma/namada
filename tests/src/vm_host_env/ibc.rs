@@ -347,13 +347,12 @@ pub fn prepare_opened_connection(
 
     let conn_id = ConnectionId::new(0);
     let key = connection_key(&conn_id);
-    let msg = msg_connection_open_init(client_id.clone());
     let conn = ConnectionEnd::new(
         ConnState::Open,
-        msg.client_id_on_a.clone(),
-        msg.counterparty.clone(),
-        vec![msg.version.clone().unwrap_or_default()],
-        msg.delay_period,
+        client_id.clone(),
+        dummy_connection_counterparty(),
+        vec![ConnVersion::default()],
+        Duration::new(0, 0),
     )
     .expect("invalid connection");
     let bytes = conn.encode_vec();
@@ -444,9 +443,16 @@ pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
+    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string()).unwrap();
+    let counterparty_client_id = ClientId::new(client_type, 42).unwrap();
+    let commitment_prefix =
+        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
+    let counterparty =
+        ConnCounterparty::new(counterparty_client_id, None, commitment_prefix);
+
     MsgConnectionOpenInit {
         client_id_on_a: client_id,
-        counterparty: dummy_connection_counterparty(),
+        counterparty,
         version: None,
         delay_period: Duration::new(0, 0),
         signer: "test".to_string().into(),
