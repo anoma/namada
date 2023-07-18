@@ -9,11 +9,11 @@ use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
-use namada::tendermint_rpc::endpoint::abci_info;
-use namada::tendermint_rpc::SimpleRequest;
 use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
+use namada::tendermint_rpc::endpoint::abci_info;
+use namada::tendermint_rpc::SimpleRequest;
 use namada::types::hash::Hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
@@ -26,8 +26,8 @@ use crate::facade::tendermint_proto::abci::RequestProcessProposal;
 use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::{tendermint, tendermint_rpc};
-use crate::node::ledger::shell::{ErrorCodes, Shell};
 use crate::node::ledger::shell::testing::utils::TestDir;
+use crate::node::ledger::shell::{ErrorCodes, Shell};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
@@ -59,7 +59,10 @@ impl Drop for MockNode {
             if !self.keep_temp {
                 ManuallyDrop::take(&mut self.test_dir).clean_up()
             } else {
-                println!("Keeping tempfile at {}", self.test_dir.path().to_string_lossy());
+                println!(
+                    "Keeping tempfile at {}",
+                    self.test_dir.path().to_string_lossy()
+                );
                 ManuallyDrop::drop(&mut self.test_dir)
             }
         }

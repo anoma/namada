@@ -1,4 +1,3 @@
-mod client;
+#[cfg(any(test, feature="testing"))]
 mod masp;
-mod node;
 mod setup;

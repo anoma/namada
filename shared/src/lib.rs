@@ -22,6 +22,7 @@ pub use {
     namada_core::ibc, namada_core::ibc_proto, namada_core::tendermint,
     namada_core::tendermint_proto,
 };
+pub mod io;
 pub mod ledger;
 pub use namada_core::proto;
 pub mod types;

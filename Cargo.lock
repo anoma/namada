@@ -4247,6 +4247,7 @@ dependencies = [
  "eyre",
  "futures",
  "itertools",
+ "lazy_static",
  "libsecp256k1 0.7.0",
  "loupe",
  "masp_primitives",

@@ -13,7 +13,7 @@ mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
 mod stats;
-#[cfg(test)]
+#[cfg(any(test, feature="testing"))]
 #[allow(dead_code)]
 pub mod testing;
 mod vote_extensions;

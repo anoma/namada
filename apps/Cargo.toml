@@ -127,6 +127,7 @@ sha2.workspace = true
 signal-hook.workspace = true
 sysinfo.workspace = true
 tar.workspace = true
+tempfile.workspace = true
 tendermint-config.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
@@ -150,7 +151,6 @@ namada = {path = "../shared", default-features = false, features = ["testing", "
 namada_test_utils = {path = "../test_utils"}
 bit-set.workspace = true
 proptest.workspace = true
-tempfile.workspace = true
 test-log.workspace = true
 tokio-test.workspace = true
 

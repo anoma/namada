@@ -56,6 +56,7 @@ use crate::types::transaction::governance::{
 use crate::types::transaction::{
     Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
+use crate::{display, edisplay};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -79,7 +80,7 @@ pub async fn find_pk<
 ) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
-            println!(
+            display!(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
@@ -417,7 +418,7 @@ pub async fn sign_wrapper<
             format_denominated_amount(client, &token_addr, fee_amount).await,
             format_denominated_amount(client, &token_addr, balance).await,
         );
-        eprintln!("{}", err_msg);
+        edisplay!("{}", err_msg);
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
         }

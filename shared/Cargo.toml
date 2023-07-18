@@ -106,6 +106,7 @@ ethers.workspace = true
 eyre.workspace = true
 futures.workspace = true
 itertools.workspace = true
+lazy_static.workspace = true
 loupe = {version = "0.1.3", optional = true}
 masp_primitives.workspace = true
 masp_proofs = { workspace = true, features = ["download-params"] }

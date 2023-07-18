@@ -542,7 +542,6 @@ impl MockNode {
     }
 }
 
-
 async fn submit_transfer(
     client: &MockNode,
     ctx: &mut Context,

@@ -3723,6 +3723,7 @@ dependencies = [
  "eyre",
  "futures",
  "itertools",
+ "lazy_static",
  "loupe",
  "masp_primitives",
  "masp_proofs",
