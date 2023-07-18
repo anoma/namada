@@ -2,11 +2,9 @@
 //! wallet.
 
 use namada::core::types::account::AccountPublicKeysMap;
-use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
 use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::key::*;
@@ -76,36 +74,6 @@ where
         public_keys_index_map,
         public_keys,
         threshold,
-    )
-    .await
-}
-
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn sign_wrapper<C, U>(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    args: &args::Tx,
-    epoch: Epoch,
-    tx: Tx,
-    keypair: &common::SecretKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBroadcastData
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-    U: WalletUtils,
-{
-    namada::ledger::signing::sign_wrapper(
-        client,
-        wallet,
-        args,
-        epoch,
-        tx,
-        keypair,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
     )
     .await
 }

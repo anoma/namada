@@ -23,7 +23,7 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{
     self, Amount, DenominatedAmount, MaspDenom, TokenAddress,
 };
-use namada_core::types::transaction::{pos, MIN_FEE};
+use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -34,9 +34,7 @@ use crate::ibc::applications::transfer::msgs::transfer::{
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
-use crate::ledger::rpc::{
-    format_denominated_amount, query_wasm_code_hash, TxBroadcastData,
-};
+use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
     Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
@@ -235,6 +233,25 @@ pub async fn sign_tx<U: WalletUtils>(
     // Sign over the transaction targets
     tx.add_section(Section::SectionSignature(multisignature_section));
 
+    let fee_payer = match &args.fee_payer {
+        Some(keypair) => keypair,
+        None => {
+            if let Some(public_key) = keypairs.get(0) {
+                public_key
+            } else {
+                return Err(Error::InvalidFeePayer(
+                    "Either --signing-keys or --fee-payer must be available."
+                        .to_string(),
+                ));
+            }
+        }
+    };
+
+    tx.add_section(Section::Signature(Signature::new(
+        tx.sechashes(),
+        fee_payer,
+    )));
+
     Ok(())
 }
 
@@ -402,149 +419,6 @@ pub async fn wrap_tx<
     }
 
     tx
-}
-
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn sign_wrapper<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
-    client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
-    args: &args::Tx,
-    epoch: Epoch,
-    mut tx: Tx,
-    keypair: &common::SecretKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBroadcastData {
-    let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::native_whole(MIN_FEE)
-    } else {
-        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<C, token::Amount>(
-            client,
-            &wrapper_tx_fees_key,
-        )
-        .await
-        .unwrap_or_default()
-    };
-    let fee_token = &args.fee_token;
-    let source = Address::from(&keypair.ref_to());
-    let balance_key = token::balance_key(fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-    let is_bal_sufficient = fee_amount <= balance;
-    if !is_bal_sufficient {
-        let token_addr = TokenAddress {
-            address: args.fee_token.clone(),
-            sub_prefix: None,
-        };
-        let err_msg = format!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
-        );
-        eprintln!("{}", err_msg);
-        if !args.force && cfg!(feature = "mainnet") {
-            panic!("{}", err_msg);
-        }
-    }
-
-    #[cfg(not(feature = "mainnet"))]
-    // A PoW solution can be used to allow zero-fee testnet transactions
-    let pow_solution: Option<crate::core::ledger::testnet_pow::Solution> = {
-        // If the address derived from the keypair doesn't have enough balance
-        // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || !is_bal_sufficient {
-            println!(
-                "The transaction requires the completion of a PoW challenge."
-            );
-            // Obtain a PoW challenge for faucet withdrawal
-            let challenge =
-                rpc::get_testnet_pow_challenge(client, source).await;
-
-            // Solve the solution, this blocks until a solution is found
-            let solution = challenge.solve();
-            Some(solution)
-        } else {
-            None
-        }
-    };
-
-    // This object governs how the payload will be processed
-    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
-        Fee {
-            amount: fee_amount,
-            token: fee_token.clone(),
-        },
-        keypair.ref_to(),
-        epoch,
-        args.gas_limit.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        pow_solution,
-    ))));
-    tx.header.chain_id = args.chain_id.clone().unwrap();
-    tx.header.expiration = args.expiration;
-
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
-        let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
-    }
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
-    }
-
-    // Remove all the sensitive sections
-    tx.protocol_filter();
-    // Then sign over the bound wrapper committing to all other sections
-    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_hash = tx
-        .clone()
-        .update_header(TxType::Raw)
-        .header_hash()
-        .to_string();
-    TxBroadcastData::Wrapper {
-        tx,
-        wrapper_hash,
-        decrypted_hash,
-    }
 }
 
 #[allow(clippy::result_large_err)]

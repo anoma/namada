@@ -66,6 +66,8 @@ pub enum Error {
     InvalidSectionSignature(String),
     #[error("Couldn't serialize transaction from JSON at {0}")]
     InvalidJSONDeserialization(String),
+    #[error("The wrapper signature is invalid.")]
+    InvalidWrapperSignature,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -1372,15 +1374,11 @@ impl Tx {
                     return signature
                         .verify_signature(public_key)
                         .map(|_| signature)
-                        .map_err(|e| {
-                            Error::InvalidSectionSignature(e.to_string())
-                        });
+                        .map_err(|_| Error::InvalidWrapperSignature);
                 }
             }
         }
-        Err(Error::InvalidSectionSignature(
-            "invalid signatures.".to_string(),
-        ))
+        Err(Error::InvalidWrapperSignature)
     }
 
     /// Validate any and all ciphertexts stored in this transaction
