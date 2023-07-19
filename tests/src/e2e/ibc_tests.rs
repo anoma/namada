@@ -499,7 +499,6 @@ fn channel_handshake(
         version_proposal: channel_version.clone(),
     };
     let height = submit_ibc_tx(test_a, msg, ALBERT)?;
-
     let events = get_events(test_a, height)?;
     let channel_id_a = get_channel_id_from_events(&events)
         .ok_or(eyre!("Transaction failed"))?;
@@ -527,8 +526,7 @@ fn channel_handshake(
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenTryChannel on Chain B
     let height = submit_ibc_tx(test_b, msg, ALBERT)?;
-
-    let events = get_events(test_a, height)?;
+    let events = get_events(test_b, height)?;
     let channel_id_b = get_channel_id_from_events(&events)
         .ok_or(eyre!("Transaction failed"))?;
 
