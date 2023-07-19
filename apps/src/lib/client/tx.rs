@@ -10,6 +10,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -35,7 +36,6 @@ use crate::client::signing::find_pk;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use crate::facade::tendermint_rpc::HttpClient;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
@@ -523,8 +523,8 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-pub async fn submit_transfer(
-    client: &HttpClient,
+pub async fn submit_transfer<C: Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
