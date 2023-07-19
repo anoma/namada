@@ -24,11 +24,14 @@ pub const LAST_UPDATE_SUB_KEY: &str = "last_update";
 /// Sub-key for an epoched data structure's oldest epoch with some data
 pub const OLDEST_EPOCH_SUB_KEY: &str = "oldest_epoch";
 
+/// Default number of past epochs to keep.
+const DEFAULT_NUM_PAST_EPOCHS: u64 = 2;
+
 /// Discrete epoched data handle
 pub struct Epoched<
     Data,
     FutureEpochs,
-    const NUM_PAST_EPOCHS: u64 = 0,
+    const NUM_PAST_EPOCHS: u64 = DEFAULT_NUM_PAST_EPOCHS,
     SON = collections::Simple,
 > {
     storage_prefix: storage::Key,
@@ -38,8 +41,11 @@ pub struct Epoched<
 }
 
 /// Discrete epoched data handle with nested lazy structure
-pub type NestedEpoched<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64 = 0> =
-    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>;
+pub type NestedEpoched<
+    Data,
+    FutureEpochs,
+    const NUM_PAST_EPOCHS: u64 = DEFAULT_NUM_PAST_EPOCHS,
+> = Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>;
 
 /// Delta epoched data handle
 pub struct EpochedDelta<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64> {
