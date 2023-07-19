@@ -168,7 +168,7 @@ mod tests {
 
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
 
         let amount = token::DenominatedAmount {
             amount,
@@ -183,7 +183,6 @@ mod tests {
                 &source,
                 address,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -328,7 +327,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         tx_env.commit_genesis();
         let amount = token::DenominatedAmount {
             amount,
@@ -338,7 +337,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount, &None, &None, &None).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -374,9 +373,9 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
-        storage_api::token::write_denom(&mut tx_env.wl_storage, &token, None, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
+        storage_api::token::write_denom(&mut tx_env.wl_storage, &token, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
         tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would
@@ -396,7 +395,7 @@ mod tests {
             let valid = solution.validate(tx::ctx(), address, target.clone()).unwrap();
             assert!(valid);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount, &None, &None, &None).unwrap();
         });
 
         let mut vp_env = vp_host_env::take();

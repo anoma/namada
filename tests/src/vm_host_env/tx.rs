@@ -177,17 +177,9 @@ impl TestTxEnv {
         &mut self,
         target: &Address,
         token: &Address,
-        sub_prefix: Option<Key>,
         amount: token::Amount,
     ) {
-        let storage_key = match &sub_prefix {
-            Some(sub_prefix) => {
-                let prefix =
-                    token::multitoken_balance_prefix(token, sub_prefix);
-                token::multitoken_balance_key(&prefix, target)
-            }
-            None => token::balance_key(token, target),
-        };
+        let storage_key = token::balance_key(token, target);
         self.wl_storage
             .storage
             .write(&storage_key, amount.try_to_vec().unwrap())

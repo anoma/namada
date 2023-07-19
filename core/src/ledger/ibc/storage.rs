@@ -23,8 +23,6 @@ const CLIENTS_COUNTER: &str = "clients/counter";
 const CONNECTIONS_COUNTER: &str = "connections/counter";
 const CHANNELS_COUNTER: &str = "channelEnds/counter";
 const DENOM: &str = "ibc_denom";
-/// Key segment for a multitoken related to IBC
-pub const MULTITOKEN_STORAGE_KEY: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -43,67 +41,6 @@ pub enum Error {
 
 /// IBC storage functions result
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// IBC prefix
-#[allow(missing_docs)]
-pub enum IbcPrefix {
-    Client,
-    Connection,
-    Channel,
-    Port,
-    Capability,
-    SeqSend,
-    SeqRecv,
-    SeqAck,
-    Commitment,
-    Receipt,
-    Ack,
-    Event,
-    Denom,
-    Unknown,
-}
-
-/// Returns the prefix from the given key
-pub fn ibc_prefix(key: &Key) -> Option<IbcPrefix> {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..]
-            if addr == &Address::Internal(InternalAddress::Ibc) =>
-        {
-            Some(match &*prefix.raw() {
-                "clients" => IbcPrefix::Client,
-                "connections" => IbcPrefix::Connection,
-                "channelEnds" => IbcPrefix::Channel,
-                "ports" => IbcPrefix::Port,
-                "capabilities" => IbcPrefix::Capability,
-                "nextSequenceSend" => IbcPrefix::SeqSend,
-                "nextSequenceRecv" => IbcPrefix::SeqRecv,
-                "nextSequenceAck" => IbcPrefix::SeqAck,
-                "commitments" => IbcPrefix::Commitment,
-                "receipts" => IbcPrefix::Receipt,
-                "acks" => IbcPrefix::Ack,
-                "event" => IbcPrefix::Event,
-                "ibc_denom" => IbcPrefix::Denom,
-                _ => IbcPrefix::Unknown,
-            })
-        }
-        _ => None,
-    }
-}
-
-/// Check if the given key is a key of the client counter
-pub fn is_client_counter_key(key: &Key) -> bool {
-    *key == client_counter_key()
-}
-
-/// Check if the given key is a key of the connection counter
-pub fn is_connection_counter_key(key: &Key) -> bool {
-    *key == connection_counter_key()
-}
-
-/// Check if the given key is a key of the channel counter
-pub fn is_channel_counter_key(key: &Key) -> bool {
-    *key == channel_counter_key()
-}
 
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
@@ -473,26 +410,20 @@ pub fn token(denom: impl AsRef<str>) -> Result<Address> {
 
 /// Get the hash of IBC token address from the denom string
 pub fn token_hash_from_denom(denom: impl AsRef<str>) -> Result<Option<String>> {
-    match denom
-        .as_ref()
-        .strip_prefix(&format!("{}/", MULTITOKEN_STORAGE_KEY))
-    {
-        Some(addr_str) => {
-            let addr = Address::decode(addr_str).map_err(|e| {
-                Error::Denom(format!(
-                    "Decoding the denom failed: ibc_token {}, error {}",
-                    addr_str, e
-                ))
-            })?;
-            match addr {
-                Address::Internal(InternalAddress::IbcToken(h)) => Ok(Some(h)),
-                _ => Err(Error::Denom(format!(
-                    "Unexpected address was given: {}",
-                    addr
-                ))),
-            }
-        }
-        None => Ok(None),
+    let addr = Address::decode(denom.as_ref()).map_err(|e| {
+        Error::Denom(format!(
+            "Decoding the denom failed: denom {}, error {}",
+            denom.as_ref(),
+            e
+        ))
+    })?;
+    match addr {
+        Address::Established(_) => Ok(None),
+        Address::Internal(InternalAddress::IbcToken(h)) => Ok(Some(h)),
+        _ => Err(Error::Denom(format!(
+            "Unexpected address was given: {}",
+            addr
+        ))),
     }
 }
 
@@ -503,17 +434,10 @@ pub fn calc_hash(denom: impl AsRef<str>) -> String {
     format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN)
 }
 
-/// Key's prefix of the received token over IBC
-pub fn ibc_token_prefix(denom: impl AsRef<str>) -> Result<Key> {
-    let token = token(&denom)?;
+/// Obtain the IbcToken with the hash from the given denom
+pub fn ibc_token(denom: impl AsRef<str>) -> Address {
     let hash = calc_hash(&denom);
-    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
-    let prefix = Key::from(token.to_db_key())
-        .push(&MULTITOKEN_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&ibc_token.to_db_key())
-        .expect("Cannot obtain a storage key");
-    Ok(prefix)
+    Address::Internal(InternalAddress::IbcToken(hash))
 }
 
 /// Returns true if the given key is for IBC
@@ -522,18 +446,24 @@ pub fn is_ibc_key(key: &Key) -> bool {
              DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
 }
 
-/// Returns true if the sub prefix is for IBC
-pub fn is_ibc_sub_prefix(sub_prefix: &Key) -> bool {
-    matches!(&sub_prefix.segments[0],
-             DbKeySeg::StringSeg(s) if s == MULTITOKEN_STORAGE_KEY)
-}
-
-/// Returns true if the given key is the denom key
-pub fn is_ibc_denom_key(key: &Key) -> bool {
+/// Returns the token hash if the given key is the denom key
+pub fn is_ibc_denom_key(key: &Key) -> Option<String> {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix), ..] => {
-            addr == &Address::Internal(InternalAddress::Ibc) && prefix == DENOM
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(Address::Internal(InternalAddress::IbcToken(
+                hash,
+            ))),
+        ] => {
+            if addr == &Address::Internal(InternalAddress::Ibc)
+                && prefix == DENOM
+            {
+                Some(hash.clone())
+            } else {
+                None
+            }
         }
-        _ => false,
+        _ => None,
     }
 }
