@@ -390,7 +390,7 @@ fn connection_handshake(
         ),
         version: Some(ConnVersion::default()),
         delay_period: Duration::new(0, 0),
-        signer: "test_a".to_string().into(),
+        signer: signer(),
     };
     // OpenInitConnection on Chain A
     let height = submit_ibc_tx(test_a, msg, ALBERT)?;
@@ -589,9 +589,11 @@ fn get_client_states(
     client_id: &ClientId,
     target_height: Height, // should have been already decremented
 ) -> Result<(TmClientState, CommitmentProofBytes, CommitmentProofBytes)> {
+    // we need proofs at the height of the previous block
+    let query_height = target_height.decrement().unwrap();
     let key = client_state_key(&client_id.as_str().parse().unwrap());
     let (value, tm_proof) =
-        query_value_with_proof(test, &key, Some(target_height))?;
+        query_value_with_proof(test, &key, Some(query_height))?;
     let cs = match value {
         Some(v) => Any::decode(&v[..])
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
@@ -610,8 +612,7 @@ fn get_client_states(
     let ibc_height = Height::new(0, height.revision_height()).unwrap();
     let key =
         consensus_state_key(&client_id.as_str().parse().unwrap(), ibc_height);
-    let (_, tm_proof) =
-        query_value_with_proof(test, &key, Some(target_height))?;
+    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let consensus_proof = convert_proof(tm_proof)?;
 
     Ok((client_state, client_state_proof, consensus_proof))
