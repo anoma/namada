@@ -11,68 +11,78 @@ use namada::ledger::masp::find_valid_diversifier;
 use namada::ledger::wallet::{DecryptionError, FindKeyError};
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
-use namada_apps::cli;
-use namada_apps::cli::args::CliToSdk;
-use namada_apps::cli::{args, cmds, Context};
-use namada_apps::wallet::{
-    read_and_confirm_encryption_password, CliWalletUtils,
-};
 use rand_core::OsRng;
 
-pub fn main() -> Result<()> {
-    let (cmd, mut ctx) = cli::namada_wallet_cli()?;
-    match cmd {
-        cmds::NamadaWallet::Key(sub) => match sub {
-            cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
-                key_and_address_restore(ctx, args)
-            }
-            cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
-                key_and_address_gen(ctx, args)
-            }
-            cmds::WalletKey::Find(cmds::KeyFind(args)) => key_find(ctx, args),
-            cmds::WalletKey::List(cmds::KeyList(args)) => key_list(ctx, args),
-            cmds::WalletKey::Export(cmds::Export(args)) => {
-                key_export(ctx, args)
-            }
-        },
-        cmds::NamadaWallet::Address(sub) => match sub {
-            cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
-                key_and_address_gen(ctx, args)
-            }
-            cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
-                key_and_address_restore(ctx, args)
-            }
-            cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
-                address_or_alias_find(ctx, args)
-            }
-            cmds::WalletAddress::List(cmds::AddressList) => address_list(ctx),
-            cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
-                address_add(ctx, args)
-            }
-        },
-        cmds::NamadaWallet::Masp(sub) => match sub {
-            cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(args)) => {
-                spending_key_gen(ctx, args)
-            }
-            cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
-                let args = args.to_sdk(&mut ctx);
-                payment_address_gen(ctx, args)
-            }
-            cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
-                address_key_add(ctx, args)
-            }
-            cmds::WalletMasp::ListPayAddrs(cmds::MaspListPayAddrs) => {
-                payment_addresses_list(ctx)
-            }
-            cmds::WalletMasp::ListKeys(cmds::MaspListKeys(args)) => {
-                spending_keys_list(ctx, args)
-            }
-            cmds::WalletMasp::FindAddrKey(cmds::MaspFindAddrKey(args)) => {
-                address_key_find(ctx, args)
-            }
-        },
+use crate::cli;
+use crate::cli::api::CliApi;
+use crate::cli::args::CliToSdk;
+use crate::cli::{args, cmds, Context};
+use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
+
+impl<IO> CliApi<IO> {
+    pub fn handle_wallet_command(
+        cmd: cmds::NamadaWallet,
+        mut ctx: Context,
+    ) -> Result<()> {
+        match cmd {
+            cmds::NamadaWallet::Key(sub) => match sub {
+                cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
+                    key_and_address_restore(ctx, args)
+                }
+                cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
+                    key_and_address_gen(ctx, args)
+                }
+                cmds::WalletKey::Find(cmds::KeyFind(args)) => {
+                    key_find(ctx, args)
+                }
+                cmds::WalletKey::List(cmds::KeyList(args)) => {
+                    key_list(ctx, args)
+                }
+                cmds::WalletKey::Export(cmds::Export(args)) => {
+                    key_export(ctx, args)
+                }
+            },
+            cmds::NamadaWallet::Address(sub) => match sub {
+                cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
+                    key_and_address_gen(ctx, args)
+                }
+                cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
+                    key_and_address_restore(ctx, args)
+                }
+                cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
+                    address_or_alias_find(ctx, args)
+                }
+                cmds::WalletAddress::List(cmds::AddressList) => {
+                    address_list(ctx)
+                }
+                cmds::WalletAddress::Add(cmds::AddressAdd(args)) => {
+                    address_add(ctx, args)
+                }
+            },
+            cmds::NamadaWallet::Masp(sub) => match sub {
+                cmds::WalletMasp::GenSpendKey(cmds::MaspGenSpendKey(args)) => {
+                    spending_key_gen(ctx, args)
+                }
+                cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
+                    let args = args.to_sdk(&mut ctx);
+                    payment_address_gen(ctx, args)
+                }
+                cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
+                    address_key_add(ctx, args)
+                }
+                cmds::WalletMasp::ListPayAddrs(cmds::MaspListPayAddrs) => {
+                    payment_addresses_list(ctx)
+                }
+                cmds::WalletMasp::ListKeys(cmds::MaspListKeys(args)) => {
+                    spending_keys_list(ctx, args)
+                }
+                cmds::WalletMasp::FindAddrKey(cmds::MaspFindAddrKey(args)) => {
+                    address_key_find(ctx, args)
+                }
+            },
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Find shielded address or key
@@ -213,8 +223,7 @@ fn spending_key_gen(
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let (alias, _key) = wallet.gen_spending_key(alias, password, alias_force);
-    namada_apps::wallet::save(&wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a spending key with alias: \"{}\"",
         alias
@@ -248,8 +257,7 @@ fn payment_address_gen(
             eprintln!("Payment address not added");
             cli::safe_exit(1);
         });
-    namada_apps::wallet::save(&wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully generated a payment address with the following alias: {}",
         alias,
@@ -306,8 +314,7 @@ fn address_key_add(
             (alias, "payment address")
         }
     };
-    namada_apps::wallet::save(&ctx.wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&ctx.wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a {} with the following alias to wallet: {}",
         typ, alias,
@@ -345,8 +352,7 @@ fn key_and_address_restore(
             println!("No changes are persisted. Exiting.");
             cli::safe_exit(0);
         });
-    namada_apps::wallet::save(&wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
         alias
@@ -387,8 +393,7 @@ fn key_and_address_gen(
             println!("No changes are persisted. Exiting.");
             cli::safe_exit(0);
         });
-    namada_apps::wallet::save(&wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
         alias
@@ -573,8 +578,7 @@ fn address_add(ctx: Context, args: args::AddressAdd) {
         eprintln!("Address not added");
         cli::safe_exit(1);
     }
-    namada_apps::wallet::save(&wallet)
-        .unwrap_or_else(|err| eprintln!("{}", err));
+    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a key and an address with alias: \"{}\"",
         args.alias.to_lowercase()
