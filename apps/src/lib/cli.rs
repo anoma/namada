@@ -6,8 +6,12 @@
 //! client can be dispatched via `namada node ...` or `namada client ...`,
 //! respectively.
 
+pub mod api;
+pub mod client;
 pub mod context;
+pub mod relayer;
 pub(super) mod utils;
+pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
