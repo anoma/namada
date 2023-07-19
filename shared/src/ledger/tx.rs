@@ -1198,16 +1198,6 @@ pub async fn build_ibc_transfer<
             .await?;
     // We cannot check the receiver
 
-    let token_hash = match &args.token {
-        Address::Internal(InternalAddress::IbcToken(hash)) => hash.clone(),
-        _ => return Err(Error::TokenDoesNotExist(args.token)),
-    };
-    let ibc_denom_key = ibc_denom_key(token_hash);
-    let ibc_denom =
-        rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
-            .await
-            .ok_or_else(|| Error::TokenDoesNotExist(args.token.clone()))?;
-
     // Check source balance
     let balance_key = token::balance_key(&args.token, &source);
 
@@ -1226,6 +1216,15 @@ pub async fn build_ibc_transfer<
             .await
             .unwrap();
 
+    let ibc_denom = match &args.token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => {
+            let ibc_denom_key = ibc_denom_key(hash);
+            rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
+                .await
+                .ok_or_else(|| Error::TokenDoesNotExist(args.token.clone()))?
+        }
+        _ => args.token.to_string(),
+    };
     let amount = args
         .amount
         .to_string_native()
