@@ -10,6 +10,7 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use namada::ledger::masp;
 use namada::ledger::wallet::Wallet;
 use namada::types::address;
 use namada::types::chain::ChainId;
@@ -20,6 +21,8 @@ use rand::prelude::ThreadRng;
 use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
+use futures::StreamExt;
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args, safe_exit};
@@ -990,6 +993,26 @@ pub fn pk_to_tm_address(
     println!("{tm_addr}");
 }
 
+pub async fn download_masp_parameters(
+    _global_args: args::Global,
+    args::PkToTmAddress { public_key }: args::PkToTmAddress,
+) {
+    let params_dir: PathBuf = masp::get_params_dir();
+    let parameters = vec![
+        "masp-convert.params",
+        "masp-output.params",
+        "masp-spend.params"
+    ];
+
+    for parameter in parameters {
+        println!("Downloading {}...", parameter);
+        let url = format!("{}{}", masp::DOWNLOAD_URL, parameter);
+        let path = params_dir.join(&parameter);
+        download_file_streaming(&url, path.to_string_lossy().as_ref()).await;
+    }
+    println!("Done!");
+}
+
 pub fn default_base_dir(
     _global_args: args::Global,
     _args: args::DefaultBaseDir,
@@ -1118,6 +1141,18 @@ async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
     response.error_for_status_ref()?;
     let contents = response.bytes().await?;
     Ok(contents)
+}
+
+async fn download_file_streaming(url: &str, path: &str) {
+    let mut file = tokio::fs::File::create(path).await.unwrap();
+    let mut stream = reqwest::get(url).await.unwrap().bytes_stream();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.unwrap();
+        file.write_all(&chunk).await.unwrap();
+    }
+
+    file.flush().await.unwrap();
 }
 
 fn try_parse_public_key(

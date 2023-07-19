@@ -231,3 +231,9 @@ max_proposal_period = 27
 max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6
+
+# Computable via shasum -a 256 <file>
+[masp]
+spend = "62b3c60ca54bd99eb390198e949660624612f7db7942db84595fa9f1b4a29fd8"
+output = "ed8b5d354017d808cfaf7b31eca5c511936e65ef6d276770251f5234ec5328b8"
+convert = "8e049c905e0e46f27662c7577a4e3480c0047ee1171f7f6d9c5b0de757bf71f1"

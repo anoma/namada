@@ -142,6 +142,8 @@ pub mod genesis_config {
         pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
+        // Masp parameters
+        pub masp: MaspParameters
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -309,6 +311,13 @@ pub mod genesis_config {
     pub struct WasmConfig {
         filename: String,
         pub sha256: Option<HexString>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct MaspParameters {
+        convert: String,
+        spend: String,
+        output: String
     }
 
     fn load_validator(
@@ -543,6 +552,7 @@ pub mod genesis_config {
             gov_params,
             wasm,
             ethereum_bridge_params,
+            masp
         } = config;
 
         let native_token = Address::decode(
@@ -599,6 +609,12 @@ pub mod genesis_config {
             .to_sha256_bytes()
             .unwrap();
 
+        let masp_parameters = HashMap::from_iter([
+            ("convert".to_string(), masp.convert),
+            ("spend".to_string(), masp.spend),
+            ("output".to_string(), masp.output)
+        ]);
+
         let min_duration: i64 =
             60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
         let parameters = Parameters {
@@ -624,6 +640,7 @@ pub mod genesis_config {
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Dec::zero(),
             pos_inflation_amount: token::Amount::zero(),
+            #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
@@ -688,6 +705,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             ethereum_bridge_params,
+            masp: masp_parameters
         };
         genesis.init();
         genesis
@@ -742,6 +760,7 @@ pub struct Genesis {
     pub gov_params: GovParams,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
+    pub masp: HashMap<String, String>
 }
 
 impl Genesis {
@@ -997,6 +1016,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
+        #[cfg(not(feature = "mainnet"))]
         wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {
@@ -1115,6 +1135,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         faucet_pow_difficulty: None,
         #[cfg(not(feature = "mainnet"))]
         faucet_withdrawal_limit: None,
+        masp: HashMap::new()
     }
 }
 

@@ -92,6 +92,8 @@ pub const SPEND_NAME: &str = "masp-spend.params";
 pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
+/// Default donwload url
+pub const DOWNLOAD_URL: &str = "https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/";
 
 fn load_pvks() -> (
     PreparedVerifyingKey<Bls12>,
@@ -296,7 +298,6 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 /// use the default.
 pub fn get_params_dir() -> PathBuf {
     if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        println!("Using {} as masp parameter folder.", params_dir);
         PathBuf::from(params_dir)
     } else {
         masp_proofs::default_params_folder().unwrap()

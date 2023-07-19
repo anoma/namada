@@ -1,5 +1,5 @@
-use std::collections::HashSet;
-use std::env;
+use std::collections::{HashSet, HashMap};
+use std::{env, io};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -26,6 +26,7 @@ use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
+use sha2::{Sha256, Digest};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -428,22 +429,46 @@ pub struct CLIShieldedUtils {
 impl CLIShieldedUtils {
     /// Initialize a shielded transaction context that identifies notes
     /// decryptable by any viewing key in the given set
-    pub fn new(context_dir: PathBuf) -> masp::ShieldedContext<Self> {
+    pub fn new(context_dir: PathBuf, masp_parameters: HashMap<String, String>) -> masp::ShieldedContext<Self> {
         // Make sure that MASP parameters are downloaded to enable MASP
         // transaction building and verification later on
+        
         let params_dir = masp::get_params_dir();
         let spend_path = params_dir.join(masp::SPEND_NAME);
         let convert_path = params_dir.join(masp::CONVERT_NAME);
         let output_path = params_dir.join(masp::OUTPUT_NAME);
-        if !(spend_path.exists()
-            && convert_path.exists()
-            && output_path.exists())
-        {
-            println!("MASP parameters not present, downloading...");
-            masp_proofs::download_masp_parameters(None)
-                .expect("MASP parameters not present or downloadable");
-            println!("MASP parameter download complete, resuming execution...");
+
+        let spend_hash = masp_parameters.get("spend").expect("Spend parameter hash should be present.");
+        let output_hash = masp_parameters.get("output").expect("output parameter hash should be present.");
+        let convert_hash = masp_parameters.get("convert").expect("convert parameter hash should be present.");
+
+        let parameters_check = vec![
+            (spend_path, spend_hash),
+            (convert_path, convert_hash),
+            (output_path, output_hash),
+        ];
+
+        tracing::info!("Checking MASP parameter integrity at {}.", params_dir.display());
+
+        for (path, genesis_hash) in parameters_check {
+            if path.exists() {
+                let mut hasher = Sha256::new();
+                let mut file = File::open(&path).expect("File should be redable.");
+                io::copy(&mut file, &mut hasher).expect("File should be redable.");
+                let hash_bytes = hasher.finalize();
+                let hash = format!("{:X}", hash_bytes);
+                if !hash.eq_ignore_ascii_case(genesis_hash) {
+                    tracing::error!("MASP parameter check failed for {}. Expect hash is {} but got {}", path.display() , genesis_hash, hash);
+                    safe_exit(1)
+                }
+            } else {
+                tracing::error!("MASP parameter wasn't found at path {}", path.display());
+                safe_exit(1)
+            }
         }
+
+        tracing::info!("MASP parameter checks successful.");
+
         // Finally initialize a shielded context with the supplied directory
         let utils = Self { context_dir };
         masp::ShieldedContext {

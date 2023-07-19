@@ -450,7 +450,7 @@ pub async fn main() -> Result<()> {
                 utils::init_genesis_validator(global_args, args)
             }
             Utils::PkToTmAddress(PkToTmAddress(args)) => {
-                utils::pk_to_tm_address(global_args, args)
+                utils::download_masp_parameters(global_args, args).await
             }
             Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
                 utils::default_base_dir(global_args, args)

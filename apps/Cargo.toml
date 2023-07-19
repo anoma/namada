@@ -113,7 +113,7 @@ rand_core.workspace = true
 rand.workspace = true
 rayon.workspace = true
 regex.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
 ripemd.workspace = true
 rlimit.workspace = true
 rocksdb.workspace = true

@@ -124,7 +124,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: CLIShieldedUtils::new(chain_dir),
+            shielded: CLIShieldedUtils::new(chain_dir, genesis.masp),
             native_token,
         })
     }
