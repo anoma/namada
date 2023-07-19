@@ -389,7 +389,7 @@ fn connection_handshake(
             commitment_prefix(),
         ),
         version: Some(ConnVersion::default()),
-        delay_period: Duration::new(1, 0),
+        delay_period: Duration::new(0, 0),
         signer: "test_a".to_string().into(),
     };
     // OpenInitConnection on Chain A
@@ -1296,7 +1296,7 @@ fn get_attribute_from_events(
     key: &str,
 ) -> Option<String> {
     for event in events {
-        let attributes = get_attributes_from_event(&event);
+        let attributes = get_attributes_from_event(event);
         if let Some(value) = attributes.get(key) {
             return Some(value.clone());
         }
