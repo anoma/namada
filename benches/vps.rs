@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::{
@@ -9,11 +9,13 @@ use namada::core::types::key::{
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::Sha256Hasher;
-use namada::proto::{Code, Signature, Tx};
+use namada::ledger::storage_api::{self, StorageRead};
+use namada::proto::{Code, Section, Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
-use namada::types::key::ed25519;
+use namada::types::key::common::PublicKey;
+use namada::types::key::{ed25519, pk_key};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Key, TxIndex};
 use namada::types::transaction::governance::VoteProposalData;
@@ -39,6 +41,10 @@ const VP_MASP_WASM: &str = "vp_masp.wasm";
 
 fn vp_user(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_user");
+    let shell = BenchShell::default();
+    let vp_code_hash: Hash = shell
+        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
+        .unwrap();
 
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
@@ -55,7 +61,8 @@ fn vp_user(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let received_transfer = generate_tx(
@@ -70,23 +77,14 @@ fn vp_user(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::bertha_keypair(),
+        None,
+        Some(&defaults::bertha_keypair()),
     );
 
-    let shell = BenchShell::default();
     let vp_validator_hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    //FIXME: shared function?
-    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
-        Code::from_hash(vp_validator_hash),
-    ));
+    let extra_section = Section::ExtraData(Code::from_hash(vp_validator_hash));
     let data = UpdateVp {
         addr: defaults::albert_address(),
         vp_code_hash: Hash(
@@ -96,15 +94,13 @@ fn vp_user(c: &mut Criterion) {
                 .into(),
         ),
     };
-    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
-    vp.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let vp = generate_tx(
         TX_UPDATE_VP_WASM,
-    )));
-    vp.add_section(namada::proto::Section::Signature(Signature::new(
-        vp.data_sechash(),
-        &defaults::albert_keypair(),
-    )));
+        data,
+        None,
+        Some(extra_section),
+        Some(&defaults::albert_keypair()),
+    );
 
     let vote = generate_tx(
         TX_VOTE_PROPOSAL_WASM,
@@ -115,7 +111,8 @@ fn vp_user(c: &mut Criterion) {
             delegations: vec![defaults::validator_address()],
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let pos = generate_tx(
@@ -126,7 +123,8 @@ fn vp_user(c: &mut Criterion) {
             source: Some(defaults::albert_address()),
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     for (signed_tx, bench_name) in [
@@ -147,9 +145,6 @@ fn vp_user(c: &mut Criterion) {
         "vp",
     ]) {
         let mut shell = BenchShell::default();
-        let vp_code_hash: Hash = shell
-            .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
-            .unwrap();
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .wl_storage
@@ -205,7 +200,8 @@ fn vp_implicit(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &implicit_account,
+        None,
+        Some(&implicit_account),
     );
 
     let received_transfer = generate_tx(
@@ -220,21 +216,17 @@ fn vp_implicit(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::bertha_keypair(),
+        None,
+        Some(&defaults::bertha_keypair()),
     );
 
-    let mut reveal_pk = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    reveal_pk.set_code(namada::proto::Code::new(
-        wasm_loader::read_wasm_or_exit(WASM_DIR, TX_REVEAL_PK_WASM),
-    ));
-    reveal_pk.set_data(namada::proto::Data::new(
-        implicit_account.to_public().try_to_vec().unwrap(),
-    ));
+    let reveal_pk = generate_tx(
+        TX_REVEAL_PK_WASM,
+        &implicit_account.to_public(),
+        None,
+        None,
+        None,
+    );
 
     let pos = generate_tx(
         TX_BOND_WASM,
@@ -244,7 +236,8 @@ fn vp_implicit(c: &mut Criterion) {
             source: Some(Address::from(&implicit_account.to_public())),
         },
         None,
-        &implicit_account,
+        None,
+        Some(&implicit_account),
     );
 
     let vote = generate_tx(
@@ -257,7 +250,8 @@ fn vp_implicit(c: &mut Criterion) {
                                   * implicit vp doesn't check that */
         },
         None,
-        &implicit_account,
+        None,
+        Some(&implicit_account),
     );
 
     for (tx, bench_name) in [
@@ -350,7 +344,8 @@ fn vp_validator(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     let received_transfer = generate_tx(
@@ -365,19 +360,11 @@ fn vp_validator(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::bertha_keypair(),
+        None,
+        Some(&defaults::bertha_keypair()),
     );
 
-    //FIXME: shared function?
-    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
-        Code::from_hash(vp_code_hash),
-    ));
+    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
     let data = UpdateVp {
         addr: defaults::validator_address(),
         vp_code_hash: Hash(
@@ -387,15 +374,13 @@ fn vp_validator(c: &mut Criterion) {
                 .into(),
         ),
     };
-    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
-    vp.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let vp = generate_tx(
         TX_UPDATE_VP_WASM,
-    )));
-    vp.add_section(namada::proto::Section::Signature(Signature::new(
-        vp.data_sechash(),
-        &defaults::validator_keypair(),
-    )));
+        data,
+        None,
+        Some(extra_section),
+        Some(&defaults::validator_keypair()),
+    );
 
     let commission_rate = generate_tx(
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
@@ -404,7 +389,8 @@ fn vp_validator(c: &mut Criterion) {
             new_rate: Decimal::new(6, 2),
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     let vote = generate_tx(
@@ -416,7 +402,8 @@ fn vp_validator(c: &mut Criterion) {
             delegations: vec![],
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     let pos = generate_tx(
@@ -427,7 +414,8 @@ fn vp_validator(c: &mut Criterion) {
             source: None,
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     for (signed_tx, bench_name) in [
@@ -500,7 +488,8 @@ fn vp_token(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     for (signed_tx, bench_name) in [foreign_key_write, transfer]

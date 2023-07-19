@@ -12,7 +12,7 @@ use namada::proof_of_stake::types::{Slash, SlashType, ValidatorStates};
 use namada::proof_of_stake::{
     self, enqueued_slashes_handle, read_pos_params, ADDRESS,
 };
-use namada::proto::{Signature, Tx};
+use namada::proto::{Code, Section, Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
@@ -132,7 +132,8 @@ fn bond(c: &mut Criterion) {
             source: Some(defaults::albert_address()),
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let self_bond = generate_tx(
@@ -143,7 +144,8 @@ fn bond(c: &mut Criterion) {
             source: None,
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     for (signed_tx, bench_name) in
@@ -172,7 +174,8 @@ fn unbond(c: &mut Criterion) {
             source: Some(defaults::albert_address()),
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let self_unbond = generate_tx(
@@ -183,7 +186,8 @@ fn unbond(c: &mut Criterion) {
             source: None,
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     for (signed_tx, bench_name) in
@@ -211,7 +215,8 @@ fn withdraw(c: &mut Criterion) {
             source: Some(defaults::albert_address()),
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let self_withdraw = generate_tx(
@@ -221,7 +226,8 @@ fn withdraw(c: &mut Criterion) {
             source: None,
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     for (signed_tx, bench_name) in [withdraw, self_withdraw]
@@ -243,7 +249,8 @@ fn withdraw(c: &mut Criterion) {
                                 source: Some(defaults::albert_address()),
                             },
                             None,
-                            &defaults::albert_keypair(),
+                            None,
+                            Some(&defaults::albert_keypair()),
                         ),
                         "self_withdraw" => generate_tx(
                             TX_UNBOND_WASM,
@@ -253,7 +260,8 @@ fn withdraw(c: &mut Criterion) {
                                 source: None,
                             },
                             None,
-                            &defaults::validator_keypair(),
+                            None,
+                            Some(&defaults::validator_keypair()),
                         ),
                         _ => panic!("Unexpected bench test"),
                     };
@@ -290,19 +298,13 @@ fn reveal_pk(c: &mut Criterion) {
             .try_to_sk()
             .unwrap();
 
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let tx = generate_tx(
         TX_REVEAL_PK_WASM,
-    )));
-    tx.set_data(namada::proto::Data::new(
-        new_implicit_account.to_public().try_to_vec().unwrap(),
-    ));
+        new_implicit_account.to_public(),
+        None,
+        None,
+        None,
+    );
 
     c.bench_function("reveal_pk", |b| {
         b.iter_batched_ref(
@@ -318,16 +320,7 @@ fn update_vp(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    //FIXME: shared function for this?
-    let mut vp = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    let extra_section = vp.add_section(namada::proto::Section::ExtraData(
-        namada::proto::Code::from_hash(vp_code_hash),
-    ));
+    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
     let data = UpdateVp {
         addr: defaults::albert_address(),
         vp_code_hash: Hash(
@@ -337,15 +330,13 @@ fn update_vp(c: &mut Criterion) {
                 .into(),
         ),
     };
-    vp.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
-    vp.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let vp = generate_tx(
         TX_UPDATE_VP_WASM,
-    )));
-    vp.add_section(namada::proto::Section::Signature(Signature::new(
-        vp.data_sechash(),
-        &defaults::albert_keypair(),
-    )));
+        data,
+        None,
+        Some(extra_section),
+        Some(&defaults::albert_keypair()),
+    );
 
     c.bench_function("update_vp", |b| {
         b.iter_batched_ref(
@@ -367,31 +358,24 @@ fn init_account(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    //FIXME: shared function for txs with extra data?
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    let extra = tx.add_section(namada::proto::Section::ExtraData(
-        namada::proto::Code::from_hash(vp_code_hash),
-    ));
-    let extra_hash =
-        Hash(extra.hash(&mut sha2::Sha256::new()).finalize_reset().into());
+    let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
+    let extra_hash = Hash(
+        extra_section
+            .hash(&mut sha2::Sha256::new())
+            .finalize_reset()
+            .into(),
+    );
     let data = InitAccount {
         public_key: new_account.to_public(),
         vp_code_hash: extra_hash,
     };
-    tx.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
-    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let tx = generate_tx(
         TX_INIT_ACCOUNT_WASM,
-    )));
-    tx.add_section(namada::proto::Section::Signature(Signature::new(
-        tx.data_sechash(),
-        &defaults::albert_keypair(),
-    )));
+        data,
+        None,
+        Some(extra_section),
+        Some(&defaults::albert_keypair()),
+    );
 
     c.bench_function("init_account", |b| {
         b.iter_batched_ref(
@@ -424,7 +408,8 @@ fn init_proposal(c: &mut Criterion) {
                                 grace_epoch: 18.into(),
                             },
                             None,
-                            &defaults::albert_keypair(),
+                            None,
+                            Some(&defaults::albert_keypair()),
                         ),
                         "complete_proposal" => {
                             let max_code_size_key =
@@ -462,7 +447,8 @@ fn init_proposal(c: &mut Criterion) {
                                     grace_epoch: 18.into(),
                                 },
                                 None,
-                                &defaults::albert_keypair(),
+                                None,
+                                Some(&defaults::albert_keypair()),
                             )
                         }
                         _ => panic!("unexpected bench test"),
@@ -490,7 +476,8 @@ fn vote_proposal(c: &mut Criterion) {
             delegations: vec![defaults::validator_address()],
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     let validator_vote = generate_tx(
@@ -502,7 +489,8 @@ fn vote_proposal(c: &mut Criterion) {
             delegations: vec![],
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     for (signed_tx, bench_name) in [delegator_vote, validator_vote]
@@ -545,18 +533,14 @@ fn init_validator(c: &mut Criterion) {
     let validator_vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
-    //FIXME: shared fucntion here?
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
-    ));
-    let extra = tx.add_section(namada::proto::Section::ExtraData(
-        namada::proto::Code::from_hash(validator_vp_code_hash),
-    ));
-    let extra_hash =
-        Hash(extra.hash(&mut sha2::Sha256::new()).finalize_reset().into());
+    let extra_section =
+        Section::ExtraData(Code::from_hash(validator_vp_code_hash));
+    let extra_hash = Hash(
+        extra_section
+            .hash(&mut sha2::Sha256::new())
+            .finalize_reset()
+            .into(),
+    );
     let data = InitValidator {
         account_key: defaults::albert_keypair().to_public(),
         consensus_key,
@@ -566,12 +550,13 @@ fn init_validator(c: &mut Criterion) {
         max_commission_rate_change: Decimal::default(),
         validator_vp_code_hash: extra_hash,
     };
-
-    tx.set_data(namada::proto::Data::new(data.try_to_vec().unwrap()));
-    tx.set_code(namada::proto::Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
+    let tx = generate_tx(
         TX_INIT_VALIDATOR_WASM,
-    )));
+        data,
+        None,
+        Some(extra_section),
+        Some(&defaults::albert_keypair()),
+    );
 
     c.bench_function("init_validator", |b| {
         b.iter_batched_ref(
@@ -590,7 +575,8 @@ fn change_validator_commission(c: &mut Criterion) {
             new_rate: Decimal::new(6, 2),
         },
         None,
-        &defaults::validator_keypair(),
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     c.bench_function("change_validator_commission", |b| {
@@ -623,8 +609,9 @@ fn unjail_validator(c: &mut Criterion) {
     let signed_tx = generate_tx(
         TX_UNJAIL_VALIDATOR_WASM,
         &defaults::validator_address(),
-        None, //FIXME: is this ever used?
-        &defaults::validator_keypair(),
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
     );
 
     c.bench_function("unjail_validator", |b| {
@@ -655,19 +642,10 @@ fn unjail_validator(c: &mut Criterion) {
                 let validator_vp_code_hash: Hash = shell
                     .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
                     .unwrap();
-                //FIXME: shared fucntion here?
-                let mut tx =
-                    Tx::new(namada::types::transaction::TxType::Decrypted(
-                        namada::types::transaction::DecryptedTx::Decrypted {
-                            #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow: true,
-                        },
-                    ));
-                let extra = tx.add_section(namada::proto::Section::ExtraData(
-                    namada::proto::Code::from_hash(validator_vp_code_hash),
-                ));
+                let extra_section =
+                    Section::ExtraData(Code::from_hash(validator_vp_code_hash));
                 let extra_hash = Hash(
-                    extra
+                    extra_section
                         .hash(&mut sha2::Sha256::new())
                         .finalize_reset()
                         .into(),
@@ -681,16 +659,13 @@ fn unjail_validator(c: &mut Criterion) {
                     max_commission_rate_change: Decimal::default(),
                     validator_vp_code_hash: extra_hash,
                 };
-
-                tx.set_data(namada::proto::Data::new(
-                    data.try_to_vec().unwrap(),
-                ));
-                tx.set_code(namada::proto::Code::new(
-                    wasm_loader::read_wasm_or_exit(
-                        WASM_DIR,
-                        TX_INIT_VALIDATOR_WASM,
-                    ),
-                ));
+                let tx = generate_tx(
+                    TX_INIT_VALIDATOR_WASM,
+                    data,
+                    None,
+                    Some(extra_section),
+                    Some(&defaults::albert_keypair()),
+                );
 
                 shell.execute_tx(&tx);
 

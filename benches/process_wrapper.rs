@@ -32,7 +32,8 @@ fn process_tx(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     tx.update_header(namada::types::transaction::TxType::Wrapper(Box::new(

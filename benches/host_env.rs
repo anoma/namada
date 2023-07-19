@@ -20,16 +20,17 @@ fn tx_signature_validation(c: &mut Criterion) {
             shielded: None,
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
-    let header_hash = tx.header_hash();
+    let data_hash = tx.data_sechash();
 
     c.bench_function("tx_signature_validation", |b| {
         b.iter(|| {
             tx.verify_signature(
                 &defaults::albert_keypair().ref_to(),
-                &header_hash,
+                &data_hash,
             )
             .unwrap()
         })

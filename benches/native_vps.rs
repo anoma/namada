@@ -104,7 +104,8 @@ fn governance(c: &mut Criterion) {
                     delegations: vec![defaults::validator_address()],
                 },
                 None,
-                &defaults::albert_keypair(),
+                None,
+                Some(&defaults::albert_keypair()),
             ),
             "validator_vote" => generate_tx(
                 TX_VOTE_PROPOSAL_WASM,
@@ -115,7 +116,8 @@ fn governance(c: &mut Criterion) {
                     delegations: vec![],
                 },
                 None,
-                &defaults::validator_keypair(),
+                None,
+                Some(&defaults::validator_keypair()),
             ),
             "minimal_proposal" => generate_tx(
                 TX_INIT_PROPOSAL_WASM,
@@ -129,7 +131,8 @@ fn governance(c: &mut Criterion) {
                     grace_epoch: 18.into(),
                 },
                 None,
-                &defaults::albert_keypair(),
+                None,
+                Some(&defaults::albert_keypair()),
             ),
             "complete_proposal" => {
                 let max_code_size_key =
@@ -164,7 +167,8 @@ fn governance(c: &mut Criterion) {
                         grace_epoch: 18.into(),
                     },
                     None,
-                    &defaults::albert_keypair(),
+                    None,
+                    Some(&defaults::albert_keypair()),
                 )
             }
             _ => panic!("Unexpected bench test"),
@@ -227,7 +231,8 @@ fn slash_fund(c: &mut Criterion) {
             grace_epoch: 18.into(),
         },
         None,
-        &defaults::albert_keypair(),
+        None,
+        Some(&defaults::albert_keypair()),
     );
 
     for (tx, bench_name) in [foreign_key_write, governance_proposal]
@@ -294,8 +299,7 @@ fn ibc(c: &mut Criterion) {
         signer: Signer::from_str(&defaults::albert_address().to_string())
             .unwrap(),
     };
-    let open_connection =
-        generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair());
+    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -309,8 +313,7 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel =
-        generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair());
+    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
     let outgoing_transfer = generate_ibc_transfer_tx();

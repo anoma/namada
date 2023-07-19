@@ -194,9 +194,16 @@ impl Default for BenchShell {
             amount: Amount::whole(1000),
             source: Some(defaults::albert_address()),
         };
-        let signed_tx =
-            generate_tx(TX_BOND_WASM, bond, None, &defaults::albert_keypair());
+        let signed_tx = generate_tx(
+            TX_BOND_WASM,
+            bond,
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        );
 
+        let params =
+            proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
         let mut bench_shell = BenchShell {
             inner: shell,
             tempdir,
@@ -218,7 +225,8 @@ impl Default for BenchShell {
                 grace_epoch: 18.into(),
             },
             None,
-            &defaults::albert_keypair(),
+            None,
+            Some(&defaults::albert_keypair()),
         );
 
         bench_shell.execute_tx(&signed_tx);
@@ -226,7 +234,7 @@ impl Default for BenchShell {
         bench_shell.inner.commit();
 
         // Advance epoch for pos benches
-        for _ in 0..=12 {
+        for _ in 0..=(params.pipeline_len + params.unbonding_len) {
             bench_shell.advance_epoch();
         }
 
@@ -404,11 +412,11 @@ impl BenchShell {
 }
 
 pub fn generate_tx(
-    //FIXME: rename to generate_signed_tx
     wasm_code_path: &str,
     data: impl BorshSerialize,
     shielded: Option<Transaction>,
-    signer: &SecretKey,
+    extra_section: Option<Section>,
+    signer: Option<&SecretKey>,
 ) -> Tx {
     let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted {
@@ -416,37 +424,38 @@ pub fn generate_tx(
             has_valid_pow: true,
         },
     ));
-    //FIXME: do I ever need to attach the fee unshielding transaction here?
-    //FIXME: should we use the hash?
+
+    // NOTE: don't use the hash to avoid computing the cost of loading the wasm code
     tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
         wasm_code_path,
     )));
     tx.set_data(Data::new(data.try_to_vec().unwrap()));
+
     if let Some(transaction) = shielded {
-        tx.add_section(Section::MaspTx(transaction)); //FIXME: need to sign this section?
+        tx.add_section(Section::MaspTx(transaction));
     }
 
-    // Add signatures
-    tx.add_section(Section::Signature(Signature::new(
-        //FIXME: need to sign the header for the decrypted? Maybe not. Can I use this transaction also for revela pk?
-        &tx.header_hash(),
-        signer,
-    )));
-    // Sign over the transacttion data
-    tx.add_section(Section::Signature(Signature::new(
-        tx.data_sechash(),
-        signer,
-    )));
+    if let Some(Section::ExtraData(_)) = extra_section {
+        tx.add_section(extra_section.unwrap());
+    }
+
+    if let Some(signer) = signer {
+        // Sign over the transaction data
+        tx.add_section(Section::Signature(Signature::new(
+            tx.data_sechash(),
+            signer,
+        )));
+        tx.add_section(Section::Signature(Signature::new(
+            tx.code_sechash(),
+            signer,
+        )));
+    }
 
     tx
 }
 
-pub fn generate_ibc_tx(
-    wasm_code_path: &str,
-    msg: impl Msg,
-    signer: &SecretKey,
-) -> Tx {
+pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
     // This function avoid serializaing the tx data with Borsh
     let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted {
@@ -463,11 +472,7 @@ pub fn generate_ibc_tx(
     prost::Message::encode(&msg.to_any(), &mut data).unwrap();
     tx.set_data(Data::new(data));
 
-    tx.add_section(Section::Signature(Signature::new(
-        //FIXME: need to sign the header for the decrypted? Of not I can use this function also for reveal_pk
-        &tx.header_hash(),
-        signer,
-    )));
+    //NOTE: the Ibc VP doesn't actually check this signature
 
     tx
 }
@@ -522,7 +527,7 @@ pub fn generate_ibc_transfer_tx() -> Tx {
         timeout_timestamp_on_b: timeout_timestamp,
     };
 
-    generate_ibc_tx(TX_IBC_WASM, msg, &defaults::albert_keypair())
+    generate_ibc_tx(TX_IBC_WASM, msg)
 }
 
 pub struct BenchShieldedCtx {
@@ -531,18 +536,33 @@ pub struct BenchShieldedCtx {
     pub wallet: Wallet<CliWalletUtils>,
 }
 
+#[derive(Debug)]
+struct WrapperTempDir(TempDir);
+
+// Mock the required traits for ShieldedUtils
+
+impl Default for WrapperTempDir {
+    fn default() -> Self {
+        Self(TempDir::new().unwrap())
+    }
+}
+
+impl Clone for WrapperTempDir {
+    fn clone(&self) -> Self {
+        Self(TempDir::new().unwrap())
+    }
+}
+
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Default)]
 pub struct BenchShieldedUtils {
     #[borsh_skip]
-    context_dir: PathBuf,
+    context_dir: WrapperTempDir,
 }
 
 #[async_trait::async_trait(?Send)]
 impl ShieldedUtils for BenchShieldedUtils {
     type C = BenchShell;
 
-    //FIXME: make everything work on tempdir?
-    //FIXME: impl this trait on BenchShell?
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = std::env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
             let params_dir = PathBuf::from(params_dir);
@@ -560,7 +580,9 @@ impl ShieldedUtils for BenchShieldedUtils {
     /// directory. If this fails, then leave the current context unchanged.
     async fn load(self) -> std::io::Result<ShieldedContext<Self>> {
         // Try to load shielded context from file
-        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
+        let mut ctx_file = File::open(
+            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+        )?;
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
         let mut new_ctx = ShieldedContext::deserialize(&mut &bytes[..])?;
@@ -572,8 +594,8 @@ impl ShieldedUtils for BenchShieldedUtils {
 
     /// Save this shielded context into its associated context directory
     async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
-        // TODO: use mktemp crate?
-        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+        let tmp_path =
+            self.context_dir.0.path().to_path_buf().join(TMP_FILE_NAME);
         {
             // First serialize the shielded context into a temporary file.
             // Inability to create this file implies a simultaneuous write is in
@@ -592,7 +614,10 @@ impl ShieldedUtils for BenchShieldedUtils {
         // Atomically update the old shielded context file with new data.
         // Atomicity is required to prevent other client instances from reading
         // corrupt data.
-        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
+        std::fs::rename(
+            tmp_path.clone(),
+            self.context_dir.0.path().to_path_buf().join(FILE_NAME),
+        )?;
         // Finally, remove our temporary file to allow future saving of shielded
         // contexts.
         std::fs::remove_file(tmp_path)?;
@@ -777,8 +802,6 @@ impl BenchShieldedCtx {
             )
         });
 
-        // FIXME: the tx section for fee unshieldign must not be encrypted!
-
         generate_tx(
             TX_TRANSFER_WASM,
             Transfer {
@@ -791,7 +814,8 @@ impl BenchShieldedCtx {
                 shielded: shielded_section_hash,
             },
             shielded,
-            &defaults::albert_keypair(),
+            None,
+            Some(&defaults::albert_keypair()),
         )
     }
 }
