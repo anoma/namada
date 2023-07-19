@@ -258,7 +258,7 @@ impl MockNode {
 }
 
 #[async_trait::async_trait(?Send)]
-impl Client for MockNode {
+impl<'a> Client for &'a MockNode {
     type Error = Report;
 
     async fn request(

@@ -10,13 +10,13 @@ pub mod api;
 pub mod client;
 pub mod context;
 pub mod relayer;
-pub(super) mod utils;
+mod utils;
 pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 use utils::*;
-pub use utils::{dispatch_prompt, safe_exit, TESTIN};
+pub use utils::{dispatch_prompt, safe_exit, Cmd, TESTIN};
 
 pub use self::context::Context;
 
