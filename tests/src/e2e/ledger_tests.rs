@@ -565,8 +565,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-    //    solution)
+        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+        //    solution)
         vec![
             "transfer",
             "--source",

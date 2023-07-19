@@ -154,17 +154,13 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<(Option<Address>, Vec<common::PublicKey>), Error> {
-    let signer = if args.dry_run {
-        // We cannot override the signer if we're doing a dry run
-        default
-    } else if !&args.signing_keys.is_empty() {
+) -> Result<Vec<common::PublicKey>, Error> {
+    let signer = if !&args.signing_keys.is_empty() {
         let public_keys =
             args.signing_keys.iter().map(|key| key.ref_to()).collect();
-
-        return Ok((None, public_keys));
+        return Ok(public_keys);
     } else if let Some(verification_key) = &args.verification_key {
-        return Ok((None, vec![verification_key.clone()]));
+        return Ok(vec![verification_key.clone()]);
     } else {
         // Otherwise use the signer determined by the caller
         default
@@ -173,15 +169,12 @@ pub async fn tx_signer<
     // Now actually fetch the signing key and apply it
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok((None, vec![masp_tx_key().ref_to()]))
+            Ok(vec![masp_tx_key().ref_to()])
         }
-        TxSigningKey::WalletAddress(signer) => Ok((
-            Some(signer.clone()),
-            vec![
-                find_pk::<C, U>(client, wallet, &signer, args.password.clone())
-                    .await?,
-            ],
-        )),
+        TxSigningKey::WalletAddress(signer) => Ok(vec![
+            find_pk::<C, U>(client, wallet, &signer, args.password.clone())
+                .await?,
+        ]),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."

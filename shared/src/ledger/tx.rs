@@ -253,11 +253,11 @@ pub async fn prepare_tx<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
-    _owner: Option<Address>,
+    owner: Option<Address>,
     default_signer: TxSigningKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Tx, Option<Address>, Vec<common::PublicKey>), Error> {
-    let (signer_address, signer_public_keys) =
+    let signer_public_keys =
         tx_signer::<C, U>(client, wallet, args, default_signer.clone()).await?;
 
     let fee_payer = match &args.fee_payer {
@@ -275,7 +275,7 @@ pub async fn prepare_tx<
     };
 
     if args.dry_run {
-        Ok((tx, signer_address, signer_public_keys))
+        Ok((tx, owner, signer_public_keys))
     } else {
         let epoch = rpc::query_epoch(client).await;
         Ok((
@@ -290,7 +290,7 @@ pub async fn prepare_tx<
                 requires_pow,
             )
             .await,
-            signer_address,
+            owner,
             signer_public_keys,
         ))
     }

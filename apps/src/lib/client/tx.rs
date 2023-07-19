@@ -12,7 +12,7 @@ use masp_proofs::prover::LocalTxProver;
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::ledger::governance::storage as gov_storage;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use namada::ledger::signing::TxSigningKey;
+use namada::ledger::signing::{find_pk, TxSigningKey};
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
@@ -33,7 +33,6 @@ use super::rpc;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
-use crate::client::signing::find_pk;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -171,6 +170,7 @@ where
 {
     let (mut tx, addr, public_keys) =
         tx::build_init_account(client, &mut ctx.wallet, args.clone()).await?;
+
     submit_reveal_aux(
         client,
         ctx,
@@ -778,7 +778,7 @@ where
 
     if args.offline {
         let signer = ctx.get(&signer);
-        let key = find_pk(client, &mut ctx.wallet, &signer).await?;
+        let key = find_pk(client, &mut ctx.wallet, &signer, None).await?;
         let signing_key =
             signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
         let offline_proposal =
@@ -994,7 +994,8 @@ where
             safe_exit(1)
         }
 
-        let key = find_pk(client, &mut ctx.wallet, &args.voter_address).await?;
+        let key =
+            find_pk(client, &mut ctx.wallet, &args.voter_address, None).await?;
         let signing_key =
             signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
         let offline_vote = OfflineVote::new(
