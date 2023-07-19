@@ -9,7 +9,9 @@
 pub mod api;
 pub mod client;
 pub mod context;
+pub mod relayer;
 mod utils;
+pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;

@@ -18,18 +18,12 @@ pub trait CliClient: Client + Sync {
 #[async_trait::async_trait(?Send)]
 impl CliClient for HttpClient {
     fn from_tendermint_address(address: &mut TendermintAddress) -> Self {
-        HttpClient::new(utils::take_config_address(
-            address,
-        ))
-        .unwrap()
+        HttpClient::new(utils::take_config_address(address)).unwrap()
     }
 
-    async fn wait_until_node_is_synced(&self) -> Halt<()>{
+    async fn wait_until_node_is_synced(&self) -> Halt<()> {
         wait_until_node_is_synched(self).await
     }
 }
 
-#[derive(Default)]
 pub struct CliApi<IO>(PhantomData<IO>);
-
-

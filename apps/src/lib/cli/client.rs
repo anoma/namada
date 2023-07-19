@@ -16,7 +16,7 @@ fn error() -> Report {
 impl<IO> CliApi<IO> {
     pub async fn handle_client_command<C>(cmd: cli::NamadaClient) -> Result<()>
     where
-        C: CliClient
+        C: CliClient,
     {
         match cmd {
             cli::NamadaClient::WithContext(cmd_box) => {
@@ -25,16 +25,16 @@ impl<IO> CliApi<IO> {
                 match cmd {
                     // Ledger cmds
                     Sub::TxCustom(TxCustom(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let dry_run = args.tx.dry_run;
-                        tx::submit_custom(
-                            &client, &mut ctx, args,
-                        )
-                        .await?;
+                        tx::submit_custom(&client, &mut ctx, args).await?;
                         if !dry_run {
                             crate::wallet::save(&ctx.wallet)
                                 .unwrap_or_else(|err| eprintln!("{}", err));
@@ -46,46 +46,50 @@ impl<IO> CliApi<IO> {
                         }
                     }
                     Sub::TxTransfer(TxTransfer(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         tx::submit_transfer(&client, ctx, args).await?;
                     }
                     Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_ibc_transfer(
-                            &client, ctx, args,
-                        )
-                        .await?;
+                        tx::submit_ibc_transfer(&client, ctx, args).await?;
                     }
                     Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_update_vp(
-                            &client, &mut ctx, args,
-                        )
-                        .await?;
+                        tx::submit_update_vp(&client, &mut ctx, args).await?;
                     }
                     Sub::TxInitAccount(TxInitAccount(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let dry_run = args.tx.dry_run;
-                        tx::submit_init_account(
-                            &client, &mut ctx, args,
-                        )
-                        .await?;
+                        tx::submit_init_account(&client, &mut ctx, args)
+                            .await?;
                         if !dry_run {
                             crate::wallet::save(&ctx.wallet)
                                 .unwrap_or_else(|err| eprintln!("{}", err));
@@ -97,83 +101,90 @@ impl<IO> CliApi<IO> {
                         }
                     }
                     Sub::TxInitValidator(TxInitValidator(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_init_validator(
-                            &client, ctx, args,
-                        )
-                        .await?;
+                        tx::submit_init_validator(&client, ctx, args).await?;
                     }
                     Sub::TxInitProposal(TxInitProposal(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_init_proposal(
-                            &client, ctx, args,
-                        )
-                        .await?;
+                        tx::submit_init_proposal(&client, ctx, args).await?;
                     }
                     Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_vote_proposal(
-                            &client, ctx, args,
-                        )
-                        .await?;
+                        tx::submit_vote_proposal(&client, ctx, args).await?;
                     }
                     Sub::TxRevealPk(TxRevealPk(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_reveal_pk(
-                            &client, &mut ctx, args,
-                        )
-                        .await?;
+                        tx::submit_reveal_pk(&client, &mut ctx, args).await?;
                     }
                     Sub::Bond(Bond(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_bond(&client, &mut ctx, args)
-                            .await?;
+                        tx::submit_bond(&client, &mut ctx, args).await?;
                     }
                     Sub::Unbond(Unbond(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_unbond(
-                            &client, &mut ctx, args,
-                        )
-                        .await?;
+                        tx::submit_unbond(&client, &mut ctx, args).await?;
                     }
                     Sub::Withdraw(Withdraw(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_withdraw(&client, ctx, args)
-                            .await?;
+                        tx::submit_withdraw(&client, ctx, args).await?;
                     }
                     Sub::TxCommissionRateChange(TxCommissionRateChange(
                         mut args,
                     )) => {
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -185,8 +196,11 @@ impl<IO> CliApi<IO> {
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {
                         let mut args = args.0;
-                        let client = C::from_tendermint_address(&mut args.tx.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.tx.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -225,15 +239,21 @@ impl<IO> CliApi<IO> {
                     }
                     // Ledger queries
                     Sub::QueryEpoch(QueryEpoch(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         rpc::query_and_print_epoch(&client).await;
                     }
                     Sub::QueryTransfers(QueryTransfers(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -246,8 +266,11 @@ impl<IO> CliApi<IO> {
                         .await;
                     }
                     Sub::QueryConversions(QueryConversions(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -255,15 +278,21 @@ impl<IO> CliApi<IO> {
                             .await;
                     }
                     Sub::QueryBlock(QueryBlock(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         rpc::query_block(&client).await;
                     }
                     Sub::QueryBalance(QueryBalance(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -276,8 +305,11 @@ impl<IO> CliApi<IO> {
                         .await;
                     }
                     Sub::QueryBonds(QueryBonds(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -286,16 +318,22 @@ impl<IO> CliApi<IO> {
                             .expect("expected successful query of bonds");
                     }
                     Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_bonded_stake(&client, args).await;
                     }
                     Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -307,8 +345,11 @@ impl<IO> CliApi<IO> {
                         .await;
                     }
                     Sub::QuerySlashes(QuerySlashes(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -316,8 +357,11 @@ impl<IO> CliApi<IO> {
                             .await;
                     }
                     Sub::QueryDelegations(QueryDelegations(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -325,24 +369,33 @@ impl<IO> CliApi<IO> {
                             .await;
                     }
                     Sub::QueryFindValidator(QueryFindValidator(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_find_validator(&client, args).await;
                     }
                     Sub::QueryResult(QueryResult(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_result(&client, args).await;
                     }
                     Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -350,16 +403,22 @@ impl<IO> CliApi<IO> {
                     }
 
                     Sub::QueryProposal(QueryProposal(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_proposal(&client, args).await;
                     }
                     Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
@@ -368,8 +427,11 @@ impl<IO> CliApi<IO> {
                     Sub::QueryProtocolParameters(QueryProtocolParameters(
                         mut args,
                     )) => {
-                        let client = C::from_tendermint_address(&mut args.query.ledger_address);
-                        client.wait_until_node_is_synced()
+                        let client = C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        );
+                        client
+                            .wait_until_node_is_synced()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
