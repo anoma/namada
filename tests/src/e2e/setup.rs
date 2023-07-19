@@ -399,6 +399,7 @@ mod macros {
     }
 }
 
+#[derive(Clone)]
 pub enum Who {
     // A non-validator
     NonValidator,
