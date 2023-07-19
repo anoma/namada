@@ -1685,6 +1685,7 @@ pub mod cmds {
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
+        FetchMaspParameters(FetchMaspParameters),
         DefaultBaseDir(DefaultBaseDir),
     }
 
@@ -2169,6 +2170,25 @@ pub mod cmds {
                      Tendermint address.",
                 )
                 .add_args::<args::PkToTmAddress>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchMaspParameters(pub args::FetchMaspParameters);
+
+    impl SubCmd for FetchMaspParameters {
+        const CMD: &'static str = "fetch-masp-parameters";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::FetchMaspParameters::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Fetch MASP parameters.")
+                .add_args::<args::FetchMaspParameters>()
         }
     }
 
@@ -4836,6 +4856,27 @@ pub mod args {
                 "The consensus public key to be converted to Tendermint \
                  address.",
             ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FetchMaspParameters {
+        pub output_folder: Option<PathBuf>,
+    }
+
+    impl Args for FetchMaspParameters {
+        fn parse(matches: &ArgMatches) -> Self {
+            let output_folder: Option<PathBuf> =
+                OUT_FILE_PATH_OPT.parse(matches);
+            Self { output_folder }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                OUT_FILE_PATH_OPT
+                    .def()
+                    .help("The folder where the files will be downloaded."),
+            )
         }
     }
 

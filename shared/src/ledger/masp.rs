@@ -93,7 +93,8 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
 /// Default donwload url
-pub const DOWNLOAD_URL: &str = "https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/";
+pub const DOWNLOAD_URL: &str =
+    "https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/";
 
 fn load_pvks() -> (
     PreparedVerifyingKey<Bls12>,

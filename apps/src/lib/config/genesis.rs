@@ -143,7 +143,7 @@ pub mod genesis_config {
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
         // Masp parameters
-        pub masp: MaspParameters
+        pub masp: MaspParameters,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -317,7 +317,7 @@ pub mod genesis_config {
     pub struct MaspParameters {
         convert: String,
         spend: String,
-        output: String
+        output: String,
     }
 
     fn load_validator(
@@ -552,7 +552,7 @@ pub mod genesis_config {
             gov_params,
             wasm,
             ethereum_bridge_params,
-            masp
+            masp,
         } = config;
 
         let native_token = Address::decode(
@@ -612,7 +612,7 @@ pub mod genesis_config {
         let masp_parameters = HashMap::from_iter([
             ("convert".to_string(), masp.convert),
             ("spend".to_string(), masp.spend),
-            ("output".to_string(), masp.output)
+            ("output".to_string(), masp.output),
         ]);
 
         let min_duration: i64 =
@@ -705,7 +705,7 @@ pub mod genesis_config {
             pos_params,
             gov_params,
             ethereum_bridge_params,
-            masp: masp_parameters
+            masp: masp_parameters,
         };
         genesis.init();
         genesis
@@ -760,7 +760,7 @@ pub struct Genesis {
     pub gov_params: GovParams,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
-    pub masp: HashMap<String, String>
+    pub masp: HashMap<String, String>,
 }
 
 impl Genesis {
@@ -1135,7 +1135,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         faucet_pow_difficulty: None,
         #[cfg(not(feature = "mainnet"))]
         faucet_withdrawal_limit: None,
-        masp: HashMap::new()
+        masp: HashMap::new(),
     }
 }
 
