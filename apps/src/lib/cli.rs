@@ -6,6 +6,8 @@
 //! client can be dispatched via `namada node ...` or `namada client ...`,
 //! respectively.
 
+pub mod api;
+pub mod client;
 pub mod context;
 mod utils;
 
