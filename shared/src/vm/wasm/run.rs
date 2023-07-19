@@ -117,6 +117,16 @@ where
         Commitment::Id(tx_code) => (Hash::sha256(&tx_code), Some(tx_code)),
     };
 
+    let tx_gas_required =
+        match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
+            Some(gas) => gas.to_owned(),
+            #[cfg(test)]
+            None => 1_000,
+            #[cfg(not(test))]
+            None => 0, // VPs will reject the non-whitelisted tx
+        };
+    gas_meter.consume(tx_gas_required)?;
+
     let code_or_hash = match code {
         Some(ref code) => WasmPayload::Code(code),
         None => WasmPayload::Hash(&tx_hash),
@@ -129,16 +139,6 @@ where
         storage,
         gas_meter,
     )?;
-
-    let tx_gas_required =
-        match gas_table.get(&tx_hash.to_string().to_ascii_lowercase()) {
-            Some(gas) => gas.to_owned(),
-            #[cfg(test)]
-            None => 1_000,
-            #[cfg(not(test))]
-            None => 0, // VPs will reject the non-whitelisted tx
-        };
-    gas_meter.consume(tx_gas_required)?;
 
     let mut iterators: PrefixIterators<'_, DB> = PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
