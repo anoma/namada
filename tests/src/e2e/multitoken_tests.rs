@@ -3,10 +3,10 @@ use color_eyre::eyre::Result;
 use namada_core::types::token;
 
 use super::helpers::get_actor_rpc;
-use super::setup::constants::{ALBERT, BERTHA, CHRISTEL};
+use super::setup::constants::{ALBERT, BERTHA};
 use super::setup::{self, Who};
 use crate::e2e;
-use crate::e2e::setup::constants::{ALBERT_KEY, BERTHA_KEY};
+use crate::e2e::setup::constants::{ALBERT_KEY, BERTHA_KEY, CHRISTEL_KEY};
 
 mod helpers;
 
@@ -45,7 +45,7 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
         &multitoken_alias,
         ALBERT,
         BERTHA,
-        CHRISTEL,
+        CHRISTEL_KEY,
         &transfer_amount,
     )?;
     unauthorized_transfer.exp_string("Transaction applied with result")?;
@@ -69,7 +69,7 @@ fn test_multitoken_transfer_implicit_to_implicit() -> Result<()> {
         &multitoken_alias,
         ALBERT,
         BERTHA,
-        ALBERT,
+        ALBERT_KEY,
         &token::Amount::native_whole(10_000_000),
     )?;
     authorized_transfer.exp_string("Transaction applied with result")?;
@@ -131,7 +131,7 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
         &multitoken_alias,
         established_alias,
         BERTHA,
-        CHRISTEL,
+        CHRISTEL_KEY,
         &transfer_amount,
     )?;
     unauthorized_transfer.exp_string("Transaction applied with result")?;
@@ -155,7 +155,7 @@ fn test_multitoken_transfer_established_to_implicit() -> Result<()> {
         &multitoken_alias,
         established_alias,
         BERTHA,
-        ALBERT,
+        ALBERT_KEY,
         &transfer_amount,
     )?;
     authorized_transfer.exp_string("Transaction applied with result")?;
@@ -216,7 +216,7 @@ fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
         &multitoken_alias,
         ALBERT,
         established_alias,
-        CHRISTEL,
+        CHRISTEL_KEY,
         &transfer_amount,
     )?;
     unauthorized_transfer.exp_string("Transaction applied with result")?;
@@ -239,7 +239,7 @@ fn test_multitoken_transfer_implicit_to_established() -> Result<()> {
         &multitoken_alias,
         ALBERT,
         established_alias,
-        ALBERT,
+        ALBERT_KEY,
         &transfer_amount,
     )?;
     authorized_transfer.exp_string("Transaction applied with result")?;
@@ -326,7 +326,7 @@ fn test_multitoken_transfer_established_to_established() -> Result<()> {
         &multitoken_alias,
         established_alias,
         receiver_alias,
-        CHRISTEL,
+        CHRISTEL_KEY,
         &transfer_amount,
     )?;
     unauthorized_transfer.exp_string("Transaction applied with result")?;
@@ -350,7 +350,7 @@ fn test_multitoken_transfer_established_to_established() -> Result<()> {
         &multitoken_alias,
         established_alias,
         receiver_alias,
-        ALBERT,
+        ALBERT_KEY,
         &transfer_amount,
     )?;
     authorized_transfer.exp_string("Transaction applied with result")?;

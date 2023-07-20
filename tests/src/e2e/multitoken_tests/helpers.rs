@@ -15,7 +15,7 @@ use regex::Regex;
 
 use super::setup::constants::NAM;
 use super::setup::{Bin, NamadaCmd, Test};
-use crate::e2e::setup::constants::ALBERT;
+use crate::e2e::setup::constants::{ALBERT, ALBERT_KEY};
 use crate::run;
 
 const MULTITOKEN_KEY_SEGMENT: &str = "tokens";
@@ -24,6 +24,7 @@ const RED_TOKEN_KEY_SEGMENT: &str = "red";
 const MULTITOKEN_RED_TOKEN_SUB_PREFIX: &str = "tokens/red";
 
 const ARBITRARY_SIGNER: &str = ALBERT;
+const ARBITRARY_SIGNER_KEY: &str = ALBERT_KEY;
 
 /// Initializes a VP to represent a multitoken account.
 pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
@@ -113,8 +114,8 @@ pub fn mint_red_tokens(
     let tx_code_path = tx_code_path.to_string_lossy().to_string();
     let tx_args = vec![
         "tx",
-        "--signer",
-        ARBITRARY_SIGNER,
+        "--signing-keys",
+        ARBITRARY_SIGNER_KEY,
         "--code-path",
         &tx_code_path,
         "--data-path",
@@ -135,7 +136,7 @@ pub fn attempt_red_tokens_transfer(
     multitoken: &str,
     from: &str,
     to: &str,
-    signer: &str,
+    signing_keys: &str,
     amount: &token::Amount,
 ) -> Result<NamadaCmd> {
     let amount = amount.to_string_native();
@@ -149,8 +150,8 @@ pub fn attempt_red_tokens_transfer(
         from,
         "--target",
         to,
-        "--signer",
-        signer,
+        "--signing-keys",
+        signing_keys,
         "--amount",
         &amount,
         "--ledger-address",

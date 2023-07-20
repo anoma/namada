@@ -4,7 +4,7 @@
 
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
-faucet_pow_difficulty = 1
+faucet_pow_difficulty = 0
 faucet_withdrawal_limit = "1000000000"
 
 [validator.validator-0]
@@ -183,6 +183,8 @@ epochs_per_year = 31_536_000
 pos_gain_p = "0.1"
 # The D gain factor in the Proof of Stake rewards controller
 pos_gain_d = "0.1"
+# The maximum number of signatures allowed per transaction
+max_signatures_per_transaction = 15
 
 # Proof of stake parameters.
 [pos_params]
