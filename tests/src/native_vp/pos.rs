@@ -118,6 +118,11 @@ pub fn init_pos(
         tx_env.spawn_accounts([&native_token]);
         for validator in genesis_validators {
             tx_env.spawn_accounts([&validator.address]);
+            tx_env.init_account_storage(
+                &validator.address,
+                vec![validator.consensus_key.clone()],
+                1,
+            )
         }
         tx_env.wl_storage.storage.block.epoch = start_epoch;
         // Initialize PoS storage

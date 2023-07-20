@@ -45,7 +45,7 @@ pub async fn build_bridge_pool_tx<
     client: &C,
     wallet: &mut Wallet<U>,
     args: args::EthereumBridgePool,
-) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
+) -> Result<(Tx, Option<Address>, Vec<common::PublicKey>), Error> {
     let args::EthereumBridgePool {
         ref tx,
         asset,
@@ -64,7 +64,7 @@ pub async fn build_bridge_pool_tx<
         transfer: TransferToEthereum {
             asset,
             recipient,
-            sender,
+            sender: sender.clone(),
             amount,
         },
         gas_fee: GasFee {
@@ -89,6 +89,7 @@ pub async fn build_bridge_pool_tx<
         wallet,
         tx,
         transfer_tx,
+        Some(sender),
         TxSigningKey::None,
         #[cfg(not(feature = "mainnet"))]
         false,

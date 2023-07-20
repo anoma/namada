@@ -1284,38 +1284,6 @@ where
         response
     }
 
-    /// Lookup a validator's keypair for their established account from their
-    /// wallet. If the node is not validator, this function returns None
-    #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<common::SecretKey> {
-        let wallet_path = &self.base_dir.join(self.chain_id.as_str());
-        let genesis_path = &self
-            .base_dir
-            .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet = crate::wallet::load_or_new_from_genesis(
-            wallet_path,
-            genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
-        );
-        self.mode.get_validator_address().map(|addr| {
-            let sk: common::SecretKey = self
-                .wl_storage
-                .read(&pk_key(addr))
-                .expect(
-                    "A validator should have a public key associated with \
-                     it's established account",
-                )
-                .expect(
-                    "A validator should have a public key associated with \
-                     it's established account",
-                );
-            let pk = sk.ref_to();
-            wallet.find_key_by_pk(&pk, None).expect(
-                "A validator's established keypair should be stored in its \
-                 wallet",
-            )
-        })
-    }
-
     #[cfg(not(feature = "mainnet"))]
     /// Check if the tx has a valid PoW solution. Unlike
     /// `apply_pow_solution_if_valid`, this won't invalidate the solution.

@@ -76,7 +76,7 @@ impl<IO> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         tx::submit_ibc_transfer(&client, ctx, args).await?;
                     }
-                    Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                    Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
                                 &mut args.tx.ledger_address,
@@ -87,7 +87,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_update_vp(&client, &mut ctx, args).await?;
+                        tx::submit_update_account(&client, &mut ctx, args)
+                            .await?;
                     }
                     Sub::TxInitAccount(TxInitAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -236,7 +237,7 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
-                        let (mut tx, addr, pk) =
+                        let (mut tx, addr, public_keys) =
                             bridge_pool::build_bridge_pool_tx(
                                 &client,
                                 &mut ctx.wallet,
@@ -248,16 +249,25 @@ impl<IO> CliApi<IO> {
                             &client,
                             &mut ctx,
                             &tx_args,
-                            addr,
-                            pk.clone(),
+                            addr.clone(),
+                            &public_keys,
                             &mut tx,
                         )
                         .await?;
+                        let (account_public_keys_map, threshold) =
+                            signing::aux_signing_data(
+                                &client,
+                                addr,
+                                public_keys.clone(),
+                            )
+                            .await;
                         signing::sign_tx(
                             &mut ctx.wallet,
                             &mut tx,
                             &tx_args,
-                            &pk,
+                            &account_public_keys_map,
+                            &public_keys,
+                            threshold,
                         )
                         .await?;
                         sdk_tx::process_tx(
@@ -526,6 +536,19 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_protocol_parameters(&client, args).await;
+                    }
+                    Sub::QueryAccount(QueryAccount(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_account(&client, args).await;
                     }
                 }
             }

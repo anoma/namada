@@ -172,6 +172,8 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &validator_one_rpc,
     ];
@@ -461,6 +463,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_one_rpc,
         ],
@@ -481,6 +485,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
+            "--signing-keys",
+            DAEWON,
             "--node",
             &validator_one_rpc,
         ],
@@ -507,44 +513,46 @@ fn ledger_txs_and_queries() -> Result<()> {
         // 3. Submit a transaction to update an account's validity
         // predicate
         vec![
-            "update",
-             "--address",
-             BERTHA,
-             "--code-path",
-             VP_USER_WASM,
-             "--gas-amount",
-             "0",
-             "--gas-limit",
-             "0",
-             "--gas-token",
-             NAM,
-            "--node",
-            &validator_one_rpc,
-        ],
-        // 4. Submit a custom tx
-        vec![
-            "tx",
-            "--signer",
+            "update-account",
+            "--address",
             BERTHA,
             "--code-path",
-            TX_TRANSFER_WASM,
-            "--data-path",
-            &tx_data_path,
+            VP_USER_WASM,
             "--gas-amount",
             "0",
             "--gas-limit",
             "0",
             "--gas-token",
             NAM,
+            "--signing-keys",
+            BERTHA_KEY,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // 4. Submit a custom tx
+        vec![
+            "tx",
+            "--code-path",
+            TX_TRANSFER_WASM,
+            "--data-path",
+            &tx_data_path,
+            "--owner",
+            BERTHA,
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_one_rpc
         ],
         // 5. Submit a tx to initialize a new account
         vec![
             "init-account",
-            "--source",
-            BERTHA,
-            "--public-key",
+            "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
             "--code-path",
@@ -557,11 +565,13 @@ fn ledger_txs_and_queries() -> Result<()> {
             "0",
             "--gas-token",
             NAM,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_one_rpc,
         ],
-    // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-    //    solution)
+        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+        //    solution)
         vec![
             "transfer",
             "--source",
@@ -573,8 +583,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--amount",
             "10.1",
             // Faucet withdrawal requires an explicit signer
-            "--signer",
-            ALBERT,
+            "--signing-keys",
+            ALBERT_KEY,
             "--node",
             &validator_one_rpc,
         ],
@@ -677,7 +687,7 @@ fn masp_txs_and_queries() -> Result<()> {
         |genesis| {
             let parameters = ParametersConfig {
                 epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 3600 } else { 360 },
+                    if is_debug_mode() { 1440 } else { 360 },
                 ),
                 min_num_of_blocks: 1,
                 ..genesis.parameters
@@ -704,8 +714,7 @@ fn masp_txs_and_queries() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
+    // the extra argument in the tuple is for flagging extra checks below
     let txs_args = vec![
         // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
         (
@@ -719,10 +728,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", false),
         ),
         // 3. Attempt to spend 15 BTC at SK(A) to Bertha
         (
@@ -736,10 +747,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", false),
         ),
         // 4. Send 20 BTC from Albert to PA(A)
         (
@@ -753,10 +766,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", false),
         ),
         // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
         (
@@ -770,10 +785,25 @@ fn masp_txs_and_queries() -> Result<()> {
                 ETH,
                 "--amount",
                 "10",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "No balance found",
+            ("No balance found", false),
+        ),
+        // 10. Assert BTC balance at VK(A) is 0
+        (
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            ("btc: 20", false),
         ),
         // 6. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -787,10 +817,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
+                "--signing-keys",
+                ALBERT_KEY,
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", false),
         ),
         // 7. Spend 7 BTC at SK(A) to PA(B)
         (
@@ -807,7 +839,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", false),
         ),
         // 8. Attempt to spend 7 BTC at SK(A) to PA(B)
         (
@@ -824,7 +856,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "is lower than the amount to be transferred and fees",
+            ("is lower than the amount to be transferred and fees", false),
         ),
         // 9. Spend 6 BTC at SK(A) to PA(B)
         (
@@ -841,7 +873,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", false),
         ),
         // 10. Assert BTC balance at VK(A) is 0
         (
@@ -854,7 +886,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "No shielded btc balance found",
+            ("No shielded btc balance found", false),
         ),
         // 11. Assert ETH balance at VK(A) is 0
         (
@@ -867,7 +899,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "No shielded eth balance found",
+            ("No shielded eth balance found", false),
         ),
         // 12. Assert balance at VK(B) is 10 BTC
         (
@@ -878,7 +910,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "btc : 20",
+            ("btc : 20", false),
         ),
         // 13. Send 10 BTC from SK(B) to Bertha
         (
@@ -895,11 +927,14 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Transaction is valid",
+            ("Transaction is valid", false),
         ),
     ];
 
-    for (tx_args, tx_result) in &txs_args {
+    // Wait till epoch boundary
+    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    for (tx_args, (tx_result, wait_reveal_pk)) in &txs_args {
         for &dry_run in &[true, false] {
             let tx_args = if dry_run && tx_args[0] == "transfer" {
                 vec![tx_args.clone(), vec!["--dry-run"]].concat()
@@ -911,6 +946,9 @@ fn masp_txs_and_queries() -> Result<()> {
             if *tx_result == "Transaction is valid" && !dry_run {
                 client.exp_string("Transaction accepted")?;
                 client.exp_string("Transaction applied")?;
+                if *wait_reveal_pk {
+                    client.exp_string("Transaction applied")?;
+                }
             }
             client.exp_string(tx_result)?;
         }
@@ -1492,8 +1530,8 @@ fn masp_incentives() -> Result<()> {
             ETH,
             "--amount",
             "10",
-            "--signer",
-            BERTHA,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_one_rpc
         ],
@@ -1590,8 +1628,8 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--signer",
-            ALBERT,
+            "--signing-keys",
+            ALBERT_KEY,
             "--node",
             &validator_one_rpc
         ],
@@ -1761,8 +1799,8 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             &((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
                 .to_string_native(),
-            "--signer",
-            BERTHA,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_one_rpc
         ],
@@ -1791,8 +1829,8 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
                 .to_string_native(),
-            "--signer",
-            ALBERT,
+            "--signing-keys",
+            ALBERT_KEY,
             "--node",
             &validator_one_rpc
         ],
@@ -1890,9 +1928,7 @@ fn invalid_transactions() -> Result<()> {
     let tx_args = vec![
         "transfer",
         "--source",
-        DAEWON,
-        "--signing-key",
-        ALBERT_KEY,
+        BERTHA,
         "--target",
         ALBERT,
         "--token",
@@ -1905,8 +1941,11 @@ fn invalid_transactions() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        ALBERT_KEY,
         "--node",
         &validator_one_rpc,
+        "--force",
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -1939,13 +1978,16 @@ fn invalid_transactions() -> Result<()> {
     ledger.exp_string("Committed block hash")?;
     let _bg_ledger = ledger.background();
 
+    // we need to wait for the rpc endpoint to start
+    sleep(10);
+
     // 5. Submit an invalid transactions (invalid token address)
     let daewon_lower = DAEWON.to_lowercase();
     let tx_args = vec![
         "transfer",
         "--source",
         DAEWON,
-        "--signing-key",
+        "--signing-keys",
         &daewon_lower,
         "--target",
         ALBERT,
@@ -2042,6 +2084,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        "validator-0-account-key",
         "--node",
         &validator_one_rpc,
     ];
@@ -2066,6 +2110,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &validator_one_rpc,
     ];
@@ -2087,6 +2133,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        "validator-0-account-key",
         "--node",
         &validator_one_rpc,
     ];
@@ -2111,6 +2159,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &validator_one_rpc,
     ];
@@ -2130,7 +2180,7 @@ fn pos_bonds() -> Result<()> {
         epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
-    let loop_timeout = Duration::new(60, 0);
+    let loop_timeout = Duration::new(120, 0);
     loop {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
@@ -2155,6 +2205,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        "validator-0-account-key",
         "--node",
         &validator_one_rpc,
     ];
@@ -2177,6 +2229,8 @@ fn pos_bonds() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &validator_one_rpc,
     ];
@@ -2253,6 +2307,8 @@ fn pos_rewards() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--ledger-address",
         &validator_zero_rpc,
     ];
@@ -2289,6 +2345,8 @@ fn pos_rewards() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        "validator-1-account-key",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2311,6 +2369,8 @@ fn pos_rewards() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        "validator-2-account-key",
         "--ledger-address",
         &validator_two_rpc,
     ];
@@ -2399,6 +2459,8 @@ fn test_bond_queries() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2435,6 +2497,8 @@ fn test_bond_queries() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2458,6 +2522,8 @@ fn test_bond_queries() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2551,14 +2617,13 @@ fn pos_init_validator() -> Result<()> {
 
     // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
-    let new_validator_key = format!("{}-key", new_validator);
+    let _new_validator_key = format!("{}-key", new_validator);
     let tx_args = vec![
         "init-validator",
         "--alias",
         new_validator,
-        "--source",
-        BERTHA,
-        "--unsafe-dont-encrypt",
+        "--account-keys",
+        "bertha-key",
         "--gas-amount",
         "0",
         "--gas-limit",
@@ -2569,8 +2634,11 @@ fn pos_init_validator() -> Result<()> {
         "0.05",
         "--max-commission-rate-change",
         "0.01",
+        "--signing-keys",
+        "bertha-key",
         "--node",
         &non_validator_rpc,
+        "--unsafe-dont-encrypt",
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2583,7 +2651,7 @@ fn pos_init_validator() -> Result<()> {
         "--source",
         BERTHA,
         "--target",
-        &new_validator_key,
+        new_validator,
         "--token",
         NAM,
         "--amount",
@@ -2594,6 +2662,8 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &non_validator_rpc,
     ];
@@ -2617,6 +2687,8 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &non_validator_rpc,
     ];
@@ -2642,6 +2714,8 @@ fn pos_init_validator() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
         &non_validator_rpc,
     ];
@@ -2673,6 +2747,13 @@ fn pos_init_validator() -> Result<()> {
     let mut non_validator = bg_non_validator.foreground();
     non_validator.interrupt()?;
     non_validator.exp_eof()?;
+
+    // it takes a bit before the node is shutdown. We dont want flasky test.
+    if is_debug_mode() {
+        sleep(10);
+    } else {
+        sleep(5);
+    }
 
     let loc = format!("{}:{}", std::file!(), std::line!());
     let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
@@ -2765,6 +2846,8 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "0",
         "--gas-token",
         NAM,
+        "--signing-keys",
+        BERTHA_KEY,
         "--node",
     ]);
 
@@ -3056,7 +3139,7 @@ fn proposal_submission() -> Result<()> {
         "0",
         "--vote",
         "yay",
-        "--signer",
+        "--address",
         "validator-0",
         "--node",
         &validator_one_rpc,
@@ -3078,7 +3161,7 @@ fn proposal_submission() -> Result<()> {
         "0",
         "--vote",
         "nay",
-        "--signer",
+        "--address",
         BERTHA,
         "--node",
         &validator_one_rpc,
@@ -3096,7 +3179,7 @@ fn proposal_submission() -> Result<()> {
         "0",
         "--vote",
         "yay",
-        "--signer",
+        "--address",
         ALBERT,
         "--node",
         &validator_one_rpc,
@@ -3322,7 +3405,7 @@ fn eth_governance_proposal() -> Result<()> {
         "yay",
         "--eth",
         &vote_arg,
-        "--signer",
+        "--address",
         BERTHA,
         "--ledger-address",
         &validator_one_rpc,
@@ -3343,7 +3426,7 @@ fn eth_governance_proposal() -> Result<()> {
         "yay",
         "--eth",
         &vote_arg,
-        "--signer",
+        "--address",
         "validator-0",
         "--ledger-address",
         &validator_one_rpc,
@@ -3575,7 +3658,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "yay",
         "--pgf",
         &arg_vote,
-        "--signer",
+        "--address",
         "validator-0",
         "--ledger-address",
         &validator_one_rpc,
@@ -3602,7 +3685,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "yay",
         "--pgf",
         &different_vote,
-        "--signer",
+        "--address",
         BERTHA,
         "--ledger-address",
         &validator_one_rpc,
@@ -3623,7 +3706,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "yay",
         "--pgf",
         &different_vote,
-        "--signer",
+        "--address",
         BERTHA,
         "--ledger-address",
         &validator_one_rpc,
@@ -3846,7 +3929,7 @@ fn proposal_offline() -> Result<()> {
         proposal_path.to_str().unwrap(),
         "--vote",
         "yay",
-        "--signer",
+        "--address",
         ALBERT,
         "--offline",
         "--node",
@@ -4655,6 +4738,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 NAM,
                 "--amount",
                 "10.1",
+                "--signing-keys",
+                source,
                 "--node",
                 &validator_0_rpc,
             ]
@@ -4672,6 +4757,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 source,
                 "--amount",
                 "10.1",
+                "--signing-keys",
+                source,
                 "--node",
                 &validator_0_rpc,
             ]
@@ -4682,16 +4769,18 @@ fn implicit_account_reveal_pk() -> Result<()> {
         // Submit proposal
         Box::new(|source| {
             // Gen data for proposal tx
-            let source = find_address(&test, source).unwrap();
+            let author = find_address(&test, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 &test,
-                source,
+                author,
                 ProposalType::Default(None),
             );
             vec![
                 "init-proposal",
                 "--data-path",
                 valid_proposal_json_path.to_str().unwrap(),
+                "--signing-keys",
+                source,
                 "--node",
                 &validator_0_rpc,
             ]
@@ -4727,6 +4816,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
             NAM,
             "--amount",
             "1000",
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             &validator_0_rpc,
         ];
