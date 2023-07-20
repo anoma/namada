@@ -27,7 +27,7 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{Code, Data, Section, Signature, Tx};
+    use namada::proto::{Code, Data, Section, Tx};
     use namada::types::address::{Address, InternalAddress};
     use namada::types::hash::Hash;
     use namada::types::key::*;
