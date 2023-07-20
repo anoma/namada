@@ -77,6 +77,7 @@ use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
+use super::helpers::wait_for_wasm_pre_compile;
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
@@ -117,14 +118,9 @@ fn run_ledger_ibc() -> Result<()> {
         &["ledger", "run"],
         Some(40)
     )?;
-    ledger_b.exp_string("Namada ledger node started")?;
-    ledger_a.exp_string("This node is a validator")?;
-    ledger_b.exp_string("This node is a validator")?;
 
-    // Wait for a first block
-    ledger_a.exp_string("Committed block hash")?;
-    ledger_b.exp_string("Committed block hash")?;
-
+    wait_for_wasm_pre_compile(&mut ledger_a)?;
+    wait_for_wasm_pre_compile(&mut ledger_b)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -294,7 +290,7 @@ fn update_client_with_height(
     target_height: Height,
 ) -> Result<()> {
     // check the current(stale) state on the target chain
-    let key = client_state_key(&target_client_id.as_str().parse().unwrap());
+    let key = client_state_key(target_client_id);
     let (value, _) = query_value_with_proof(target_test, &key, None)?;
     let cs = match value {
         Some(v) => Any::decode(&v[..])
@@ -473,7 +469,7 @@ fn get_connection_proof(
 ) -> Result<CommitmentProofBytes> {
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
-    let key = connection_key(&conn_id.as_str().parse().unwrap());
+    let key = connection_key(conn_id);
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     convert_proof(tm_proof)
 }
@@ -589,7 +585,7 @@ fn get_client_states(
 ) -> Result<(TmClientState, CommitmentProofBytes, CommitmentProofBytes)> {
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
-    let key = client_state_key(&client_id.as_str().parse().unwrap());
+    let key = client_state_key(client_id);
     let (value, tm_proof) =
         query_value_with_proof(test, &key, Some(query_height))?;
     let cs = match value {
@@ -608,8 +604,7 @@ fn get_client_states(
 
     let height = client_state.latest_height();
     let ibc_height = Height::new(0, height.revision_height()).unwrap();
-    let key =
-        consensus_state_key(&client_id.as_str().parse().unwrap(), ibc_height);
+    let key = consensus_state_key(client_id, ibc_height);
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     let consensus_proof = convert_proof(tm_proof)?;
 
@@ -819,7 +814,7 @@ fn transfer_timeout(
         get_receipt_absence_proof(test_b, &packet, height_b)?;
     let msg = MsgTimeout {
         packet,
-        next_seq_recv_on_b: 0.into(), // not used
+        next_seq_recv_on_b: 1.into(), // not used
         proof_unreceived_on_b,
         proof_height_on_b: height_b,
         signer: signer(),
@@ -840,9 +835,9 @@ fn get_commitment_proof(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = commitment_key(
-        &packet.port_id_on_a.as_str().parse().unwrap(),
-        &packet.chan_id_on_a.as_str().parse().unwrap(),
-        u64::from(packet.seq_on_a).into(),
+        &packet.port_id_on_a,
+        &packet.chan_id_on_a,
+        packet.seq_on_a,
     );
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     convert_proof(tm_proof)
@@ -855,11 +850,8 @@ fn get_ack_proof(
 ) -> Result<CommitmentProofBytes> {
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
-    let key = ack_key(
-        &packet.port_id_on_b.as_str().parse().unwrap(),
-        &packet.chan_id_on_b.as_str().parse().unwrap(),
-        u64::from(packet.seq_on_a).into(),
-    );
+    let key =
+        ack_key(&packet.port_id_on_b, &packet.chan_id_on_b, packet.seq_on_a);
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     convert_proof(tm_proof)
 }
@@ -872,9 +864,9 @@ fn get_receipt_absence_proof(
     // we need proofs at the height of the previous block
     let query_height = target_height.decrement().unwrap();
     let key = receipt_key(
-        &packet.port_id_on_b.as_str().parse().unwrap(),
-        &packet.chan_id_on_b.as_str().parse().unwrap(),
-        u64::from(packet.seq_on_a).into(),
+        &packet.port_id_on_b,
+        &packet.chan_id_on_b,
+        packet.seq_on_a,
     );
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
     convert_proof(tm_proof)
@@ -1047,7 +1039,7 @@ fn check_ibc_update_query(
     let client = HttpClient::new(ledger_address).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_client_update(
         &client,
-        &client_id.as_str().parse().unwrap(),
+        client_id,
         &consensus_height,
     )) {
         Ok(Some(event)) => {
@@ -1070,11 +1062,11 @@ fn check_ibc_packet_query(
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
         event_type,
-        &packet.port_id_on_a.as_str().parse().unwrap(),
-        &packet.chan_id_on_a.as_str().parse().unwrap(),
-        &packet.port_id_on_b.as_str().parse().unwrap(),
-        &packet.chan_id_on_b.as_str().parse().unwrap(),
-        &packet.seq_on_a.to_string().parse().unwrap(),
+        &packet.port_id_on_a,
+        &packet.chan_id_on_a,
+        &packet.port_id_on_b,
+        &packet.chan_id_on_b,
+        &packet.seq_on_a,
     )) {
         Ok(Some(event)) => {
             println!("Found the packet event: {:?}", event);
