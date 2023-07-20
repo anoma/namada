@@ -15,6 +15,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
+use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
     masp, masp_tx_key, Address, ImplicitAddress,
 };
@@ -22,7 +23,7 @@ use namada_core::types::storage::Key;
 use namada_core::types::token::{
     self, Amount, DenominatedAmount, MaspDenom, TokenAddress,
 };
-use namada_core::types::transaction::{pos, MIN_FEE};
+use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -33,29 +34,27 @@ use crate::ibc::applications::transfer::msgs::transfer::{
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
-use crate::ledger::rpc::{
-    format_denominated_amount, query_wasm_code_hash, TxBroadcastData,
-};
+use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
     Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
-use crate::proto::{MaspBuilder, Section, Signature, Tx};
+use crate::proto::{MaspBuilder, MultiSignature, Section, Signature, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
 use crate::types::token::Transfer;
+use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use crate::types::transaction::{
-    Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
-};
+use crate::types::transaction::pos::InitValidator;
+use crate::types::transaction::{Fee, TxType, WrapperTx};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -83,12 +82,12 @@ pub async fn find_pk<
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            rpc::get_public_key(client, addr).await.ok_or(Error::Other(
-                format!(
+            rpc::get_public_key_at(client, addr, 0)
+                .await
+                .ok_or(Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
-                ),
-            ))
+                )))
         }
         Address::Implicit(ImplicitAddress(pkh)) => Ok(wallet
             .find_key_by_pkh(pkh, password)
@@ -114,28 +113,20 @@ pub async fn find_pk<
 pub fn find_key_by_pk<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    keypair: &common::PublicKey,
+    public_key: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
-    if *keypair == masp_tx_key().ref_to() {
+    if *public_key == masp_tx_key().ref_to() {
         // We already know the secret key corresponding to the MASP sentinal key
         Ok(masp_tx_key())
-    } else if args
-        .signing_key
-        .as_ref()
-        .map(|x| x.ref_to() == *keypair)
-        .unwrap_or(false)
-    {
-        // We can lookup the secret key from the CLI arguments in this case
-        Ok(args.signing_key.clone().unwrap())
     } else {
         // Otherwise we need to search the wallet for the secret key
         wallet
-            .find_key_by_pk(keypair, args.password.clone())
+            .find_key_by_pk(public_key, args.password.clone())
             .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for public \
                      key {}. Failed with: {}",
-                    keypair, err
+                    public_key, err
                 ))
             })
     }
@@ -163,32 +154,27 @@ pub async fn tx_signer<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::PublicKey), Error> {
-    let signer = if args.dry_run {
-        // We cannot override the signer if we're doing a dry run
-        default
-    } else if let Some(signing_key) = &args.signing_key {
-        // Otherwise use the signing key override provided by user
-        return Ok((None, signing_key.ref_to()));
+) -> Result<Vec<common::PublicKey>, Error> {
+    let signer = if !&args.signing_keys.is_empty() {
+        let public_keys =
+            args.signing_keys.iter().map(|key| key.ref_to()).collect();
+        return Ok(public_keys);
     } else if let Some(verification_key) = &args.verification_key {
-        return Ok((None, verification_key.clone()));
-    } else if let Some(signer) = &args.signer {
-        // Otherwise use the signer address provided by user
-        TxSigningKey::WalletAddress(signer.clone())
+        return Ok(vec![verification_key.clone()]);
     } else {
         // Otherwise use the signer determined by the caller
         default
     };
+
     // Now actually fetch the signing key and apply it
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok((None, masp_tx_key().ref_to()))
+            Ok(vec![masp_tx_key().ref_to()])
         }
-        TxSigningKey::WalletAddress(signer) => Ok((
-            Some(signer.clone()),
+        TxSigningKey::WalletAddress(signer) => Ok(vec![
             find_pk::<C, U>(client, wallet, &signer, args.password.clone())
                 .await?,
-        )),
+        ]),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
@@ -209,22 +195,81 @@ pub async fn sign_tx<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
-    keypair: &common::PublicKey,
+    public_keys_index_map: &AccountPublicKeysMap,
+    public_keys: &[common::PublicKey],
+    threshold: u8,
 ) -> Result<(), Error> {
-    let keypair = find_key_by_pk(wallet, args, keypair)?;
+    let keypairs = public_keys
+        .iter()
+        .filter_map(|public_key| {
+            match find_key_by_pk(wallet, args, public_key) {
+                Ok(secret_key) => Some(secret_key),
+                Err(_) => None,
+            }
+        })
+        .collect::<Vec<common::SecretKey>>();
+
     // Sign over the transacttion data
-    tx.add_section(Section::Signature(Signature::new(
+    let multisignature_section = MultiSignature::new(
         vec![*tx.data_sechash(), *tx.code_sechash()],
-        &keypair,
-    )));
+        &keypairs,
+        public_keys_index_map,
+    );
+
+    if (multisignature_section.total_signatures() < threshold) && !args.force {
+        return Err(Error::MissingSigningKeys(
+            threshold,
+            multisignature_section.total_signatures(),
+        ));
+    }
+
+    // Sign over the transaction targets
+    tx.add_section(Section::SectionSignature(multisignature_section));
+
     // Remove all the sensitive sections
     tx.protocol_filter();
-    // Then sign over the bound wrapper
+
+    let fee_payer = match &args.fee_payer {
+        Some(keypair) => keypair,
+        None => {
+            if let Some(public_key) = keypairs.get(0) {
+                public_key
+            } else {
+                return Err(Error::InvalidFeePayer(
+                    "Either --signing-keys or --fee-payer must be available."
+                        .to_string(),
+                ));
+            }
+        }
+    };
+
     tx.add_section(Section::Signature(Signature::new(
         tx.sechashes(),
-        &keypair,
+        fee_payer,
     )));
+
     Ok(())
+}
+
+/// Return the necessary data regarding an account to be able to generate a
+/// multisignature section
+pub async fn aux_signing_data<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    owner: Option<Address>,
+    public_keys: Vec<common::PublicKey>,
+) -> (AccountPublicKeysMap, u8) {
+    if let Some(owner) = owner {
+        let account = rpc::get_account_info::<C>(client, &owner).await;
+        let (public_keys_index_map, threshold) = if let Some(account) = account
+        {
+            (account.public_keys_map, account.threshold)
+        } else {
+            (AccountPublicKeysMap::from_iter(public_keys), 1u8)
+        };
+        (public_keys_index_map, threshold)
+    } else {
+        (AccountPublicKeysMap::from_iter(public_keys), 0u8)
+    }
 }
 
 #[cfg(not(feature = "mainnet"))]
@@ -370,149 +415,6 @@ pub async fn wrap_tx<
     }
 
     tx
-}
-
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn sign_wrapper<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
-    client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
-    args: &args::Tx,
-    epoch: Epoch,
-    mut tx: Tx,
-    keypair: &common::SecretKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBroadcastData {
-    let fee_amount = if cfg!(feature = "mainnet") {
-        Amount::native_whole(MIN_FEE)
-    } else {
-        let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-        rpc::query_storage_value::<C, token::Amount>(
-            client,
-            &wrapper_tx_fees_key,
-        )
-        .await
-        .unwrap_or_default()
-    };
-    let fee_token = &args.fee_token;
-    let source = Address::from(&keypair.ref_to());
-    let balance_key = token::balance_key(fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-    let is_bal_sufficient = fee_amount <= balance;
-    if !is_bal_sufficient {
-        let token_addr = TokenAddress {
-            address: args.fee_token.clone(),
-            sub_prefix: None,
-        };
-        let err_msg = format!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
-        );
-        eprintln!("{}", err_msg);
-        if !args.force && cfg!(feature = "mainnet") {
-            panic!("{}", err_msg);
-        }
-    }
-
-    #[cfg(not(feature = "mainnet"))]
-    // A PoW solution can be used to allow zero-fee testnet transactions
-    let pow_solution: Option<crate::core::ledger::testnet_pow::Solution> = {
-        // If the address derived from the keypair doesn't have enough balance
-        // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || !is_bal_sufficient {
-            println!(
-                "The transaction requires the completion of a PoW challenge."
-            );
-            // Obtain a PoW challenge for faucet withdrawal
-            let challenge =
-                rpc::get_testnet_pow_challenge(client, source).await;
-
-            // Solve the solution, this blocks until a solution is found
-            let solution = challenge.solve();
-            Some(solution)
-        } else {
-            None
-        }
-    };
-
-    // This object governs how the payload will be processed
-    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
-        Fee {
-            amount: fee_amount,
-            token: fee_token.clone(),
-        },
-        keypair.ref_to(),
-        epoch,
-        args.gas_limit.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        pow_solution,
-    ))));
-    tx.header.chain_id = args.chain_id.clone().unwrap();
-    tx.header.expiration = args.expiration;
-
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
-        let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
-    }
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
-    }
-
-    // Remove all the sensitive sections
-    tx.protocol_filter();
-    // Then sign over the bound wrapper committing to all other sections
-    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
-    // We use this to determine when the wrapper tx makes it on-chain
-    let wrapper_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_hash = tx
-        .clone()
-        .update_header(TxType::Raw)
-        .header_hash()
-        .to_string();
-    TxBroadcastData::Wrapper {
-        tx,
-        wrapper_hash,
-        decrypted_hash,
-    }
 }
 
 #[allow(clippy::result_large_err)]
@@ -766,9 +668,10 @@ pub async fn to_ledger_vector<
         .unwrap();
     let reveal_pk_hash =
         query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
-    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_VP_WASM)
-        .await
-        .unwrap();
+    let update_account_hash =
+        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
+            .await
+            .unwrap();
     let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
         .await
         .unwrap();
@@ -839,12 +742,12 @@ pub async fn to_ledger_vector<
 
         tv.output.extend(vec![
             format!("Type : Init Account"),
-            format!("Public key : {}", init_account.public_key),
+            format!("Public key : {:?}", init_account.public_keys),
             format!("VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Public key : {}", init_account.public_key),
+            format!("Public key : {:?}", init_account.public_keys),
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
@@ -869,7 +772,7 @@ pub async fn to_ledger_vector<
 
         tv.output.extend(vec![
             format!("Type : Init Validator"),
-            format!("Account key : {}", init_validator.account_key),
+            format!("Account key : {:?}", init_validator.account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),
@@ -882,7 +785,7 @@ pub async fn to_ledger_vector<
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Account key : {}", init_validator.account_key),
+            format!("Account key : {:?}", init_validator.account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),
@@ -980,36 +883,40 @@ pub async fn to_ledger_vector<
 
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
-    } else if code_hash == update_vp_hash {
+    } else if code_hash == update_account_hash {
         let transfer =
-            UpdateVp::try_from_slice(&tx.data().ok_or_else(|| {
+            UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
         tv.name = "Update VP 0".to_string();
 
-        let extra = tx
-            .get_section(&transfer.vp_code_hash)
-            .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
-            .code
-            .hash();
-        let vp_code = if extra == user_hash {
-            "User".to_string()
-        } else {
-            HEXLOWER.encode(&extra.0)
+        match &transfer.vp_code_hash {
+            Some(hash) => {
+                let extra = tx
+                    .get_section(hash)
+                    .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                    .expect("unable to load vp code")
+                    .code
+                    .hash();
+                let vp_code = if extra == user_hash {
+                    "User".to_string()
+                } else {
+                    HEXLOWER.encode(&extra.0)
+                };
+                tv.output.extend(vec![
+                    format!("Type : Update VP"),
+                    format!("Address : {}", transfer.addr),
+                    format!("VP type : {}", vp_code),
+                ]);
+
+                tv.output_expert.extend(vec![
+                    format!("Address : {}", transfer.addr),
+                    format!("VP type : {}", HEXLOWER.encode(&extra.0)),
+                ]);
+            }
+            None => (),
         };
-
-        tv.output.extend(vec![
-            format!("Type : Update VP"),
-            format!("Address : {}", transfer.addr),
-            format!("VP type : {}", vp_code),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("Address : {}", transfer.addr),
-            format!("VP type : {}", HEXLOWER.encode(&extra.0)),
-        ]);
     } else if code_hash == transfer_hash {
         let transfer =
             Transfer::try_from_slice(&tx.data().ok_or_else(|| {

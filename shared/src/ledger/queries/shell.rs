@@ -5,6 +5,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
+use namada_core::types::account::{Account, AccountPublicKeysMap};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockHeight, BlockResults, Key, KeySeg};
@@ -75,6 +76,12 @@ router! {SHELL,
 
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
+
+    // Query account subspace
+    ( "account" / [owner: Address] ) -> Option<Account> = account,
+
+    // Query public key revealad
+    ( "revealed" / [owner: Address] ) -> bool = revealed,
 
     // IBC UpdateClient event
     ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
@@ -438,6 +445,46 @@ where
         .by_ref()
         .next()
         .cloned())
+}
+
+fn account<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    owner: Address,
+) -> storage_api::Result<Option<Account>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let account_exists = storage_api::account::exists(ctx.wl_storage, &owner)?;
+
+    if account_exists {
+        let public_keys =
+            storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+        let threshold =
+            storage_api::account::threshold(ctx.wl_storage, &owner)?;
+
+        Ok(Some(Account {
+            public_keys_map: AccountPublicKeysMap::from_iter(public_keys),
+            address: owner,
+            threshold: threshold.unwrap_or(1),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+fn revealed<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    owner: Address,
+) -> storage_api::Result<bool>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let public_keys =
+        storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+
+    Ok(!public_keys.is_empty())
 }
 
 #[cfg(test)]

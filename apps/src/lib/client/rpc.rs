@@ -31,7 +31,7 @@ use namada::ledger::pos::{
 };
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{
-    enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
     TxResponse,
 };
 use namada::ledger::storage::ConversionState;
@@ -1222,10 +1222,13 @@ pub async fn query_proposal_result<
                                 "JSON was not well-formatted for proposal.",
                             );
 
-                        let public_key =
-                            get_public_key(client, &proposal.address)
-                                .await
-                                .expect("Public key should exist.");
+                        let public_key = rpc::get_public_key_at(
+                            client,
+                            &proposal.address,
+                            0,
+                        )
+                        .await
+                        .expect("Public key should exist.");
 
                         if !proposal.check_signature(&public_key) {
                             eprintln!("Bad proposal signature.");
@@ -1273,6 +1276,23 @@ pub async fn query_proposal_result<
                 cli::safe_exit(1)
             }
         }
+    }
+}
+
+pub async fn query_account<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    args: args::QueryAccount,
+) {
+    let account = rpc::get_account_info(client, &args.owner).await;
+    if let Some(account) = account {
+        println!("Address: {}", account.address);
+        println!("Threshold: {}", account.threshold);
+        println!("Public keys:");
+        for (public_key, _) in account.public_keys_map.pk_to_idx {
+            println!("- {}", public_key);
+        }
+    } else {
+        println!("No account exists for {}", args.owner);
     }
 }
 
@@ -1791,8 +1811,9 @@ where
 pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
+    index: u8,
 ) -> Option<common::PublicKey> {
-    namada::ledger::rpc::get_public_key(client, address).await
+    namada::ledger::rpc::get_public_key_at(client, address, index).await
 }
 
 /// Check if the given address is a known validator.
@@ -2061,10 +2082,10 @@ pub async fn get_proposal_offline_votes<
         let proposal_vote: OfflineVote = serde_json::from_reader(file)
             .expect("JSON was not well-formatted for offline vote.");
 
-        let key = pk_key(&proposal_vote.address);
-        let public_key = query_storage_value(client, &key)
-            .await
-            .expect("Public key should exist.");
+        let public_key =
+            rpc::get_public_key_at(client, &proposal_vote.address, 0)
+                .await
+                .expect("Public key should exist.");
 
         if !proposal_vote.proposal_hash.eq(&proposal_hash)
             || !proposal_vote.check_signature(&public_key)

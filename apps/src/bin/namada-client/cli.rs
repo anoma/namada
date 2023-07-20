@@ -67,7 +67,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
@@ -76,8 +76,10 @@ pub async fn main() -> Result<()> {
                         .await
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_update_account::<HttpClient>(
+                        &client, &mut ctx, args,
+                    )
+                    .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -213,24 +215,39 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
-                    let (mut tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
-                        &client,
-                        &mut ctx.wallet,
-                        args,
-                    )
-                    .await
-                    .unwrap();
+                    let (mut tx, addr, public_keys) =
+                        bridge_pool::build_bridge_pool_tx(
+                            &client,
+                            &mut ctx.wallet,
+                            args,
+                        )
+                        .await
+                        .unwrap();
                     tx::submit_reveal_aux(
                         &client,
                         &mut ctx,
                         &tx_args,
-                        addr,
-                        pk.clone(),
+                        addr.clone(),
+                        &public_keys,
                         &mut tx,
                     )
                     .await?;
-                    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk)
-                        .await?;
+                    let (account_public_keys_map, threshold) =
+                        signing::aux_signing_data(
+                            &client,
+                            addr,
+                            public_keys.clone(),
+                        )
+                        .await;
+                    signing::sign_tx(
+                        &mut ctx.wallet,
+                        &mut tx,
+                        &tx_args,
+                        &account_public_keys_map,
+                        &public_keys,
+                        threshold,
+                    )
+                    .await?;
                     sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
                         .await?;
                 }
@@ -432,6 +449,16 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
+                }
+                Sub::QueryAccount(QueryAccount(args)) => {
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_account(&client, args).await;
                 }
             }
         }

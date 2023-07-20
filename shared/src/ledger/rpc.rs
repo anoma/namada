@@ -9,7 +9,9 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
+#[cfg(not(feature = "mainnet"))]
 use namada_core::ledger::testnet_pow;
+use namada_core::types::account::Account;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{
@@ -34,7 +36,7 @@ use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
-use crate::types::key::*;
+use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
 use crate::types::token::balance_key;
 use crate::types::{storage, token};
@@ -140,15 +142,6 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
 ) -> Option<token::Amount> {
     let balance_key = balance_key(token, owner);
     query_storage_value(client, &balance_key).await
-}
-
-/// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    address: &Address,
-) -> Option<common::PublicKey> {
-    let key = pk_key(address);
-    query_storage_value(client, &key).await
 }
 
 /// Check if the given address is a known validator.
@@ -773,6 +766,42 @@ pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
     unwrap_client_response::<C, token::Amount>(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
     )
+}
+
+/// Query the accunt substorage space of an address
+pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    owner: &Address,
+) -> Option<Account> {
+    unwrap_client_response::<C, Option<Account>>(
+        RPC.shell().account(client, owner).await,
+    )
+}
+
+/// Query if the public_key is revealed
+pub async fn is_public_key_revealed<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    owner: &Address,
+) -> bool {
+    unwrap_client_response::<C, bool>(RPC.shell().revealed(client, owner).await)
+}
+
+/// Query an account substorage at a specific index
+pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    owner: &Address,
+    index: u8,
+) -> Option<common::PublicKey> {
+    let account = unwrap_client_response::<C, Option<Account>>(
+        RPC.shell().account(client, owner).await,
+    );
+    if let Some(account) = account {
+        account.get_public_key_from_index(index)
+    } else {
+        None
+    }
 }
 
 /// Query a validator's unbonds for a given epoch
