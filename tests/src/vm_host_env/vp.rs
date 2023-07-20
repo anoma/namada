@@ -12,6 +12,7 @@ use namada::types::transaction::TxType;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_core::ledger::gas::TxGasMeter;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
@@ -75,7 +76,9 @@ impl Default for TestVpEnv {
             addr: address::testing::established_address_1(),
             wl_storage,
             iterators: PrefixIterators::default(),
-            gas_meter: VpGasMeter::new(10_000_000, 0),
+            gas_meter: VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                10_000_000,
+            )),
             tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),

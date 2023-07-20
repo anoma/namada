@@ -16,7 +16,7 @@ use namada::ibc::core::ics24_host::identifier::{
 };
 use namada::ibc::signer::Signer;
 use namada::ibc::tx_msg::Msg;
-use namada::ledger::gas::VpGasMeter;
+use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance;
 use namada::ledger::ibc::vp::{Ibc, IbcToken};
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
@@ -57,7 +57,7 @@ fn replay_protection(c: &mut Criterion) {
             &shell.wl_storage.write_log,
             &tx,
             &TxIndex(0),
-            VpGasMeter::new(u64::MAX, 0),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)),
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -189,7 +189,7 @@ fn governance(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new(u64::MAX, 0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -256,7 +256,7 @@ fn slash_fund(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 &tx,
                 &TxIndex(0),
-                VpGasMeter::new(u64::MAX, 0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -339,7 +339,7 @@ fn ibc(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new(u64::MAX, 0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -398,7 +398,7 @@ fn ibc_token(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new(u64::MAX, 0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),

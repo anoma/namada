@@ -744,7 +744,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -857,7 +858,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -996,7 +998,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1121,7 +1124,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1182,7 +1186,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1355,7 +1360,8 @@ mod tests {
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");
         let write_log = WriteLog::default();
-        let mut gas_meter = VpGasMeter::new(TX_GAS_LIMIT, 0);
+        let mut gas_meter =
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new(TX_GAS_LIMIT));
         let gas_table = BTreeMap::default();
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();

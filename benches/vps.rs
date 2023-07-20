@@ -7,7 +7,7 @@ use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::{Amount, Transfer};
-use namada::ledger::gas::VpGasMeter;
+use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::storage::Sha256Hasher;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::proto::{Code, Section, Signature, Tx};
@@ -160,7 +160,9 @@ fn vp_user(c: &mut Criterion) {
                     &defaults::albert_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                        u64::MAX
+                    )),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -306,7 +308,9 @@ fn vp_implicit(c: &mut Criterion) {
                     &Address::from(&implicit_account.to_public()),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                        u64::MAX
+                    )),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -454,7 +458,9 @@ fn vp_validator(c: &mut Criterion) {
                     &defaults::validator_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                        u64::MAX
+                    )),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -515,7 +521,9 @@ fn vp_token(c: &mut Criterion) {
                     &defaults::albert_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                        u64::MAX
+                    )),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -601,7 +609,9 @@ fn vp_masp(c: &mut Criterion) {
                     &defaults::validator_address(),
                     &shielded_ctx.shell.wl_storage.storage,
                     &shielded_ctx.shell.wl_storage.write_log,
-                    &mut VpGasMeter::new(u64::MAX, 0),
+                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                        u64::MAX
+                    )),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,

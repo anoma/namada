@@ -624,8 +624,7 @@ where
         tx_index,
         storage,
         write_log,
-        tx_gas_meter.tx_gas_limit,
-        tx_gas_meter.get_current_transaction_gas(),
+        tx_gas_meter,
         gas_table,
         vp_wasm_cache,
         #[cfg(not(feature = "mainnet"))]
@@ -647,8 +646,7 @@ fn execute_vps<D, H, CA>(
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     write_log: &WriteLog,
-    tx_gas_limit: u64,
-    initial_gas: u64,
+    tx_gas_meter: &TxGasMeter,
     gas_table: &BTreeMap<String, u64>,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
@@ -664,7 +662,7 @@ where
     verifiers
         .par_iter()
         .try_fold(VpsResult::default, |mut result, addr| {
-            let mut gas_meter = VpGasMeter::new(tx_gas_limit, initial_gas);
+            let mut gas_meter = VpGasMeter::new_from_tx_meter(tx_gas_meter);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = storage
@@ -833,7 +831,7 @@ where
             Ok(result)
         })
         .try_reduce(VpsResult::default, |a, b| {
-            merge_vp_results(a, b, tx_gas_limit, initial_gas)
+            merge_vp_results(a, b, tx_gas_meter)
         })
 }
 
@@ -841,8 +839,7 @@ where
 fn merge_vp_results(
     a: VpsResult,
     mut b: VpsResult,
-    tx_gas_limit: u64,
-    initial_gas: u64,
+    tx_gas_meter: &TxGasMeter,
 ) -> Result<VpsResult> {
     let mut accepted_vps = a.accepted_vps;
     let mut rejected_vps = a.rejected_vps;
@@ -852,7 +849,7 @@ fn merge_vp_results(
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
 
-    gas_used.merge(&mut b.gas_used, tx_gas_limit, initial_gas)?;
+    gas_used.merge(&mut b.gas_used, tx_gas_meter)?;
 
     Ok(VpsResult {
         accepted_vps,

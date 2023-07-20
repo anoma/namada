@@ -42,6 +42,10 @@ pub trait GasMetering {
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
+        tracing::error!(
+            "Adding compile cost: {}",
+            bytes_len * COMPILE_GAS_PER_BYTE
+        ); //FIXME: remove
         self.consume(
             bytes_len
                 .checked_mul(COMPILE_GAS_PER_BYTE)
@@ -51,12 +55,22 @@ pub trait GasMetering {
 
     /// Add the gas for loading the wasm code from storage
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
+        tracing::error!(
+            "Adding load from storage cost: {}",
+            bytes_len * MIN_STORAGE_GAS
+        ); //FIXME: remove
         self.consume(
             bytes_len
                 .checked_mul(MIN_STORAGE_GAS)
                 .ok_or(Error::GasOverflow)?,
         )
     }
+
+    /// Get the gas consumed by the tx alone
+    fn get_tx_gas(&self) -> u64;
+
+    /// Get the gas limit
+    fn get_gas_limit(&self) -> u64;
 }
 
 /// Gas metering in a transaction
@@ -100,6 +114,14 @@ impl GasMetering for TxGasMeter {
 
         Ok(())
     }
+
+    fn get_tx_gas(&self) -> u64 {
+        self.transaction_gas
+    }
+
+    fn get_gas_limit(&self) -> u64 {
+        self.tx_gas_limit
+    }
 }
 
 impl TxGasMeter {
@@ -127,6 +149,10 @@ impl TxGasMeter {
 
     /// Add the gas cost used in validity predicates to the current transaction.
     pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
+        tracing::error!(
+            "Adding vp gas: {}",
+            vps_gas.get_current_gas().unwrap()
+        ); //FIXME: remove
         self.consume(vps_gas.get_current_gas()?)
     }
 
@@ -154,15 +180,22 @@ impl GasMetering for VpGasMeter {
 
         Ok(())
     }
+
+    fn get_tx_gas(&self) -> u64 {
+        self.initial_gas
+    }
+
+    fn get_gas_limit(&self) -> u64 {
+        self.tx_gas_limit
+    }
 }
 
 impl VpGasMeter {
-    /// Initialize a new VP gas meter, starting with the gas consumed in the
-    /// transaction so far. Also requires the transaction gas limit.
-    pub fn new(tx_gas_limit: u64, initial_gas: u64) -> Self {
+    /// Initialize a new VP gas meter from the `TxGasMeter`
+    pub fn new_from_tx_meter(tx_gas_meter: &TxGasMeter) -> Self {
         Self {
-            tx_gas_limit,
-            initial_gas,
+            tx_gas_limit: tx_gas_meter.tx_gas_limit,
+            initial_gas: tx_gas_meter.transaction_gas,
             current_gas: 0,
         }
     }
@@ -175,15 +208,14 @@ impl VpsGas {
         debug_assert_eq!(self.max, None);
         debug_assert!(self.rest.is_empty());
         self.max = Some(vp_gas_meter.current_gas);
-        self.check_limit(vp_gas_meter.tx_gas_limit, vp_gas_meter.initial_gas)
+        self.check_limit(&vp_gas_meter)
     }
 
     /// Merge validity predicates gas meters from parallelized runs.
     pub fn merge(
         &mut self,
         other: &mut VpsGas,
-        tx_gas_limit: u64,
-        initial_gas: u64,
+        tx_gas_meter: &TxGasMeter,
     ) -> Result<()> {
         match (self.max, other.max) {
             (None, Some(_)) => {
@@ -201,14 +233,15 @@ impl VpsGas {
         }
         self.rest.append(&mut other.rest);
 
-        self.check_limit(tx_gas_limit, initial_gas)
+        self.check_limit(tx_gas_meter)
     }
 
-    fn check_limit(&self, tx_gas_limit: u64, initial_gas: u64) -> Result<()> {
-        let total = initial_gas
+    fn check_limit(&self, gas_meter: &impl GasMetering) -> Result<()> {
+        let total = gas_meter
+            .get_tx_gas()
             .checked_add(self.get_current_gas()?)
             .ok_or(Error::GasOverflow)?;
-        if total > tx_gas_limit {
+        if total > gas_meter.get_gas_limit() {
             return Err(Error::TransactionGasExceededError);
         }
         Ok(())
@@ -235,7 +268,11 @@ mod tests {
     proptest! {
         #[test]
         fn test_vp_gas_meter_add(gas in 0..BLOCK_GAS_LIMIT) {
-            let mut meter = VpGasMeter::new(BLOCK_GAS_LIMIT, 0);
+        let tx_gas_meter = TxGasMeter {
+            tx_gas_limit: BLOCK_GAS_LIMIT,
+            transaction_gas: 0,
+        };
+            let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
             meter.consume(gas).expect("cannot add the gas");
         }
 
@@ -243,7 +280,11 @@ mod tests {
 
     #[test]
     fn test_vp_gas_overflow() {
-        let mut meter = VpGasMeter::new(BLOCK_GAS_LIMIT, 1);
+        let tx_gas_meter = TxGasMeter {
+            tx_gas_limit: BLOCK_GAS_LIMIT,
+            transaction_gas: TX_GAS_LIMIT - 1,
+        };
+        let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
             meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
             Error::GasOverflow
@@ -252,7 +293,11 @@ mod tests {
 
     #[test]
     fn test_vp_gas_limit() {
-        let mut meter = VpGasMeter::new(TX_GAS_LIMIT, 1);
+        let tx_gas_meter = TxGasMeter {
+            tx_gas_limit: TX_GAS_LIMIT,
+            transaction_gas: TX_GAS_LIMIT - 1,
+        };
+        let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
             meter
                 .consume(TX_GAS_LIMIT)

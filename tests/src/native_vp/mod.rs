@@ -10,6 +10,7 @@ use namada::ledger::storage::Sha256Hasher;
 use namada::types::address::Address;
 use namada::types::storage;
 use namada::vm::WasmCacheRwAccess;
+use namada_core::ledger::gas::TxGasMeter;
 
 use crate::tx::TestTxEnv;
 
@@ -50,9 +51,8 @@ impl TestNativeVpEnv {
     {
         let ctx = Ctx {
             iterators: Default::default(),
-            gas_meter: RefCell::new(VpGasMeter::new(
-                self.tx_env.gas_meter.tx_gas_limit,
-                self.tx_env.gas_meter.get_current_transaction_gas(),
+            gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
+                &self.tx_env.gas_meter,
             )),
             storage: &self.tx_env.wl_storage.storage,
             write_log: &self.tx_env.wl_storage.write_log,
