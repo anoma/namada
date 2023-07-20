@@ -44,7 +44,7 @@ build:
 	$(cargo) build $(jobs)
 
 build-test:
-	$(cargo) build --tests $(jobs)
+	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
 	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
