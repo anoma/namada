@@ -77,10 +77,9 @@ impl MockNode {
     }
 
     pub fn genesis_path(&self) -> PathBuf {
-        self.test_dir.path().join(format!(
-            "{}.toml",
-            self.shell.lock().unwrap().chain_id.to_string()
-        ))
+        self.test_dir
+            .path()
+            .join(format!("{}.toml", self.shell.lock().unwrap().chain_id))
     }
 
     pub fn wasm_dir(&self) -> PathBuf {
