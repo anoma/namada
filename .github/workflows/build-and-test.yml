@@ -386,7 +386,7 @@ jobs:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
-        comet_bft: [https://github.com/cometbft/cometbft/releases/download/v0.37.2/cometbft_0.37.2_linux_amd64.tar.gz]
+        comet_bft: [0.37.2]
         make:
           - name: e2e
             suffix: ''
@@ -515,7 +515,7 @@ jobs:
           path: ./target/release/
       - name: Download CometBFT
         run: |
-          curl -o cometbft.tar.gz -LO ${{ matrix.comet_bft }}
+          curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
       - name: Change permissions
