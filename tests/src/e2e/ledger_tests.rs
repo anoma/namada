@@ -4318,9 +4318,20 @@ fn double_signing_gets_slashed() -> Result<()> {
     use namada_apps::client;
     use namada_apps::config::Config;
 
+    let mut pipeline_len = 0;
+    let mut unbonding_len = 0;
+    let mut cubic_offset = 0;
+
     // Setup 2 genesis validator nodes
     let test = setup::network(
-        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        |genesis| {
+            (pipeline_len, unbonding_len, cubic_offset) = (
+                genesis.pos_params.pipeline_len,
+                genesis.pos_params.unbonding_len,
+                genesis.pos_params.cubic_slashing_window_length,
+            );
+            setup::set_validators(4, genesis, default_port_offset)
+        },
         None,
     )?;
 
@@ -4338,6 +4349,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
+    println!("pipeline_len: {}", pipeline_len);
 
     // 1. Run 2 genesis validator ledger nodes
     let _bg_validator_0 =
@@ -4346,6 +4358,18 @@ fn double_signing_gets_slashed() -> Result<()> {
     let bg_validator_1 =
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
+
+    let mut validator_2 =
+        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
+    validator_2.exp_string("Namada ledger node started")?;
+    validator_2.exp_string("This node is a validator")?;
+    let _bg_validator_2 = validator_2.background();
+
+    let mut validator_3 =
+        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
+    validator_3.exp_string("Namada ledger node started")?;
+    validator_3.exp_string("This node is a validator")?;
+    let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
@@ -4373,7 +4397,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let net_address_port_0 = net_address_0.port();
 
     let update_config = |ix: u8, mut config: Config| {
-        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
+        let first_port = net_address_port_0 + 26 * (ix as u16 + 1);
         let p2p_addr =
             convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
@@ -4468,7 +4492,118 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
     validator_1.exp_string("Processing evidence")?;
-    validator_1.exp_string("Slashing")?;
+    // validator_1.exp_string("Slashing")?;
+
+    println!("\nPARSING SLASH MESSAGE\n");
+    let (_, res) = validator_1
+        .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
+        .unwrap();
+    println!("\n{res}\n");
+    let _bg_validator_1 = validator_1.background();
+
+    let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
+        .unwrap()
+        + unbonding_len
+        + cubic_offset
+        + 1u64;
+
+    // Query slashes
+    // let tx_args = ["slashes", "--node", &validator_one_rpc];
+    // let client = run!(test, Bin::Client, tx_args, Some(40))?;
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &["slashes", "--node", &validator_one_rpc],
+        Some(40)
+    )?;
+    client.exp_string("No processed slashes found")?;
+    client.exp_string("Enqueued slashes for future processing")?;
+    let (_, res) = client
+        .exp_regex(r"To be processed in epoch [0-9]+")
+        .unwrap();
+    let processing_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
+
+    assert_eq!(processing_epoch, exp_processing_epoch);
+
+    println!("\n{processing_epoch}\n");
+
+    // 6. Wait for processing epoch
+    loop {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        println!("\nCurrent epoch: {}", epoch);
+        if epoch > processing_epoch {
+            break;
+        }
+    }
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &[
+            "validator-state",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(40)
+    )?;
+    let _ = client.exp_regex(r"Validator [a-z0-9]+ is jailed").unwrap();
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &["slashes", "--node", &validator_one_rpc],
+        Some(40)
+    )?;
+    client.exp_string("Processed slashes:")?;
+    client.exp_string("No enqueued slashes found")?;
+
+    let tx_args = vec![
+        "unjail-validator",
+        "--validator",
+        "validator-0",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // Wait until pipeline epoch to see if the validator is back in consensus
+    let cur_epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+    loop {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        println!("\nCurrent epoch: {}", epoch);
+        if epoch > cur_epoch + pipeline_len + 1u64 {
+            break;
+        }
+    }
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &[
+            "validator-state",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(40)
+    )?;
+    let _ = client
+        .exp_regex(r"Validator [a-z0-9]+ is in the .* set")
+        .unwrap();
 
     Ok(())
 }
