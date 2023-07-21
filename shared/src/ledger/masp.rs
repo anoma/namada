@@ -1213,7 +1213,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Convert transaction amount into MASP types
         let (asset_type, amount) =
             convert_amount(epoch, &args.token, args.amount);
-        // The fee to be paid for the transaction
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
