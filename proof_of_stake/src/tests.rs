@@ -43,15 +43,17 @@ use crate::{
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, init_genesis,
     insert_validator_into_validator_set, is_validator, process_slashes,
+    purge_validator_sets_for_old_epoch,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
-    staking_token_address, total_deltas_handle, unbond_handle, unbond_tokens,
-    unjail_validator, update_validator_deltas, update_validator_set,
-    validator_consensus_key_handle, validator_set_update_tendermint,
-    validator_slashes_handle, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash, BecomeValidator,
+    staking_token_address, store_total_consensus_stake, total_deltas_handle,
+    unbond_handle, unbond_tokens, unjail_validator, update_validator_deltas,
+    update_validator_set, validator_consensus_key_handle,
+    validator_set_update_tendermint, validator_slashes_handle,
+    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
+    BecomeValidator, STORE_VALIDATOR_SETS_LEN,
 };
 
 proptest! {
@@ -1159,8 +1161,7 @@ fn test_validator_sets() {
             .unwrap();
     };
 
-    // Start with two genesis validators with 1 NAM stake
-    let epoch = Epoch::default();
+    // Create genesis validators
     let ((val1, pk1), stake1) =
         (gen_validator(), token::Amount::native_whole(1));
     let ((val2, pk2), stake2) =
@@ -1182,6 +1183,9 @@ fn test_validator_sets() {
     println!("val5: {val5}, {pk5}, {}", stake5.to_string_native());
     println!("val6: {val6}, {pk6}, {}", stake6.to_string_native());
     println!("val7: {val7}, {pk7}, {}", stake7.to_string_native());
+
+    let start_epoch = Epoch::default();
+    let epoch = start_epoch;
 
     init_genesis(
         &mut s,
@@ -1749,6 +1753,28 @@ fn test_validator_sets() {
         })
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
+
+    // Check that the validator sets were purged for the old epochs
+    let last_epoch = epoch;
+    for e in Epoch::iter_bounds_inclusive(
+        start_epoch,
+        last_epoch
+            .sub_or_default(Epoch(STORE_VALIDATOR_SETS_LEN))
+            .sub_or_default(Epoch(1)),
+    ) {
+        assert!(
+            consensus_validator_set_handle()
+                .at(&e)
+                .is_empty(&s)
+                .unwrap()
+        );
+        assert!(
+            below_capacity_validator_set_handle()
+                .at(&e)
+                .is_empty(&s)
+                .unwrap()
+        );
+    }
 }
 
 /// When a consensus set validator with 0 voting power adds a bond in the same
@@ -2003,14 +2029,14 @@ fn get_tendermint_set_updates(
 fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
     s.storage.block.epoch = s.storage.block.epoch.next();
     let current_epoch = s.storage.block.epoch;
+    store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,
         current_epoch,
         current_epoch + params.pipeline_len,
-        &consensus_validator_set_handle(),
-        &below_capacity_validator_set_handle(),
     )
     .unwrap();
+    purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();
     // process_slashes(s, current_epoch).unwrap();
     // dbg!(current_epoch);
     current_epoch

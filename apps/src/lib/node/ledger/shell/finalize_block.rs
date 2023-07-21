@@ -105,8 +105,14 @@ where
                 &mut self.wl_storage,
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
-                &namada_proof_of_stake::consensus_validator_set_handle(),
-                &namada_proof_of_stake::below_capacity_validator_set_handle(),
+            )?;
+            namada_proof_of_stake::store_total_consensus_stake(
+                &mut self.wl_storage,
+                current_epoch,
+            )?;
+            namada_proof_of_stake::purge_validator_sets_for_old_epoch(
+                &mut self.wl_storage,
+                current_epoch,
             )?;
         }
 
