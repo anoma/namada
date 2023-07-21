@@ -33,7 +33,7 @@ where
     storage.read(&threshold_key)
 }
 
-/// Get the public keys index map associated with an account
+/// Get the public keys associated with an account
 pub fn public_keys<S>(
     storage: &S,
     owner: &Address,
@@ -70,8 +70,13 @@ pub fn exists<S>(storage: &S, owner: &Address) -> Result<bool>
 where
     S: StorageRead,
 {
-    let vp_key = Key::validity_predicate(owner);
-    storage.has_key(&vp_key)
+    match owner {
+        Address::Established(_) => {
+            let vp_key = Key::validity_predicate(owner);
+            storage.has_key(&vp_key)
+        }
+        Address::Implicit(_) | Address::Internal(_) => Ok(true),
+    }
 }
 
 /// Set public key at specific index

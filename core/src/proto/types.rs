@@ -2,11 +2,8 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
-use std::env;
-use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::path::PathBuf;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
@@ -14,6 +11,7 @@ use ark_ec::AffineCurve;
 use ark_ec::PairingEngine;
 use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
@@ -869,7 +867,6 @@ impl borsh::BorshSchema for MaspBuilder {
     Serialize,
     Deserialize,
 )]
-#[allow(clippy::large_enum_variant)]
 pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
     Data(Data),
@@ -1147,22 +1144,12 @@ impl Tx {
         }
     }
 
-    /// Dump to file
-    // TODO: refactor
-    pub fn dump(&self, path: Option<PathBuf>) -> Result<PathBuf> {
-        let path = path
-            .unwrap_or(env::current_dir().expect(
-                "Should be able to get the current working directory.",
-            ));
-        let tx_filename = format!("{}.tx", self.header_hash());
-        let tx_filename_clone_error = tx_filename.clone();
-        let tx_filename_clone_ok = tx_filename.clone();
-        let out = File::create(path.join(tx_filename)).unwrap();
-        serde_json::to_writer_pretty(out, &self)
-            .map_err(|_| {
-                Error::InvalidJSONDeserialization(tx_filename_clone_error)
-            })
-            .map(|_| path.join(tx_filename_clone_ok))
+    /// Dump tx to hex string
+    pub fn serialize(&self) -> String {
+        let tx_bytes = self
+            .try_to_vec()
+            .expect("Transation should be serializable");
+        HEXUPPER.encode(&tx_bytes)
     }
 
     /// Get the transaction header

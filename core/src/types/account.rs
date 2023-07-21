@@ -40,7 +40,13 @@ impl Account {
 }
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    Default,
 )]
 /// Holds the public key map data as a bimap for efficient quering
 pub struct AccountPublicKeysMap {
@@ -82,13 +88,5 @@ impl AccountPublicKeysMap {
         public_key: &common::PublicKey,
     ) -> Option<u8> {
         self.pk_to_idx.get(public_key).cloned()
-    }
-
-    /// Return an empty AccountPublicKeysMap
-    pub fn empty() -> Self {
-        AccountPublicKeysMap {
-            pk_to_idx: HashMap::new(),
-            idx_to_pk: HashMap::new(),
-        }
     }
 }

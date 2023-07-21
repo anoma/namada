@@ -3,6 +3,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::ledger::tx::dump_tx;
 use namada::ledger::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
@@ -215,41 +216,51 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
-                    let (mut tx, addr, public_keys) =
-                        bridge_pool::build_bridge_pool_tx(
+
+                    let default_signer =
+                        signing::signer_from_address(Some(args.sender.clone()));
+                    let signing_data = signing::aux_signing_data(
+                        &client,
+                        &mut ctx.wallet,
+                        &args.tx,
+                        &args.sender,
+                        default_signer,
+                    )
+                    .await?;
+
+                    let tx_builder = bridge_pool::build_bridge_pool_tx(
+                        &client,
+                        args.clone(),
+                        signing_data.fee_payer.clone(),
+                    )
+                    .await?;
+
+                    if args.tx.dump_tx {
+                        dump_tx(&args.tx, tx_builder);
+                    } else {
+                        tx::submit_reveal_aux(
+                            &client,
+                            &mut ctx,
+                            tx_args.clone(),
+                            &args.sender,
+                        )
+                        .await?;
+
+                        let tx_builder = signing::sign_tx(
+                            &mut ctx.wallet,
+                            &tx_args,
+                            tx_builder,
+                            signing_data,
+                        )?;
+
+                        sdk_tx::process_tx(
                             &client,
                             &mut ctx.wallet,
-                            args,
+                            &tx_args,
+                            tx_builder,
                         )
-                        .await
-                        .unwrap();
-                    tx::submit_reveal_aux(
-                        &client,
-                        &mut ctx,
-                        &tx_args,
-                        addr.clone(),
-                        &public_keys,
-                        &mut tx,
-                    )
-                    .await?;
-                    let (account_public_keys_map, threshold) =
-                        signing::aux_signing_data(
-                            &client,
-                            addr,
-                            public_keys.clone(),
-                        )
-                        .await;
-                    signing::sign_tx(
-                        &mut ctx.wallet,
-                        &mut tx,
-                        &tx_args,
-                        &account_public_keys_map,
-                        &public_keys,
-                        threshold,
-                    )
-                    .await?;
-                    sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
                         .await?;
+                    }
                 }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {

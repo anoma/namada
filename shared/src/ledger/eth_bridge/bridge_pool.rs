@@ -19,11 +19,8 @@ use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
-use crate::ledger::rpc::validate_amount;
-use crate::ledger::signing::TxSigningKey;
+use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::{prepare_tx, Error};
-use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::proto::{Code, Data, Tx};
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
@@ -35,34 +32,31 @@ use crate::types::eth_bridge_pool::{
 };
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
-use crate::types::transaction::TxType;
+use crate::types::tx::TxBuilder;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn build_bridge_pool_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    wallet: &mut Wallet<U>,
-    args: args::EthereumBridgePool,
-) -> Result<(Tx, Option<Address>, Vec<common::PublicKey>), Error> {
-    let args::EthereumBridgePool {
-        ref tx,
+    args::EthereumBridgePool {
+        tx,
         asset,
         recipient,
         sender,
         amount,
         gas_amount,
         gas_payer,
-        code_path: wasm_code,
-    } = args;
-
+        code_path,
+    }: args::EthereumBridgePool,
+    fee_payer: common::PublicKey,
+) -> Result<TxBuilder, Error> {
     let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
+
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, &sub_prefix, tx.force)
             .await
             .expect("Failed to validate amount");
+
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
@@ -76,24 +70,24 @@ pub async fn build_bridge_pool_tx<
         },
     };
 
-    let mut transfer_tx = Tx::new(TxType::Raw);
-    transfer_tx.header.chain_id = tx.chain_id.clone().unwrap();
-    transfer_tx.header.expiration = tx.expiration;
-    transfer_tx.set_data(Data::new(
-        transfer
-            .try_to_vec()
-            .expect("Serializing tx should not fail"),
-    ));
-    // TODO: change the wasm code to a hash
-    transfer_tx.set_code(Code::new(wasm_code));
+    let tx_code_hash =
+        query_wasm_code_hash(client, code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
-    prepare_tx::<C, U>(
+    let chain_id = tx.chain_id.clone().unwrap();
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+
+    // TODO: change the wasm code to a hash
+    let tx_builder = tx_builder
+        .add_code_from_hash(tx_code_hash)
+        .add_data(transfer);
+
+    prepare_tx::<C>(
         client,
-        wallet,
-        tx,
-        transfer_tx,
-        Some(sender),
-        TxSigningKey::None,
+        &tx,
+        tx_builder,
+        fee_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )

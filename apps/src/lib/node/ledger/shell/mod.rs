@@ -2053,6 +2053,7 @@ mod test_mempool_validate {
     use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::tx::TxBuilder;
 
     use super::*;
 
@@ -2145,10 +2146,10 @@ mod test_mempool_validate {
     fn test_wrong_tx_type() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        // Test Raw TxType
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code("wasm_code".as_bytes().to_owned())
+            .build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2277,18 +2278,12 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wrong_chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![
-                tx.header_hash(),
-                tx.sections[0].get_hash(),
-                tx.sections[1].get_hash(),
-            ],
-            &keypair,
-        )));
+        let tx_builder = TxBuilder::new(wrong_chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .add_fee_payer(keypair)
+            .build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2312,19 +2307,15 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.expiration = Some(DateTimeUtc::default());
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![
-                tx.header_hash(),
-                tx.sections[0].get_hash(),
-                tx.sections[1].get_hash(),
-            ],
-            &keypair,
-        )));
+        let tx_builder = TxBuilder::new(
+            shell.chain_id.clone(),
+            Some(DateTimeUtc::default()),
+        );
+        let tx = tx_builder
+            .add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .add_fee_payer(keypair)
+            .build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),

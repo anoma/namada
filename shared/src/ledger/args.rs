@@ -651,7 +651,7 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     /// The account of fee payer.
     pub gas_payer: C::Address,
     /// Path to the tx WASM code file
-    pub code_path: C::Data,
+    pub code_path: PathBuf,
 }
 
 /// Bridge pool proof arguments.

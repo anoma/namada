@@ -964,6 +964,7 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
+    use namada::types::tx::TxBuilder;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -2027,10 +2028,14 @@ mod test_process_proposal {
     fn test_raw_tx_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .add_fee_payer(keypair)
+            .build();
 
         let response = {
             let request = ProcessProposal {

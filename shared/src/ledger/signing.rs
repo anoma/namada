@@ -1,12 +1,6 @@
 //! Functions to sign transactions
 use std::collections::HashMap;
-#[cfg(feature = "std")]
-use std::env;
-#[cfg(feature = "std")]
-use std::fs::File;
 use std::io::ErrorKind;
-#[cfg(feature = "std")]
-use std::io::Write;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -44,7 +38,7 @@ use crate::ledger::tx::{
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
-use crate::proto::{MaspBuilder, MultiSignature, Section, Signature, Tx};
+use crate::proto::{MaspBuilder, Section, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -54,7 +48,8 @@ use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use crate::types::transaction::pos::InitValidator;
-use crate::types::transaction::{Fee, TxType, WrapperTx};
+use crate::types::transaction::{Fee, TxType};
+use crate::types::tx::TxBuilder;
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -62,6 +57,28 @@ const ENV_VAR_LEDGER_LOG_PATH: &str = "NAMADA_LEDGER_LOG_PATH";
 #[cfg(feature = "std")]
 /// Env. var specifying where to store transaction debug outputs
 const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
+
+/// A struture holding the signing data to craft a transaction
+#[derive(Clone)]
+pub struct SigningTxData {
+    /// The public keys associated to an account
+    pub public_keys: Vec<common::PublicKey>,
+    /// The threshold associated to an account
+    pub threshold: u8,
+    /// The public keys to index map associated to an account
+    pub account_public_keys_map: AccountPublicKeysMap,
+    /// The public keys of the fee payer
+    pub fee_payer: common::PublicKey,
+}
+
+/// Generate a signing key from an address. Default to None if address is empty.
+pub fn signer_from_address(address: Option<Address>) -> TxSigningKey {
+    if let Some(address) = address {
+        TxSigningKey::WalletAddress(address)
+    } else {
+        TxSigningKey::None
+    }
+}
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. If the keypair is encrypted but a password is not
@@ -146,7 +163,7 @@ pub enum TxSigningKey {
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
-pub async fn tx_signer<
+pub async fn tx_signers<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
 >(
@@ -191,15 +208,14 @@ pub async fn tx_signer<
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<U: WalletUtils>(
+pub fn sign_tx<U: WalletUtils>(
     wallet: &mut Wallet<U>,
-    tx: &mut Tx,
     args: &args::Tx,
-    public_keys_index_map: &AccountPublicKeysMap,
-    public_keys: &[common::PublicKey],
-    threshold: u8,
-) -> Result<(), Error> {
-    let keypairs = public_keys
+    tx_builder: TxBuilder,
+    signing_data: SigningTxData,
+) -> Result<TxBuilder, Error> {
+    let signing_tx_keypairs = signing_data
+        .public_keys
         .iter()
         .filter_map(|public_key| {
             match find_key_by_pk(wallet, args, public_key) {
@@ -209,67 +225,68 @@ pub async fn sign_tx<U: WalletUtils>(
         })
         .collect::<Vec<common::SecretKey>>();
 
-    // Sign over the transacttion data
-    let multisignature_section = MultiSignature::new(
-        vec![*tx.data_sechash(), *tx.code_sechash()],
-        &keypairs,
-        public_keys_index_map,
+    let fee_payer_keypair =
+        find_key_by_pk(wallet, args, &signing_data.fee_payer).expect("");
+
+    let tx_builder = tx_builder.add_signing_keys(
+        signing_tx_keypairs,
+        signing_data.account_public_keys_map,
     );
+    let tx_builder = tx_builder.add_fee_payer(fee_payer_keypair);
 
-    if (multisignature_section.total_signatures() < threshold) && !args.force {
-        return Err(Error::MissingSigningKeys(
-            threshold,
-            multisignature_section.total_signatures(),
-        ));
-    }
-
-    // Sign over the transaction targets
-    tx.add_section(Section::SectionSignature(multisignature_section));
-
-    // Remove all the sensitive sections
-    tx.protocol_filter();
-
-    let fee_payer = match &args.fee_payer {
-        Some(keypair) => keypair,
-        None => {
-            if let Some(public_key) = keypairs.get(0) {
-                public_key
-            } else {
-                return Err(Error::InvalidFeePayer(
-                    "Either --signing-keys or --fee-payer must be available."
-                        .to_string(),
-                ));
-            }
-        }
-    };
-
-    tx.add_section(Section::Signature(Signature::new(
-        tx.sechashes(),
-        fee_payer,
-    )));
-
-    Ok(())
+    Ok(tx_builder)
 }
 
 /// Return the necessary data regarding an account to be able to generate a
 /// multisignature section
-pub async fn aux_signing_data<C: crate::ledger::queries::Client + Sync>(
+pub async fn aux_signing_data<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
     client: &C,
-    owner: Option<Address>,
-    public_keys: Vec<common::PublicKey>,
-) -> (AccountPublicKeysMap, u8) {
-    if let Some(owner) = owner {
-        let account = rpc::get_account_info::<C>(client, &owner).await;
-        let (public_keys_index_map, threshold) = if let Some(account) = account
-        {
-            (account.public_keys_map, account.threshold)
-        } else {
-            (AccountPublicKeysMap::from_iter(public_keys), 1u8)
-        };
-        (public_keys_index_map, threshold)
-    } else {
-        (AccountPublicKeysMap::from_iter(public_keys), 0u8)
-    }
+    wallet: &mut Wallet<U>,
+    args: &args::Tx,
+    owner: &Address,
+    default_signer: TxSigningKey,
+) -> Result<SigningTxData, Error> {
+    let public_keys =
+        tx_signers::<C, U>(client, wallet, args, default_signer.clone())
+            .await?;
+
+    let (account_public_keys_map, threshold) = match owner {
+        Address::Established(_) => {
+            let account = rpc::get_account_info::<C>(client, owner).await;
+            if let Some(account) = account {
+                (account.public_keys_map, account.threshold)
+            } else {
+                return Err(Error::InvalidAccount(owner.encode()));
+            }
+        }
+        Address::Implicit(_) => {
+            (AccountPublicKeysMap::from_iter(public_keys.clone()), 1u8)
+        }
+        Address::Internal(_) => {
+            return Err(Error::InvalidAccount(owner.encode()));
+        }
+    };
+
+    let fee_payer = match &args.fee_payer {
+        Some(keypair) => keypair.ref_to(),
+        None => {
+            if let Some(public_key) = public_keys.get(0) {
+                public_key.clone()
+            } else {
+                return Err(Error::InvalidFeePayer);
+            }
+        }
+    };
+
+    Ok(SigningTxData {
+        public_keys,
+        threshold,
+        account_public_keys_map,
+        fee_payer,
+    })
 }
 
 #[cfg(not(feature = "mainnet"))]
@@ -351,70 +368,26 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
-pub async fn wrap_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    #[allow(unused_variables)] wallet: &mut Wallet<U>,
+    tx_builder: TxBuilder,
     args: &args::Tx,
     epoch: Epoch,
-    mut tx: Tx,
-    keypair: &common::PublicKey,
+    fee_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Tx {
+) -> TxBuilder {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
-        solve_pow_challenge(client, args, keypair, requires_pow).await;
-    // This object governs how the payload will be processed
-    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+        solve_pow_challenge(client, args, &fee_payer, requires_pow).await;
+
+    tx_builder.add_wrapper(
         fee,
-        keypair.clone(),
+        fee_payer,
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
-    ))));
-    tx.header.chain_id = args.chain_id.clone().unwrap();
-    tx.header.expiration = args.expiration;
-
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
-        let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
-    }
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
-    }
-
-    tx
+    )
 }
 
 #[allow(clippy::result_large_err)]
@@ -640,6 +613,55 @@ pub async fn make_ledger_masp_endpoints<
             &transfer.sub_prefix,
             "",
         );
+    }
+}
+
+/// Internal method used to generate transaction test vectors
+#[cfg(feature = "std")]
+pub async fn generate_test_vector<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    tx: &Tx,
+) {
+    use std::env;
+    use std::fs::File;
+    use std::io::Write;
+
+    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Convert the transaction to Ledger format
+        let decoding = to_ledger_vector(client, wallet, &tx)
+            .await
+            .expect("unable to decode transaction");
+        let output = serde_json::to_string(&decoding)
+            .expect("failed to serialize decoding");
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{},", output)
+            .expect("unable to write test vector to file");
+    }
+
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
     }
 }
 

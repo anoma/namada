@@ -2657,7 +2657,7 @@ pub mod args {
                 amount: self.amount,
                 gas_amount: self.gas_amount,
                 gas_payer: ctx.get(&self.gas_payer),
-                code_path: ctx.read_wasm(self.code_path),
+                code_path: self.code_path,
             }
         }
     }

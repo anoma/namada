@@ -120,14 +120,6 @@ pub fn is_max_proposal_bytes_key(key: &Key) -> bool {
     is_max_proposal_bytes_key_at_addr(key, &ADDRESS)
 }
 
-/// Returns if the key is the max signature per transacton key
-pub fn is_max_signatures_per_transaction_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [
-        DbKeySeg::AddressSeg(addr),
-        DbKeySeg::StringSeg(max_signatures_per_transaction),
-    ] if addr == &ADDRESS && max_signatures_per_transaction == Keys::VALUES.max_signatures_per_transaction)
-}
-
 /// Storage key used for epoch parameter.
 pub fn get_epoch_duration_storage_key() -> Key {
     get_epoch_duration_key_at_addr(ADDRESS)
@@ -195,12 +187,5 @@ pub fn get_wrapper_tx_fees_key() -> Key {
 
 /// Storage key used for the max signatures per transaction key
 pub fn get_max_signatures_per_transaction_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(
-                Keys::VALUES.max_signatures_per_transaction.to_string(),
-            ),
-        ],
-    }
+    get_max_signatures_per_transaction_key_at_addr(ADDRESS)
 }
