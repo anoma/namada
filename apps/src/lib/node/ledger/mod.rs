@@ -1,8 +1,8 @@
 mod abortable;
 mod broadcaster;
 pub mod ethereum_oracle;
-mod shell;
-mod shims;
+pub mod shell;
+pub mod shims;
 pub mod storage;
 pub mod tendermint_node;
 

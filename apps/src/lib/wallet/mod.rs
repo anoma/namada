@@ -1,3 +1,4 @@
+pub mod cli_utils;
 pub mod defaults;
 pub mod pre_genesis;
 mod store;
