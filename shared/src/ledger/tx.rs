@@ -17,7 +17,6 @@ use masp_primitives::transaction::components::transparent::fees::{
 use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
-use namada_core::types::storage::Key;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -44,7 +43,7 @@ use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
+use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
@@ -560,18 +559,18 @@ where
 
 /// decode components of a masp note
 pub fn decode_component<K, F>(
-    (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
+    (addr, denom, epoch): (Address, MaspDenom, Epoch),
     val: i128,
     res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where
-    F: FnOnce(Address, Option<Key>, Epoch) -> K,
+    F: FnOnce(Address, Epoch) -> K,
     K: Eq + std::hash::Hash,
 {
     let decoded_change = token::Change::from_masp_denominated(val, denom)
         .expect("expected this to fit");
 
-    res.entry(mk_key(addr, sub, epoch))
+    res.entry(mk_key(addr, epoch))
         .and_modify(|val| *val += decoded_change)
         .or_insert(decoded_change);
 }
@@ -1194,20 +1193,10 @@ pub async fn build_ibc_transfer<
             .await?;
     // We cannot check the receiver
 
-    let token = token_exists_or_err(args.token, args.tx.force, client).await?;
+    let token = args.token;
 
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     check_balance_too_low_err(
         &token,
@@ -1224,11 +1213,6 @@ pub async fn build_ibc_transfer<
             .await
             .unwrap();
 
-    let denom = match sub_prefix {
-        // To parse IbcToken address, remove the address prefix
-        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
-        None => token.to_string(),
-    };
     let amount = args
         .amount
         .to_string_native()
@@ -1236,7 +1220,10 @@ pub async fn build_ibc_transfer<
         .next()
         .expect("invalid amount")
         .to_string();
-    let token = Coin { denom, amount };
+    let token = Coin {
+        denom: token.to_string(),
+        amount,
+    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
@@ -1296,7 +1283,7 @@ async fn add_asset_type<
     C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils,
 >(
-    asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
+    asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
     shielded: &mut ShieldedContext<U>,
     client: &C,
     asset_type: AssetType,
@@ -1324,7 +1311,7 @@ async fn used_asset_types<
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
-) -> Result<HashSet<(Address, Option<Key>, MaspDenom, Epoch)>, RpcError> {
+) -> Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -1383,37 +1370,18 @@ pub async fn build_transfer<
     source_exists_or_err(source.clone(), args.tx.force, client).await?;
     // Check that the target address exists on chain
     target_exists_or_err(target.clone(), args.tx.force, client).await?;
-    // Check that the token address exists on chain
-    token_exists_or_err(token.clone(), args.tx.force, client).await?;
     // Check source balance
-    let (sub_prefix, balance_key) = match &args.sub_prefix {
-        Some(ref sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
-    let validated_amount = validate_amount(
-        client,
-        args.amount,
-        &token,
-        &sub_prefix,
-        args.tx.force,
-    )
-    .await
-    .expect("expected to validate amount");
+    let validated_amount =
+        validate_amount(client, args.amount, &token, args.tx.force)
+            .await
+            .expect("expected to validate amount");
     let validate_fee = validate_amount(
         client,
         args.tx.fee_amount,
         &args.tx.fee_token,
-        // TODO: Currently multi-tokens cannot be used to pay fees
-        &None,
         args.tx.force,
     )
     .await
@@ -1521,7 +1489,6 @@ pub async fn build_transfer<
         source: source.clone(),
         target: target.clone(),
         token: token.clone(),
-        sub_prefix: sub_prefix.clone(),
         amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
@@ -1786,26 +1753,6 @@ where
     } else {
         Ok(addr)
     }
-}
-
-/// Returns the given token if the given address exists on chain
-/// otherwise returns an error, force forces the address through even
-/// if it isn't on chain
-pub async fn token_exists_or_err<C: crate::ledger::queries::Client + Sync>(
-    token: Address,
-    force: bool,
-    client: &C,
-) -> Result<Address, Error> {
-    let message =
-        format!("The token address {} doesn't exist on chain.", token);
-    address_exists_or_err(
-        token,
-        force,
-        client,
-        message,
-        Error::TokenDoesNotExist,
-    )
-    .await
 }
 
 /// Returns the given source address if the given address exists on chain

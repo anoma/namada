@@ -28,7 +28,7 @@ use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::key::{self, *};
-use crate::types::storage::{Epoch, Key};
+use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::token::MaspDenom;
 #[cfg(feature = "ferveo-tpke")]
@@ -671,7 +671,7 @@ pub struct MaspBuilder {
     pub target: crate::types::hash::Hash,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
-    pub asset_types: HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
+    pub asset_types: HashSet<(Address, MaspDenom, Epoch)>,
     /// Track how Info objects map to descriptors and outputs
     #[serde(
         serialize_with = "borsh_serde::<SaplingMetadataSerde, _>",
