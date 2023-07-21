@@ -11,7 +11,7 @@ use namada_core::types::storage::{
 };
 use thiserror::Error;
 
-use super::gas::MIN_STORAGE_GAS;
+use super::gas::STORAGE_ACCESS_GAS_PER_BYTE;
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
@@ -293,7 +293,7 @@ pub fn get_tx_code_hash(
         .get_section(tx.code_sechash())
         .and_then(Section::code_sec)
         .map(|x| x.code.hash());
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(hash)
 }
 
@@ -318,7 +318,7 @@ pub fn get_tx_index(
     gas_meter: &mut VpGasMeter,
     tx_index: &TxIndex,
 ) -> EnvResult<TxIndex> {
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(*tx_index)
 }
 
@@ -331,7 +331,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(storage.native_token.clone())
 }
 

@@ -21,14 +21,16 @@ const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 
-/// The minimum gas cost for accessing the storage
-pub const MIN_STORAGE_GAS: u64 = 1;
-/// The gas cost for verifying the signature of a transaction
-pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
-/// The gas cost for validating wasm vp code
-pub const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
-/// The cost for writing a byte to storage
+/// The cost of accessing the storage, per byte
+pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 = 1;
+/// The cost of writing to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
+/// The cost of verifying the signature of a transaction
+pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
+/// The cost of validating wasm vp code
+pub const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
+/// The cost of accessing the WASM memory, per byte
+pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -57,11 +59,11 @@ pub trait GasMetering {
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
         tracing::error!(
             "Adding load from storage cost: {}",
-            bytes_len * MIN_STORAGE_GAS
+            bytes_len * STORAGE_ACCESS_GAS_PER_BYTE
         ); //FIXME: remove
         self.consume(
             bytes_len
-                .checked_mul(MIN_STORAGE_GAS)
+                .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
                 .ok_or(Error::GasOverflow)?,
         )
     }

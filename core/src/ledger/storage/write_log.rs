@@ -7,7 +7,9 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
-use crate::ledger::gas::STORAGE_WRITE_GAS_PER_BYTE;
+use crate::ledger::gas::{
+    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+};
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::types::address::{Address, EstablishedAddressGen};
 use crate::types::hash::Hash;
@@ -136,9 +138,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as _)
+                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as _),
+            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -164,9 +166,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as _)
+                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as _),
+            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -267,7 +269,8 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
-        Ok((gas as _, size_diff))
+        // Temp writes are not propagated to db so just charge the cost of accessing storage
+        Ok((gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
@@ -295,7 +298,7 @@ impl WriteLog {
             None => 0,
         };
         let gas = key.len() + size_diff as usize;
-        Ok((gas as _, -size_diff))
+        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
 
     /// Delete a key and its value.
@@ -334,7 +337,8 @@ impl WriteLog {
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
         let key = storage::Key::validity_predicate(&addr);
-        let gas = (key.len() + vp_code_hash.len()) as _;
+        let gas = (key.len() + vp_code_hash.len()) as u64
+            * STORAGE_WRITE_GAS_PER_BYTE;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)
@@ -347,7 +351,7 @@ impl WriteLog {
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
         self.ibc_events.insert(event);
-        len as _
+        len as u64 * STORAGE_ACCESS_GAS_PER_BYTE
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
@@ -584,7 +588,7 @@ mod tests {
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // insert a value
@@ -617,12 +621,15 @@ mod tests {
 
         // delete the key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // read the deleted key
@@ -631,7 +638,7 @@ mod tests {
             StorageModification::Delete => {}
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
@@ -653,7 +660,10 @@ mod tests {
         let vp_hash = Hash::sha256(init_vp);
         let (addr, gas) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
-        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
+        assert_eq!(
+            gas,
+            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
 
         // read
         let (value, gas) = write_log.read(&vp_key);
@@ -663,7 +673,10 @@ mod tests {
             }
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
+        assert_eq!(
+            gas,
+            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE
+        );
 
         // get all
         let (_changed_keys, init_accounts) = write_log.get_partitioned_keys();

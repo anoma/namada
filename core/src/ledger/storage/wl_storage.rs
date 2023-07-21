@@ -283,7 +283,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::MIN_STORAGE_GAS,
+        gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -308,7 +308,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::MIN_STORAGE_GAS,
+        gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 

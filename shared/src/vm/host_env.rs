@@ -2,6 +2,7 @@
 //! within a virtual machine.
 use std::collections::BTreeSet;
 use std::convert::TryInto;
+use std::f64::MIN;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -15,7 +16,7 @@ use super::wasm::TxCache;
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
 use crate::ledger::gas::{
-    self, VpGasMeter, MIN_STORAGE_GAS, WASM_VALIDATION_GAS_PER_BYTE,
+    self, VpGasMeter, STORAGE_ACCESS_GAS_PER_BYTE, WASM_VALIDATION_GAS_PER_BYTE,
 };
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
@@ -851,7 +852,6 @@ where
         .write(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
-    // TODO: charge the size diff
 }
 
 /// Temporary storage write function exposed to the wasm VM Tx environment. The
@@ -892,7 +892,6 @@ where
         .write_temp(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
-    // TODO: charge the size diff
 }
 
 fn check_address_existence<MEM, DB, H, CA>(
@@ -968,7 +967,6 @@ where
         .delete(&key)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
-    // TODO: charge the size diff
 }
 
 /// Emitting an IBC event function exposed to the wasm VM Tx environment.
@@ -1368,7 +1366,8 @@ where
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
-    tx_add_gas(env, addr_len)
+    // This is not a storage write, use the same multiplier used for a storage read
+    tx_add_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
@@ -1408,7 +1407,6 @@ where
         .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
     tx_add_gas(env, gas)
-    // TODO: charge the size diff
 }
 
 /// Initialize a new account established address.
@@ -1501,7 +1499,7 @@ where
     CA: WasmCacheAccess,
 {
     let tx_index = unsafe { env.ctx.tx_index.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
+    tx_add_gas(env, crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(tx_index.0)
 }
 
@@ -1576,7 +1574,7 @@ where
     CA: WasmCacheAccess,
 {
     let storage = unsafe { env.ctx.storage.get() };
-    tx_add_gas(env, MIN_STORAGE_GAS)?;
+    tx_add_gas(env, STORAGE_ACCESS_GAS_PER_BYTE)?;
     let native_token = storage.native_token.clone();
     let native_token_string = native_token.encode();
     let gas = env
@@ -1792,6 +1790,7 @@ where
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     Ok(
+        // TODO: once the runtime gas meter is implemented we need to benchmark this funcion and charge the gas here. For the moment, the cost of this is included in the benchmark of the masp vp
         HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
             .to_i64(),
     )
