@@ -19,7 +19,7 @@ pub fn transfer(
     shielded_hash: &Option<Hash>,
     shielded: &Option<Transaction>,
 ) -> TxResult {
-    if amount.amount != Amount::default() {
+    if amount.amount != Amount::default() && src != dest {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = ctx.read(&src_key)?;
@@ -30,10 +30,8 @@ pub fn transfer(
         src_bal.spend(&amount.amount);
         let mut dest_bal: Amount = ctx.read(&dest_key)?.unwrap_or_default();
         dest_bal.receive(&amount.amount);
-        if src != dest {
-            ctx.write(&src_key, src_bal)?;
-            ctx.write(&dest_key, dest_bal)?;
-        }
+        ctx.write(&src_key, src_bal)?;
+        ctx.write(&dest_key, dest_bal)?;
     }
 
     // If this transaction has a shielded component, then handle it
