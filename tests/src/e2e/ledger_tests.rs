@@ -428,7 +428,6 @@ fn ledger_txs_and_queries() -> Result<()> {
         source: find_address(&test, BERTHA).unwrap(),
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
-        sub_prefix: None,
         amount: token::DenominatedAmount {
             amount: token::Amount::native_whole(10),
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1246,7 +1245,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1269,7 +1268,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep1.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1313,7 +1312,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1336,7 +1335,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep2.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1443,7 +1442,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
+    let amt = (amt10 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1467,8 +1466,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
+    let amt = ((amt20 * masp_rewards[&btc()]).0 * (ep4.0 - ep0.0))
+        + ((amt10 * masp_rewards[&eth()]).0 * (ep4.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1540,7 +1539,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let amt = (amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1565,8 +1564,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep5.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let amt = ((amt20 * masp_rewards[&btc()]).0 * (ep5.0 - ep0.0))
+        + ((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1636,7 +1635,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1660,8 +1659,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let amt = ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1687,7 +1686,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
+    let amt = (amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1710,7 +1709,7 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
+    let amt = (amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0);
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1734,8 +1733,8 @@ fn masp_incentives() -> Result<()> {
         ],
         Some(60)
     )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
+    let amt = ((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
+        + ((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0));
     let denominated = DenominatedAmount {
         amount: amt,
         denom: NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -1760,7 +1759,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0))
+            &((amt10 * masp_rewards[&eth()]).0 * (ep5.0 - ep3.0))
                 .to_string_native(),
             "--signer",
             BERTHA,
@@ -1790,7 +1789,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            &((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
+            &((amt20 * masp_rewards[&btc()]).0 * (ep6.0 - ep0.0))
                 .to_string_native(),
             "--signer",
             ALBERT,

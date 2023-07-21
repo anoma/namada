@@ -8,10 +8,11 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
-use crate::ledger::ibc::vp::{Ibc, IbcToken};
+use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::governance::GovernanceVp;
+use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
@@ -58,7 +59,7 @@ pub enum Error {
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
     #[error("IBC Token native VP: {0}")]
-    IbcTokenNativeVpError(crate::ledger::ibc::vp::IbcTokenError),
+    MultitokenNativeVpError(crate::ledger::native_vp::multitoken::Error),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(crate::ledger::native_vp::governance::Error),
     #[error("SlashFund native VP error: {0}")]
@@ -550,16 +551,12 @@ where
                             gas_meter = slash_fund.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::IbcEscrow
-                        | InternalAddress::IbcBurn
-                        | InternalAddress::IbcMint => {
-                            // validate the transfer
-                            let ibc_token = IbcToken { ctx };
-                            let result = ibc_token
+                        InternalAddress::Multitoken => {
+                            let multitoken = MultitokenVp { ctx };
+                            let result = multitoken
                                 .validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::IbcTokenNativeVpError);
-                            gas_meter = ibc_token.ctx.gas_meter.into_inner();
+                                .map_err(Error::MultitokenNativeVpError);
+                            gas_meter = multitoken.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::EthBridge => {
@@ -587,6 +584,14 @@ where
                             gas_meter =
                                 replay_protection_vp.ctx.gas_meter.into_inner();
                             result
+                        }
+                        InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_) => {
+                            // The address should be a part of a multitoken key
+                            gas_meter = ctx.gas_meter.into_inner();
+                            Ok(verifiers.contains(&Address::Internal(
+                                InternalAddress::Multitoken,
+                            )))
                         }
                     };
 

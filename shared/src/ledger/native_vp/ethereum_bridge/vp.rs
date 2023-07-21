@@ -13,7 +13,6 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::storage::Key;
 use namada_core::types::token::{balance_key, Amount, Change};
 
-use crate::ledger::native_vp::ethereum_bridge::authorize;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
@@ -94,7 +93,7 @@ where
 #[derive(Debug)]
 enum CheckType {
     Escrow,
-    Erc20Transfer(wrapped_erc20s::Key, wrapped_erc20s::Key),
+    Erc20Transfer,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -138,35 +137,14 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        let (key_a, key_b) = match determine_check_type(
+        match determine_check_type(
             &self.ctx.storage.native_token,
             keys_changed,
         )? {
-            Some(CheckType::Erc20Transfer(key_a, key_b)) => (key_a, key_b),
-            Some(CheckType::Escrow) => return self.check_escrow(verifiers),
-            None => return Ok(false),
-        };
-        let (sender, receiver, _) =
-            match check_balance_changes(&self.ctx, key_a, key_b)? {
-                Some(sender) => sender,
-                None => return Ok(false),
-            };
-        if authorize::is_authorized(verifiers, &sender, &receiver) {
-            tracing::info!(
-                ?verifiers,
-                ?sender,
-                ?receiver,
-                "Ethereum Bridge VP authorized transfer"
-            );
-            Ok(true)
-        } else {
-            tracing::info!(
-                ?verifiers,
-                ?sender,
-                ?receiver,
-                "Ethereum Bridge VP rejected unauthorized transfer"
-            );
-            Ok(false)
+            // Multitoken VP checks the balance changes for the ERC20 transfer
+            Some(CheckType::Erc20Transfer) => Ok(true),
+            Some(CheckType::Escrow) => self.check_escrow(verifiers),
+            None => Ok(false),
         }
     }
 }
@@ -245,155 +223,93 @@ fn determine_check_type(
         );
         return Ok(None);
     }
-    Ok(Some(CheckType::Erc20Transfer(key_a, key_b)))
+    Ok(Some(CheckType::Erc20Transfer))
 }
 
-/// Checks that the balances at both `key_a` and `key_b` have changed by some
-/// amount, and that the changes balance each other out. If the balance changes
-/// are invalid, the reason is logged and a `None` is returned. Otherwise,
-/// return:
-/// - the `Address` of the sender i.e. the owner of the balance which is
-///   decreasing
-/// - the `Address` of the receiver i.e. the owner of the balance which is
-///   increasing
-/// - the `Amount` of the transfer i.e. by how much the sender's balance
-///   decreased, or equivalently by how much the receiver's balance increased
+/// Checks that the balances at both `sender` and `receiver` have changed by
+/// some amount, and that the changes balance each other out. If the balance
+/// changes are invalid, the reason is logged and a `None` is returned.
+/// Otherwise, return the `Amount` of the transfer i.e. by how much the sender's
+/// balance decreased, or equivalently by how much the receiver's balance
+/// increased
 pub(super) fn check_balance_changes(
     reader: impl StorageReader,
-    key_a: wrapped_erc20s::Key,
-    key_b: wrapped_erc20s::Key,
-) -> Result<Option<(Address, Address, Amount)>> {
-    let (balance_a, balance_b) =
-        match (key_a.suffix.clone(), key_b.suffix.clone()) {
-            (
-                wrapped_erc20s::KeyType::Balance { .. },
-                wrapped_erc20s::KeyType::Balance { .. },
-            ) => (Key::from(&key_a), Key::from(&key_b)),
-            (
-                wrapped_erc20s::KeyType::Balance { .. },
-                wrapped_erc20s::KeyType::Supply,
-            )
-            | (
-                wrapped_erc20s::KeyType::Supply,
-                wrapped_erc20s::KeyType::Balance { .. },
-            ) => {
-                tracing::debug!(
-                    ?key_a,
-                    ?key_b,
-                    "Rejecting transaction that is attempting to change a \
-                     supply key"
-                );
-                return Ok(None);
-            }
-            (
-                wrapped_erc20s::KeyType::Supply,
-                wrapped_erc20s::KeyType::Supply,
-            ) => {
-                // in theory, this should be unreachable!() as we would have
-                // already rejected if both supply keys were for
-                // the same asset
-                tracing::debug!(
-                    ?key_a,
-                    ?key_b,
-                    "Rejecting transaction that is attempting to change two \
-                     supply keys"
-                );
-                return Ok(None);
-            }
-        };
-    let balance_a_pre = reader
-        .read_pre_value::<Amount>(&balance_a)?
+    sender: &Key,
+    receiver: &Key,
+) -> Result<Option<Amount>> {
+    let sender_balance_pre = reader
+        .read_pre_value::<Amount>(sender)?
         .unwrap_or_default()
         .change();
-    let balance_a_post = match reader.read_post_value::<Amount>(&balance_a)? {
+    let sender_balance_post = match reader.read_post_value::<Amount>(sender)? {
         Some(value) => value,
         None => {
-            tracing::debug!(
-                ?balance_a,
-                "Rejecting transaction as could not read_post balance key"
-            );
-            return Ok(None);
+            return Err(eyre!(
+                "Rejecting transaction as could not read_post balance key {}",
+                sender,
+            ));
         }
     }
     .change();
-    let balance_b_pre = reader
-        .read_pre_value::<Amount>(&balance_b)?
+    let receiver_balance_pre = reader
+        .read_pre_value::<Amount>(receiver)?
         .unwrap_or_default()
         .change();
-    let balance_b_post = match reader.read_post_value::<Amount>(&balance_b)? {
+    let receiver_balance_post = match reader
+        .read_post_value::<Amount>(receiver)?
+    {
         Some(value) => value,
         None => {
-            tracing::debug!(
-                ?balance_b,
-                "Rejecting transaction as could not read_post balance key"
-            );
-            return Ok(None);
+            return Err(eyre!(
+                "Rejecting transaction as could not read_post balance key {}",
+                receiver,
+            ));
         }
     }
     .change();
 
-    let balance_a_delta = calculate_delta(balance_a_pre, balance_a_post)?;
-    let balance_b_delta = calculate_delta(balance_b_pre, balance_b_post)?;
-    if balance_a_delta != -balance_b_delta {
+    let sender_balance_delta =
+        calculate_delta(sender_balance_pre, sender_balance_post)?;
+    let receiver_balance_delta =
+        calculate_delta(receiver_balance_pre, receiver_balance_post)?;
+    if receiver_balance_delta != -sender_balance_delta {
         tracing::debug!(
-            ?balance_a_pre,
-            ?balance_b_pre,
-            ?balance_a_post,
-            ?balance_b_post,
-            ?balance_a_delta,
-            ?balance_b_delta,
+            ?sender_balance_pre,
+            ?receiver_balance_pre,
+            ?sender_balance_post,
+            ?receiver_balance_post,
+            ?sender_balance_delta,
+            ?receiver_balance_delta,
             "Rejecting transaction as balance changes do not match"
         );
         return Ok(None);
     }
-    if balance_a_delta.is_zero() {
-        assert_eq!(balance_b_delta, Change::zero());
-        tracing::debug!("Rejecting transaction as no balance change");
+    if sender_balance_delta.is_zero() || sender_balance_delta > Change::zero() {
+        assert!(
+            receiver_balance_delta.is_zero()
+                || receiver_balance_delta < Change::zero()
+        );
+        tracing::debug!(
+            "Rejecting transaction as no balance change or invalid change"
+        );
         return Ok(None);
     }
-    if balance_a_post < Change::zero() {
+    if sender_balance_post < Change::zero() {
         tracing::debug!(
-            ?balance_a_post,
+            ?sender_balance_post,
             "Rejecting transaction as balance is negative"
         );
         return Ok(None);
     }
-    if balance_b_post < Change::zero() {
+    if receiver_balance_post < Change::zero() {
         tracing::debug!(
-            ?balance_b_post,
+            ?receiver_balance_post,
             "Rejecting transaction as balance is negative"
         );
         return Ok(None);
     }
 
-    if balance_a_delta < Change::zero() {
-        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_a.suffix
-        {
-            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
-                key_b.suffix else { unreachable!() };
-            Ok(Some((
-                sender,
-                receiver,
-                Amount::from_change(balance_b_delta),
-            )))
-        } else {
-            unreachable!()
-        }
-    } else {
-        assert!(balance_b_delta < Change::zero());
-        if let wrapped_erc20s::KeyType::Balance { owner: sender } = key_b.suffix
-        {
-            let wrapped_erc20s::KeyType::Balance { owner: receiver } =
-                key_a.suffix else { unreachable!() };
-            Ok(Some((
-                sender,
-                receiver,
-                Amount::from_change(balance_a_delta),
-            )))
-        } else {
-            unreachable!()
-        }
-    }
+    Ok(Some(Amount::from_change(receiver_balance_delta)))
 }
 
 /// Return the delta between `balance_pre` and `balance_post`, erroring if there
@@ -437,6 +353,7 @@ mod tests {
     use crate::types::ethereum_events;
     use crate::types::ethereum_events::EthAddress;
     use crate::types::storage::TxIndex;
+    use crate::types::token::minted_balance_key;
     use crate::types::transaction::TxType;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
@@ -563,10 +480,9 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![
                 arbitrary_key(),
-                wrapped_erc20s::Keys::from(
+                minted_balance_key(&wrapped_erc20s::token(
                     &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .supply(),
+                )),
             ]);
 
             let result = determine_check_type(&nam(), &keys_changed);
@@ -577,10 +493,10 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![
                 arbitrary_key(),
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
@@ -596,17 +512,17 @@ mod tests {
     fn test_rejects_if_multitoken_keys_for_different_assets() {
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_A_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
-                wrapped_erc20s::Keys::from(
-                    &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
-                )
-                .balance(
+                balance_key(
+                    &wrapped_erc20s::token(
+                        &ethereum_events::testing::USDC_ERC20_ETH_ADDRESS,
+                    ),
                     &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),
@@ -623,8 +539,9 @@ mod tests {
         let asset = &ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
         {
             let keys_changed = BTreeSet::from_iter(vec![
-                wrapped_erc20s::Keys::from(asset).supply(),
-                wrapped_erc20s::Keys::from(asset).balance(
+                minted_balance_key(&wrapped_erc20s::token(asset)),
+                balance_key(
+                    &wrapped_erc20s::token(asset),
                     &Address::decode(ARBITRARY_OWNER_B_ADDRESS)
                         .expect("Couldn't set up test"),
                 ),

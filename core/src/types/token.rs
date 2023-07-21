@@ -1,6 +1,6 @@
 //! A basic fungible token
 
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
@@ -15,7 +15,9 @@ use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{self, StorageRead};
-use crate::types::address::{masp, Address, DecodeError as AddressError};
+use crate::types::address::{
+    masp, Address, DecodeError as AddressError, InternalAddress,
+};
 use crate::types::dec::Dec;
 use crate::types::hash::Hash;
 use crate::types::storage;
@@ -199,15 +201,13 @@ impl Amount {
     pub fn denominated(
         &self,
         token: &Address,
-        sub_prefix: Option<&Key>,
         storage: &impl StorageRead,
     ) -> storage_api::Result<DenominatedAmount> {
-        let denom =
-            read_denom(storage, token, sub_prefix)?.ok_or_else(|| {
-                storage_api::Error::SimpleMessage(
-                    "No denomination found in storage for the given token",
-                )
-            })?;
+        let denom = read_denom(storage, token)?.ok_or_else(|| {
+            storage_api::Error::SimpleMessage(
+                "No denomination found in storage for the given token",
+            )
+        })?;
         Ok(DenominatedAmount {
             amount: *self,
             denom,
@@ -767,6 +767,10 @@ impl TryFrom<IbcAmount> for Amount {
 pub const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment for a denomination key
 pub const DENOM_STORAGE_KEY: &str = "denomination";
+/// Key segment for multitoken minter
+pub const MINTER_STORAGE_KEY: &str = "minter";
+/// Key segment for minted balance
+pub const MINTED_STORAGE_KEY: &str = "minted";
 /// Key segment for head shielded transaction pointer keys
 pub const HEAD_TX_KEY: &str = "head-tx";
 /// Key segment prefix for shielded transaction key
@@ -775,91 +779,41 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
-const TOTAL_SUPPLY_STORAGE_KEY: &str = "total_supply";
-
-/// A fully qualified (multi-) token address.
-#[derive(
-    Clone,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Debug,
-    Hash,
-    BorshSerialize,
-    BorshDeserialize,
-)]
-pub struct TokenAddress {
-    /// The address of the (multi-) token
-    pub address: Address,
-    /// If it is a mutli-token, this indicates the sub-token.
-    pub sub_prefix: Option<Key>,
-}
-
-impl TokenAddress {
-    /// A function for displaying a [`TokenAddress`]. Takes a
-    /// human readable name of the token as input.
-    pub fn format_with_alias(&self, alias: &str) -> String {
-        format!(
-            "{}{}",
-            alias,
-            self.sub_prefix
-                .as_ref()
-                .map(|k| format!("/{}", k))
-                .unwrap_or_default()
-        )
-    }
-}
-
-impl Display for TokenAddress {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let formatted = format!(
-            "{}{}",
-            self.address,
-            self.sub_prefix
-                .as_ref()
-                .map(|k| format!("/{}", k))
-                .unwrap_or_default()
-        );
-        f.write_str(&formatted)
-    }
-}
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
-    Key::from(token_addr.to_db_key())
-        .push(&BALANCE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+    balance_prefix(token_addr)
         .push(&owner.to_db_key())
         .expect("Cannot obtain a storage key")
 }
 
 /// Obtain a storage key prefix for all users' balances.
 pub fn balance_prefix(token_addr: &Address) -> Key {
-    Key::from(token_addr.to_db_key())
+    Key::from(Address::Internal(InternalAddress::Multitoken).to_db_key())
+        .push(&token_addr.to_db_key())
+        .expect("Cannot obtain a storage key")
         .push(&BALANCE_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Obtain a storage key prefix for multitoken balances.
-pub fn multitoken_balance_prefix(
-    token_addr: &Address,
-    sub_prefix: &Key,
-) -> Key {
-    Key::from(token_addr.to_db_key()).join(sub_prefix)
+/// Obtain a storage key for the multitoken minter.
+pub fn minter_key(token_addr: &Address) -> Key {
+    Key::from(Address::Internal(InternalAddress::Multitoken).to_db_key())
+        .push(&token_addr.to_db_key())
+        .expect("Cannot obtain a storage key")
+        .push(&MINTER_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }
 
-/// Obtain a storage key for user's multitoken balance.
-pub fn multitoken_balance_key(prefix: &Key, owner: &Address) -> Key {
-    prefix
-        .push(&BALANCE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&owner.to_db_key())
+/// Obtain a storage key for the minted multitoken balance.
+pub fn minted_balance_key(token_addr: &Address) -> Key {
+    balance_prefix(token_addr)
+        .push(&MINTED_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
 /// Check if the given storage key is balance key for the given token. If it is,
-/// returns the owner.
+/// returns the owner. For minted balances, use [`is_any_minted_balance_key()`].
 pub fn is_balance_key<'a>(
     token_addr: &Address,
     key: &'a Key,
@@ -867,9 +821,15 @@ pub fn is_balance_key<'a>(
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
+            DbKeySeg::AddressSeg(token),
+            DbKeySeg::StringSeg(balance),
             DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY && addr == token_addr => Some(owner),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && token == token_addr
+            && balance == BALANCE_STORAGE_KEY =>
+        {
+            Some(owner)
+        }
         _ => None,
     }
 }
@@ -879,25 +839,24 @@ pub fn is_balance_key<'a>(
 pub fn is_any_token_balance_key(key: &Key) -> Option<[&Address; 2]> {
     match &key.segments[..] {
         [
+            DbKeySeg::AddressSeg(addr),
             DbKeySeg::AddressSeg(token),
-            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(balance),
             DbKeySeg::AddressSeg(owner),
-        ] if key == BALANCE_STORAGE_KEY => Some([token, owner]),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && balance == BALANCE_STORAGE_KEY =>
+        {
+            Some([token, owner])
+        }
         _ => None,
     }
 }
 
 /// Obtain a storage key denomination of a token.
-pub fn denom_key(token_addr: &Address, sub_prefix: Option<&Key>) -> Key {
-    match sub_prefix {
-        Some(sub) => Key::from(token_addr.to_db_key())
-            .join(sub)
-            .push(&DENOM_STORAGE_KEY.to_owned())
-            .expect("Cannot obtain a storage key"),
-        None => Key::from(token_addr.to_db_key())
-            .push(&DENOM_STORAGE_KEY.to_owned())
-            .expect("Cannot obtain a storage key"),
-    }
+pub fn denom_key(token_addr: &Address) -> Key {
+    Key::from(token_addr.to_db_key())
+        .push(&DENOM_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Check if the given storage key is a denomination key for the given token.
@@ -920,71 +879,37 @@ pub fn is_masp_key(key: &Key) -> bool {
                     || key.starts_with(PIN_KEY_PREFIX)))
 }
 
-/// Storage key for total supply of a token
-pub fn total_supply_key(token_address: &Address) -> Key {
-    Key::from(token_address.to_db_key())
-        .push(&TOTAL_SUPPLY_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Is storage key for total supply of a specific token?
-pub fn is_total_supply_key(key: &Key, token_address: &Address) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == token_address && key == TOTAL_SUPPLY_STORAGE_KEY)
-}
-
-/// Check if the given storage key is multitoken balance key for the given
-/// token. If it is, returns the sub prefix and the owner.
-pub fn is_multitoken_balance_key<'a>(
-    token_addr: &Address,
-    key: &'a Key,
-) -> Option<(Key, &'a Address)> {
-    match key.segments.first() {
-        Some(DbKeySeg::AddressSeg(addr)) if addr == token_addr => {
-            multitoken_balance_owner(key)
+/// Check if the given storage key is for a minter of a unspecified token.
+/// If it is, returns the token.
+pub fn is_any_minter_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::AddressSeg(token),
+            DbKeySeg::StringSeg(minter),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && minter == MINTER_STORAGE_KEY =>
+        {
+            Some(token)
         }
         _ => None,
     }
 }
 
-/// Check if the given storage key is multitoken balance key for unspecified
-/// token. If it is, returns the sub prefix and the token and owner addresses.
-pub fn is_any_multitoken_balance_key(
-    key: &Key,
-) -> Option<(Key, [&Address; 2])> {
-    match key.segments.first() {
-        Some(DbKeySeg::AddressSeg(token)) => multitoken_balance_owner(key)
-            .map(|(sub, owner)| (sub, [token, owner])),
-        _ => None,
-    }
-}
-
-/// Check if the given storage key is token or multitoken balance key for
-/// unspecified token. If it is, returns the token and owner addresses.
-pub fn is_any_token_or_multitoken_balance_key(
-    key: &Key,
-) -> Option<[&Address; 2]> {
-    is_any_multitoken_balance_key(key)
-        .map(|a| a.1)
-        .or_else(|| is_any_token_balance_key(key))
-}
-
-fn multitoken_balance_owner(key: &Key) -> Option<(Key, &Address)> {
-    let len = key.segments.len();
-    if len < 4 {
-        // the key of a multitoken should have 1 or more segments other than
-        // token, balance, owner
-        return None;
-    }
+/// Check if the given storage key is for total supply of a unspecified token.
+/// If it is, returns the token.
+pub fn is_any_minted_balance_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
         [
-            ..,
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::AddressSeg(token),
             DbKeySeg::StringSeg(balance),
-            DbKeySeg::AddressSeg(owner),
-        ] if balance == BALANCE_STORAGE_KEY => {
-            let sub_prefix = Key {
-                segments: key.segments[1..(len - 2)].to_vec(),
-            };
-            Some((sub_prefix, owner))
+            DbKeySeg::StringSeg(owner),
+        ] if *addr == Address::Internal(InternalAddress::Multitoken)
+            && balance == BALANCE_STORAGE_KEY
+            && owner == MINTED_STORAGE_KEY =>
+        {
+            Some(token)
         }
         _ => None,
     }
@@ -1011,8 +936,6 @@ pub struct Transfer {
     pub target: Address,
     /// Token's address
     pub token: Address,
-    /// Source token's sub prefix
-    pub sub_prefix: Option<Key>,
     /// The amount of tokens
     pub amount: DenominatedAmount,
     /// The unused storage location at which to place TxId

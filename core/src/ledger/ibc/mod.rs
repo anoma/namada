@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
+use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::storage::{IbcStorageContext, ProofSpec};
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
@@ -140,7 +141,7 @@ where
         }
     }
 
-    /// Restore the denom when it is hashed, i.e. the denom is `ibc/{hash}`.
+    /// Restore the denom when it is hashed
     fn restore_denom(&self, msg: MsgTransfer) -> Result<MsgTransfer, Error> {
         let mut msg = msg;
         // lookup the original denom with the IBC token hash
@@ -151,7 +152,7 @@ where
         {
             let denom_key = storage::ibc_denom_key(token_hash);
             let denom = match self.ctx.borrow().read(&denom_key) {
-                Ok(Some(v)) => String::from_utf8(v).map_err(|e| {
+                Ok(Some(v)) => String::try_from_slice(&v[..]).map_err(|e| {
                     Error::Denom(format!(
                         "Decoding the denom string failed: {}",
                         e

@@ -13,11 +13,10 @@ use ripemd::{Digest, Ripemd160};
 fn asset_type_from_epoched_address(
     epoch: Epoch,
     token: &Address,
-    sub_prefix: String,
     denom: token::MaspDenom,
 ) -> AssetType {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, sub_prefix, denom, epoch.0)
+    let token_bytes = (token, denom, epoch.0)
         .try_to_vec()
         .expect("token should serialize");
     // Generate the unique asset identifier from the unique token address
@@ -63,19 +62,10 @@ fn valid_transfer_amount(
 fn convert_amount(
     epoch: Epoch,
     token: &Address,
-    sub_prefix: &Option<storage::Key>,
     val: token::Amount,
     denom: token::MaspDenom,
 ) -> (AssetType, Amount) {
-    let asset_type = asset_type_from_epoched_address(
-        epoch,
-        token,
-        sub_prefix
-            .as_ref()
-            .map(|k| k.to_string())
-            .unwrap_or_default(),
-        denom,
-    );
+    let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
     let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
         .expect("invalid value or asset type for amount");
@@ -127,7 +117,6 @@ fn validate_tx(
                 let (_transp_asset, transp_amt) = convert_amount(
                     ctx.get_block_epoch().unwrap(),
                     &transfer.token,
-                    &transfer.sub_prefix,
                     transfer.amount.into(),
                     denom,
                 );
@@ -191,11 +180,6 @@ fn validate_tx(
                     asset_type_from_epoched_address(
                         ctx.get_block_epoch().unwrap(),
                         &transfer.token,
-                        transfer
-                            .sub_prefix
-                            .as_ref()
-                            .map(|k| k.to_string())
-                            .unwrap_or_default(),
                         denom,
                     );
 
@@ -215,7 +199,6 @@ fn validate_tx(
                 let (_transp_asset, transp_amt) = convert_amount(
                     ctx.get_block_epoch().unwrap(),
                     &transfer.token,
-                    &transfer.sub_prefix,
                     transfer.amount.amount,
                     denom,
                 );

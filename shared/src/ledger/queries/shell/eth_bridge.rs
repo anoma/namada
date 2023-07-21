@@ -17,7 +17,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
-use namada_core::types::token::Amount;
+use namada_core::types::token::{minted_balance_key, Amount};
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -123,13 +123,12 @@ where
             "The Ethereum bridge storage is not initialized",
         ));
     };
-    if asset == native_erc20 {
-        return Err(storage_api::Error::SimpleMessage(
-            "Wrapped NAM's supply is not kept track of",
-        ));
-    }
-    let keys: wrapped_erc20s::Keys = (&asset).into();
-    ctx.wl_storage.read(&keys.supply())
+    let token = if asset == native_erc20 {
+        ctx.wl_storage.storage.native_token.clone()
+    } else {
+        wrapped_erc20s::token(&asset)
+    };
+    ctx.wl_storage.read(&minted_balance_key(&token))
 }
 
 /// Helper function to read a smart contract from storage.
@@ -1365,14 +1364,25 @@ mod test_ethbridge_router {
         assert!(resp.is_err());
     }
 
-    /// Test that reading the wrapped NAM supply fails.
+    /// Test reading the wrapped NAM supply
     #[tokio::test]
-    async fn test_read_wnam_supply_fails() {
+    async fn test_read_wnam_supply() {
         let mut client = TestClient::new(RPC);
         assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
 
         // initialize storage
         test_utils::init_default_storage(&mut client.wl_storage);
+
+        let native_erc20 =
+            read_native_erc20_address(&client.wl_storage).expect("Test failed");
+
+        // write tokens to storage
+        let amount = Amount::native_whole(12345);
+        let token = &client.wl_storage.storage.native_token;
+        client
+            .wl_storage
+            .write(&minted_balance_key(token), amount)
+            .expect("Test failed");
 
         // commit the changes
         client
@@ -1382,21 +1392,12 @@ mod test_ethbridge_router {
             .expect("Test failed");
 
         // check that reading wrapped NAM fails
-        let native_erc20 =
-            read_native_erc20_address(&client.wl_storage).expect("Test failed");
         let result = RPC
             .shell()
             .eth_bridge()
             .read_erc20_supply(&client, &native_erc20)
             .await;
-        let Err(err) = result else {
-            panic!("Test failed");
-        };
-
-        assert_eq!(
-            err.to_string(),
-            "Wrapped NAM's supply is not kept track of"
-        );
+        assert_matches!(result, Ok(Some(a)) if a == amount);
     }
 
     /// Test reading the supply of an ERC20 token.
@@ -1420,10 +1421,10 @@ mod test_ethbridge_router {
 
         // write tokens to storage
         let amount = Amount::native_whole(12345);
-        let keys: wrapped_erc20s::Keys = (&ERC20_TOKEN).into();
+        let token = wrapped_erc20s::token(&ERC20_TOKEN);
         client
             .wl_storage
-            .write(&keys.supply(), amount)
+            .write(&minted_balance_key(&token), amount)
             .expect("Test failed");
 
         // check that the supply was updated
