@@ -6,8 +6,11 @@ use std::f64::MIN;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::gas::{GasMetering, TxGasMeter};
+use namada_core::ledger::gas::{
+    GasMetering, TxGasMeter, VERIFY_TX_SIG_GAS_COST,
+};
 use namada_core::types::internal::KeyVal;
+use namada_core::types::key::common;
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -1761,6 +1764,48 @@ where
     let storage = unsafe { env.ctx.storage.get() };
     let epoch = vp_host_fns::get_block_epoch(gas_meter, storage)?;
     Ok(epoch.0)
+}
+
+/// Verify a transaction signature
+/// TODO: this is just a warkaround to track gas for multiple singature verifications. When the runtime gas meter is implemented this funcion can be removed
+pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    pk_ptr: u64,
+    pk_len: u64,
+    hash_ptr: u64,
+    hash_len: u64,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let (pk, gas) = env
+        .memory
+        .read_bytes(pk_ptr, pk_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_host_fns::add_gas(gas_meter, gas)?;
+
+    let pk = common::PublicKey::try_from_slice(&pk)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (hash, gas) = env
+        .memory
+        .read_bytes(hash_ptr, hash_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let hash = namada_core::types::hash::Hash::try_from_slice(&hash)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
+    let tx = unsafe { env.ctx.tx.get() };
+
+    Ok(HostEnvResult::from(tx.verify_signature(&pk, &hash).is_ok()).to_i64())
 }
 
 /// Verify a ShieldedTransaction.

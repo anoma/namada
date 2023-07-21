@@ -28,8 +28,8 @@ fn validate_tx(
     let valid_sig = Lazy::new(|| {
         let pk = key::get(ctx, &addr);
         match pk {
-            Ok(Some(pk)) => tx_data
-                .verify_signature(&pk, tx_data.data_sechash())
+            Ok(Some(pk)) => ctx
+                .verify_tx_section_signature(&pk, tx_data.data_sechash())
                 .is_ok(),
             _ => false,
         }
@@ -261,10 +261,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 
     prop_compose! {

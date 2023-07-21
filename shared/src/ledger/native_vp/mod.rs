@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 pub use namada_core::ledger::vp_env::VpEnv;
+use namada_core::types::key::common::PublicKey;
 
 use super::storage_api::{self, ResultExt, StorageRead};
 use super::vp_host_fns;
@@ -530,6 +531,14 @@ where
                  `eval` function."
             )
         }
+    }
+
+    fn verify_tx_section_signature(
+        &self,
+        pk: &PublicKey,
+        section_hash: &Hash,
+    ) -> Result<bool, storage_api::Error> {
+        unimplemented!("Native VPs don't validate tx singature")
     }
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {

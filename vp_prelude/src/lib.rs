@@ -289,6 +289,25 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(HostEnvResult::is_success(result))
     }
 
+    fn verify_tx_section_signature(
+        &self,
+        pk: &crate::key::common::PublicKey,
+        section_hash: &Hash,
+    ) -> Result<bool, Error> {
+        let pk = pk.try_to_vec().unwrap();
+        let hash = section_hash.try_to_vec().unwrap();
+        let valid = unsafe {
+            namada_vp_verify_tx_section_signature(
+                pk.as_ptr() as _,
+                pk.len() as _,
+                hash.as_ptr() as _,
+                hash.len() as _,
+            )
+        };
+
+        Ok(HostEnvResult::is_success(valid))
+    }
+
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {
         let result = Vec::with_capacity(HASH_LENGTH + 1);
         unsafe {

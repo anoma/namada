@@ -67,8 +67,8 @@ fn validate_tx(
     let valid_sig = Lazy::new(|| {
         let pk = key::get(ctx, &addr);
         match pk {
-            Ok(Some(pk)) => tx_data
-                .verify_signature(&pk, tx_data.data_sechash())
+            Ok(Some(pk)) => ctx
+                .verify_tx_section_signature(&pk, tx_data.data_sechash())
                 .is_ok(),
             _ => false,
         }
@@ -503,10 +503,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 
     /// Test that a debit transfer without a valid signature is rejected.
@@ -610,10 +614,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 
     /// Test that a transfer on with accounts other than self is accepted.
@@ -670,8 +678,8 @@ mod tests {
 
     /// Generates a keypair, derive an implicit address from it and generate
     /// a storage key inside its storage.
-    fn arb_account_storage_subspace_key()
-    -> impl Strategy<Value = (key::common::SecretKey, Address, Key)> {
+    fn arb_account_storage_subspace_key(
+    ) -> impl Strategy<Value = (key::common::SecretKey, Address, Key)> {
         // Generate a keypair
         key::testing::arb_common_keypair().prop_flat_map(|sk| {
             let pk = sk.ref_to();
@@ -850,10 +858,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(!validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 
     #[test]
@@ -899,9 +911,13 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 }

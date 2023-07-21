@@ -907,7 +907,6 @@ impl Tx {
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_signature(
-        //FIXME: need a host env function for gas metering!
         &self,
         pk: &common::PublicKey,
         hash: &crate::types::hash::Hash,
