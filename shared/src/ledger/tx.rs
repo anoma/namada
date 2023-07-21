@@ -1294,7 +1294,7 @@ pub async fn build_ibc_transfer<
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type<
     C: crate::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
     shielded: &mut ShieldedContext<U>,
@@ -1315,7 +1315,7 @@ async fn add_asset_type<
 /// type information.
 async fn used_asset_types<
     C: crate::ledger::queries::Client + Sync,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
     P,
     R,
     K,
@@ -1367,7 +1367,7 @@ async fn used_asset_types<
 pub async fn build_transfer<
     C: crate::ledger::queries::Client + Sync,
     V: WalletUtils,
-    U: ShieldedUtils<C = C>,
+    U: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<V>,
