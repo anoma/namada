@@ -268,6 +268,19 @@ impl<IO> CliApi<IO> {
                         )
                         .await?;
                     }
+                    Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_unjail_validator(&client, ctx, args).await?;
+                    }
                     // Ledger queries
                     Sub::QueryEpoch(QueryEpoch(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -278,6 +291,24 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         rpc::query_and_print_epoch(&client).await;
+                    }
+                    Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_and_print_validator_state(
+                            &client,
+                            &mut ctx.wallet,
+                            args,
+                        )
+                        .await;
                     }
                     Sub::QueryTransfers(QueryTransfers(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -517,6 +548,19 @@ impl<IO> CliApi<IO> {
                 }
                 Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
                     utils::default_base_dir(global_args, args)
+                }
+                Utils::EpochSleep(EpochSleep(args)) => {
+                    let mut ctx = cli::Context::new(global_args)
+                        .expect("expected to construct a context");
+                    let mut ledger_address = args.ledger_address.clone();
+                    let client =
+                        C::from_tendermint_address(&mut ledger_address);
+                    client
+                        .wait_until_node_is_synced()
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::epoch_sleep(&client, args).await;
                 }
             },
         }
