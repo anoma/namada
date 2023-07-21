@@ -114,6 +114,14 @@ where
             )?;
         }
 
+        // Invariant: Has to be applied before `record_slashes_from_evidence`
+        // because it potentially needs to be able to read validator state from
+        // previous epoch and jailing validator removes the historical state
+        self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
+        if new_epoch {
+            self.apply_inflation(current_epoch)?;
+        }
+
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` and before `self.update_epoch`.
         self.record_slashes_from_evidence();
@@ -526,42 +534,6 @@ where
             self.update_eth_oracle();
         }
 
-        // Read the block proposer of the previously committed block in storage
-        // (n-1 if we are in the process of finalizing n right now).
-        match read_last_block_proposer_address(&self.wl_storage)? {
-            Some(proposer_address) => {
-                tracing::debug!(
-                    "Found last block proposer: {proposer_address}"
-                );
-                let votes = pos_votes_from_abci(&self.wl_storage, &req.votes);
-                namada_proof_of_stake::log_block_rewards(
-                    &mut self.wl_storage,
-                    if new_epoch {
-                        current_epoch.prev()
-                    } else {
-                        current_epoch
-                    },
-                    &proposer_address,
-                    votes,
-                )?;
-            }
-            None => {
-                if height > BlockHeight::default().next_height() {
-                    tracing::error!(
-                        "Can't find the last block proposer at height {height}"
-                    );
-                } else {
-                    tracing::debug!(
-                        "No last block proposer at height {height}"
-                    );
-                }
-            }
-        }
-
-        if new_epoch {
-            self.apply_inflation(current_epoch)?;
-        }
-
         if !req.proposer_address.is_empty() {
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
@@ -845,6 +817,48 @@ where
                 .remove(&mut self.wl_storage, &address)?;
         }
 
+        Ok(())
+    }
+
+    // Process the proposer and votes in the block to assign their PoS rewards.
+    fn log_block_rewards(
+        &mut self,
+        votes: &[VoteInfo],
+        height: BlockHeight,
+        current_epoch: Epoch,
+        new_epoch: bool,
+    ) -> Result<()> {
+        // Read the block proposer of the previously committed block in storage
+        // (n-1 if we are in the process of finalizing n right now).
+        match read_last_block_proposer_address(&self.wl_storage)? {
+            Some(proposer_address) => {
+                tracing::debug!(
+                    "Found last block proposer: {proposer_address}"
+                );
+                let votes = pos_votes_from_abci(&self.wl_storage, votes);
+                namada_proof_of_stake::log_block_rewards(
+                    &mut self.wl_storage,
+                    if new_epoch {
+                        current_epoch.prev()
+                    } else {
+                        current_epoch
+                    },
+                    &proposer_address,
+                    votes,
+                )?;
+            }
+            None => {
+                if height > BlockHeight::default().next_height() {
+                    tracing::error!(
+                        "Can't find the last block proposer at height {height}"
+                    );
+                } else {
+                    tracing::debug!(
+                        "No last block proposer at height {height}"
+                    );
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -2400,8 +2414,11 @@ mod test_finalize_block {
         );
 
         // Advance to the processing epoch
-        let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
         loop {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
             next_block_for_inflation(
                 &mut shell,
                 pkh1.clone(),
@@ -2940,10 +2957,14 @@ mod test_finalize_block {
                 total_voting_power: Default::default(),
             },
         ];
+        let votes = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
         next_block_for_inflation(
             &mut shell,
             pkh1.clone(),
-            votes.clone(),
+            votes,
             Some(misbehaviors),
         );
         assert_eq!(current_epoch.0, 7_u64);

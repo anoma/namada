@@ -4309,6 +4309,7 @@ fn test_genesis_validators() -> Result<()> {
 /// 4. Run it to get it to double vote and sign blocks
 /// 5. Submit a valid token transfer tx to validator 0
 /// 6. Wait for double signing evidence
+/// 7. Make sure the the first validator can proceed to the next epoch
 #[test]
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
@@ -4330,7 +4331,11 @@ fn double_signing_gets_slashed() -> Result<()> {
                 genesis.pos_params.unbonding_len,
                 genesis.pos_params.cubic_slashing_window_length,
             );
-            setup::set_validators(4, genesis, default_port_offset)
+            let mut genesis =
+                setup::set_validators(4, genesis, default_port_offset);
+            // Make faster epochs to be more likely to discover boundary issues
+            genesis.parameters.min_num_of_blocks = 2;
+            genesis
         },
         None,
     )?;
@@ -4492,14 +4497,13 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
     validator_1.exp_string("Processing evidence")?;
-    // validator_1.exp_string("Slashing")?;
 
     println!("\nPARSING SLASH MESSAGE\n");
     let (_, res) = validator_1
         .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
         .unwrap();
     println!("\n{res}\n");
-    let _bg_validator_1 = validator_1.background();
+    let bg_validator_1 = validator_1.background();
 
     let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
         .unwrap()
@@ -4604,6 +4608,17 @@ fn double_signing_gets_slashed() -> Result<()> {
     let _ = client
         .exp_regex(r"Validator [a-z0-9]+ is in the .* set")
         .unwrap();
+
+    // 7. Make sure the the first validator can proceed to the next epoch
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+    // Make sure there are no errors
+    let mut validator_1 = bg_validator_1.foreground();
+    validator_1.interrupt()?;
+    // Wait for the node to stop running to finish writing the state and tx
+    // queue
+    validator_1.exp_string("Namada ledger node has shut down.")?;
+    validator_1.assert_success();
 
     Ok(())
 }
