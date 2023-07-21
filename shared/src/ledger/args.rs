@@ -150,7 +150,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Transferred token addres    s
     pub token: C::Address,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: InputAmount,
     /// Port ID
     pub port_id: PortId,
     /// Channel ID

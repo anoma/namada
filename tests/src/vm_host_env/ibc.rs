@@ -80,7 +80,7 @@ use namada::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
 use namada::types::time::DurationSecs;
-use namada::types::token::{self, Amount};
+use namada::types::token::{self, Amount, DenominatedAmount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerialize;
@@ -637,6 +637,7 @@ pub fn msg_transfer(
     denom: String,
     sender: &Address,
 ) -> MsgTransfer {
+    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     MsgTransfer {
         port_id_on_a: port_id,
@@ -644,7 +645,7 @@ pub fn msg_transfer(
         packet_data: PacketData {
             token: PrefixedCoin {
                 denom: denom.parse().expect("invalid denom"),
-                amount: 100.into(),
+                amount: amount.into(),
             },
             sender: sender.to_string().into(),
             receiver: address::testing::gen_established_address()
@@ -689,11 +690,12 @@ pub fn received_packet(
     token: String,
     receiver: &Address,
 ) -> Packet {
+    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let counterparty = dummy_channel_counterparty();
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let coin = PrefixedCoin {
         denom: token.parse().expect("invalid denom"),
-        amount: 100.into(),
+        amount: amount.into(),
     };
     let sender = address::testing::gen_established_address();
     let data = PacketData {

@@ -558,11 +558,7 @@ fn get_token_amount(
         _ => storage::ibc_token(coin.denom.to_string()),
     };
 
-    let amount = coin.amount.try_into().map_err(|_| {
-        TokenTransferError::InvalidCoin {
-            coin: coin.to_string(),
-        }
-    })?;
+    let amount = coin.amount.into();
 
     Ok((token, amount))
 }

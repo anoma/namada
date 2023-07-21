@@ -768,17 +768,17 @@ impl MaspDenom {
     }
 }
 
-impl TryFrom<IbcAmount> for Amount {
-    type Error = AmountParseError;
+impl From<IbcAmount> for Amount {
+    fn from(amount: IbcAmount) -> Self {
+        Self {
+            raw: Uint(primitive_types::U256::from(amount).0),
+        }
+    }
+}
 
-    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
-        // TODO: https://github.com/anoma/namada/issues/1089
-        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
-        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
-        //    return Err(AmountParseError::InvalidRange);
-        //}
-        DenominatedAmount::from_str(&amount.to_string())
-            .map(|a| a.amount * NATIVE_SCALE)
+impl From<DenominatedAmount> for IbcAmount {
+    fn from(amount: DenominatedAmount) -> Self {
+        primitive_types::U256(amount.amount.raw.0).into()
     }
 }
 
