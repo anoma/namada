@@ -176,7 +176,7 @@ where
     /// Takes an iterator over Bridge pool root vote extension instances,
     /// and returns another iterator. The latter yields
     /// valid Brige pool root vote extensions, or the reason why these
-    /// are invalid, in the form of a [`VoteExtensionError`].
+    /// are invalid, in the form of a `VoteExtensionError`.
     #[inline]
     pub fn validate_bp_roots_vext_list<'iter>(
         &'iter self,

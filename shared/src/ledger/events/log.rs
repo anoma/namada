@@ -67,6 +67,12 @@ impl EventLog {
 
     /// Returns a new iterator over this [`EventLog`].
     #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = &Event> {
+        self.queue.iter()
+    }
+
+    /// Returns a filtering iterator over this [`EventLog`].
+    #[inline]
     pub fn iter_with_matcher(
         &self,
         matcher: dumb_queries::QueryMatcher,
