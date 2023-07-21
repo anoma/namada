@@ -12,6 +12,7 @@ use namada::ledger::wallet::store::AddressVpType;
 use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
+use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::*;
 
@@ -82,7 +83,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(global_args: args::Global) -> Result<Self> {
+    pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
         tracing::debug!("Chain ID: {}", global_config.default_chain_id);
 
@@ -124,7 +125,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: CLIShieldedUtils::new(chain_dir),
+            shielded: CLIShieldedUtils::new::<IO>(chain_dir),
             native_token,
         })
     }

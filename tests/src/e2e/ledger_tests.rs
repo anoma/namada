@@ -21,6 +21,7 @@ use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::{btc, eth, masp_rewards, Address};
 use namada::types::governance::ProposalType;
+use namada::types::io::DefaultIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
@@ -664,7 +665,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -927,7 +928,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_pinned_txs() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -1107,7 +1108,7 @@ fn masp_incentives() -> Result<()> {
     // The number of decimal places used by ETH amounts.
     const ETH_DENOMINATION: u8 = 18;
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

@@ -8,13 +8,14 @@ use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::Address;
+use namada::types::io::Io;
 use namada::types::key::*;
 
 use crate::cli::args;
 
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet. Panics if the key cannot be found or loaded.
-pub async fn find_pk<C, U>(
+pub async fn find_pk<C, U, IO: Io>(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
@@ -24,14 +25,15 @@ where
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::find_pk(client, wallet, addr, None).await
+    namada::ledger::signing::find_pk::<_, _, IO>(client, wallet, addr, None)
+        .await
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer<C, U>(
+pub async fn tx_signer<C, U, IO: Io>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
@@ -42,8 +44,10 @@ where
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
-        .await
+    namada::ledger::signing::tx_signer::<C, U, IO>(
+        client, wallet, args, default,
+    )
+    .await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -71,7 +75,7 @@ where
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
-pub async fn sign_wrapper<C, U>(
+pub async fn sign_wrapper<C, U, IO: Io>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
@@ -85,7 +89,7 @@ where
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::sign_wrapper(
+    namada::ledger::signing::sign_wrapper::<_, _, IO>(
         client,
         wallet,
         args,

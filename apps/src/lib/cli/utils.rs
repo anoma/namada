@@ -8,6 +8,7 @@ use color_eyre::eyre::Result;
 
 use super::args;
 use super::context::{Context, FromContext};
+use crate::cli::api::CliIo;
 
 // We only use static strings
 pub type App = clap::Command;
@@ -22,7 +23,7 @@ pub trait Cmd: Sized {
         match Self::parse(&matches) {
             Some(cmd) => {
                 let global_args = args::Global::parse(&matches);
-                let context = Context::new(global_args)?;
+                let context = Context::new::<CliIo>(global_args)?;
                 Ok((cmd, context))
             }
             None => {

@@ -24,6 +24,8 @@ use crate::types::control_flow::time::{self, Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
+use crate::types::io::{DefaultIo, Io};
+use crate::{display_line, edisplay};
 
 /// Relayer related errors.
 #[derive(Debug, Default)]
@@ -253,7 +255,7 @@ impl From<Option<TransactionReceipt>> for RelayResult {
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
-pub async fn query_validator_set_update_proof<C>(
+pub async fn query_validator_set_update_proof<C, IO: Io>(
     client: &C,
     args: args::ValidatorSetProof,
 ) where
@@ -272,11 +274,11 @@ pub async fn query_validator_set_update_proof<C>(
         .await
         .unwrap();
 
-    println!("0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
+    display_line!(IO, "0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
 }
 
 /// Query an ABI encoding of the validator set at a given epoch.
-pub async fn query_validator_set_args<C>(
+pub async fn query_validator_set_args<C, IO: Io>(
     client: &C,
     args: args::ConsensusValidatorSet,
 ) where
@@ -295,11 +297,15 @@ pub async fn query_validator_set_args<C>(
         .await
         .unwrap();
 
-    println!("0x{}", HEXLOWER.encode(encoded_validator_set_args.as_ref()));
+    display_line!(
+        IO,
+        "0x{}",
+        HEXLOWER.encode(encoded_validator_set_args.as_ref())
+    );
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update<C, E>(
+pub async fn relay_validator_set_update<C, E, IO: Io>(
     eth_client: Arc<E>,
     nam_client: &C,
     args: args::ValidatorSetUpdateRelay,
@@ -312,7 +318,7 @@ where
     let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
-        block_on_eth_sync(
+        block_on_eth_sync::<_, IO>(
             &*eth_client,
             BlockOnEthSync {
                 deadline: Instant::now() + Duration::from_secs(60),
@@ -321,7 +327,7 @@ where
         )
         .await?;
     } else {
-        eth_sync_or_exit(&*eth_client).await?;
+        eth_sync_or_exit::<_, IO>(&*eth_client).await?;
     }
 
     if args.daemon {
@@ -339,7 +345,7 @@ where
             nam_client,
             |relay_result| match relay_result {
                 RelayResult::GovernanceCallError(reason) => {
-                    tracing::error!(reason, "Calling Governance failed");
+                    edisplay!(IO, "Calling Governance failed due to: {reason}");
                 }
                 RelayResult::NonceError { argument, contract } => {
                     let whence = match argument.cmp(&contract) {
@@ -347,22 +353,31 @@ where
                         Ordering::Equal => "identical to",
                         Ordering::Greater => "too far ahead of",
                     };
-                    tracing::error!(
-                        ?argument,
-                        ?contract,
-                        "Argument nonce is {whence} contract nonce"
+                    edisplay!(
+                        IO,
+                        "Argument nonce <{argument}> is {whence} contract \
+                         nonce <{contract}>"
                     );
                 }
                 RelayResult::NoReceipt => {
-                    tracing::warn!(
+                    edisplay!(
+                        IO,
                         "No transfer receipt received from the Ethereum node"
                     );
                 }
                 RelayResult::Receipt { receipt } => {
                     if receipt.is_successful() {
-                        tracing::info!(?receipt, "Ethereum transfer succeded");
+                        display_line!(
+                            IO,
+                            "Ethereum transfer succeded: {:?}",
+                            receipt
+                        );
                     } else {
-                        tracing::error!(?receipt, "Ethereum transfer failed");
+                        display_line!(
+                            IO,
+                            "Ethereum transfer failed: {:?}",
+                            receipt
+                        );
                     }
                 }
             },
@@ -420,7 +435,9 @@ where
         time::sleep(sleep_for).await;
 
         let is_synchronizing =
-            eth_sync_or(&*eth_client, || ()).await.is_break();
+            eth_sync_or::<_, _, _, DefaultIo>(&*eth_client, || ())
+                .await
+                .is_break();
         if is_synchronizing {
             tracing::debug!("The Ethereum node is synchronizing");
             last_call_succeeded = false;

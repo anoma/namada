@@ -2,6 +2,7 @@
 
 pub mod control_flow;
 pub mod ibc;
+pub mod io;
 pub mod key;
 
 pub use namada_core::types::{

@@ -19,6 +19,7 @@ pub use utils::safe_exit;
 use utils::*;
 
 pub use self::context::Context;
+use crate::cli::api::CliIo;
 
 include!("../../version.rs");
 
@@ -5044,7 +5045,7 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
             let global_args = args::Global::parse(&matches);
             match cmd {
                 cmds::NamadaClient::WithContext(sub_cmd) => {
-                    let context = Context::new(global_args)?;
+                    let context = Context::new::<CliIo>(global_args)?;
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {

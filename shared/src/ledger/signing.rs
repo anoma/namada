@@ -46,6 +46,7 @@ pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Signature, Tx};
+use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -56,6 +57,7 @@ use crate::types::transaction::governance::{
 use crate::types::transaction::{
     Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
+use crate::{display_line, edisplay};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -71,6 +73,7 @@ const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 pub async fn find_pk<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -79,7 +82,8 @@ pub async fn find_pk<
 ) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
-            println!(
+            display_line!(
+                IO,
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
@@ -158,6 +162,7 @@ pub enum TxSigningKey {
 pub async fn tx_signer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -186,7 +191,7 @@ pub async fn tx_signer<
         }
         TxSigningKey::WalletAddress(signer) => Ok((
             Some(signer.clone()),
-            find_pk::<C, U>(client, wallet, &signer, args.password.clone())
+            find_pk::<C, U, IO>(client, wallet, &signer, args.password.clone())
                 .await?,
         )),
         TxSigningKey::None => other_err(
@@ -230,7 +235,10 @@ pub async fn sign_tx<U: WalletUtils>(
 #[cfg(not(feature = "mainnet"))]
 /// Solve the PoW challenge if balance is insufficient to pay transaction fees
 /// or if solution is explicitly requested.
-pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
+pub async fn solve_pow_challenge<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     args: &args::Tx,
     keypair: &common::PublicKey,
@@ -259,8 +267,10 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
+            format_denominated_amount::<_, IO>(client, &token_addr, fee_amount)
+                .await,
+            format_denominated_amount::<_, IO>(client, &token_addr, balance)
+                .await,
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
@@ -274,7 +284,10 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
     if requires_pow || !is_bal_sufficient {
-        println!("The transaction requires the completion of a PoW challenge.");
+        display_line!(
+            IO,
+            "The transaction requires the completion of a PoW challenge."
+        );
         // Obtain a PoW challenge for faucet withdrawal
         let challenge = rpc::get_testnet_pow_challenge(client, source).await;
 
@@ -288,7 +301,10 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
 #[cfg(not(feature = "mainnet"))]
 /// Update the PoW challenge inside the given transaction
-pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
+pub async fn update_pow_challenge<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
@@ -297,7 +313,8 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 ) {
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
         let (pow_solution, fee) =
-            solve_pow_challenge(client, args, keypair, requires_pow).await;
+            solve_pow_challenge::<_, IO>(client, args, keypair, requires_pow)
+                .await;
         wrapper.fee = fee;
         wrapper.pow_solution = pow_solution;
     }
@@ -309,6 +326,7 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 pub async fn wrap_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     #[allow(unused_variables)] wallet: &mut Wallet<U>,
@@ -320,7 +338,7 @@ pub async fn wrap_tx<
 ) -> Tx {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
-        solve_pow_challenge(client, args, keypair, requires_pow).await;
+        solve_pow_challenge::<_, IO>(client, args, keypair, requires_pow).await;
     // This object governs how the payload will be processed
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         fee,
@@ -340,7 +358,7 @@ pub async fn wrap_tx<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
+        let decoding = to_ledger_vector::<_, _, IO>(client, wallet, &tx)
             .await
             .expect("unable to decode transaction");
         let output = serde_json::to_string(&decoding)
@@ -378,6 +396,7 @@ pub async fn wrap_tx<
 pub async fn sign_wrapper<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     #[allow(unused_variables)] wallet: &mut Wallet<U>,
@@ -414,10 +433,12 @@ pub async fn sign_wrapper<
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
+            format_denominated_amount::<_, IO>(client, &token_addr, fee_amount)
+                .await,
+            format_denominated_amount::<_, IO>(client, &token_addr, balance)
+                .await,
         );
-        eprintln!("{}", err_msg);
+        edisplay!(IO, "{}", err_msg);
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
         }
@@ -429,7 +450,8 @@ pub async fn sign_wrapper<
         // If the address derived from the keypair doesn't have enough balance
         // to pay for the fee, allow to find a PoW solution instead.
         if requires_pow || !is_bal_sufficient {
-            println!(
+            display_line!(
+                IO,
                 "The transaction requires the completion of a PoW challenge."
             );
             // Obtain a PoW challenge for faucet withdrawal
@@ -466,7 +488,7 @@ pub async fn sign_wrapper<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
+        let decoding = to_ledger_vector::<_, _, IO>(client, wallet, &tx)
             .await
             .expect("unable to decode transaction");
         let output = serde_json::to_string(&decoding)
@@ -561,7 +583,10 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
+async fn make_ledger_amount_asset<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
@@ -576,8 +601,12 @@ async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
             address: token.clone(),
             sub_prefix: sub_prefix.clone(),
         };
-        let formatted_amt =
-            format_denominated_amount(client, &token_addr, amount.into()).await;
+        let formatted_amt = format_denominated_amount::<_, IO>(
+            client,
+            &token_addr,
+            amount.into(),
+        )
+        .await;
         if let Some(token) = tokens.get(token) {
             output.push(format!(
                 "{}Amount: {} {}",
@@ -665,6 +694,7 @@ fn format_outputs(output: &mut Vec<String>) {
 /// transactions
 pub async fn make_ledger_masp_endpoints<
     C: crate::ledger::queries::Client + Sync,
+    IO: Io,
 >(
     client: &C,
     tokens: &HashMap<Address, String>,
@@ -689,7 +719,7 @@ pub async fn make_ledger_masp_endpoints<
         for sapling_input in builder.builder.sapling_inputs() {
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
-            make_ledger_amount_asset(
+            make_ledger_amount_asset::<_, IO>(
                 client,
                 tokens,
                 output,
@@ -717,7 +747,7 @@ pub async fn make_ledger_masp_endpoints<
         for sapling_output in builder.builder.sapling_outputs() {
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
-            make_ledger_amount_asset(
+            make_ledger_amount_asset::<_, IO>(
                 client,
                 tokens,
                 output,
@@ -746,44 +776,57 @@ pub async fn make_ledger_masp_endpoints<
 pub async fn to_ledger_vector<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
 ) -> Result<LedgerVector, std::io::Error> {
-    let init_account_hash = query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM)
-        .await
-        .unwrap();
-    let init_validator_hash =
-        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM)
+    let init_account_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_ACCOUNT_WASM)
             .await
             .unwrap();
-    let init_proposal_hash = query_wasm_code_hash(client, TX_INIT_PROPOSAL)
+    let init_validator_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_VALIDATOR_WASM)
+            .await
+            .unwrap();
+    let init_proposal_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_PROPOSAL)
+            .await
+            .unwrap();
+    let vote_proposal_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_VOTE_PROPOSAL)
+            .await
+            .unwrap();
+    let reveal_pk_hash = query_wasm_code_hash::<_, IO>(client, TX_REVEAL_PK)
         .await
         .unwrap();
-    let vote_proposal_hash = query_wasm_code_hash(client, TX_VOTE_PROPOSAL)
+    let update_vp_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_UPDATE_VP_WASM)
+            .await
+            .unwrap();
+    let transfer_hash = query_wasm_code_hash::<_, IO>(client, TX_TRANSFER_WASM)
         .await
         .unwrap();
-    let reveal_pk_hash =
-        query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
-    let update_vp_hash = query_wasm_code_hash(client, TX_UPDATE_VP_WASM)
+    let ibc_hash = query_wasm_code_hash::<_, IO>(client, TX_IBC_WASM)
         .await
         .unwrap();
-    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
+    let bond_hash = query_wasm_code_hash::<_, IO>(client, TX_BOND_WASM)
         .await
         .unwrap();
-    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await.unwrap();
-    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await.unwrap();
-    let unbond_hash =
-        query_wasm_code_hash(client, TX_UNBOND_WASM).await.unwrap();
-    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM)
+    let unbond_hash = query_wasm_code_hash::<_, IO>(client, TX_UNBOND_WASM)
+        .await
+        .unwrap();
+    let withdraw_hash = query_wasm_code_hash::<_, IO>(client, TX_WITHDRAW_WASM)
         .await
         .unwrap();
     let change_commission_hash =
-        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM)
+        query_wasm_code_hash::<_, IO>(client, TX_CHANGE_COMMISSION_WASM)
             .await
             .unwrap();
-    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await.unwrap();
+    let user_hash = query_wasm_code_hash::<_, IO>(client, VP_USER_WASM)
+        .await
+        .unwrap();
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
@@ -1045,7 +1088,7 @@ pub async fn to_ledger_vector<
         tv.name = "Transfer 0".to_string();
 
         tv.output.push("Type : Transfer".to_string());
-        make_ledger_masp_endpoints(
+        make_ledger_masp_endpoints::<_, IO>(
             client,
             &tokens,
             &mut tv.output,
@@ -1054,7 +1097,7 @@ pub async fn to_ledger_vector<
             &asset_types,
         )
         .await;
-        make_ledger_masp_endpoints(
+        make_ledger_masp_endpoints::<_, IO>(
             client,
             &tokens,
             &mut tv.output_expert,
@@ -1220,15 +1263,18 @@ pub async fn to_ledger_vector<
             address: wrapper.fee.token.clone(),
             sub_prefix: None,
         };
-        let gas_limit = format_denominated_amount(
+        let gas_limit = format_denominated_amount::<_, IO>(
             client,
             &gas_token,
             Amount::from(wrapper.gas_limit),
         )
         .await;
-        let gas_amount =
-            format_denominated_amount(client, &gas_token, wrapper.fee.amount)
-                .await;
+        let gas_amount = format_denominated_amount::<_, IO>(
+            client,
+            &gas_token,
+            wrapper.fee.amount,
+        )
+        .await;
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("PK : {}", wrapper.pk),
