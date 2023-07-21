@@ -27,8 +27,6 @@ pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 = 1;
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// The cost of verifying the signature of a transaction
 pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
-/// The cost of validating wasm vp code
-pub const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 /// The cost of accessing the WASM memory, per byte
 pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
 

@@ -18,9 +18,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{
-    self, VpGasMeter, STORAGE_ACCESS_GAS_PER_BYTE, WASM_VALIDATION_GAS_PER_BYTE,
-};
+use crate::ledger::gas::{self, VpGasMeter, STORAGE_ACCESS_GAS_PER_BYTE};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -1874,7 +1872,6 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
     let hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let key = Key::wasm_code(&hash);
