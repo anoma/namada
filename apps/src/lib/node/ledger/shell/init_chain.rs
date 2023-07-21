@@ -313,7 +313,7 @@ where
                     &mut self.wl_storage,
                     &address,
                     difficulty,
-                    withdrawal_limit.into(),
+                    withdrawal_limit,
                 )
                 .expect("Couldn't init faucet storage")
             }
