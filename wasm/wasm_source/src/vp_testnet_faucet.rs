@@ -52,7 +52,7 @@ fn validate_tx(
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
                 let maybe_denom =
-                    storage_api::token::read_denom(&ctx.pre(), token, None)?;
+                    storage_api::token::read_denom(&ctx.pre(), token)?;
                 if maybe_denom.is_none() {
                     debug_log!(
                         "A denomination for token address {} does not exist \

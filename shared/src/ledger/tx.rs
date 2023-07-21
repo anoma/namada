@@ -1111,10 +1111,7 @@ pub async fn build_bond<
 
     // TODO Should we state the same error message for the native token?
     check_balance_too_low_err(
-        &TokenAddress {
-            address: args.native_token,
-            sub_prefix: None,
-        },
+        &args.native_token,
         bond_source,
         args.amount,
         balance_key,
@@ -1205,10 +1202,7 @@ pub async fn build_ibc_transfer<
     let balance_key = token::balance_key(&token, &source);
 
     check_balance_too_low_err(
-        &TokenAddress {
-            address: token.clone(),
-            sub_prefix: sub_prefix.clone(),
-        },
+        &token,
         &source,
         args.amount,
         balance_key,
@@ -1398,15 +1392,8 @@ pub async fn build_transfer<
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
-    let sub_prefix = args
-        .sub_prefix
-        .as_ref()
-        .map(|k| k.parse().expect("Could not parse multi-token sub-prefix"));
     check_balance_too_low_err::<C>(
-        &TokenAddress {
-            address: token.clone(),
-            sub_prefix: sub_prefix.clone(),
-        },
+        &token,
         &source,
         validated_amount.amount,
         balance_key,
@@ -1814,7 +1801,7 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 /// given amount, along with the balance even existing. force
 /// overrides this
 async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
-    token: &TokenAddress,
+    token: &Address,
     source: &Address,
     amount: token::Amount,
     balance_key: storage::Key,
@@ -1840,7 +1827,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 } else {
                     Err(Error::BalanceTooLow(
                         source.clone(),
-                        token.address.clone(),
+                        token.clone(),
                         amount.to_string_native(),
                         balance.to_string_native(),
                     ))
@@ -1857,10 +1844,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 );
                 Ok(())
             } else {
-                Err(Error::NoBalanceForToken(
-                    source.clone(),
-                    token.address.clone(),
-                ))
+                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
             }
         }
     }

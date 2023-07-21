@@ -327,8 +327,6 @@ where
 #[cfg(not(feature = "testing"))]
 /// A helper to exit after flushing output, borrowed from `clap::util` module.
 pub fn safe_exit(code: i32) -> ! {
-    use std::io::Write;
-
     let _ = std::io::stdout().lock().flush();
     let _ = std::io::stderr().lock().flush();
 
