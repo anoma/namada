@@ -42,6 +42,7 @@ use super::helpers::{
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
+    parse_reached_epoch,
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
@@ -2138,7 +2139,7 @@ fn pos_bonds() -> Result<()> {
                 delegation_withdrawable_epoch
             );
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= delegation_withdrawable_epoch {
             break;
         }
@@ -2333,7 +2334,7 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
-        let epoch = get_epoch(&test, &validator_zero_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_zero_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
@@ -2414,7 +2415,7 @@ fn test_bond_queries() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", 1);
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= Epoch(4) {
             break;
         }
@@ -2704,7 +2705,7 @@ fn pos_init_validator() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
-        let epoch = get_epoch(&test, &non_validator_rpc)?;
+        let epoch = epoch_sleep(&test, &non_validator_rpc, 40)?;
         if epoch >= earliest_update_epoch {
             break;
         }
@@ -4595,6 +4596,52 @@ fn implicit_account_reveal_pk() -> Result<()> {
         let unread = client.exp_eof()?;
         assert!(!unread.contains(expected_reveal))
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_epoch_sleep() -> Result<()> {
+    // Use slightly longer epochs to give us time to sleep
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(30),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
+
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Query the current epoch
+    let start_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+
+    // 3. Use epoch-sleep to sleep for an epoch
+    let args = ["utils", "epoch-sleep", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, &args, None)?;
+    let reached_epoch = parse_reached_epoch(&mut client)?;
+    client.assert_success();
+
+    // 4. Confirm the current epoch is larger
+    // possibly badly, we assume we get here within 30 seconds of the last step
+    // should be fine haha (future debuggers: sorry)
+    let current_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    assert!(current_epoch > start_epoch);
+    assert_eq!(current_epoch, reached_epoch);
 
     Ok(())
 }
