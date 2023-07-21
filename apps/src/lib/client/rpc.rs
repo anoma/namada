@@ -1098,7 +1098,7 @@ pub async fn get_token_balance<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
-) -> Option<token::Amount> {
+) -> token::Amount {
     namada::ledger::rpc::get_token_balance(client, token, owner).await
 }
 
