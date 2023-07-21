@@ -78,7 +78,7 @@ where
 }
 
 /// Convenience macro for formatting arguments to
-/// [`IO::print`]
+/// [`Io::print`]
 #[macro_export]
 macro_rules! display {
     ($io:ty) => {
@@ -93,7 +93,7 @@ macro_rules! display {
 }
 
 /// Convenience macro for formatting arguments to
-/// [`IO::println`] and [`IO::writeln`]
+/// [`Io::println`] and [`Io::writeln`]
 #[macro_export]
 macro_rules! display_line {
     ($io:ty) => {
@@ -108,7 +108,7 @@ macro_rules! display_line {
 }
 
 /// Convenience macro for formatting arguments to
-/// [`IO::eprintln`]
+/// [`Io::eprintln`]
 #[macro_export]
 macro_rules! edisplay {
     ($io:ty,$($args:tt)*) => {
