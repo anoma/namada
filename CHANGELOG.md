@@ -1,5 +1,61 @@
 # CHANGELOG
 
+## v0.20.0
+
+Namada 0.20.0 is a minor releasing addressing several improvements to the PoS system and the ledger 
+stability.
+
+### BUG FIXES
+
+- Fix genesis `faucet_withdrawal_limit` parser to respect tokens' denomination.
+  ([\#1667](https://github.com/anoma/namada/pull/1667))
+- PoS: ensure that the size of genesis validator set
+  is limited by the `max_validator_slots` parameter.
+  ([\#1686](https://github.com/anoma/namada/pull/1686))
+- Fix inconsistency state before commit
+  ([\#1709](https://github.com/anoma/namada/issues/1709))
+- PoS: Fixed an epoch boundary issue in which a validator who's being slashed
+  on a start of a new epoch is disregarded during processing of block votes.
+  ([\#1729](https://github.com/anoma/namada/pull/1729))
+
+### IMPROVEMENTS
+
+- PoS: purge validator sets for old epochs from the storage; store total
+  validator stake ([\#1129](https://github.com/anoma/namada/issues/1129))
+- Added a reusable token balance query method.
+  ([\#1173](https://github.com/anoma/namada/pull/1173))
+- Replaced file-lock with fd-lock dependency to support Windows build.
+  ([\#1605](https://github.com/anoma/namada/pull/1605))
+- Added a command to wait for the next epoch: `client utils epoch-sleep`.
+  ([\#1621](https://github.com/anoma/namada/pull/1621))
+- Added a client query for `validator-state` and improved the slashes query to
+  show more info. ([\#1656](https://github.com/anoma/namada/pull/1656))
+- Removed associated type on `masp::ShieldedUtils`. This type was an
+  attempt to reduce the number of generic parameters needed when interacting
+  with MASP but resulted in making code re-use extremely difficult.
+  ([\#1670](https://github.com/anoma/namada/pull/1670))
+- Removed `impl From<u64> for EthBridgeVotingPower` and replaced it with a
+  `TryFrom`. ([\#1692](https://github.com/anoma/namada/pull/1692))
+- Updated sysinfo dependency.
+  ([\#1695](https://github.com/anoma/namada/pull/1695))
+- Refactored storage code to only use an immutable reference when reading and
+  writing to a batch. ([\#1717](https://github.com/anoma/namada/pull/1717))
+
+### MISCELLANEOUS
+
+- Replaced token sub-prefix with a multitoken address and native VP for IBC and
+  ETH bridge. ([\#1693](https://github.com/anoma/namada/pull/1693))
+- PoS: Keep the data for last two epochs by default.
+  ([\#1733](https://github.com/anoma/namada/pull/1733))
+- Refactored CLI into libraries for future re-use in integration tests and
+  to enable generic IO. ([\#1738](https://github.com/anoma/namada/pull/1738))
+
+### TESTING
+
+- Added integration testing infrastructure for node, client and
+  the wallet and replaced MASP E2E tests with integration tests.
+  ([\#1714](https://github.com/anoma/namada/pull/1714))
+
 ## v0.19.0
 
 Namada 0.19.0 is a minor releasing addressing the integration with the namada trustless ethereum bridge.

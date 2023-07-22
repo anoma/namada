@@ -3707,7 +3707,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3767,7 +3767,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3819,7 +3819,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "ethers",
@@ -3839,7 +3839,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3848,7 +3848,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -3862,7 +3862,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3871,7 +3871,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3901,7 +3901,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3915,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -3924,7 +3924,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "namada_core",
@@ -3937,7 +3937,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.9",
@@ -6488,7 +6488,7 @@ dependencies = [
 
 [[package]]
 name = "tx_template"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.9",
@@ -6635,7 +6635,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "borsh",
  "getrandom 0.2.9",
