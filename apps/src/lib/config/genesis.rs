@@ -1017,9 +1017,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
             public_key: wallet::defaults::ester_keypair().ref_to(),
         },
     ];
-    let default_user_tokens = token::Amount::native_whole(1_000_000);
-    let default_key_tokens = token::Amount::native_whole(1_000);
-    let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+    let default_user_tokens = Uint::from(1_000_000);
+    let default_key_tokens = Uint::from(1_000_000);
+    let mut balances: HashMap<Address, Uint> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
@@ -1063,7 +1063,11 @@ pub fn genesis(num_validators: u64) -> Genesis {
         .map(|(address, (_, denom))| TokenAccount {
             address,
             denom,
-            balances: balances.clone(),
+            balances: balances
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
+                .collect(),
         })
         .collect();
     Genesis {

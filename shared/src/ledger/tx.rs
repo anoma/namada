@@ -34,7 +34,10 @@ use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
-use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse};
+use crate::ledger::rpc::{
+    self, format_denominated_amount, validate_amount, TxBroadcastData,
+    TxResponse,
+};
 use crate::ledger::signing::{tx_signer, wrap_tx, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Tx};
@@ -1389,7 +1392,6 @@ pub async fn build_transfer<
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.fee_amount = InputAmount::Validated(validate_fee);
-
     check_balance_too_low_err::<C>(
         &token,
         &source,
@@ -1818,8 +1820,8 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                          transfer is {} and the balance is {}.",
                         source,
                         token,
-                        amount.to_string_native(),
-                        balance.to_string_native()
+                        format_denominated_amount(client, token, amount).await,
+                        format_denominated_amount(client, token, balance).await,
                     );
                     Ok(())
                 } else {

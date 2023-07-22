@@ -52,6 +52,7 @@ use tokio::time::Instant;
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::prompt;
 use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
@@ -399,10 +400,7 @@ pub async fn query_pinned_balance<
         }
         // If a suitable viewing key was not found, then demand it from the user
         if balance == pinned_error {
-            print!("Enter the viewing key for {}: ", owner);
-            io::stdout().flush().unwrap();
-            let mut vk_str = String::new();
-            io::stdin().read_line(&mut vk_str).unwrap();
+            let vk_str = prompt!("Enter the viewing key for {}: ", owner);
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {
@@ -2024,7 +2022,7 @@ pub async fn epoch_sleep<C: namada::ledger::queries::Client + Sync>(
 ) {
     let start_epoch = query_and_print_epoch(client).await;
     loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
         let current_epoch = query_epoch(client).await;
         if current_epoch > start_epoch {
             println!("Reached epoch {}", current_epoch);
