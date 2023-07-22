@@ -13,6 +13,9 @@ mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
 mod stats;
+#[cfg(any(test, feature = "testing"))]
+#[allow(dead_code)]
+pub mod testing;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
@@ -137,7 +140,7 @@ impl From<Error> for TxResult {
 /// The different error codes that the ledger may
 /// send back to a client indicating the status
 /// of their submitted tx
-#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum ErrorCodes {
     Ok = 0,
     InvalidDecryptedChainId = 1,

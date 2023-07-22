@@ -308,7 +308,7 @@ where
     /// Takes an iterator over Ethereum events vote extension instances,
     /// and returns another iterator. The latter yields
     /// valid Ethereum events vote extensions, or the reason why these
-    /// are invalid, in the form of a [`VoteExtensionError`].
+    /// are invalid, in the form of a `VoteExtensionError`.
     #[inline]
     pub fn validate_eth_events_vext_list<'iter>(
         &'iter self,
