@@ -80,6 +80,7 @@ pub mod wrapper_tx {
     #[derive(
         Debug,
         Clone,
+        Copy,
         PartialEq,
         Serialize,
         Deserialize,
@@ -112,7 +113,7 @@ pub mod wrapper_tx {
     }
 
     /// Round the input number up to the next highest multiple
-    /// of GAS_LIMIT_RESOLUTION
+    /// of `GAS_LIMIT_RESOLUTION`
     impl From<u64> for GasLimit {
         fn from(amount: u64) -> GasLimit {
             // we could use the ceiling function but this way avoids casts to

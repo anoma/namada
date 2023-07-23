@@ -171,8 +171,8 @@ where
                 tx,
                 &vec![],
                 TxIndex::default(),
-                &mut TxGasMeter::new(u64::MAX), /* No gas limit for
-                                                 * governance proposals */
+                &mut TxGasMeter::new_from_micro(u64::MAX.into()), /* No gas limit for
+                                                                   * governance proposals */
                 gas_table,
                 &mut shell.wl_storage.write_log,
                 &shell.wl_storage.storage,

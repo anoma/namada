@@ -347,7 +347,7 @@ where
             }
             TxType::Decrypted(tx_header) => {
                 // Increase wrapper index
-                let tx_index = *wrapper_index;
+                let tx_index = *wrapper_index; //FIXME: remove
                 *wrapper_index += 1;
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
@@ -440,9 +440,10 @@ where
                                 .storage
                                 .tx_queue
                                 .get(tx_index)
-                                .map_or(0, |wrapper| wrapper.gas);
+                                //FIXME: should we always find the wrapper in queue?
+                                .map_or(Gas::default(), |wrapper| wrapper.gas);
                             let mut tx_gas_meter =
-                                TxGasMeter::new(inner_tx_gas_limit);
+                                TxGasMeter::new_from_micro(inner_tx_gas_limit);
                             if let Err(e) = tx_gas_meter.consume(tx_gas) {
                                 return TxResult {
                                     code: ErrorCodes::DecryptedTxGasLimit
@@ -482,8 +483,7 @@ where
                 // later deemed invalid, to incentivize the proposer to
                 // include only valid transaction and avoid wasting block
                 // resources (ABCI only)
-                let mut tx_gas_meter =
-                    TxGasMeter::new(u64::from(&wrapper.gas_limit));
+                let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
                     // Account for the tx's resources even in case of an error. Ignore any allocation error
                     let _ = metadata
@@ -902,8 +902,9 @@ mod test_process_proposal {
             ));
             outer_tx.encrypt(&Default::default());
             let gas_limit =
-                u64::from(&outer_tx.header().wrapper().unwrap().gas_limit)
-                    - outer_tx.to_bytes().len() as u64;
+                Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
+                    .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
+                    .unwrap();
             shell.enqueue_tx(outer_tx.clone(), gas_limit);
 
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -962,8 +963,9 @@ mod test_process_proposal {
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.encrypt(&Default::default());
-        let gas_limit = u64::from(&tx.header().wrapper().unwrap().gas_limit)
-            - tx.to_bytes().len() as u64;
+        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
+            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
+            .unwrap();
         shell.enqueue_tx(tx.clone(), gas_limit);
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -1016,8 +1018,9 @@ mod test_process_proposal {
         tx.set_data_sechash(Hash([0u8; 32]));
         tx.encrypt(&Default::default());
 
-        let gas_limit = u64::from(&tx.header().wrapper().unwrap().gas_limit)
-            - tx.to_bytes().len() as u64;
+        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
+            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
+            .unwrap();
         shell.enqueue_tx(tx.clone(), gas_limit);
 
         tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
@@ -1061,8 +1064,9 @@ mod test_process_proposal {
         let mut decrypted = tx.clone();
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Undecryptable));
 
-        let gas_limit = u64::from(&tx.header().wrapper().unwrap().gas_limit)
-            - tx.to_bytes().len() as u64;
+        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
+            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
+            .unwrap();
         shell.enqueue_tx(tx, gas_limit);
 
         let request = ProcessProposal {
@@ -1513,8 +1517,9 @@ mod test_process_proposal {
             &decrypted.header_hash(),
             &keypair,
         )));
-        let gas_limit = u64::from(wrapper.header.wrapper().unwrap().gas_limit)
-            - wrapper.to_bytes().len() as u64;
+        let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
+            .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+            .unwrap();
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
             gas: gas_limit,
@@ -1623,8 +1628,9 @@ mod test_process_proposal {
             &decrypted.header_hash(),
             &keypair,
         )));
-        let gas_limit = u64::from(wrapper.header.wrapper().unwrap().gas_limit)
-            - wrapper.to_bytes().len() as u64;
+        let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
+            .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+            .unwrap();
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
             gas: gas_limit,
@@ -1682,7 +1688,7 @@ mod test_process_proposal {
 
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
-            gas: 0,
+            gas: Gas::default(),
             has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);

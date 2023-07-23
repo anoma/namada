@@ -26,7 +26,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
-use namada::ledger::gas::TxGasMeter;
+use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -788,7 +788,7 @@ where
         // Tx type check
         if let TxType::Wrapper(wrapper) = tx_type.tx_type {
             // Tx gas limit
-            let mut gas_meter = TxGasMeter::new(u64::from(&wrapper.gas_limit));
+            let mut gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
             if gas_meter.add_tx_size_gas(tx_bytes).is_err() {
                 response.code = ErrorCodes::TxGasLimit.into();
                 response.log =
@@ -797,11 +797,12 @@ where
             }
 
             // Max block gas
-            let block_gas_limit: u64 = self
-                .wl_storage
-                .read(&parameters::storage::get_max_block_gas_key())
-                .expect("Error while reading from storage")
-                .expect("Missing max_block_gas parameter in storage");
+            let block_gas_limit: Gas = Gas::from_whole_units(
+                self.wl_storage
+                    .read(&parameters::storage::get_max_block_gas_key())
+                    .expect("Error while reading from storage")
+                    .expect("Missing max_block_gas parameter in storage"),
+            );
             if gas_meter.tx_gas_limit > block_gas_limit {
                 response.code = ErrorCodes::AllocationError.into();
                 response.log = "Wrapper transaction exceeds the maximum block \
@@ -900,7 +901,7 @@ where
             .expect("Error while reading from storage")
             .expect("Missing gas table in storage");
         let mut write_log = WriteLog::default();
-        let mut cumulated_gas = 0;
+        let mut cumulated_gas = Gas::default();
         let mut vp_wasm_cache = self.vp_wasm_cache.read_only();
         let mut tx_wasm_cache = self.tx_wasm_cache.read_only();
         let mut tx = match Tx::try_from(tx_bytes) {
@@ -954,7 +955,7 @@ where
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: true,
                 }));
-                TxGasMeter::new(
+                TxGasMeter::new_from_micro(
                     tx_gas_meter
                         .tx_gas_limit
                         .checked_sub(tx_gas_meter.get_current_transaction_gas())
@@ -1006,10 +1007,19 @@ where
         .map_err(Error::TxApply)
         {
             Ok(mut result) => {
-                cumulated_gas += tx_gas_meter.get_current_transaction_gas();
+                cumulated_gas = match cumulated_gas
+                    .checked_add(tx_gas_meter.get_current_transaction_gas())
+                {
+                    Some(gas) => gas,
+                    None => {
+                        response.code = 1;
+                        response.log = "Gas overflow".to_string();
+                        return response;
+                    }
+                };
                 // Account gas for both inner and wrapper (if available)
                 result.gas_used = cumulated_gas;
-                response.info = format!("{}", result.to_string(),);
+                response.info = format!("{}", result.to_string());
             }
             Err(error) => {
                 response.code = 1;
@@ -1427,7 +1437,7 @@ mod test_utils {
         /// in the current block proposal. Takes the length of the encoded
         /// wrapper as parameter.
         #[cfg(test)]
-        pub fn enqueue_tx(&mut self, tx: Tx, inner_tx_gas: u64) {
+        pub fn enqueue_tx(&mut self, tx: Tx, inner_tx_gas: Gas) {
             self.shell.wl_storage.storage.tx_queue.push(TxInQueue {
                 tx,
                 gas: inner_tx_gas,
@@ -1533,8 +1543,9 @@ mod test_utils {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.encrypt(&Default::default());
         let gas_limit =
-            u64::from(&wrapper.header().wrapper().unwrap().gas_limit)
-                - wrapper.to_bytes().len() as u64;
+            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                .unwrap();
 
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
             tx: wrapper,

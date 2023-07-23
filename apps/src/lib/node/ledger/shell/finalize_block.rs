@@ -278,8 +278,7 @@ where
                     let has_valid_pow =
                         self.invalidate_pow_solution_if_valid(wrapper);
 
-                    let gas_meter =
-                        TxGasMeter::new(u64::from(&wrapper.gas_limit));
+                    let gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
 
                     (
                         tx_event,
@@ -326,7 +325,7 @@ where
                                 .update_header(TxType::Raw)
                                 .header_hash(),
                         ),
-                        TxGasMeter::new(tx_in_queue.gas),
+                        TxGasMeter::new_from_micro(tx_in_queue.gas),
                         #[cfg(not(feature = "mainnet"))]
                         false,
                         None,
@@ -376,13 +375,13 @@ where
                                 "Wrapper transaction {} was accepted",
                                 tx_event["hash"]
                             );
-                            let spare_gas =
-                                u64::from(tx_gas_meter.tx_gas_limit)
-                                    .checked_sub(
-                                        tx_gas_meter
-                                            .get_current_transaction_gas(),
-                                    )
-                                    .unwrap_or_default();
+                            // This will actually never underflow
+                            let spare_gas = tx_gas_meter
+                                .tx_gas_limit
+                                .checked_sub(
+                                    tx_gas_meter.get_current_transaction_gas(),
+                                )
+                                .unwrap_or_default();
                             self.wl_storage.storage.tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
                                 gas: spare_gas,
@@ -1021,8 +1020,9 @@ mod test_finalize_block {
                     };
                 shell.enqueue_tx(
                     wrapper.clone(),
-                    u64::from(&wrapper_info.gas_limit)
-                        - wrapper.to_bytes().len() as u64,
+                    Gas::from(wrapper_info.gas_limit)
+                        .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                        .unwrap(),
                 );
             }
 
@@ -1086,8 +1086,9 @@ mod test_finalize_block {
         ));
         wrapper.encrypt(&Default::default());
         let gas_limit =
-            u64::from(&wrapper.header().wrapper().unwrap().gas_limit)
-                - wrapper.to_bytes().len() as u64;
+            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                .unwrap();
         shell.enqueue_tx(wrapper.clone(), gas_limit);
 
         wrapper.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1148,8 +1149,9 @@ mod test_finalize_block {
         };
 
         let gas_limit =
-            u64::from(&wrapper.header().wrapper().unwrap().gas_limit)
-                - wrapper.to_bytes().len() as u64;
+            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                .unwrap();
         shell.enqueue_tx(wrapper, gas_limit);
 
         // check that correct error message is returned
@@ -1215,8 +1217,9 @@ mod test_finalize_block {
                     .to_owned(),
             ));
             wrapper.encrypt(&Default::default());
-            let gas = u64::from(wrapper.header().wrapper().unwrap().gas_limit)
-                - wrapper.to_bytes().len() as u64;
+            let gas = Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                .unwrap();
             shell.enqueue_tx(wrapper.clone(), gas);
             wrapper.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
@@ -1799,7 +1802,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper, 0);
+        shell.enqueue_tx(wrapper, Gas::default());
 
         let event = &shell
             .finalize_block(FinalizeBlock {

@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
+use crate::ledger::gas::Gas;
 use crate::ledger::gas::VpsGas;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
@@ -46,7 +47,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
-    pub gas_used: u64,
+    pub gas_used: Gas,
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction

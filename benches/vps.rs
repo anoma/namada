@@ -160,9 +160,9 @@ fn vp_user(c: &mut Criterion) {
                     &defaults::albert_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                        u64::MAX
-                    )),
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_micro(u64::MAX.into())
+                    ),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -308,9 +308,9 @@ fn vp_implicit(c: &mut Criterion) {
                     &Address::from(&implicit_account.to_public()),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                        u64::MAX
-                    )),
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_micro(u64::MAX.into())
+                    ),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -458,9 +458,9 @@ fn vp_validator(c: &mut Criterion) {
                     &defaults::validator_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                        u64::MAX
-                    )),
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_micro(u64::MAX.into())
+                    ),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -521,9 +521,9 @@ fn vp_token(c: &mut Criterion) {
                     &defaults::albert_address(),
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                        u64::MAX
-                    )),
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_micro(u64::MAX.into())
+                    ),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,
@@ -609,9 +609,9 @@ fn vp_masp(c: &mut Criterion) {
                     &defaults::validator_address(),
                     &shielded_ctx.shell.wl_storage.storage,
                     &shielded_ctx.shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                        u64::MAX
-                    )),
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_micro(u64::MAX.into())
+                    ),
                     &BTreeMap::default(),
                     &keys_changed,
                     &verifiers,

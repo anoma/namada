@@ -368,6 +368,7 @@ mod test_prepare_proposal {
     use namada::types::address::{self, Address};
     use namada::types::key::RefTo;
     use namada::types::token;
+    use namada::ledger::gas::Gas;
     use namada::types::token::Amount;
     use namada::proto::{Code, Data, Header, Section, Signature};
     use namada::types::transaction::{Fee, WrapperTx};
@@ -479,7 +480,7 @@ use data_encoding::HEXUPPER;
             )));
             tx.encrypt(&Default::default());
 
-            let gas = u64::from(tx.header().wrapper().expect("Wrong tx type").gas_limit) - tx.to_bytes().len() as u64;
+            let gas = Gas::from(tx.header().wrapper().expect("Wrong tx type").gas_limit).checked_sub(Gas::from(tx.to_bytes().len() as u64)).unwrap();
             shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());

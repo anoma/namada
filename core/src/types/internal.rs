@@ -52,6 +52,7 @@ impl From<bool> for HostEnvResult {
 mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
+    use crate::ledger::gas::Gas;
     use crate::proto::Tx;
 
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
@@ -61,7 +62,7 @@ mod tx_queue {
         /// Wrapper tx
         pub tx: Tx,
         /// The available gas remaining for the inner tx (for gas accounting). This allows for a more detailed logging about the gas used by the wrapper and that used by the inner
-        pub gas: u64,
+        pub gas: Gas,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet
         /// transactions.

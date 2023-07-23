@@ -82,7 +82,7 @@ where
 {
     use std::collections::BTreeMap;
 
-    use namada_core::ledger::gas::TxGasMeter;
+    use namada_core::ledger::gas::{Gas, TxGasMeter};
     use namada_core::ledger::parameters;
     use namada_core::types::transaction::DecryptedTx;
 
@@ -103,7 +103,7 @@ where
     tx.validate_header().into_storage_result()?;
 
     let mut write_log = WriteLog::default();
-    let mut cumulated_gas = 0;
+    let mut cumulated_gas = Gas::default();
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
     let mut tx_gas_meter = match tx.header().tx_type {
@@ -138,7 +138,7 @@ where
                     // that we got a valid PoW
                 has_valid_pow: true },
             ));
-            TxGasMeter::new(
+            TxGasMeter::new_from_micro(
                 tx_gas_meter
                     .tx_gas_limit
                     .checked_sub(tx_gas_meter.get_current_transaction_gas())
@@ -186,7 +186,11 @@ where
         false,
     )
     .into_storage_result()?;
-    cumulated_gas += tx_gas_meter.get_current_transaction_gas();
+    cumulated_gas = cumulated_gas
+        .checked_add(tx_gas_meter.get_current_transaction_gas())
+        .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
+            "Overflow in gas",
+        ))?;
     // Account gas for both inner and wrapper (if available)
     data.gas_used = cumulated_gas;
     // NOTE: the keys changed by the wrapper transaction (if any) are not returned from this function

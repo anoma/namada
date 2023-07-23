@@ -1,6 +1,10 @@
 //! Gas accounting module to track the gas usage in a block for transactions and
 //! validity predicates triggered by transactions.
 
+use crate::types::transaction::wrapper::GasLimit;
+
+use std::{fmt::Display, ops::Div};
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
@@ -32,6 +36,99 @@ pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Decimal scale of Gas units
+const SCALE: u64 = 1_000_000;
+
+//FIXME: move Gas and GasLimit in a new file in types
+/// Representation of gas in micro units. This effectively decouples gas metering from fee apyment, allowing higher resolution when accounting for gas while, at the same time, providing a ontained gas value when paying fees.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    PartialOrd,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+)]
+pub struct Gas {
+    //FIXME: should use this even in the BlockAllocator instead of u64? In the alloc I actually need to deal with whole gas units
+    micro: u64,
+}
+
+impl Gas {
+    /// Checked add of `Gas`. Returns `None` on overflow
+    pub fn checked_add(&self, rhs: Self) -> Option<Self> {
+        self.micro
+            .checked_add(rhs.micro)
+            .map(|micro| Self { micro })
+    }
+
+    /// Checked sub of `Gas`. Returns `None` on underflow
+    pub fn checked_sub(&self, rhs: Self) -> Option<Self> {
+        self.micro
+            .checked_sub(rhs.micro)
+            .map(|micro| Self { micro })
+    }
+
+    /// Converts the micro gas units to whole ones. If the micro units are not a multiple of the `SCALE` than ceil the quotient
+    fn get_whole_gas_units(&self) -> u64 {
+        let quotient = self.micro / SCALE;
+        if self.micro % SCALE == 0 {
+            quotient
+        } else {
+            quotient + 1
+        }
+    }
+
+    /// Generates a `Gas` instance from a whole amount
+    pub fn from_whole_units(whole: u64) -> Self {
+        Self {
+            micro: whole * SCALE,
+        }
+    }
+}
+
+impl Div<u64> for Gas {
+    type Output = Gas;
+
+    fn div(self, rhs: u64) -> Self::Output {
+        Self {
+            micro: self.micro / rhs,
+        }
+    }
+}
+
+//FIXME: remove these two impls and make a from_micro?
+impl From<u64> for Gas {
+    fn from(micro: u64) -> Self {
+        Self { micro }
+    }
+}
+
+impl From<Gas> for u64 {
+    fn from(gas: Gas) -> Self {
+        gas.micro
+    }
+}
+
+impl Display for Gas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Display the gas in whole amounts
+        write!(f, "{}", self.get_whole_gas_units())
+    }
+}
+
+impl From<GasLimit> for Gas {
+    // Derive a Gas instance with a micro amount which is exaclty a whole amount since the limit represents gas in whole units
+    fn from(value: GasLimit) -> Self {
+        Self {
+            micro: u64::from(value) * SCALE,
+        }
+    }
+}
 
 /// Trait to share gas operations for transactions and validity predicates
 pub trait GasMetering {
@@ -67,29 +164,30 @@ pub trait GasMetering {
     }
 
     /// Get the gas consumed by the tx alone
-    fn get_tx_gas(&self) -> u64;
+    fn get_tx_gas(&self) -> Gas;
 
     /// Get the gas limit
-    fn get_gas_limit(&self) -> u64;
+    fn get_gas_limit(&self) -> Gas;
 }
 
 /// Gas metering in a transaction
 #[derive(Debug)]
 pub struct TxGasMeter {
     /// The gas limit for a transaction
-    pub tx_gas_limit: u64,
-    transaction_gas: u64,
+    pub tx_gas_limit: Gas, //FIXME: need to be public?
+    transaction_gas: Gas,
 }
+
+//FIXME: should gas multiplier in GasLimit and MIN_FEE be NonZero? Maybe yes, for extra safety
 
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
 pub struct VpGasMeter {
     /// The transaction gas limit
-    tx_gas_limit: u64,
-    /// The gas used in the transaction before the VP run
-    initial_gas: u64,
+    tx_gas_limit: Gas,
+    initial_gas: Gas,
     /// The current gas usage in the VP
-    pub current_gas: u64,
+    pub current_gas: Gas, //FIXME: need to be public?
 }
 
 /// Gas meter for VPs parallel runs
@@ -97,15 +195,15 @@ pub struct VpGasMeter {
     Clone, Debug, Default, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct VpsGas {
-    max: Option<u64>,
-    rest: Vec<u64>,
+    max: Option<Gas>,
+    rest: Vec<Gas>,
 }
 
 impl GasMetering for TxGasMeter {
     fn consume(&mut self, gas: u64) -> Result<()> {
         self.transaction_gas = self
             .transaction_gas
-            .checked_add(gas)
+            .checked_add(gas.into())
             .ok_or(Error::GasOverflow)?;
 
         if self.transaction_gas > self.tx_gas_limit {
@@ -115,22 +213,31 @@ impl GasMetering for TxGasMeter {
         Ok(())
     }
 
-    fn get_tx_gas(&self) -> u64 {
+    fn get_tx_gas(&self) -> Gas {
         self.transaction_gas
     }
 
-    fn get_gas_limit(&self) -> u64 {
+    fn get_gas_limit(&self) -> Gas {
         self.tx_gas_limit
     }
 }
 
 impl TxGasMeter {
-    /// Initialize a new Tx gas meter. Requires the gas limit for the specific
+    /// Initialize a new Tx gas meter. Requires the `GasLimit` for the specific wrapper
     /// transaction
-    pub fn new(tx_gas_limit: u64) -> Self {
+    pub fn new(tx_gas_limit: GasLimit) -> Self {
+        Self {
+            tx_gas_limit: tx_gas_limit.into(),
+            transaction_gas: Gas::default(),
+        }
+    }
+
+    /// Initialize a new gas meter. Requires the gas limit expressed in micro units
+    pub fn new_from_micro(tx_gas_limit: Gas) -> Self {
+        //FIXME: rename to new_from_micro_limit
         Self {
             tx_gas_limit,
-            transaction_gas: 0,
+            transaction_gas: Gas::default(),
         }
     }
 
@@ -150,14 +257,15 @@ impl TxGasMeter {
     /// Add the gas cost used in validity predicates to the current transaction.
     pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
         tracing::error!(
-            "Adding vp gas: {}",
+            "Adding vp gas: {:?}",
             vps_gas.get_current_gas().unwrap()
         ); //FIXME: remove
-        self.consume(vps_gas.get_current_gas()?)
+        self.consume(vps_gas.get_current_gas()?.into())
     }
 
     /// Get the total gas used in the current transaction.
-    pub fn get_current_transaction_gas(&self) -> u64 {
+    //FIXME: not needed anymore since I have the method in the trqait, remove this
+    pub fn get_current_transaction_gas(&self) -> Gas {
         self.transaction_gas
     }
 }
@@ -166,7 +274,7 @@ impl GasMetering for VpGasMeter {
     fn consume(&mut self, gas: u64) -> Result<()> {
         self.current_gas = self
             .current_gas
-            .checked_add(gas)
+            .checked_add(gas.into())
             .ok_or(Error::GasOverflow)?;
 
         let current_total = self
@@ -181,11 +289,11 @@ impl GasMetering for VpGasMeter {
         Ok(())
     }
 
-    fn get_tx_gas(&self) -> u64 {
+    fn get_tx_gas(&self) -> Gas {
         self.initial_gas
     }
 
-    fn get_gas_limit(&self) -> u64 {
+    fn get_gas_limit(&self) -> Gas {
         self.tx_gas_limit
     }
 }
@@ -196,7 +304,7 @@ impl VpGasMeter {
         Self {
             tx_gas_limit: tx_gas_meter.tx_gas_limit,
             initial_gas: tx_gas_meter.transaction_gas,
-            current_gas: 0,
+            current_gas: Gas::default(),
         }
     }
 }
@@ -248,8 +356,11 @@ impl VpsGas {
     }
 
     /// Get the gas consumed by the parallelized VPs
-    fn get_current_gas(&self) -> Result<u64> {
-        let parallel_gas = self.rest.iter().sum::<u64>() / PARALLEL_GAS_DIVIDER;
+    fn get_current_gas(&self) -> Result<Gas> {
+        let parallel_gas =
+            self.rest.iter().try_fold(Gas::default(), |acc, gas| {
+                acc.checked_add(*gas).ok_or(Error::GasOverflow)
+            })? / PARALLEL_GAS_DIVIDER;
         self.max
             .unwrap_or_default()
             .checked_add(parallel_gas)
@@ -269,8 +380,8 @@ mod tests {
         #[test]
         fn test_vp_gas_meter_add(gas in 0..BLOCK_GAS_LIMIT) {
         let tx_gas_meter = TxGasMeter {
-            tx_gas_limit: BLOCK_GAS_LIMIT,
-            transaction_gas: 0,
+            tx_gas_limit: BLOCK_GAS_LIMIT.into(),
+            transaction_gas: Gas::default(),
         };
             let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
             meter.consume(gas).expect("cannot add the gas");
@@ -281,8 +392,8 @@ mod tests {
     #[test]
     fn test_vp_gas_overflow() {
         let tx_gas_meter = TxGasMeter {
-            tx_gas_limit: BLOCK_GAS_LIMIT,
-            transaction_gas: TX_GAS_LIMIT - 1,
+            tx_gas_limit: BLOCK_GAS_LIMIT.into(),
+            transaction_gas: (TX_GAS_LIMIT - 1).into(),
         };
         let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
@@ -294,8 +405,8 @@ mod tests {
     #[test]
     fn test_vp_gas_limit() {
         let tx_gas_meter = TxGasMeter {
-            tx_gas_limit: TX_GAS_LIMIT,
-            transaction_gas: TX_GAS_LIMIT - 1,
+            tx_gas_limit: TX_GAS_LIMIT.into(),
+            transaction_gas: (TX_GAS_LIMIT - 1).into(),
         };
         let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
@@ -308,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_overflow() {
-        let mut meter = TxGasMeter::new(BLOCK_GAS_LIMIT);
+        let mut meter = TxGasMeter::new_from_micro(BLOCK_GAS_LIMIT.into());
         meter.consume(1).expect("cannot add the gas");
         assert_matches!(
             meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
@@ -318,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_limit() {
-        let mut meter = TxGasMeter::new(TX_GAS_LIMIT);
+        let mut meter = TxGasMeter::new_from_micro(TX_GAS_LIMIT.into());
         assert_matches!(
             meter
                 .consume(TX_GAS_LIMIT + 1)
