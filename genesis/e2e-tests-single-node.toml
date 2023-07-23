@@ -156,10 +156,9 @@ max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
 # Max amount of gas per block 
-# FIXME: adjust these two values everywhere, also in the repo where the genesis for testnets lives
-max_block_gas = 200000000000 
+max_block_gas = 200000
 # Fee unshielding gas limit
-fee_unshielding_gas_limit = 200000000
+fee_unshielding_gas_limit = 200
 # Fee unshielding descriptions limit
 fee_unshielding_descriptions_limit = 15
 # Gas table

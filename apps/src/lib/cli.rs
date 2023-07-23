@@ -1842,7 +1842,7 @@ pub mod args {
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const FEE_AMOUNT: ArgOpt<token::Amount> = arg_opt("fee-amount");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(200_000_000))); //FIXME: lower gas consumption
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(200)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".into()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
