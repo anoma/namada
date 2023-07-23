@@ -82,7 +82,7 @@ $(patsubst %,watch_%,$(wasms)): watch_%:
 $(patsubst %,clippy_%,$(wasms)): clippy_%:
 	$(cargo) +$(nightly) clippy --all-targets --features $* -- -D warnings
 
-clean-wasm = rm ../$(wasm).wasm
+clean-wasm = rm ../$(wasm).*.wasm
 clean:
 	$(foreach wasm,$(wasms),$(clean-wasm) && ) true
 
