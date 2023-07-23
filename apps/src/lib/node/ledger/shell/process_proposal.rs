@@ -170,8 +170,6 @@ where
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
-        let mut wrapper_index = 0;
-
         let tx_results = txs
             .iter()
             .map(|tx_bytes| {
@@ -182,7 +180,6 @@ where
                     &mut temp_wl_storage,
                     block_time,
                     &gas_table,
-                    &mut wrapper_index,
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
                     block_proposer,
@@ -238,7 +235,6 @@ where
         temp_wl_storage: &mut TempWlStorage<D, H>,
         block_time: DateTimeUtc,
         gas_table: &BTreeMap<String, u64>,
-        wrapper_index: &mut usize,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: &Address,
@@ -346,9 +342,6 @@ where
                 }
             }
             TxType::Decrypted(tx_header) => {
-                // Increase wrapper index
-                let tx_index = *wrapper_index; //FIXME: remove
-                *wrapper_index += 1;
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
                     Some(wrapper) => {
@@ -436,14 +429,8 @@ where
                                 None => 0, /* VPs will rejected the
                                             * non-whitelisted tx */
                             };
-                            let inner_tx_gas_limit = temp_wl_storage
-                                .storage
-                                .tx_queue
-                                .get(tx_index)
-                                //FIXME: should we always find the wrapper in queue?
-                                .map_or(Gas::default(), |wrapper| wrapper.gas);
                             let mut tx_gas_meter =
-                                TxGasMeter::new_from_micro(inner_tx_gas_limit);
+                                TxGasMeter::new_from_micro(wrapper.gas);
                             if let Err(e) = tx_gas_meter.consume(tx_gas) {
                                 return TxResult {
                                     code: ErrorCodes::DecryptedTxGasLimit

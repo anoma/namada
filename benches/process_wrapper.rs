@@ -90,7 +90,6 @@ fn process_tx(c: &mut Criterion) {
                             &mut temp_wl_storage,
                             datetime,
                             &gas_table,
-                            &mut 0,
                             &mut vp_wasm_cache,
                             &mut tx_wasm_cache,
                             &block_proposer
