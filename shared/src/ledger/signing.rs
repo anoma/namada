@@ -303,7 +303,7 @@ pub async fn sign_wrapper<
     {
         Some(amount) => amount,
         None => {
-            if !args.force {
+            if !args.force && cfg!(feature = "mainnet") {
                 panic!(
                     "Could not retrieve the gas cost for token {}",
                     args.fee_token
