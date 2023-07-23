@@ -158,7 +158,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
-        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
+        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro_limit(
             1_000_000.into(),
         )),
         &keys_changed,
@@ -196,7 +196,7 @@ pub fn validate_token_vp_from_tx<'a>(
         &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
-        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
+        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro_limit(
             1_000_000.into(),
         )),
         &keys_changed,

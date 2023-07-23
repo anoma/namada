@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use data_encoding::HEXUPPER;
 use namada::ledger::events::EventType;
-use namada::ledger::gas::TxGasMeter;
+use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::types::{decimal_mult_u64, into_tm_voting_power};
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
@@ -325,7 +325,7 @@ where
                                 .update_header(TxType::Raw)
                                 .header_hash(),
                         ),
-                        TxGasMeter::new_from_micro(tx_in_queue.gas),
+                        TxGasMeter::new_from_micro_limit(tx_in_queue.gas),
                         #[cfg(not(feature = "mainnet"))]
                         false,
                         None,
@@ -375,16 +375,9 @@ where
                                 "Wrapper transaction {} was accepted",
                                 tx_event["hash"]
                             );
-                            // This will actually never underflow
-                            let spare_gas = tx_gas_meter
-                                .tx_gas_limit
-                                .checked_sub(
-                                    tx_gas_meter.get_current_transaction_gas(),
-                                )
-                                .unwrap_or_default();
                             self.wl_storage.storage.tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
-                                gas: spare_gas,
+                                gas: tx_gas_meter.get_available_gas(),
                                 #[cfg(not(feature = "mainnet"))]
                                 has_valid_pow,
                             });
@@ -467,7 +460,7 @@ where
 
                     self.wl_storage.drop_tx();
                     tx_event["gas_used"] =
-                        tx_gas_meter.get_current_transaction_gas().to_string();
+                        tx_gas_meter.get_tx_consumed_gas().to_string();
                     tx_event["info"] = msg.to_string();
                     if let EventType::Accepted = tx_event.event_type {
                         // If wrapper, invalid tx error code

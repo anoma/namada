@@ -845,7 +845,7 @@ pub mod testing {
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
-                env.gas_meter = TxGasMeter::new_from_micro(env.gas_meter.tx_gas_limit);
+                env.gas_meter = TxGasMeter::new_from_micro_limit(env.gas_meter.tx_gas_limit);
                 env.wl_storage.storage.block.epoch
             });
             println!("Current epoch {}", current_epoch);

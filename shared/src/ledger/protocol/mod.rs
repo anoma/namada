@@ -143,7 +143,7 @@ where
                 has_valid_pow,
             )?;
 
-            let gas_used = tx_gas_meter.get_current_transaction_gas();
+            let gas_used = tx_gas_meter.get_tx_consumed_gas();
             let initialized_accounts = write_log.get_initialized_accounts();
             let changed_keys = write_log.get_keys();
             let ibc_events = write_log.take_ibc_events();
@@ -174,7 +174,7 @@ where
                 has_valid_pow,
             )?;
             Ok(TxResult {
-                gas_used: tx_gas_meter.get_current_transaction_gas(),
+                gas_used: tx_gas_meter.get_tx_consumed_gas(),
                 changed_keys,
                 vps_result: VpsResult::default(),
                 initialized_accounts: vec![],

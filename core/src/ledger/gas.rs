@@ -164,7 +164,7 @@ pub trait GasMetering {
     }
 
     /// Get the gas consumed by the tx alone
-    fn get_tx_gas(&self) -> Gas;
+    fn get_tx_consumed_gas(&self) -> Gas;
 
     /// Get the gas limit
     fn get_gas_limit(&self) -> Gas;
@@ -174,7 +174,7 @@ pub trait GasMetering {
 #[derive(Debug)]
 pub struct TxGasMeter {
     /// The gas limit for a transaction
-    pub tx_gas_limit: Gas, //FIXME: need to be public?
+    pub tx_gas_limit: Gas,
     transaction_gas: Gas,
 }
 
@@ -185,9 +185,10 @@ pub struct TxGasMeter {
 pub struct VpGasMeter {
     /// The transaction gas limit
     tx_gas_limit: Gas,
+    /// The gas consumed by the transaction before the Vp
     initial_gas: Gas,
     /// The current gas usage in the VP
-    pub current_gas: Gas, //FIXME: need to be public?
+    current_gas: Gas,
 }
 
 /// Gas meter for VPs parallel runs
@@ -213,7 +214,7 @@ impl GasMetering for TxGasMeter {
         Ok(())
     }
 
-    fn get_tx_gas(&self) -> Gas {
+    fn get_tx_consumed_gas(&self) -> Gas {
         self.transaction_gas
     }
 
@@ -233,8 +234,7 @@ impl TxGasMeter {
     }
 
     /// Initialize a new gas meter. Requires the gas limit expressed in micro units
-    pub fn new_from_micro(tx_gas_limit: Gas) -> Self {
-        //FIXME: rename to new_from_micro_limit
+    pub fn new_from_micro_limit(tx_gas_limit: Gas) -> Self {
         Self {
             tx_gas_limit,
             transaction_gas: Gas::default(),
@@ -263,10 +263,11 @@ impl TxGasMeter {
         self.consume(vps_gas.get_current_gas()?.into())
     }
 
-    /// Get the total gas used in the current transaction.
-    //FIXME: not needed anymore since I have the method in the trqait, remove this
-    pub fn get_current_transaction_gas(&self) -> Gas {
-        self.transaction_gas
+    /// Get the amount of gas still available to the transaction
+    pub fn get_available_gas(&self) -> Gas {
+        self.tx_gas_limit
+            .checked_sub(self.transaction_gas)
+            .unwrap_or_default()
     }
 }
 
@@ -289,7 +290,7 @@ impl GasMetering for VpGasMeter {
         Ok(())
     }
 
-    fn get_tx_gas(&self) -> Gas {
+    fn get_tx_consumed_gas(&self) -> Gas {
         self.initial_gas
     }
 
@@ -346,7 +347,7 @@ impl VpsGas {
 
     fn check_limit(&self, gas_meter: &impl GasMetering) -> Result<()> {
         let total = gas_meter
-            .get_tx_gas()
+            .get_tx_consumed_gas()
             .checked_add(self.get_current_gas()?)
             .ok_or(Error::GasOverflow)?;
         if total > gas_meter.get_gas_limit() {
@@ -419,7 +420,8 @@ mod tests {
 
     #[test]
     fn test_tx_gas_overflow() {
-        let mut meter = TxGasMeter::new_from_micro(BLOCK_GAS_LIMIT.into());
+        let mut meter =
+            TxGasMeter::new_from_micro_limit(BLOCK_GAS_LIMIT.into());
         meter.consume(1).expect("cannot add the gas");
         assert_matches!(
             meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
@@ -429,7 +431,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_limit() {
-        let mut meter = TxGasMeter::new_from_micro(TX_GAS_LIMIT.into());
+        let mut meter = TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into());
         assert_matches!(
             meter
                 .consume(TX_GAS_LIMIT + 1)

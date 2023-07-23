@@ -247,7 +247,7 @@ impl BenchShell {
         run::tx(
             &self.inner.wl_storage.storage,
             &mut self.inner.wl_storage.write_log,
-            &mut TxGasMeter::new_from_micro(u64::MAX.into()),
+            &mut TxGasMeter::new_from_micro_limit(u64::MAX.into()),
             &BTreeMap::default(),
             &TxIndex(0),
             tx,

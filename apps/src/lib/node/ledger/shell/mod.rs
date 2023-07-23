@@ -26,7 +26,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
-use namada::ledger::gas::{Gas, TxGasMeter};
+use namada::ledger::gas::{Gas, GasMetering, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
@@ -943,7 +943,7 @@ where
                 };
 
                 write_log.commit_tx();
-                cumulated_gas = tx_gas_meter.get_current_transaction_gas();
+                cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
                 // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
                 let privkey =
@@ -955,11 +955,8 @@ where
                     #[cfg(not(feature = "mainnet"))]
                     has_valid_pow: true,
                 }));
-                TxGasMeter::new_from_micro(
-                    tx_gas_meter
-                        .tx_gas_limit
-                        .checked_sub(tx_gas_meter.get_current_transaction_gas())
-                        .unwrap_or_default(),
+                TxGasMeter::new_from_micro_limit(
+                    tx_gas_meter.get_available_gas(),
                 )
             }
             TxType::Protocol(_) | TxType::Decrypted(_) => {
@@ -1008,7 +1005,7 @@ where
         {
             Ok(mut result) => {
                 cumulated_gas = match cumulated_gas
-                    .checked_add(tx_gas_meter.get_current_transaction_gas())
+                    .checked_add(tx_gas_meter.get_tx_consumed_gas())
                 {
                     Some(gas) => gas,
                     None => {

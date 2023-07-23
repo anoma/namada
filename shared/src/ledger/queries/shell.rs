@@ -82,7 +82,7 @@ where
 {
     use std::collections::BTreeMap;
 
-    use namada_core::ledger::gas::{Gas, TxGasMeter};
+    use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
     use namada_core::ledger::parameters;
     use namada_core::types::transaction::DecryptedTx;
 
@@ -127,7 +127,7 @@ where
             .into_storage_result()?;
 
             write_log.commit_tx();
-            cumulated_gas = tx_gas_meter.get_current_transaction_gas();
+            cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
             let privkey =
@@ -138,12 +138,7 @@ where
                     // that we got a valid PoW
                 has_valid_pow: true },
             ));
-            TxGasMeter::new_from_micro(
-                tx_gas_meter
-                    .tx_gas_limit
-                    .checked_sub(tx_gas_meter.get_current_transaction_gas())
-                    .unwrap_or_default(),
-            )
+            TxGasMeter::new_from_micro_limit(tx_gas_meter.get_available_gas())
         }
         TxType::Protocol(_) | TxType::Decrypted(_) => {
             // If dry run only the inner tx, use the max block gas as the gas limit
@@ -187,7 +182,7 @@ where
     )
     .into_storage_result()?;
     cumulated_gas = cumulated_gas
-        .checked_add(tx_gas_meter.get_current_transaction_gas())
+        .checked_add(tx_gas_meter.get_tx_consumed_gas())
         .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
             "Overflow in gas",
         ))?;

@@ -57,7 +57,7 @@ fn replay_protection(c: &mut Criterion) {
             &shell.wl_storage.write_log,
             &tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro_limit(
                 u64::MAX.into(),
             )),
             &keys_changed,
@@ -191,9 +191,9 @@ fn governance(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 &signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
-                    u64::MAX.into(),
-                )),
+                VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+                ),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -260,9 +260,9 @@ fn slash_fund(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 &tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
-                    u64::MAX.into(),
-                )),
+                VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+                ),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -345,9 +345,9 @@ fn ibc(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
-                    u64::MAX.into(),
-                )),
+                VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+                ),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -406,9 +406,9 @@ fn ibc_token(c: &mut Criterion) {
                 &shell.wl_storage.write_log,
                 signed_tx,
                 &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro(
-                    u64::MAX.into(),
-                )),
+                VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+                ),
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
