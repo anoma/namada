@@ -25,7 +25,7 @@ use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
 use crate::types::io::{DefaultIo, Io};
-use crate::{display_line, edisplay};
+use crate::{display_line, edisplay_line};
 
 /// Relayer related errors.
 #[derive(Debug, Default)]
@@ -345,7 +345,10 @@ where
             nam_client,
             |relay_result| match relay_result {
                 RelayResult::GovernanceCallError(reason) => {
-                    edisplay!(IO, "Calling Governance failed due to: {reason}");
+                    edisplay_line!(
+                        IO,
+                        "Calling Governance failed due to: {reason}"
+                    );
                 }
                 RelayResult::NonceError { argument, contract } => {
                     let whence = match argument.cmp(&contract) {
@@ -353,14 +356,14 @@ where
                         Ordering::Equal => "identical to",
                         Ordering::Greater => "too far ahead of",
                     };
-                    edisplay!(
+                    edisplay_line!(
                         IO,
                         "Argument nonce <{argument}> is {whence} contract \
                          nonce <{contract}>"
                     );
                 }
                 RelayResult::NoReceipt => {
-                    edisplay!(
+                    edisplay_line!(
                         IO,
                         "No transfer receipt received from the Ethereum node"
                     );

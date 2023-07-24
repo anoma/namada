@@ -18,7 +18,7 @@ use crate::types::control_flow::time::{
 };
 use crate::types::control_flow::{self, Halt, TryHalt};
 use crate::types::io::Io;
-use crate::{display_line, edisplay};
+use crate::{display_line, edisplay_line};
 
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
@@ -127,7 +127,10 @@ where
     })
     .await
     .try_halt(|_| {
-        edisplay!(IO, "Timed out while waiting for Ethereum to synchronize");
+        edisplay_line!(
+            IO,
+            "Timed out while waiting for Ethereum to synchronize"
+        );
     })?;
     display_line!(IO, "The Ethereum node is up to date");
     control_flow::proceed(())
@@ -147,7 +150,7 @@ where
         .await
         .map(|status| status.is_synchronized())
         .try_halt(|err| {
-            edisplay!(
+            edisplay_line!(
                 IO,
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"

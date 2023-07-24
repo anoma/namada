@@ -110,7 +110,7 @@ macro_rules! display_line {
 /// Convenience macro for formatting arguments to
 /// [`Io::eprintln`]
 #[macro_export]
-macro_rules! edisplay {
+macro_rules! edisplay_line {
     ($io:ty,$($args:tt)*) => {
         <$io>::eprintln(format_args!($($args)*).to_string())
     };

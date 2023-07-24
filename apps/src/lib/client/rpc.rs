@@ -48,7 +48,7 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
-use namada::{display, display_line, edisplay};
+use namada::{display, display_line, edisplay_line};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
@@ -460,7 +460,7 @@ pub async fn query_pinned_balance<
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {
-                    edisplay!(IO, "Invalid viewing key entered");
+                    edisplay_line!(IO, "Invalid viewing key entered");
                     continue;
                 }
             };
@@ -724,7 +724,11 @@ pub async fn query_proposal<
                         display_line!(IO, "{:4}Status: on-going", "");
                     }
                     Err(msg) => {
-                        edisplay!(IO, "Error in tally computation: {}", msg);
+                        edisplay_line!(
+                            IO,
+                            "Error in tally computation: {}",
+                            msg
+                        );
                     }
                 }
             } else {
@@ -739,7 +743,11 @@ pub async fn query_proposal<
                         );
                     }
                     Err(msg) => {
-                        edisplay!(IO, "Error in tally computation: {}", msg);
+                        edisplay_line!(
+                            IO,
+                            "Error in tally computation: {}",
+                            msg
+                        );
                     }
                 }
             }
@@ -769,7 +777,11 @@ pub async fn query_proposal<
                 .await
                 .is_none()
             {
-                edisplay!(IO, "No valid proposal was found with id {}", id);
+                edisplay_line!(
+                    IO,
+                    "No valid proposal was found with id {}",
+                    id
+                );
             }
         }
         None => {
@@ -784,7 +796,11 @@ pub async fn query_proposal<
                     .await
                     .is_none()
                 {
-                    edisplay!(IO, "No valid proposal was found with id {}", id);
+                    edisplay_line!(
+                        IO,
+                        "No valid proposal was found with id {}",
+                        id
+                    );
                 };
             }
         }
@@ -1148,7 +1164,7 @@ pub async fn query_proposal_result<
                                 );
                             }
                             Err(msg) => {
-                                edisplay!(
+                                edisplay_line!(
                                     IO,
                                     "Error in tally computation: {}",
                                     msg
@@ -1156,12 +1172,12 @@ pub async fn query_proposal_result<
                             }
                         }
                     } else {
-                        edisplay!(IO, "Proposal is still in progress.");
+                        edisplay_line!(IO, "Proposal is still in progress.");
                         cli::safe_exit(1)
                     }
                 }
                 None => {
-                    edisplay!(IO, "Error while retriving proposal.");
+                    edisplay_line!(IO, "Error while retriving proposal.");
                     cli::safe_exit(1)
                 }
             }
@@ -1199,7 +1215,7 @@ pub async fn query_proposal_result<
                                         }
                                     }
                                     Err(e) => {
-                                        edisplay!(
+                                        edisplay_line!(
                                             IO,
                                             "Can't read entry type: {}.",
                                             e
@@ -1208,14 +1224,18 @@ pub async fn query_proposal_result<
                                     }
                                 },
                                 Err(e) => {
-                                    edisplay!(IO, "Can't read entry: {}.", e);
+                                    edisplay_line!(
+                                        IO,
+                                        "Can't read entry: {}.",
+                                        e
+                                    );
                                     cli::safe_exit(1)
                                 }
                             }
                         }
 
                         if !is_proposal_present {
-                            edisplay!(
+                            edisplay_line!(
                                 IO,
                                 "The folder must contain the offline proposal \
                                  in a file named \"proposal\""
@@ -1236,7 +1256,7 @@ pub async fn query_proposal_result<
                                 .expect("Public key should exist.");
 
                         if !proposal.check_signature(&public_key) {
-                            edisplay!(IO, "Bad proposal signature.");
+                            edisplay_line!(IO, "Bad proposal signature.");
                             cli::safe_exit(1)
                         }
 
@@ -1267,7 +1287,7 @@ pub async fn query_proposal_result<
                                 );
                             }
                             Err(msg) => {
-                                edisplay!(
+                                edisplay_line!(
                                     IO,
                                     "Error in tally computation: {}",
                                     msg
@@ -1276,7 +1296,7 @@ pub async fn query_proposal_result<
                         }
                     }
                     None => {
-                        edisplay!(
+                        edisplay_line!(
                             IO,
                             "Offline flag must be followed by data-path."
                         );
@@ -1284,7 +1304,7 @@ pub async fn query_proposal_result<
                     }
                 };
             } else {
-                edisplay!(
+                edisplay_line!(
                     IO,
                     "Either --proposal-id or --data-path should be provided \
                      as arguments."
@@ -1976,7 +1996,7 @@ pub async fn query_find_validator<
 ) {
     let args::QueryFindValidator { query: _, tm_addr } = args;
     if tm_addr.len() != 40 {
-        edisplay!(
+        edisplay_line!(
             IO,
             "Expected 40 characters in Tendermint address, got {}",
             tm_addr.len()
@@ -2259,7 +2279,7 @@ pub async fn query_result<C: namada::ledger::queries::Client + Sync, IO: Io>(
                 ),
                 Err(err2) => {
                     // Print the errors that caused the lookups to fail
-                    edisplay!(IO, "{}\n{}", err1, err2);
+                    edisplay_line!(IO, "{}\n{}", err1, err2);
                     cli::safe_exit(1)
                 }
             }

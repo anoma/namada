@@ -28,7 +28,7 @@ use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
-use namada::{display_line, edisplay};
+use namada::{display_line, edisplay_line};
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -223,7 +223,7 @@ where
         .map(|key| match key {
             common::SecretKey::Ed25519(_) => key,
             common::SecretKey::Secp256k1(_) => {
-                edisplay!(IO, "Consensus key can only be ed25519");
+                edisplay_line!(IO, "Consensus key can only be ed25519");
                 safe_exit(1)
             }
         })
@@ -249,7 +249,7 @@ where
         .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
-                edisplay!(IO, "Eth cold key can only be secp256k1");
+                edisplay_line!(IO, "Eth cold key can only be secp256k1");
                 safe_exit(1)
             }
         })
@@ -276,7 +276,7 @@ where
         .map(|key| match key {
             common::SecretKey::Secp256k1(_) => key.ref_to(),
             common::SecretKey::Ed25519(_) => {
-                edisplay!(IO, "Eth hot key can only be secp256k1");
+                edisplay_line!(IO, "Eth hot key can only be secp256k1");
                 safe_exit(1)
             }
         })
@@ -326,7 +326,7 @@ where
 
     // Validate the commission rate data
     if commission_rate > Dec::one() || commission_rate < Dec::zero() {
-        edisplay!(
+        edisplay_line!(
             IO,
             "The validator commission rate must not exceed 1.0 or 100%, and \
              it must be 0 or positive"
@@ -338,7 +338,7 @@ where
     if max_commission_rate_change > Dec::one()
         || max_commission_rate_change < Dec::zero()
     {
-        edisplay!(
+        edisplay_line!(
             IO,
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
@@ -407,12 +407,12 @@ where
                 if let Some(alias) = ctx.wallet.find_alias(validator_address) {
                     (alias.clone(), validator_address.clone())
                 } else {
-                    edisplay!(IO, "Expected one account to be created");
+                    edisplay_line!(IO, "Expected one account to be created");
                     safe_exit(1)
                 }
             }
             _ => {
-                edisplay!(IO, "Expected one account to be created");
+                edisplay_line!(IO, "Expected one account to be created");
                 safe_exit(1)
             }
         };
@@ -420,7 +420,7 @@ where
         ctx.wallet
             .add_validator_data(validator_address, validator_keys);
         crate::wallet::save(&ctx.wallet)
-            .unwrap_or_else(|err| edisplay!(IO, "{}", err));
+            .unwrap_or_else(|err| edisplay_line!(IO, "{}", err));
 
         let tendermint_home = ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
@@ -628,7 +628,7 @@ pub async fn submit_transfer<C: Client + Sync, IO: Io>(
                 tx_epoch.unwrap() != submission_epoch =>
             {
                 // Then we probably straddled an epoch boundary. Let's retry...
-                edisplay!(IO,
+                edisplay_line!(IO,
                     "MASP transaction rejected and this may be due to the \
                      epoch changing. Attempting to resubmit transaction.",
                 );
@@ -701,7 +701,7 @@ where
                 % governance_parameters.min_proposal_period
                 == 0
         );
-        edisplay!(
+        edisplay_line!(
             IO,
             "Invalid proposal start epoch: {} must be greater than current \
              epoch {} and a multiple of {}",
@@ -719,7 +719,7 @@ where
             > governance_parameters.max_proposal_period
         || proposal.voting_end_epoch.0 % 3 != 0
     {
-        edisplay!(
+        edisplay_line!(
             IO,
             "Invalid proposal end epoch: difference between proposal start \
              and end epoch must be at least {} and at max {} and end epoch \
@@ -735,7 +735,7 @@ where
         || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
             < governance_parameters.min_proposal_grace_epochs
     {
-        edisplay!(
+        edisplay_line!(
             IO,
             "Invalid proposal grace epoch: difference between proposal grace \
              and end epoch must be at least {}",
@@ -768,7 +768,11 @@ where
                 );
             }
             Err(e) => {
-                edisplay!(IO, "Error while creating proposal file: {}.", e);
+                edisplay_line!(
+                    IO,
+                    "Error while creating proposal file: {}.",
+                    e
+                );
                 safe_exit(1)
             }
         }
@@ -780,7 +784,10 @@ where
             if let Ok(data) = tx_data {
                 data
             } else {
-                edisplay!(IO, "Invalid data for init proposal transaction.");
+                edisplay_line!(
+                    IO,
+                    "Invalid data for init proposal transaction."
+                );
                 safe_exit(1)
             };
 
@@ -794,7 +801,7 @@ where
             )
             .unwrap()
         {
-            edisplay!(
+            edisplay_line!(
                 IO,
                 "Address {} doesn't have enough funds.",
                 &proposal.author
@@ -805,7 +812,7 @@ where
         if init_proposal_content.len()
             > governance_parameters.max_proposal_content_size as usize
         {
-            edisplay!(IO, "Proposal content size too big.");
+            edisplay_line!(IO, "Proposal content size too big.");
             safe_exit(1);
         }
 
@@ -876,7 +883,7 @@ where
     let signer = if let Some(addr) = &args.tx.signer {
         addr
     } else {
-        edisplay!(IO, "Missing mandatory argument --signer.");
+        edisplay_line!(IO, "Missing mandatory argument --signer.");
         safe_exit(1)
     };
 
@@ -916,7 +923,7 @@ where
 
                 let msg = splits.next().expect("Missing message to sign");
                 if splits.next().is_some() {
-                    edisplay!(IO, "Unexpected argument after message");
+                    edisplay_line!(IO, "Unexpected argument after message");
                     safe_exit(1);
                 }
 
@@ -932,14 +939,14 @@ where
         }
         "nay" => ProposalVote::Nay,
         _ => {
-            edisplay!(IO, "Vote must be either yay or nay");
+            edisplay_line!(IO, "Vote must be either yay or nay");
             safe_exit(1);
         }
     };
 
     if args.offline {
         if !proposal_vote.is_default_vote() {
-            edisplay!(
+            edisplay_line!(
                 IO,
                 "Wrong vote type for offline proposal. Just vote yay or nay!"
             );
@@ -955,7 +962,7 @@ where
             .await
             .expect("Public key should exist.");
         if !proposal.check_signature(&public_key) {
-            edisplay!(IO, "Proposal signature mismatch!");
+            edisplay_line!(IO, "Proposal signature mismatch!");
             safe_exit(1)
         }
 
@@ -984,7 +991,7 @@ where
                 Ok(())
             }
             Err(e) => {
-                edisplay!(
+                edisplay_line!(
                     IO,
                     "Error while creating proposal vote file: {}.",
                     e
@@ -1018,7 +1025,7 @@ where
 
         if let ProposalVote::Yay(ref vote_type) = proposal_vote {
             if &proposal_type != vote_type {
-                edisplay!(
+                edisplay_line!(
                     IO,
                     "Expected vote of type {}, found {}",
                     proposal_type,
@@ -1035,7 +1042,7 @@ where
                             if !rpc::query_has_storage_key::<C>(client, &vp_key)
                                 .await
                             {
-                                edisplay!(
+                                edisplay_line!(
                                     IO,
                                     "Proposed PGF council {} cannot be found \
                                      in storage",
@@ -1045,7 +1052,7 @@ where
                             }
                         }
                         _ => {
-                            edisplay!(
+                            edisplay_line!(
                                 IO,
                                 "PGF council vote contains a non-established \
                                  address: {}",
@@ -1061,7 +1068,7 @@ where
         match proposal_start_epoch {
             Some(epoch) => {
                 if current_epoch < epoch {
-                    edisplay!(
+                    edisplay_line!(
                         IO,
                         "Current epoch {} is not greater than proposal start \
                          epoch {}",
@@ -1151,7 +1158,7 @@ where
                 Ok(())
             }
             None => {
-                edisplay!(
+                edisplay_line!(
                     IO,
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id

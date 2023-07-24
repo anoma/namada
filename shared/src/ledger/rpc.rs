@@ -41,7 +41,7 @@ use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
 use crate::types::{storage, token};
-use crate::{display_line, edisplay};
+use crate::{display_line, edisplay_line};
 
 /// Query the status of a given transaction.
 ///
@@ -88,7 +88,7 @@ where
     })
     .await
     .try_halt(|_| {
-        edisplay!(
+        edisplay_line!(
             IO,
             "Transaction status query deadline of {deadline:?} exceeded"
         );
@@ -276,7 +276,7 @@ pub async fn query_wasm_code_hash<
             Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
         }
         None => {
-            edisplay!(
+            edisplay_line!(
                 IO,
                 "The corresponding wasm code of the code path {} doesn't \
                  exist on chain.",
@@ -371,7 +371,7 @@ where
             &value[..],
         ) {
             Err(err) => {
-                edisplay!(
+                edisplay_line!(
                     IO,
                     "Skipping a value for key {}. Error in decoding: {}",
                     key,
@@ -1090,7 +1090,11 @@ where
                 ControlFlow::Continue(())
             }
             Err(e) => {
-                edisplay!(IO, "Failed to query node status with error: {}", e);
+                edisplay_line!(
+                    IO,
+                    "Failed to query node status with error: {}",
+                    e
+                );
                 ControlFlow::Break(Err(()))
             }
         }

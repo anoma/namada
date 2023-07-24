@@ -75,7 +75,7 @@ use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
-use crate::{display_line, edisplay};
+use crate::{display_line, edisplay_line};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1002,7 +1002,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2);
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
-            edisplay!(
+            edisplay_line!(
                 IO,
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",

@@ -54,7 +54,7 @@ use crate::types::transaction::governance::{
 use crate::types::transaction::{
     Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
-use crate::{display_line, edisplay};
+use crate::{display_line, edisplay_line};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -429,7 +429,7 @@ pub async fn sign_wrapper<
             format_denominated_amount::<_, IO>(client, &token_addr, balance)
                 .await,
         );
-        edisplay!(IO, "{}", err_msg);
+        edisplay_line!(IO, "{}", err_msg);
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
         }
