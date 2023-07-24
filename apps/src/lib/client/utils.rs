@@ -414,6 +414,9 @@ pub fn init_network(
         // Find the sha256 from checksums.json
         let name = format!("{}.wasm", name);
         // Full name in format `{name}.{sha256}.wasm`
+        println!("Updating checksum for {} ...", name);
+        println!("Checksums: {:?}", checksums);
+        println!("Checksums.0: {:?}", checksums.0);
         let full_name = checksums.0.get(&name).unwrap();
         let hash = full_name
             .split_once('.')
