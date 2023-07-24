@@ -40,7 +40,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Decimal scale of Gas units
 const SCALE: u64 = 1_000_000;
 
-//FIXME: move Gas and GasLimit in a new file in types
 /// Representation of gas in micro units. This effectively decouples gas metering from fee apyment, allowing higher resolution when accounting for gas while, at the same time, providing a ontained gas value when paying fees.
 #[derive(
     Clone,
@@ -54,7 +53,6 @@ const SCALE: u64 = 1_000_000;
     BorshSchema,
 )]
 pub struct Gas {
-    //FIXME: should use this even in the BlockAllocator instead of u64? In the alloc I actually need to deal with whole gas units
     micro: u64,
 }
 
@@ -101,7 +99,6 @@ impl Div<u64> for Gas {
     }
 }
 
-//FIXME: remove these two impls and make a from_micro?
 impl From<u64> for Gas {
     fn from(micro: u64) -> Self {
         Self { micro }
@@ -139,10 +136,6 @@ pub trait GasMetering {
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
-        tracing::error!(
-            "Adding compile cost: {}",
-            bytes_len * COMPILE_GAS_PER_BYTE
-        ); //FIXME: remove
         self.consume(
             bytes_len
                 .checked_mul(COMPILE_GAS_PER_BYTE)
@@ -152,10 +145,6 @@ pub trait GasMetering {
 
     /// Add the gas for loading the wasm code from storage
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
-        tracing::error!(
-            "Adding load from storage cost: {}",
-            bytes_len * STORAGE_ACCESS_GAS_PER_BYTE
-        ); //FIXME: remove
         self.consume(
             bytes_len
                 .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
@@ -177,8 +166,6 @@ pub struct TxGasMeter {
     pub tx_gas_limit: Gas,
     transaction_gas: Gas,
 }
-
-//FIXME: should gas multiplier in GasLimit and MIN_FEE be NonZero? Maybe yes, for extra safety
 
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
@@ -256,10 +243,6 @@ impl TxGasMeter {
 
     /// Add the gas cost used in validity predicates to the current transaction.
     pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
-        tracing::error!(
-            "Adding vp gas: {:?}",
-            vps_gas.get_current_gas().unwrap()
-        ); //FIXME: remove
         self.consume(vps_gas.get_current_gas()?.into())
     }
 
