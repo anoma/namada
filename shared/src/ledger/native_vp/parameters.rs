@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use namada_core::ledger::storage;
 use namada_core::proto::Tx;
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use thiserror::Error;
 
@@ -40,8 +40,6 @@ where
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
-
-    const ADDR: InternalAddress = InternalAddress::Parameters;
 
     fn validate_tx(
         &self,
