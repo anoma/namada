@@ -18,10 +18,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use namada_core::types::address::{
     masp, masp_tx_key, Address, ImplicitAddress,
 };
-use namada_core::types::storage::Key;
-use namada_core::types::token::{
-    self, Amount, DenominatedAmount, MaspDenom, TokenAddress,
-};
+use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::{pos, MIN_FEE};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -260,10 +257,7 @@ pub async fn solve_pow_challenge<
             .unwrap_or_default();
     let is_bal_sufficient = fee_amount <= balance;
     if !is_bal_sufficient {
-        let token_addr = TokenAddress {
-            address: args.fee_token.clone(),
-            sub_prefix: None,
-        };
+        let token_addr = args.fee_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
@@ -426,10 +420,7 @@ pub async fn sign_wrapper<
             .unwrap_or_default();
     let is_bal_sufficient = fee_amount <= balance;
     if !is_bal_sufficient {
-        let token_addr = TokenAddress {
-            address: args.fee_token.clone(),
-            sub_prefix: None,
-        };
+        let token_addr = args.fee_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
@@ -559,23 +550,13 @@ fn make_ledger_amount_addr(
     output: &mut Vec<String>,
     amount: DenominatedAmount,
     token: &Address,
-    sub_prefix: &Option<Key>,
     prefix: &str,
 ) {
-    let token_address = TokenAddress {
-        address: token.clone(),
-        sub_prefix: sub_prefix.clone(),
-    };
     if let Some(token) = tokens.get(token) {
-        output.push(format!(
-            "{}Amount {}: {}",
-            prefix,
-            token_address.format_with_alias(token),
-            amount
-        ));
+        output.push(format!("{}Amount {}: {}", prefix, token, amount));
     } else {
         output.extend(vec![
-            format!("{}Token: {}", prefix, token_address),
+            format!("{}Token: {}", prefix, token),
             format!("{}Amount: {}", prefix, amount),
         ]);
     }
@@ -592,31 +573,22 @@ async fn make_ledger_amount_asset<
     output: &mut Vec<String>,
     amount: u64,
     token: &AssetType,
-    assets: &HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
+    assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
     prefix: &str,
 ) {
-    if let Some((token, sub_prefix, _, _epoch)) = assets.get(token) {
+    if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        let token_addr = TokenAddress {
-            address: token.clone(),
-            sub_prefix: sub_prefix.clone(),
-        };
-        let formatted_amt = format_denominated_amount::<_, IO>(
-            client,
-            &token_addr,
-            amount.into(),
-        )
-        .await;
+        let formatted_amt =
+            format_denominated_amount::<_, IO>(client, token, amount.into())
+                .await;
         if let Some(token) = tokens.get(token) {
-            output.push(format!(
-                "{}Amount: {} {}",
-                prefix,
-                token_addr.format_with_alias(token),
-                formatted_amt,
-            ));
+            output
+                .push(
+                    format!("{}Amount: {} {}", prefix, token, formatted_amt,),
+                );
         } else {
             output.extend(vec![
-                format!("{}Token: {}", prefix, token_addr),
+                format!("{}Token: {}", prefix, token),
                 format!("{}Amount: {}", prefix, formatted_amt),
             ]);
         }
@@ -701,7 +673,7 @@ pub async fn make_ledger_masp_endpoints<
     output: &mut Vec<String>,
     transfer: &Transfer,
     builder: Option<&MaspBuilder>,
-    assets: &HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
+    assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
 ) {
     if transfer.source != masp() {
         output.push(format!("Sender : {}", transfer.source));
@@ -711,7 +683,6 @@ pub async fn make_ledger_masp_endpoints<
                 output,
                 transfer.amount,
                 &transfer.token,
-                &transfer.sub_prefix,
                 "Sending ",
             );
         }
@@ -739,7 +710,6 @@ pub async fn make_ledger_masp_endpoints<
                 output,
                 transfer.amount,
                 &transfer.token,
-                &transfer.sub_prefix,
                 "Receiving ",
             );
         }
@@ -765,7 +735,6 @@ pub async fn make_ledger_masp_endpoints<
             output,
             transfer.amount,
             &transfer.token,
-            &transfer.sub_prefix,
             "",
         );
     }
@@ -1065,16 +1034,10 @@ pub async fn to_ledger_vector<
                 Section::MaspBuilder(builder)
                     if builder.target == shielded_hash =>
                 {
-                    for (addr, sub_prefix, denom, epoch) in &builder.asset_types
-                    {
+                    for (addr, denom, epoch) in &builder.asset_types {
                         asset_types.insert(
-                            make_asset_type(
-                                Some(*epoch),
-                                addr,
-                                sub_prefix,
-                                *denom,
-                            ),
-                            (addr.clone(), sub_prefix.clone(), *denom, *epoch),
+                            make_asset_type(Some(*epoch), addr, *denom),
+                            (addr.clone(), *denom, *epoch),
                         );
                     }
                     Some(builder)
@@ -1259,10 +1222,7 @@ pub async fn to_ledger_vector<
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
-        let gas_token = TokenAddress {
-            address: wrapper.fee.token.clone(),
-            sub_prefix: None,
-        };
+        let gas_token = wrapper.fee.token.clone();
         let gas_limit = format_denominated_amount::<_, IO>(
             client,
             &gas_token,

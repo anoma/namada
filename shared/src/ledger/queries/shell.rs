@@ -7,7 +7,7 @@ use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::storage::{BlockHeight, BlockResults, Key, KeySeg};
+use namada_core::types::storage::{BlockHeight, BlockResults, KeySeg};
 use namada_core::types::token::MaspDenom;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
@@ -27,7 +27,6 @@ use crate::types::transaction::TxResult;
 
 type Conversion = (
     Address,
-    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -163,7 +162,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, sub_prefix, denom), epoch, conv, pos)) = ctx
+    if let Some(((addr, denom), epoch, conv, pos)) = ctx
         .wl_storage
         .storage
         .conversion_state
@@ -172,7 +171,6 @@ where
     {
         Ok((
             addr.clone(),
-            sub_prefix.clone(),
             *denom,
             *epoch,
             Into::<masp_primitives::transaction::components::Amount>::into(

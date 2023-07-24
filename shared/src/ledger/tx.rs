@@ -17,10 +17,9 @@ use masp_primitives::transaction::components::transparent::fees::{
 use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
-use namada_core::types::storage::Key;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::types::CommissionPair;
+use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
 use thiserror::Error;
 
@@ -35,7 +34,10 @@ use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
-use crate::ledger::rpc::{self, validate_amount, TxBroadcastData, TxResponse};
+use crate::ledger::rpc::{
+    self, format_denominated_amount, validate_amount, TxBroadcastData,
+    TxResponse,
+};
 use crate::ledger::signing::{tx_signer, wrap_tx, TxSigningKey};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{Code, Data, MaspBuilder, Section, Tx};
@@ -45,7 +47,7 @@ use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::types::storage::{Epoch, RESERVED_ADDRESS_PREFIX};
+use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
@@ -111,6 +113,18 @@ pub enum Error {
     /// Invalid validator address
     #[error("The address {0} doesn't belong to any known validator account.")]
     InvalidValidatorAddress(Address),
+    /// Not jailed at pipeline epoch
+    #[error(
+        "The validator address {0} is not jailed at epoch when it would be \
+         restored."
+    )]
+    ValidatorNotCurrentlyJailed(Address),
+    /// Validator still frozen and ineligible to be unjailed
+    #[error(
+        "The validator address {0} is currently frozen and ineligible to be \
+         unjailed."
+    )]
+    ValidatorFrozenFromUnjailing(Address),
     /// Rate of epoch change too large for current epoch
     #[error(
         "New rate, {0}, is too large of a change with respect to the \
@@ -572,18 +586,18 @@ where
 
 /// decode components of a masp note
 pub fn decode_component<K, F>(
-    (addr, sub, denom, epoch): (Address, Option<Key>, MaspDenom, Epoch),
+    (addr, denom, epoch): (Address, MaspDenom, Epoch),
     val: i128,
     res: &mut HashMap<K, token::Change>,
     mk_key: F,
 ) where
-    F: FnOnce(Address, Option<Key>, Epoch) -> K,
+    F: FnOnce(Address, Epoch) -> K,
     K: Eq + std::hash::Hash,
 {
     let decoded_change = token::Change::from_masp_denominated(val, denom)
         .expect("expected this to fit");
 
-    res.entry(mk_key(addr, sub, epoch))
+    res.entry(mk_key(addr, epoch))
         .and_modify(|val| *val += decoded_change)
         .or_insert(decoded_change);
 }
@@ -663,11 +677,7 @@ pub async fn build_validator_commission_change<
     .await
     .unwrap();
 
-    // TODO: put following two let statements in its own function
-    let params_key = crate::ledger::pos::params_key();
-    let params = rpc::query_storage_value::<C, PosParams>(client, &params_key)
-        .await
-        .expect("Parameter should be defined.");
+    let params: PosParams = rpc::get_pos_params(client).await;
 
     let validator = args.validator.clone();
     if rpc::is_validator(client, &validator).await {
@@ -767,10 +777,12 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
-    let tx_code_hash = query_wasm_code_hash::<_, IO>(client, tx_code_path)
-        .await
-        .unwrap();
+    let tx_code_hash = query_wasm_code_hash::<_, IO>(
+        client,
+        args.tx_code_path.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
 
     let data = args
         .validator
@@ -818,10 +830,57 @@ pub async fn submit_unjail_validator<
         }
     }
 
-    let tx_code_path = String::from_utf8(args.tx_code_path).unwrap();
-    let tx_code_hash = query_wasm_code_hash::<_, IO>(client, tx_code_path)
-        .await
-        .unwrap();
+    let params: PosParams = rpc::get_pos_params(client).await;
+    let current_epoch = rpc::query_epoch(client).await;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    let validator_state_at_pipeline =
+        rpc::get_validator_state(client, &args.validator, Some(pipeline_epoch))
+            .await
+            .expect("Validator state should be defined.");
+    if validator_state_at_pipeline != ValidatorState::Jailed {
+        edisplay!(
+            IO,
+            "The given validator address {} is not jailed at the pipeline \
+             epoch when it would be restored to one of the validator sets.",
+            &args.validator
+        );
+        if !args.tx.force {
+            return Err(Error::ValidatorNotCurrentlyJailed(
+                args.validator.clone(),
+            ));
+        }
+    }
+
+    let last_slash_epoch_key =
+        crate::ledger::pos::validator_last_slash_key(&args.validator);
+    let last_slash_epoch =
+        rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
+            .await;
+    if let Some(last_slash_epoch) = last_slash_epoch {
+        let eligible_epoch =
+            last_slash_epoch + params.slash_processing_epoch_offset();
+        if current_epoch < eligible_epoch {
+            edisplay!(
+                IO,
+                "The given validator address {} is currently frozen and not \
+                 yet eligible to be unjailed.",
+                &args.validator
+            );
+            if !args.tx.force {
+                return Err(Error::ValidatorNotCurrentlyJailed(
+                    args.validator.clone(),
+                ));
+            }
+        }
+    }
+
+    let tx_code_hash = query_wasm_code_hash::<_, IO>(
+        client,
+        args.tx_code_path.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
 
     let data = args
         .validator
@@ -1224,21 +1283,10 @@ pub async fn build_ibc_transfer<
     .await?;
     // We cannot check the receiver
 
-    let token =
-        token_exists_or_err::<_, IO>(args.token, args.tx.force, client).await?;
+    let token = args.token;
 
     // Check source balance
-    let (sub_prefix, balance_key) = match args.sub_prefix {
-        Some(sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     check_balance_too_low_err::<_, IO>(
         &token,
@@ -1257,11 +1305,6 @@ pub async fn build_ibc_transfer<
     .await
     .unwrap();
 
-    let denom = match sub_prefix {
-        // To parse IbcToken address, remove the address prefix
-        Some(sp) => sp.to_string().replace(RESERVED_ADDRESS_PREFIX, ""),
-        None => token.to_string(),
-    };
     let amount = args
         .amount
         .to_string_native()
@@ -1269,7 +1312,10 @@ pub async fn build_ibc_transfer<
         .next()
         .expect("invalid amount")
         .to_string();
-    let token = Coin { denom, amount };
+    let token = Coin {
+        denom: token.to_string(),
+        amount,
+    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
@@ -1329,7 +1375,7 @@ async fn add_asset_type<
     C: crate::ledger::queries::Client + Sync,
     U: ShieldedUtils,
 >(
-    asset_types: &mut HashSet<(Address, Option<Key>, MaspDenom, Epoch)>,
+    asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
     shielded: &mut ShieldedContext<U>,
     client: &C,
     asset_type: AssetType,
@@ -1357,7 +1403,7 @@ async fn used_asset_types<
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
-) -> Result<HashSet<(Address, Option<Key>, MaspDenom, Epoch)>, RpcError> {
+) -> Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -1419,37 +1465,18 @@ pub async fn build_transfer<
     // Check that the target address exists on chain
     target_exists_or_err::<_, IO>(target.clone(), args.tx.force, client)
         .await?;
-    // Check that the token address exists on chain
-    token_exists_or_err::<_, IO>(token.clone(), args.tx.force, client).await?;
     // Check source balance
-    let (sub_prefix, balance_key) = match &args.sub_prefix {
-        Some(ref sub_prefix) => {
-            let sub_prefix = storage::Key::parse(sub_prefix).unwrap();
-            let prefix = token::multitoken_balance_prefix(&token, &sub_prefix);
-            (
-                Some(sub_prefix),
-                token::multitoken_balance_key(&prefix, &source),
-            )
-        }
-        None => (None, token::balance_key(&token, &source)),
-    };
+    let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
-    let validated_amount = validate_amount::<_, IO>(
-        client,
-        args.amount,
-        &token,
-        &sub_prefix,
-        args.tx.force,
-    )
-    .await
-    .expect("expected to validate amount");
+    let validated_amount =
+        validate_amount::<_, IO>(client, args.amount, &token, args.tx.force)
+            .await
+            .expect("expected to validate amount");
     let validate_fee = validate_amount::<_, IO>(
         client,
         args.tx.fee_amount,
         &args.tx.fee_token,
-        // TODO: Currently multi-tokens cannot be used to pay fees
-        &None,
         args.tx.force,
     )
     .await
@@ -1559,7 +1586,6 @@ pub async fn build_transfer<
         source: source.clone(),
         target: target.clone(),
         token: token.clone(),
-        sub_prefix: sub_prefix.clone(),
         amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
@@ -1850,29 +1876,6 @@ where
     }
 }
 
-/// Returns the given token if the given address exists on chain
-/// otherwise returns an error, force forces the address through even
-/// if it isn't on chain
-pub async fn token_exists_or_err<
-    C: crate::ledger::queries::Client + Sync,
-    IO: Io,
->(
-    token: Address,
-    force: bool,
-    client: &C,
-) -> Result<Address, Error> {
-    let message =
-        format!("The token address {} doesn't exist on chain.", token);
-    address_exists_or_err::<_, _, IO>(
-        token,
-        force,
-        client,
-        message,
-        Error::TokenDoesNotExist,
-    )
-    .await
-}
-
 /// Returns the given source address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
@@ -1946,8 +1949,14 @@ async fn check_balance_too_low_err<
                          transfer is {} and the balance is {}.",
                         source,
                         token,
-                        amount.to_string_native(),
-                        balance.to_string_native()
+                        format_denominated_amount::<_, IO>(
+                            client, token, amount
+                        )
+                        .await,
+                        format_denominated_amount::<_, IO>(
+                            client, token, balance
+                        )
+                        .await,
                     );
                     Ok(())
                 } else {

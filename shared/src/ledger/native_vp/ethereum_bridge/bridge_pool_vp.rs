@@ -92,30 +92,20 @@ where
         transfer: &PendingTransfer,
     ) -> Result<bool, Error> {
         // check that the assets to be transferred were escrowed
-        let asset_key = wrapped_erc20s::Keys::from(&transfer.transfer.asset);
-        let owner_key = asset_key.balance(&transfer.transfer.sender);
-        let escrow_key = asset_key.balance(&BRIDGE_POOL_ADDRESS);
+        let token = wrapped_erc20s::token(&transfer.transfer.asset);
+        let owner_key = balance_key(&token, &transfer.transfer.sender);
+        let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
         if keys_changed.contains(&owner_key)
             && keys_changed.contains(&escrow_key)
         {
-            match check_balance_changes(
-                &self.ctx,
-                (&self.ctx.storage.native_token, &escrow_key)
-                    .try_into()
-                    .expect("This should not fail"),
-                (&self.ctx.storage.native_token, &owner_key)
-                    .try_into()
-                    .expect("This should not fail"),
-            ) {
-                Ok(Some((sender, _, amount)))
-                    if check_delta(&sender, &amount, transfer) => {}
-                other => {
+            match check_balance_changes(&self.ctx, &owner_key, &escrow_key)? {
+                Some(amount) if amount == transfer.transfer.amount => Ok(true),
+                _ => {
                     tracing::debug!(
                         "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool: {:?}",
-                        other
+                         escrowed into the Ethereum bridge pool"
                     );
-                    return Ok(false);
+                    Ok(false)
                 }
             }
         } else {
@@ -123,14 +113,8 @@ where
                 "The assets of the transfer were not properly escrowed into \
                  the Ethereum bridge pool."
             );
-            return Ok(false);
+            Ok(false)
         }
-
-        tracing::info!(
-            "The Ethereum bridge pool VP accepted the transfer {:?}.",
-            transfer
-        );
-        Ok(true)
     }
 
     /// Check that the correct amount of Nam was sent
@@ -233,15 +217,6 @@ where
             },
         )
     }
-}
-
-/// Check if a delta matches the delta given by a transfer
-fn check_delta(
-    sender: &Address,
-    amount: &Amount,
-    transfer: &PendingTransfer,
-) -> bool {
-    *sender == transfer.transfer.sender && *amount == transfer.transfer.amount
 }
 
 /// Helper struct for handling the different escrow
@@ -486,7 +461,7 @@ mod test_bridge_pool_vp {
     ) -> BTreeSet<Key> {
         // get the balance keys
         let token_key =
-            wrapped_erc20s::Keys::from(&ASSET).balance(&balance.owner);
+            balance_key(&wrapped_erc20s::token(&ASSET), &balance.owner);
         let account_key = balance_key(&nam(), &balance.owner);
 
         // update the balance of nam
@@ -1028,12 +1003,14 @@ mod test_bridge_pool_vp {
             BTreeSet::from([get_pending_key(&transfer)])
         };
         // We escrow 0 tokens
-        keys_changed.insert(
-            wrapped_erc20s::Keys::from(&ASSET).balance(&bertha_address()),
-        );
-        keys_changed.insert(
-            wrapped_erc20s::Keys::from(&ASSET).balance(&BRIDGE_POOL_ADDRESS),
-        );
+        keys_changed.insert(balance_key(
+            &wrapped_erc20s::token(&ASSET),
+            &bertha_address(),
+        ));
+        keys_changed.insert(balance_key(
+            &wrapped_erc20s::token(&ASSET),
+            &BRIDGE_POOL_ADDRESS,
+        ));
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp

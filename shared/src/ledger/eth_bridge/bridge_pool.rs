@@ -7,7 +7,6 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
-use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::key::common;
 use owo_colors::OwoColorize;
@@ -57,17 +56,10 @@ pub async fn build_bridge_pool_tx<
         gas_payer,
         code_path: wasm_code,
     } = args;
-
-    let sub_prefix = Some(wrapped_erc20s::sub_prefix(&asset));
-    let DenominatedAmount { amount, .. } = validate_amount::<_, IO>(
-        client,
-        amount,
-        &BRIDGE_ADDRESS,
-        &sub_prefix,
-        tx.force,
-    )
-    .await
-    .expect("Failed to validate amount");
+    let DenominatedAmount { amount, .. } =
+        validate_amount::<_, IO>(client, amount, &BRIDGE_ADDRESS, tx.force)
+            .await
+            .expect("Failed to validate amount");
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,

@@ -19,32 +19,61 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::{btc, eth, masp_rewards, Address};
+use namada::types::address::Address;
 use namada::types::governance::ProposalType;
-use namada::types::io::DefaultIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_test_utils::TestWasms;
 use serde_json::json;
 use setup::constants::*;
+use setup::Test;
 
 use super::helpers::{
-    get_height, is_debug_mode, wait_for_block_height, wait_for_wasm_pre_compile,
+    get_height, wait_for_block_height, wait_for_wasm_pre_compile,
 };
-use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode};
+use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
+    parse_reached_epoch,
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
+
+fn start_namada_ledger_node(
+    test: &Test,
+    idx: Option<u64>,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd> {
+    let who = match idx {
+        Some(idx) => Who::Validator(idx),
+        _ => Who::NonValidator,
+    };
+    let mut node =
+        run_as!(test, who.clone(), Bin::Node, &["ledger"], timeout_sec)?;
+    node.exp_string("Namada ledger node started")?;
+    if let Who::Validator(_) = who {
+        node.exp_string("This node is a validator")?;
+    } else {
+        node.exp_string("This node is not a validator")?;
+    }
+    Ok(node)
+}
+
+fn start_namada_ledger_node_wait_wasm(
+    test: &Test,
+    idx: Option<u64>,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd> {
+    let mut node = start_namada_ledger_node(test, idx, timeout_sec)?;
+    wait_for_wasm_pre_compile(&mut node)?;
+    Ok(node)
+}
 
 /// Test that when we "run-ledger" with all the possible command
 /// combinations from fresh state, the node starts-up successfully for both a
@@ -111,28 +140,14 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     );
 
     // 1. Run 2 genesis validator ledger nodes and 1 non-validator node
-    let args = ["ledger"];
-    let mut validator_0 =
-        run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Namada ledger node started")?;
-    validator_0.exp_string("This node is a validator")?;
-    let mut validator_1 =
-        run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Namada ledger node started")?;
-    validator_1.exp_string("This node is a validator")?;
-    let mut non_validator =
-        run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Namada ledger node started")?;
-    non_validator.exp_string("This node is not a validator")?;
-
-    wait_for_wasm_pre_compile(&mut validator_0)?;
-    let bg_validator_0 = validator_0.background();
-
-    wait_for_wasm_pre_compile(&mut validator_1)?;
-    let bg_validator_1 = validator_1.background();
-
-    wait_for_wasm_pre_compile(&mut non_validator)?;
-    let _bg_non_validator = non_validator.background();
+    let bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+    let bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+    let _bg_non_validator =
+        start_namada_ledger_node_wait_wasm(&test, None, Some(40))?.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
@@ -218,9 +233,7 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 1. Run the ledger node
     let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    ledger.exp_string("Namada ledger node started")?;
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
 
     // 2. Kill the tendermint node
     sleep(1);
@@ -261,10 +274,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
 
-    ledger.exp_string("Namada ledger node started")?;
     // There should be no previous state
     ledger.exp_string("No state could be found")?;
     // Wait to commit a block
@@ -284,10 +295,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     drop(ledger);
 
     // 3. Run the ledger again, it should load its previous state
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    ledger.exp_string("Namada ledger node started")?;
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -309,10 +317,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     session.exp_eof()?;
 
     // 6. Run the ledger again, it should start from fresh state
-    let mut session =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    session.exp_string("Namada ledger node started")?;
+    let mut session = start_namada_ledger_node(&test, Some(0), Some(40))?;
 
     // There should be no previous state
     session.exp_string("No state could be found")?;
@@ -412,18 +417,15 @@ fn ledger_txs_and_queries() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     // for a custom tx
     let transfer = token::Transfer {
         source: find_address(&test, BERTHA).unwrap(),
         target: find_address(&test, ALBERT).unwrap(),
         token: find_address(&test, NAM).unwrap(),
-        sub_prefix: None,
         amount: token::DenominatedAmount {
             amount: token::Amount::native_whole(10),
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -649,1224 +651,6 @@ fn ledger_txs_and_queries() -> Result<()> {
 
 /// In this test we:
 /// 1. Run the ledger node
-/// 2. Attempt to spend 10 BTC at SK(A) to PA(B)
-/// 3. Attempt to spend 15 BTC at SK(A) to Bertha
-/// 4. Send 20 BTC from Albert to PA(A)
-/// 5. Attempt to spend 10 ETH at SK(A) to PA(B)
-/// 6. Spend 7 BTC at SK(A) to PA(B)
-/// 7. Spend 7 BTC at SK(A) to PA(B)
-/// 8. Attempt to spend 7 BTC at SK(A) to PA(B)
-/// 9. Spend 6 BTC at SK(A) to PA(B)
-/// 10. Assert BTC balance at VK(A) is 0
-/// 11. Assert ETH balance at VK(A) is 0
-/// 12. Assert balance at VK(B) is 10 BTC
-/// 13. Send 10 BTC from SK(B) to Bertha
-
-#[test]
-fn masp_txs_and_queries() -> Result<()> {
-    // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
-    let test = setup::network(
-        |genesis| {
-            let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 3600 } else { 360 },
-                ),
-                min_num_of_blocks: 1,
-                ..genesis.parameters
-            };
-            GenesisConfig {
-                parameters,
-                ..genesis
-            }
-        },
-        None,
-    )?;
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-
-    let _bg_ledger = ledger.background();
-
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    let txs_args = vec![
-        // 2. Attempt to spend 10 BTC at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                AB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "10",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "No balance found",
-        ),
-        // 3. Attempt to spend 15 BTC at SK(A) to Bertha
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BERTHA,
-                "--token",
-                BTC,
-                "--amount",
-                "15",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "No balance found",
-        ),
-        // 4. Send 20 BTC from Albert to PA(A)
-        (
-            vec![
-                "transfer",
-                "--source",
-                ALBERT,
-                "--target",
-                AA_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "20",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-        // 5. Attempt to spend 10 ETH at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                AB_PAYMENT_ADDRESS,
-                "--token",
-                ETH,
-                "--amount",
-                "10",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "No balance found",
-        ),
-        // 6. Spend 7 BTC at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                AB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "7",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-        // 7. Spend 7 BTC at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "7",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-        // 8. Attempt to spend 7 BTC at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "7",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "is lower than the amount to be transferred and fees",
-        ),
-        // 9. Spend 6 BTC at SK(A) to PA(B)
-        (
-            vec![
-                "transfer",
-                "--source",
-                A_SPENDING_KEY,
-                "--target",
-                BB_PAYMENT_ADDRESS,
-                "--token",
-                BTC,
-                "--amount",
-                "6",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-        // 10. Assert BTC balance at VK(A) is 0
-        (
-            vec![
-                "balance",
-                "--owner",
-                AA_VIEWING_KEY,
-                "--token",
-                BTC,
-                "--node",
-                &validator_one_rpc,
-            ],
-            "No shielded btc balance found",
-        ),
-        // 11. Assert ETH balance at VK(A) is 0
-        (
-            vec![
-                "balance",
-                "--owner",
-                AA_VIEWING_KEY,
-                "--token",
-                ETH,
-                "--node",
-                &validator_one_rpc,
-            ],
-            "No shielded eth balance found",
-        ),
-        // 12. Assert balance at VK(B) is 10 BTC
-        (
-            vec![
-                "balance",
-                "--owner",
-                AB_VIEWING_KEY,
-                "--node",
-                &validator_one_rpc,
-            ],
-            "btc : 20",
-        ),
-        // 13. Send 10 BTC from SK(B) to Bertha
-        (
-            vec![
-                "transfer",
-                "--source",
-                B_SPENDING_KEY,
-                "--target",
-                BERTHA,
-                "--token",
-                BTC,
-                "--amount",
-                "20",
-                "--node",
-                &validator_one_rpc,
-            ],
-            "Transaction is valid",
-        ),
-    ];
-
-    for (tx_args, tx_result) in &txs_args {
-        for &dry_run in &[true, false] {
-            let tx_args = if dry_run && tx_args[0] == "transfer" {
-                vec![tx_args.clone(), vec!["--dry-run"]].concat()
-            } else {
-                tx_args.clone()
-            };
-            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-
-            if *tx_result == "Transaction is valid" && !dry_run {
-                client.exp_string("Transaction accepted")?;
-                client.exp_string("Transaction applied")?;
-            }
-            client.exp_string(tx_result)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Assert PPA(C) cannot be recognized by incorrect viewing key
-/// 3. Assert PPA(C) has not transaction pinned to it
-/// 4. Send 20 BTC from Albert to PPA(C)
-/// 5. Assert PPA(C) has the 20 BTC transaction pinned to it
-
-#[test]
-fn masp_pinned_txs() -> Result<()> {
-    // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
-    let test = setup::network(
-        |genesis| {
-            let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(120),
-                ..genesis.parameters
-            };
-            GenesisConfig {
-                parameters,
-                ..genesis
-            }
-        },
-        None,
-    )?;
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-
-    let _bg_ledger = ledger.background();
-
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-
-    // Wait till epoch boundary
-    let _ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert PPA(C) cannot be recognized by incorrect viewing key
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.send_line(AB_VIEWING_KEY)?;
-    client.exp_string("Supplied viewing key cannot decode transactions to")?;
-    client.assert_success();
-
-    // Assert PPA(C) has no transaction pinned to it
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("has not yet been consumed")?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 20 BTC from Albert to PPA(C)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    // This makes it more consistent for some reason?
-    let _ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert PPA(C) has the 20 BTC transaction pinned to it
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received 20 btc")?;
-    client.assert_success();
-
-    // Assert PPA(C) has no NAM pinned to it
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded nam")?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert PPA(C) does not NAM pinned to it on epoch boundary
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.send_line(AC_VIEWING_KEY)?;
-    client.exp_string("Received no shielded nam")?;
-    client.assert_success();
-
-    Ok(())
-}
-
-/// In this test we verify that users of the MASP receive the correct rewards
-/// for leaving their assets in the pool for varying periods of time.
-
-#[test]
-fn masp_incentives() -> Result<()> {
-    // The number of decimal places used by BTC amounts.
-    const BTC_DENOMINATION: u8 = 8;
-    // The number of decimal places used by ETH amounts.
-    const ETH_DENOMINATION: u8 = 18;
-    // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
-    let test = setup::network(
-        |genesis| {
-            let parameters = ParametersConfig {
-                epochs_per_year: epochs_per_year_from_min_duration(
-                    if is_debug_mode() { 340 } else { 85 },
-                ),
-                min_num_of_blocks: 1,
-                ..genesis.parameters
-            };
-            GenesisConfig {
-                parameters,
-                ..genesis
-            }
-        },
-        None,
-    )?;
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-
-    let _bg_ledger = ledger.background();
-
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-
-    // Wait till epoch boundary
-    let ep0 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 20 BTC from Albert to PA(A)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AA_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Assert BTC balance at VK(A) is 20
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("btc: 20")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(A) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
-
-    let masp_rewards = masp_rewards();
-
-    // Wait till epoch boundary
-    let ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert BTC balance at VK(A) is 20
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("btc: 20")?;
-    client.assert_success();
-
-    let amt20 = token::Amount::from_uint(20, BTC_DENOMINATION).unwrap();
-    let amt10 = token::Amount::from_uint(10, ETH_DENOMINATION).unwrap();
-
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep1.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let ep2 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert BTC balance at VK(A) is 20
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("btc: 20")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep2.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let ep3 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 10 ETH from Albert to PA(B)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AB_PAYMENT_ADDRESS,
-            "--token",
-            ETH,
-            "--amount",
-            "10",
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Assert ETH balance at VK(B) is 10
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("eth: 10")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let ep4 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert ETH balance at VK(B) is 10
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("eth: 10")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_4-epoch_0)+10*ETH_reward*(epoch_4-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep4.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep4.0 - ep3.0));
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated))?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let ep5 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 10 ETH from SK(B) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            ETH,
-            "--amount",
-            "10",
-            "--signer",
-            BERTHA,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Assert ETH balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            ETH,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded eth balance found")?;
-    client.assert_success();
-
-    // let mut ep = get_epoch(&test, &validator_one_rpc)?;
-
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // ep = get_epoch(&test, &validator_one_rpc)?;
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep5.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated))?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let ep6 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 20 BTC from SK(A) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
-            "--signer",
-            ALBERT,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Assert BTC balance at VK(A) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            BTC,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded btc balance found")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let _ep7 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated))?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = (amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0);
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    let amt = ((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-        + ((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0));
-    let denominated = DenominatedAmount {
-        amount: amt,
-        denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-    };
-    client.exp_string(&format!("nam: {}", denominated,))?;
-    client.assert_success();
-
-    // Wait till epoch boundary to prevent conversion expiry during transaction
-    // construction
-    let _ep8 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 10*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            B_SPENDING_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt10 * masp_rewards[&(eth(), None)]).0 * (ep5.0 - ep3.0))
-                .to_string_native(),
-            "--signer",
-            BERTHA,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Wait till epoch boundary
-    let _ep9 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            A_SPENDING_KEY,
-            "--target",
-            BERTHA,
-            "--token",
-            NAM,
-            "--amount",
-            &((amt20 * masp_rewards[&(btc(), None)]).0 * (ep6.0 - ep0.0))
-                .to_string_native(),
-            "--signer",
-            ALBERT,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(300)
-    )?;
-    client.exp_string("Transaction accepted")?;
-    client.exp_string("Transaction applied")?;
-    client.exp_string("Transaction is valid")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(A) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AA_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
-
-    // Assert NAM balance at VK(B) is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            AB_VIEWING_KEY,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("No shielded nam balance found")?;
-    client.assert_success();
-
-    // Assert NAM balance at MASP pool is 0
-    let mut client = run!(
-        test,
-        Bin::Client,
-        vec![
-            "balance",
-            "--owner",
-            MASP,
-            "--token",
-            NAM,
-            "--node",
-            &validator_one_rpc
-        ],
-        Some(60)
-    )?;
-    client.exp_string("nam: 0")?;
-    client.assert_success();
-
-    Ok(())
-}
-
-/// In this test we:
-/// 1. Run the ledger node
 /// 2. Submit an invalid transaction (disallowed by state machine)
 /// 3. Shut down the ledger
 /// 4. Restart the ledger
@@ -1884,12 +668,9 @@ fn invalid_transactions() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-
-    let bg_ledger = ledger.background();
+    let bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     // 2. Submit a an invalid transaction (trying to transfer tokens should fail
     // in the user's VP due to the wrong signer)
@@ -1939,10 +720,7 @@ fn invalid_transactions() -> Result<()> {
     drop(ledger);
 
     // 4. Restart the ledger
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    ledger.exp_string("Namada ledger node started")?;
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
 
     // There should be previous state now
     ledger.exp_string("Last state root hash:")?;
@@ -2034,11 +812,9 @@ fn pos_bonds() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -2151,7 +927,7 @@ fn pos_bonds() -> Result<()> {
                 delegation_withdrawable_epoch
             );
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= delegation_withdrawable_epoch {
             break;
         }
@@ -2237,27 +1013,15 @@ fn pos_rewards() -> Result<()> {
     }
 
     // 1. Run 3 genesis validator ledger nodes
-    let mut validator_0 =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    validator_0.exp_string("Namada ledger node started")?;
-    validator_0.exp_string("This node is a validator")?;
-
-    let mut validator_1 =
-        run_as!(test, Who::Validator(1), Bin::Node, &["ledger"], Some(40))?;
-    validator_1.exp_string("Namada ledger node started")?;
-    validator_1.exp_string("This node is a validator")?;
-
-    let mut validator_2 =
-        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    validator_2.exp_string("Namada ledger node started")?;
-    validator_2.exp_string("This node is a validator")?;
-
-    wait_for_wasm_pre_compile(&mut validator_0)?;
-    let bg_validator_0 = validator_0.background();
-    wait_for_wasm_pre_compile(&mut validator_1)?;
-    let bg_validator_1 = validator_1.background();
-    wait_for_wasm_pre_compile(&mut validator_2)?;
-    let bg_validator_2 = validator_2.background();
+    let bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+    let bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+    let bg_validator_2 =
+        start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
+            .background();
 
     let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(1));
@@ -2358,7 +1122,7 @@ fn pos_rewards() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
-        let epoch = get_epoch(&test, &validator_zero_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_zero_rpc, 40)?;
         if dbg!(epoch) >= wait_epoch {
             break;
         }
@@ -2402,11 +1166,9 @@ fn test_bond_queries() -> Result<()> {
     )?;
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let validator_alias = "validator-0";
@@ -2441,7 +1203,7 @@ fn test_bond_queries() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", 1);
         }
-        let epoch = get_epoch(&test, &validator_one_rpc)?;
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
         if epoch >= Epoch(4) {
             break;
         }
@@ -2563,17 +1325,10 @@ fn pos_init_validator() -> Result<()> {
     )?;
 
     // 1. Run a validator and non-validator ledger node
-    let args = ["ledger"];
     let mut validator_0 =
-        run_as!(test, Who::Validator(0), Bin::Node, args, Some(60))?;
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(60))?;
     let mut non_validator =
-        run_as!(test, Who::NonValidator, Bin::Node, args, Some(60))?;
-
-    wait_for_wasm_pre_compile(&mut validator_0)?;
-    // let _bg_ledger = validator_0.background();
-
-    wait_for_wasm_pre_compile(&mut non_validator)?;
-    // let _bg_ledger = non_validator.background();
+        start_namada_ledger_node_wait_wasm(&test, None, Some(60))?;
 
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;
@@ -2706,15 +1461,13 @@ fn pos_init_validator() -> Result<()> {
     // Stop the non-validator node and run it as the new validator
     let mut non_validator = bg_non_validator.foreground();
     non_validator.interrupt()?;
-
-    // it takes a bit before the node is shutdown. We dont want flasky test.
-    sleep(6);
+    non_validator.exp_eof()?;
 
     let loc = format!("{}:{}", std::file!(), std::line!());
     let validator_1_base_dir = test.get_base_dir(&Who::NonValidator);
     let mut validator_1 = setup::run_cmd(
         Bin::Node,
-        args,
+        ["ledger"],
         Some(60),
         &test.working_dir,
         validator_1_base_dir,
@@ -2740,7 +1493,7 @@ fn pos_init_validator() -> Result<()> {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
-        let epoch = get_epoch(&test, &non_validator_rpc)?;
+        let epoch = epoch_sleep(&test, &non_validator_rpc, 40)?;
         if epoch >= earliest_update_epoch {
             break;
         }
@@ -2778,11 +1531,9 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(*test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let bg_ledger = ledger.background();
+    let bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, &Who::Validator(0)));
 
@@ -2890,13 +1641,11 @@ fn proposal_submission() -> Result<()> {
     client.assert_success();
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    let bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
-
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     // 1.1 Delegate some token
     let tx_args = vec![
@@ -2914,7 +1663,7 @@ fn proposal_submission() -> Result<()> {
         "--gas-token",
         NAM,
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
@@ -2944,6 +1693,11 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // Wait for the proposal to be committed
+    let mut ledger = bg_ledger.foreground();
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
 
     // 3. Query the proposal
     let proposal_query_args = vec![
@@ -3243,12 +1997,9 @@ fn eth_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    ledger.exp_string("Namada ledger node started")?;
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -3477,12 +2228,9 @@ fn pgf_governance_proposal() -> Result<()> {
     client.assert_success();
 
     // Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    ledger.exp_string("Namada ledger node started")?;
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -3797,11 +2545,9 @@ fn proposal_offline() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(20))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
@@ -4254,30 +3000,12 @@ fn test_genesis_validators() -> Result<()> {
         test.genesis.validator.keys(),
     );
 
-    let args = ["ledger"];
     let mut validator_0 =
-        run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Namada ledger node started")?;
-    validator_0.exp_string("This node is a validator")?;
-
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
     let mut validator_1 =
-        run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Namada ledger node started")?;
-    validator_1.exp_string("This node is a validator")?;
-
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?;
     let mut non_validator =
-        run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
-    non_validator.exp_string("Namada ledger node started")?;
-    non_validator.exp_string("This node is not a validator")?;
-
-    // Wait for a first block
-    validator_0.exp_string("Committed block hash")?;
-    validator_1.exp_string("Committed block hash")?;
-    non_validator.exp_string("Committed block hash")?;
-
-    wait_for_wasm_pre_compile(&mut validator_0)?;
-    wait_for_wasm_pre_compile(&mut validator_1)?;
-    wait_for_wasm_pre_compile(&mut non_validator)?;
+        start_namada_ledger_node_wait_wasm(&test, None, Some(40))?;
 
     // Wait for a first block
     validator_0.exp_string("Committed block hash")?;
@@ -4369,6 +3097,7 @@ fn test_genesis_validators() -> Result<()> {
 /// 4. Run it to get it to double vote and sign blocks
 /// 5. Submit a valid token transfer tx to validator 0
 /// 6. Wait for double signing evidence
+/// 7. Make sure the the first validator can proceed to the next epoch
 #[test]
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
@@ -4378,9 +3107,24 @@ fn double_signing_gets_slashed() -> Result<()> {
     use namada_apps::client;
     use namada_apps::config::Config;
 
+    let mut pipeline_len = 0;
+    let mut unbonding_len = 0;
+    let mut cubic_offset = 0;
+
     // Setup 2 genesis validator nodes
     let test = setup::network(
-        |genesis| setup::set_validators(2, genesis, default_port_offset),
+        |genesis| {
+            (pipeline_len, unbonding_len, cubic_offset) = (
+                genesis.pos_params.pipeline_len,
+                genesis.pos_params.unbonding_len,
+                genesis.pos_params.cubic_slashing_window_length,
+            );
+            let mut genesis =
+                setup::set_validators(4, genesis, default_port_offset);
+            // Make faster epochs to be more likely to discover boundary issues
+            genesis.parameters.min_num_of_blocks = 2;
+            genesis
+        },
         None,
     )?;
 
@@ -4398,24 +3142,37 @@ fn double_signing_gets_slashed() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
+    println!("pipeline_len: {}", pipeline_len);
 
     // 1. Run 2 genesis validator ledger nodes
-    let args = ["ledger"];
-    let mut validator_0 =
-        run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
-    validator_0.exp_string("Namada ledger node started")?;
-    validator_0.exp_string("This node is a validator")?;
-    let _bg_validator_0 = validator_0.background();
-    let mut validator_1 =
-        run_as!(test, Who::Validator(1), Bin::Node, args, Some(40))?;
-    validator_1.exp_string("Namada ledger node started")?;
-    validator_1.exp_string("This node is a validator")?;
-    let bg_validator_1 = validator_1.background();
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+    let bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+
+    let mut validator_2 =
+        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
+    validator_2.exp_string("Namada ledger node started")?;
+    validator_2.exp_string("This node is a validator")?;
+    let _bg_validator_2 = validator_2.background();
+
+    let mut validator_3 =
+        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
+    validator_3.exp_string("Namada ledger node started")?;
+    validator_3.exp_string("This node is a validator")?;
+    let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_0_base_dir_copy =
-        test.test_dir.path().join("validator-0-copy");
+    let validator_0_base_dir_copy = test
+        .test_dir
+        .path()
+        .join(test.net.chain_id.as_str())
+        .join(client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-0-copy")
+        .join(namada_apps::config::DEFAULT_BASE_DIR);
     fs_extra::dir::copy(
         validator_0_base_dir,
         &validator_0_base_dir_copy,
@@ -4433,7 +3190,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let net_address_port_0 = net_address_0.port();
 
     let update_config = |ix: u8, mut config: Config| {
-        let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
+        let first_port = net_address_port_0 + 26 * (ix as u16 + 1);
         let p2p_addr =
             convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
                 .ip()
@@ -4489,7 +3246,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     // `validator_0` and `validator_0_copy` should start double signing
     let mut validator_0_copy = setup::run_cmd(
         Bin::Node,
-        args,
+        ["ledger"],
         Some(40),
         &test.working_dir,
         validator_0_base_dir_copy,
@@ -4497,7 +3254,6 @@ fn double_signing_gets_slashed() -> Result<()> {
     )?;
     validator_0_copy.exp_string("Namada ledger node started")?;
     validator_0_copy.exp_string("This node is a validator")?;
-    wait_for_wasm_pre_compile(&mut validator_0_copy)?;
     let _bg_validator_0_copy = validator_0_copy.background();
 
     // 5. Submit a valid token transfer tx to validator 0
@@ -4529,7 +3285,128 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 6. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
     validator_1.exp_string("Processing evidence")?;
-    validator_1.exp_string("Slashing")?;
+
+    println!("\nPARSING SLASH MESSAGE\n");
+    let (_, res) = validator_1
+        .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
+        .unwrap();
+    println!("\n{res}\n");
+    let bg_validator_1 = validator_1.background();
+
+    let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
+        .unwrap()
+        + unbonding_len
+        + cubic_offset
+        + 1u64;
+
+    // Query slashes
+    // let tx_args = ["slashes", "--node", &validator_one_rpc];
+    // let client = run!(test, Bin::Client, tx_args, Some(40))?;
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &["slashes", "--node", &validator_one_rpc],
+        Some(40)
+    )?;
+    client.exp_string("No processed slashes found")?;
+    client.exp_string("Enqueued slashes for future processing")?;
+    let (_, res) = client
+        .exp_regex(r"To be processed in epoch [0-9]+")
+        .unwrap();
+    let processing_epoch =
+        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
+
+    assert_eq!(processing_epoch, exp_processing_epoch);
+
+    println!("\n{processing_epoch}\n");
+
+    // 6. Wait for processing epoch
+    loop {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        println!("\nCurrent epoch: {}", epoch);
+        if epoch > processing_epoch {
+            break;
+        }
+    }
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &[
+            "validator-state",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(40)
+    )?;
+    let _ = client.exp_regex(r"Validator [a-z0-9]+ is jailed").unwrap();
+
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &["slashes", "--node", &validator_one_rpc],
+        Some(40)
+    )?;
+    client.exp_string("Processed slashes:")?;
+    client.exp_string("No enqueued slashes found")?;
+
+    let tx_args = vec![
+        "unjail-validator",
+        "--validator",
+        "validator-0",
+        "--gas-amount",
+        "0",
+        "--gas-limit",
+        "0",
+        "--gas-token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // Wait until pipeline epoch to see if the validator is back in consensus
+    let cur_epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+    loop {
+        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        println!("\nCurrent epoch: {}", epoch);
+        if epoch > cur_epoch + pipeline_len + 1u64 {
+            break;
+        }
+    }
+    let mut client = run!(
+        test,
+        Bin::Client,
+        &[
+            "validator-state",
+            "--validator",
+            "validator-0",
+            "--node",
+            &validator_one_rpc
+        ],
+        Some(40)
+    )?;
+    let _ = client
+        .exp_regex(r"Validator [a-z0-9]+ is in the .* set")
+        .unwrap();
+
+    // 7. Make sure the the first validator can proceed to the next epoch
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+    // Make sure there are no errors
+    let mut validator_1 = bg_validator_1.foreground();
+    validator_1.interrupt()?;
+    // Wait for the node to stop running to finish writing the state and tx
+    // queue
+    validator_1.exp_string("Namada ledger node has shut down.")?;
+    validator_1.assert_success();
 
     Ok(())
 }
@@ -4548,15 +3425,12 @@ fn implicit_account_reveal_pk() -> Result<()> {
     let test = setup::network(|genesis| genesis, None)?;
 
     // 1. Run the ledger node
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-
-    wait_for_wasm_pre_compile(&mut ledger)?;
-    let _bg_ledger = ledger.background();
-
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
 
     // 2. Some transactions that need signature authorization:
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
     let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
         // A token transfer tx
         Box::new(|source| {
@@ -4571,7 +3445,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--amount",
                 "10.1",
                 "--node",
-                &validator_one_rpc,
+                &validator_0_rpc,
             ]
             .into_iter()
             .map(|x| x.to_owned())
@@ -4588,7 +3462,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--amount",
                 "10.1",
                 "--node",
-                &validator_one_rpc,
+                &validator_0_rpc,
             ]
             .into_iter()
             .map(|x| x.to_owned())
@@ -4608,7 +3482,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--data-path",
                 valid_proposal_json_path.to_str().unwrap(),
                 "--node",
-                &validator_one_rpc,
+                &validator_0_rpc,
             ]
             .into_iter()
             .map(|x| x.to_owned())
@@ -4643,7 +3517,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             "--amount",
             "1000",
             "--node",
-            &validator_one_rpc,
+            &validator_0_rpc,
         ];
         let mut client = run!(test, Bin::Client, credit_args, Some(40))?;
         client.assert_success();
@@ -4660,6 +3534,52 @@ fn implicit_account_reveal_pk() -> Result<()> {
         let unread = client.exp_eof()?;
         assert!(!unread.contains(expected_reveal))
     }
+
+    Ok(())
+}
+
+#[test]
+fn test_epoch_sleep() -> Result<()> {
+    // Use slightly longer epochs to give us time to sleep
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(30),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    wait_for_wasm_pre_compile(&mut ledger)?;
+
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Query the current epoch
+    let start_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+
+    // 3. Use epoch-sleep to sleep for an epoch
+    let args = ["utils", "epoch-sleep", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, &args, None)?;
+    let reached_epoch = parse_reached_epoch(&mut client)?;
+    client.assert_success();
+
+    // 4. Confirm the current epoch is larger
+    // possibly badly, we assume we get here within 30 seconds of the last step
+    // should be fine haha (future debuggers: sorry)
+    let current_epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    assert!(current_epoch > start_epoch);
+    assert_eq!(current_epoch, reached_epoch);
 
     Ok(())
 }

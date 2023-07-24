@@ -23,6 +23,9 @@ use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::{BlockHeight, Key, TxIndex};
+use crate::types::token::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
@@ -902,9 +905,20 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    // Get the token if the key is a balance or minter key
+    let token = if let Some([token, _]) = is_any_token_balance_key(key) {
+        Some(token)
+    } else {
+        is_any_minted_balance_key(key).or_else(|| is_any_minter_key(key))
+    };
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     for addr in key.find_addresses() {
+        // skip if the address is a token address
+        if Some(&addr) == token {
+            continue;
+        }
         // skip the check for implicit and internal addresses
         if let Address::Implicit(_) | Address::Internal(_) = &addr {
             continue;

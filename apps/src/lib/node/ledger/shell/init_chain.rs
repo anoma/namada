@@ -6,9 +6,7 @@ use std::hash::Hash;
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::{self, Parameters};
-use namada::ledger::pos::{
-    into_tm_voting_power, staking_token_address, PosParams,
-};
+use namada::ledger::pos::{staking_token_address, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
@@ -23,8 +21,6 @@ use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::types::token;
 
 use super::*;
-use crate::facade::tendermint_proto::abci;
-use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
@@ -236,10 +232,7 @@ where
         self.initialize_implicit_accounts(genesis.implicit_accounts);
 
         // Initialize genesis token accounts
-        self.initialize_token_accounts(
-            genesis.token_accounts,
-            &implicit_vp_code_path,
-        );
+        self.initialize_token_accounts(genesis.token_accounts);
 
         // Initialize genesis validator accounts
         let staking_token = staking_token_address(&self.wl_storage);
@@ -249,18 +242,18 @@ where
             &implicit_vp_code_path,
         );
         // set the initial validators set
-        Ok(self.set_initial_validators(
+        self.set_initial_validators(
             &staking_token,
             genesis.validators,
             &genesis.pos_params,
-        ))
+        )
     }
 
     /// Initialize genesis established accounts
     fn initialize_established_accounts(
         &mut self,
         faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
-        faucet_withdrawal_limit: Option<token::Amount>,
+        faucet_withdrawal_limit: Option<namada::types::uint::Uint>,
         accounts: Vec<genesis::EstablishedAccount>,
         implicit_vp_code_path: &str,
     ) -> Result<()> {
@@ -311,8 +304,11 @@ where
             if vp_code_path == "vp_testnet_faucet.wasm" {
                 let difficulty = faucet_pow_difficulty.unwrap_or_default();
                 // withdrawal limit defaults to 1000 NAM when not set
-                let withdrawal_limit = faucet_withdrawal_limit
-                    .unwrap_or_else(|| token::Amount::native_whole(1_000));
+                let withdrawal_limit =
+                    faucet_withdrawal_limit.unwrap_or_else(|| {
+                        token::Amount::native_whole(1_000).into()
+                    });
+
                 testnet_pow::init_faucet_storage(
                     &mut self.wl_storage,
                     &address,
@@ -342,52 +338,16 @@ where
     fn initialize_token_accounts(
         &mut self,
         accounts: Vec<genesis::TokenAccount>,
-        implicit_vp_code_path: &str,
     ) {
         // Initialize genesis token accounts
         for genesis::TokenAccount {
             address,
             denom,
-            vp_code_path,
-            vp_sha256,
             balances,
         } in accounts
         {
             // associate a token with its denomination.
-            write_denom(
-                &mut self.wl_storage,
-                &address,
-                // TODO: Should we support multi-tokens at genesis?
-                None,
-                denom,
-            )
-            .unwrap();
-            let vp_code_hash =
-                read_wasm_hash(&self.wl_storage, vp_code_path.clone())
-                    .unwrap()
-                    .ok_or(Error::LoadingWasm(format!(
-                        "Unknown vp code path: {}",
-                        implicit_vp_code_path
-                    )))
-                    .expect("Reading wasms should succeed");
-
-            // In dev, we don't check the hash
-            #[cfg(feature = "dev")]
-            let _ = vp_sha256;
-            #[cfg(not(feature = "dev"))]
-            {
-                assert_eq!(
-                    vp_code_hash.0.as_slice(),
-                    &vp_sha256,
-                    "Invalid token account's VP sha256 hash for {}",
-                    vp_code_path
-                );
-            }
-
-            self.wl_storage
-                .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
-                .unwrap();
-
+            write_denom(&mut self.wl_storage, &address, denom).unwrap();
             for (owner, amount) in balances {
                 credit_tokens(&mut self.wl_storage, &address, &owner, amount)
                     .unwrap();
@@ -464,7 +424,7 @@ where
         staking_token: &Address,
         validators: Vec<genesis::Validator>,
         pos_params: &PosParams,
-    ) -> response::InitChain {
+    ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized. Write the total
         // genesis staking token balance to storage after
@@ -473,20 +433,15 @@ where
         pos::init_genesis_storage(
             &mut self.wl_storage,
             pos_params,
-            validators
-                .clone()
-                .into_iter()
-                .map(|validator| validator.pos_data),
+            validators.into_iter().map(|validator| validator.pos_data),
             current_epoch,
         );
 
-        let total_nam =
-            read_total_supply(&self.wl_storage, staking_token).unwrap();
+        let total_nam = read_total_supply(&self.wl_storage, staking_token)?;
         // At this stage in the chain genesis, the PoS address balance is the
         // same as the number of staked tokens
         let total_staked_nam =
-            read_balance(&self.wl_storage, staking_token, &address::POS)
-                .unwrap();
+            read_balance(&self.wl_storage, staking_token, &address::POS)?;
 
         tracing::info!(
             "Genesis total native tokens: {}.",
@@ -507,21 +462,12 @@ where
         ibc::init_genesis_storage(&mut self.wl_storage);
 
         // Set the initial validator set
-        for validator in validators {
-            let mut abci_validator = abci::ValidatorUpdate::default();
-            let consensus_key: common::PublicKey =
-                validator.pos_data.consensus_key.clone();
-            let pub_key = TendermintPublicKey {
-                sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-            };
-            abci_validator.pub_key = Some(pub_key);
-            abci_validator.power = into_tm_voting_power(
-                pos_params.tm_votes_per_token,
-                validator.pos_data.tokens,
-            );
-            response.validators.push(abci_validator);
-        }
-        response
+        response.validators = self
+            .get_abci_validator_updates(true)
+            .expect("Must be able to set genesis validator set");
+        debug_assert!(!response.validators.is_empty());
+
+        Ok(response)
     }
 }
 

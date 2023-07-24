@@ -161,7 +161,7 @@ where
     /// Takes an iterator over validator set update vote extension instances,
     /// and returns another iterator. The latter yields
     /// valid validator set update vote extensions, or the reason why these
-    /// are invalid, in the form of a [`VoteExtensionError`].
+    /// are invalid, in the form of a `VoteExtensionError`.
     #[inline]
     pub fn validate_valset_upd_vext_list(
         &self,

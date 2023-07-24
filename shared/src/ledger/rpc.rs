@@ -13,9 +13,12 @@ use namada_core::ledger::testnet_pow;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{
-    Amount, DenominatedAmount, Denomination, MaspDenom, TokenAddress,
+    Amount, DenominatedAmount, Denomination, MaspDenom,
 };
-use namada_proof_of_stake::types::{BondsAndUnbondsDetails, CommissionPair};
+use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::types::{
+    BondsAndUnbondsDetails, CommissionPair, ValidatorState,
+};
 use serde::Serialize;
 
 use crate::ledger::args::InputAmount;
@@ -37,7 +40,6 @@ use crate::types::hash::Hash;
 use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::token::balance_key;
 use crate::types::{storage, token};
 use crate::{display_line, edisplay};
 
@@ -142,9 +144,10 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
-) -> Option<token::Amount> {
-    let balance_key = balance_key(token, owner);
-    query_storage_value(client, &balance_key).await
+) -> token::Amount {
+    unwrap_client_response::<C, _>(
+        RPC.vp().token().balance(client, token, owner).await,
+    )
 }
 
 /// Get account's public key stored in its storage sub-space
@@ -246,7 +249,6 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -715,6 +717,13 @@ pub async fn get_proposal_votes<
     }
 }
 
+/// Get the PoS parameters
+pub async fn get_pos_params<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+) -> PosParams {
+    unwrap_client_response::<C, _>(RPC.vp().pos().pos_params(client).await)
+}
+
 /// Get all validators in the given epoch
 pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -753,6 +762,20 @@ pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
             .await,
     )
     .unwrap_or_default()
+}
+
+/// Query and return a validator's state
+pub async fn get_validator_state<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Option<ValidatorState> {
+    unwrap_client_response::<C, Option<ValidatorState>>(
+        RPC.vp()
+            .pos()
+            .validator_state(client, validator, &epoch)
+            .await,
+    )
 }
 
 /// Get the delegator's delegation
@@ -979,7 +1002,6 @@ pub async fn validate_amount<
     client: &C,
     amount: InputAmount,
     token: &Address,
-    sub_prefix: &Option<Key>,
     force: bool,
 ) -> Option<token::DenominatedAmount> {
     let input_amount = match amount {
@@ -987,10 +1009,7 @@ pub async fn validate_amount<
         InputAmount::Validated(amt) => return Some(amt),
     };
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, token, sub_prefix)
-            .await,
+        RPC.vp().token().denomination(client, token).await,
     )
     .or_else(|| {
         if force {
@@ -1095,14 +1114,11 @@ pub async fn format_denominated_amount<
     IO: Io,
 >(
     client: &C,
-    token: &TokenAddress,
+    token: &Address,
     amount: token::Amount,
 ) -> String {
     let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, &token.address, &token.sub_prefix)
-            .await,
+        RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|| {
         display_line!(

@@ -1,5 +1,7 @@
 //! ExecutionContext implementation for IBC
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::client_type::ClientType;
@@ -180,7 +182,7 @@ where
             .expect("Creating a key for the client state shouldn't fail");
         let list = match self.ctx.borrow().read(&key) {
             Ok(Some(value)) => {
-                let list = String::from_utf8(value).map_err(|e| {
+                let list = String::try_from_slice(&value).map_err(|e| {
                     ContextError::ConnectionError(ConnectionError::Other {
                         description: format!(
                             "Decoding the connection list failed: Key {}, \
@@ -201,7 +203,7 @@ where
                 }))?
             }
         };
-        let bytes = list.as_bytes().to_vec();
+        let bytes = list.try_to_vec().expect("encoding shouldn't fail");
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(

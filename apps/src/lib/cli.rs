@@ -15,8 +15,8 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-pub use utils::safe_exit;
 use utils::*;
+pub use utils::{dispatch_prompt, safe_exit, Cmd, TESTIN};
 
 pub use self::context::Context;
 use crate::cli::api::CliIo;
@@ -32,6 +32,7 @@ const WALLET_CMD: &str = "wallet";
 const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
+
     use super::utils::*;
     use super::{
         args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
@@ -221,6 +222,7 @@ pub mod cmds {
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
+                .subcommand(TxUnjailValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -243,6 +245,7 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(4))
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
+                .subcommand(QueryValidatorState::def().display_order(4))
                 // Utils
                 .subcommand(Utils::def().display_order(5))
         }
@@ -256,6 +259,8 @@ pub mod cmds {
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
+            let tx_unjail_validator =
+                Self::parse_with_ctx(matches, TxUnjailValidator);
             let tx_reveal_pk = Self::parse_with_ctx(matches, TxRevealPk);
             let tx_init_proposal =
                 Self::parse_with_ctx(matches, TxInitProposal);
@@ -287,6 +292,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let query_validator_state =
+                Self::parse_with_ctx(matches, QueryValidatorState);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
@@ -300,6 +307,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
+                .or(tx_unjail_validator)
                 .or(bond)
                 .or(unbond)
                 .or(withdraw)
@@ -319,6 +327,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_validator_state)
                 .or(utils)
         }
     }
@@ -364,6 +373,7 @@ pub mod cmds {
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
+        TxUnjailValidator(TxUnjailValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -386,6 +396,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        QueryValidatorState(QueryValidatorState),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1288,6 +1299,27 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxUnjailValidator(pub args::TxUnjailValidator<args::CliTypes>);
+
+    impl SubCmd for TxUnjailValidator {
+        const CMD: &'static str = "unjail-validator";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUnjailValidator(args::TxUnjailValidator::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Send a signed transaction to unjail a jailed validator.",
+                )
+                .add_args::<args::TxUnjailValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct Bond(pub args::Bond<args::CliTypes>);
 
     impl SubCmd for Bond {
@@ -1459,6 +1491,27 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryValidatorState(
+        pub args::QueryValidatorState<args::CliTypes>,
+    );
+
+    impl SubCmd for QueryValidatorState {
+        const CMD: &'static str = "validator-state";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryValidatorState(args::QueryValidatorState::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query the state of a PoS validator.")
+                .add_args::<args::QueryValidatorState<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryTransfers(pub args::QueryTransfers<args::CliTypes>);
 
     impl SubCmd for QueryTransfers {
@@ -1493,7 +1546,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query commission rate.")
+                .about("Query a validator's commission rate.")
                 .add_args::<args::QueryCommissionRate<args::CliTypes>>()
         }
     }
@@ -1684,6 +1737,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct EpochSleep(pub args::Query<args::CliTypes>);
+
+    impl SubCmd for EpochSleep {
+        const CMD: &'static str = "epoch-sleep";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::Query::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query for the current epoch, then sleep until the next \
+                     epoch.",
+                )
+                .add_args::<args::Query<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
@@ -1691,6 +1766,7 @@ pub mod cmds {
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
+        EpochSleep(EpochSleep),
     }
 
     impl SubCmd for Utils {
@@ -1709,12 +1785,14 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
+                let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
+                    .or(epoch_sleep)
             })
         }
 
@@ -1727,6 +1805,7 @@ pub mod cmds {
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
+                .subcommand(EpochSleep::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2387,7 +2466,6 @@ pub mod args {
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
-    pub const SUB_PREFIX: ArgOpt<String> = arg_opt("sub-prefix");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
@@ -3075,7 +3153,6 @@ pub mod args {
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),
-                sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -3089,7 +3166,6 @@ pub mod args {
             let source = TRANSFER_SOURCE.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
@@ -3097,7 +3173,6 @@ pub mod args {
                 source,
                 target,
                 token,
-                sub_prefix,
                 amount,
                 native_token: (),
                 tx_code_path,
@@ -3115,7 +3190,6 @@ pub mod args {
                      to produce the signature.",
                 ))
                 .arg(TOKEN.def().help("The transfer token."))
-                .arg(SUB_PREFIX.def().help("The token's sub prefix."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
         }
     }
@@ -3127,7 +3201,6 @@ pub mod args {
                 source: ctx.get(&self.source),
                 receiver: self.receiver,
                 token: ctx.get(&self.token),
-                sub_prefix: self.sub_prefix,
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -3144,7 +3217,6 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             let amount = AMOUNT.parse(matches);
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
@@ -3156,7 +3228,6 @@ pub mod args {
                 source,
                 receiver,
                 token,
-                sub_prefix,
                 amount: amount.amount,
                 port_id,
                 channel_id,
@@ -3176,7 +3247,6 @@ pub mod args {
                     "The receiver address on the destination chain as string.",
                 ))
                 .arg(TOKEN.def().help("The transfer token."))
-                .arg(SUB_PREFIX.def().help("The token's sub prefix."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
                 .arg(PORT_ID.def().help("The port ID."))
                 .arg(CHANNEL_ID.def().help("The channel ID."))
@@ -3869,7 +3939,6 @@ pub mod args {
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
                 no_conversions: self.no_conversions,
-                sub_prefix: self.sub_prefix,
             }
         }
     }
@@ -3880,13 +3949,11 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
-                sub_prefix,
             }
         }
 
@@ -3907,11 +3974,6 @@ pub mod args {
                         "Whether not to automatically perform conversions.",
                     ),
                 )
-                .arg(
-                    SUB_PREFIX
-                        .def()
-                        .help("The token's sub prefix whose balance to query."),
-                )
         }
     }
 
@@ -3921,7 +3983,6 @@ pub mod args {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
-                sub_prefix: self.sub_prefix,
             }
         }
     }
@@ -3931,12 +3992,10 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
-            let sub_prefix = SUB_PREFIX.parse(matches);
             Self {
                 query,
                 owner,
                 token,
-                sub_prefix,
             }
         }
 
@@ -3948,11 +4007,6 @@ pub mod args {
                 .arg(TOKEN_OPT.def().help(
                     "The token address that queried transfers must involve.",
                 ))
-                .arg(
-                    SUB_PREFIX
-                        .def()
-                        .help("The token's sub prefix whose balance to query."),
-                )
         }
     }
 
@@ -4021,8 +4075,44 @@ pub mod args {
                     "The validator's address whose bonded stake to query.",
                 ))
                 .arg(EPOCH.def().help(
-                    "The epoch at which to query (last committed, if not \
-                     specified).",
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
+                ))
+        }
+    }
+
+    impl CliToSdk<QueryValidatorState<SdkTypes>> for QueryValidatorState<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryValidatorState<SdkTypes> {
+            QueryValidatorState::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                epoch: self.epoch,
+            }
+        }
+    }
+
+    impl Args for QueryValidatorState<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self {
+                query,
+                validator,
+                epoch,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(
+                    VALIDATOR.def().help(
+                        "The validator's address whose state is queried.",
+                    ),
+                )
+                .arg(EPOCH.def().help(
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
                 ))
         }
     }
@@ -4069,16 +4159,10 @@ pub mod args {
 
     impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
-            TxUnjailValidator {
+            TxUnjailValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.get(&self.validator),
-                tx_code_path: self
-                    .tx_code_path
-                    .as_path()
-                    .to_str()
-                    .unwrap()
-                    .to_string()
-                    .into_bytes(),
+                tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
     }
@@ -4132,8 +4216,8 @@ pub mod args {
                     "The validator's address whose commission rate to query.",
                 ))
                 .arg(EPOCH.def().help(
-                    "The epoch at which to query (last committed, if not \
-                     specified).",
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified).",
                 ))
         }
     }

@@ -8,7 +8,6 @@ use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use num_integer::Integer;
-use serde::{Deserialize, Serialize};
 use uint::construct_uint;
 
 use crate::types::token;
@@ -31,14 +30,68 @@ construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
     /// integers.
     #[derive(
-        Serialize,
-        Deserialize,
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
     )]
 
     pub struct Uint(4);
+}
+
+impl serde::Serialize for Uint {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let amount_string = self.to_string();
+        serde::Serialize::serialize(&amount_string, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Uint {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error as serdeError;
+        let amount_string: String =
+            serde::Deserialize::deserialize(deserializer)?;
+
+        let digits = amount_string
+            .chars()
+            .filter_map(|c| {
+                if c.is_ascii_digit() {
+                    c.to_digit(10).map(Uint::from)
+                } else {
+                    None
+                }
+            })
+            .rev()
+            .collect::<Vec<_>>();
+        if digits.len() != amount_string.len() {
+            return Err(D::Error::custom(AmountParseError::FromString));
+        }
+        if digits.len() > 77 {
+            return Err(D::Error::custom(AmountParseError::ScaleTooLarge(
+                digits.len() as u32,
+                77,
+            )));
+        }
+        let mut value = Uint::default();
+        let ten = Uint::from(10);
+        for (pow, digit) in digits.into_iter().enumerate() {
+            value = ten
+                .checked_pow(Uint::from(pow))
+                .and_then(|scaling| scaling.checked_mul(digit))
+                .and_then(|scaled| value.checked_add(scaled))
+                .ok_or(AmountParseError::PrecisionOverflow)
+                .map_err(D::Error::custom)?;
+        }
+        Ok(value)
+    }
 }
 
 impl_uint_num_traits!(Uint, 4);
@@ -623,5 +676,16 @@ mod test_uint {
         assert!(that >= -this);
         assert!(-that <= -this);
         assert!(-that <= this);
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let amount: Uint = serde_json::from_str(r#""1000000000""#).unwrap();
+        assert_eq!(amount, Uint::from(1000000000));
+        let serialized = serde_json::to_string(&amount).unwrap();
+        assert_eq!(serialized, r#""1000000000""#);
+
+        let amount: Result<Uint, _> = serde_json::from_str(r#""1000000000.2""#);
+        assert!(amount.is_err());
     }
 }

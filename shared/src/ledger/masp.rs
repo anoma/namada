@@ -50,7 +50,7 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::types::token::{Change, MaspDenom, TokenAddress};
+use namada_core::types::token::{Change, MaspDenom};
 use namada_core::types::transaction::AffineCurve;
 #[cfg(feature = "masp-tx-gen")]
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -406,7 +406,7 @@ pub enum PinnedBalanceError {
 
 // #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 // pub struct MaspAmount {
-//     pub asset: TokenAddress,
+//     pub asset: Address,
 //     pub amount: token::Amount,
 // }
 
@@ -414,7 +414,7 @@ pub enum PinnedBalanceError {
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 pub struct MaspChange {
     /// the token address
-    pub asset: TokenAddress,
+    pub asset: Address,
     /// the change in the token
     pub change: token::Change,
 }
@@ -423,10 +423,10 @@ pub struct MaspChange {
 #[derive(
     BorshSerialize, BorshDeserialize, Debug, Clone, Default, PartialEq, Eq,
 )]
-pub struct MaspAmount(HashMap<(Epoch, TokenAddress), token::Change>);
+pub struct MaspAmount(HashMap<(Epoch, Address), token::Change>);
 
 impl std::ops::Deref for MaspAmount {
-    type Target = HashMap<(Epoch, TokenAddress), token::Change>;
+    type Target = HashMap<(Epoch, Address), token::Change>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -494,14 +494,9 @@ impl std::ops::Mul<Change> for MaspAmount {
 impl<'a> From<&'a MaspAmount> for Amount {
     fn from(masp_amount: &'a MaspAmount) -> Amount {
         let mut res = Amount::zero();
-        for ((epoch, key), val) in masp_amount.iter() {
+        for ((epoch, token), val) in masp_amount.iter() {
             for denom in MaspDenom::iter() {
-                let asset = make_asset_type(
-                    Some(*epoch),
-                    &key.address,
-                    &key.sub_prefix,
-                    denom,
-                );
+                let asset = make_asset_type(Some(*epoch), token, denom);
                 res += Amount::from_pair(asset, denom.denominate_i128(val))
                     .unwrap();
             }
@@ -557,8 +552,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
-    pub asset_types:
-        HashMap<AssetType, (Address, Option<Key>, MaspDenom, Epoch)>,
+    pub asset_types: HashMap<AssetType, (Address, MaspDenom, Epoch)>,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
 }
@@ -849,10 +843,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         }
         // Record the changes to the transparent accounts
         let mut transfer_delta = TransferDelta::new();
-        let token_addr = TokenAddress {
-            address: tx.token.clone(),
-            sub_prefix: tx.sub_prefix.clone(),
-        };
+        let token_addr = tx.token.clone();
         transfer_delta.insert(
             tx.source.clone(),
             MaspChange {
@@ -916,23 +907,22 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         &mut self,
         client: &C,
         asset_type: AssetType,
-    ) -> Option<(Address, Option<Key>, MaspDenom, Epoch)> {
+    ) -> Option<(Address, MaspDenom, Epoch)> {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
             return decoded.cloned();
         }
         // Query for the ID of the last accepted transaction
-        let (addr, sub_prefix, denom, ep, _conv, _path): (
+        let (addr, denom, ep, _conv, _path): (
             Address,
-            Option<Key>,
             MaspDenom,
             _,
             Amount,
             MerklePath<Node>,
         ) = rpc::query_conversion(client, asset_type).await?;
         self.asset_types
-            .insert(asset_type, (addr.clone(), sub_prefix.clone(), denom, ep));
-        Some((addr, sub_prefix, denom, ep))
+            .insert(asset_type, (addr.clone(), denom, ep));
+        Some((addr, denom, ep))
     }
 
     /// Query the ledger for the conversion that is allowed for the given asset
@@ -945,11 +935,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     ) {
         if let Entry::Vacant(conv_entry) = conversions.entry(asset_type) {
             // Query for the ID of the last accepted transaction
-            if let Some((addr, sub_prefix, denom, ep, conv, path)) =
+            if let Some((addr, denom, ep, conv, path)) =
                 query_conversion(client, asset_type).await
             {
-                self.asset_types
-                    .insert(asset_type, (addr, sub_prefix, denom, ep));
+                self.asset_types.insert(asset_type, (addr, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
                 if conv != Amount::zero() {
                     conv_entry.insert((conv.into(), path, 0));
@@ -996,7 +985,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         &mut self,
         client: &C,
         conv: AllowedConversion,
-        asset_type: (Epoch, TokenAddress, MaspDenom),
+        asset_type: (Epoch, Address, MaspDenom),
         value: i128,
         usage: &mut i128,
         input: &mut MaspAmount,
@@ -1009,12 +998,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // If conversion if possible, accumulate the exchanged amount
         let conv: Amount = conv.into();
         // The amount required of current asset to qualify for conversion
-        let masp_asset = make_asset_type(
-            Some(asset_type.0),
-            &asset_type.1.address,
-            &asset_type.1.sub_prefix,
-            asset_type.2,
-        );
+        let masp_asset =
+            make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2);
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
             edisplay!(
@@ -1063,18 +1048,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let asset_epoch = *asset_epoch;
             let token_addr = token_addr.clone();
             for denom in MaspDenom::iter() {
-                let target_asset_type = make_asset_type(
-                    Some(target_epoch),
-                    &token_addr.address,
-                    &token_addr.sub_prefix,
-                    denom,
-                );
-                let asset_type = make_asset_type(
-                    Some(asset_epoch),
-                    &token_addr.address,
-                    &token_addr.sub_prefix,
-                    denom,
-                );
+                let target_asset_type =
+                    make_asset_type(Some(target_epoch), &token_addr, denom);
+                let asset_type =
+                    make_asset_type(Some(asset_epoch), &token_addr, denom);
                 let at_target_asset_type = target_epoch == asset_epoch;
 
                 let denom_value = denom.denominate_i128(&value);
@@ -1141,9 +1118,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         (asset_epoch, token_addr.clone()),
                         denom_value.into(),
                     );
-                    for ((e, key), val) in input.iter() {
-                        if *key == token_addr && *e == asset_epoch {
-                            comp.insert((*e, key.clone()), *val);
+                    for ((e, token), val) in input.iter() {
+                        if *token == token_addr && *e == asset_epoch {
+                            comp.insert((*e, token.clone()), *val);
                         }
                     }
                     output += comp.clone();
@@ -1334,24 +1311,19 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         amt: Amount,
         target_epoch: Epoch,
-    ) -> HashMap<TokenAddress, token::Change> {
+    ) -> HashMap<Address, token::Change> {
         let mut res = HashMap::new();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             let decoded = self.decode_asset_type(client, *asset_type).await;
             // Only assets with the target timestamp count
             match decoded {
-                Some(asset_type @ (_, _, _, epoch))
-                    if epoch == target_epoch =>
-                {
+                Some(asset_type @ (_, _, epoch)) if epoch == target_epoch => {
                     decode_component(
                         asset_type,
                         *val,
                         &mut res,
-                        |address, sub_prefix, _| TokenAddress {
-                            address,
-                            sub_prefix,
-                        },
+                        |address, _| address,
                     );
                 }
                 _ => {}
@@ -1367,27 +1339,15 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         amt: Amount,
     ) -> MaspAmount {
-        let mut res: HashMap<(Epoch, TokenAddress), Change> =
-            HashMap::default();
+        let mut res: HashMap<(Epoch, Address), Change> = HashMap::default();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                decode_component(
-                    decoded,
-                    *val,
-                    &mut res,
-                    |address, sub_prefix, epoch| {
-                        (
-                            epoch,
-                            TokenAddress {
-                                address,
-                                sub_prefix,
-                            },
-                        )
-                    },
-                )
+                decode_component(decoded, *val, &mut res, |address, epoch| {
+                    (epoch, address)
+                })
             }
         }
         MaspAmount(res)
@@ -1447,12 +1407,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
         };
         // Convert transaction amount into MASP types
-        let (asset_types, amount) = convert_amount(
-            epoch,
-            &args.token,
-            &args.sub_prefix.as_ref(),
-            amt.amount,
-        );
+        let (asset_types, amount) =
+            convert_amount(epoch, &args.token, amt.amount);
 
         let tx_fee =
         // If there are shielded inputs
@@ -1463,7 +1419,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Transaction fees need to match the amount in the wrapper Transfer
             // when MASP source is used
             let (_, shielded_fee) =
-                convert_amount(epoch, &args.tx.fee_token, &None, fee.amount);
+                convert_amount(epoch, &args.tx.fee_token, fee.amount);
             let required_amt = if shielded_gas {
                 amount + shielded_fee.clone()
             } else {
@@ -1708,10 +1664,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             let delta = TransferDelta::from([(
                                 transfer.source.clone(),
                                 MaspChange {
-                                    asset: TokenAddress {
-                                        address: transfer.token.clone(),
-                                        sub_prefix: transfer.sub_prefix.clone(),
-                                    },
+                                    asset: transfer.token.clone(),
                                     change: -transfer.amount.amount.change(),
                                 },
                             )]);
@@ -1751,33 +1704,15 @@ fn extract_payload(
 }
 
 /// Make asset type corresponding to given address and epoch
-pub fn make_asset_type<T: std::fmt::Display>(
+pub fn make_asset_type(
     epoch: Option<Epoch>,
     token: &Address,
-    sub_prefix: &Option<T>,
     denom: MaspDenom,
 ) -> AssetType {
     // Typestamp the chosen token with the current epoch
     let token_bytes = match epoch {
-        None => (
-            token,
-            sub_prefix
-                .as_ref()
-                .map(|k| k.to_string())
-                .unwrap_or_default(),
-            denom,
-        )
-            .try_to_vec()
-            .expect("token should serialize"),
-        Some(epoch) => (
-            token,
-            sub_prefix
-                .as_ref()
-                .map(|k| k.to_string())
-                .unwrap_or_default(),
-            denom,
-            epoch.0,
-        )
+        None => (token, denom).try_to_vec().expect("token should serialize"),
+        Some(epoch) => (token, denom, epoch.0)
             .try_to_vec()
             .expect("token should serialize"),
     };
@@ -1789,14 +1724,12 @@ pub fn make_asset_type<T: std::fmt::Display>(
 fn convert_amount(
     epoch: Epoch,
     token: &Address,
-    sub_prefix: &Option<&String>,
     val: token::Amount,
 ) -> ([AssetType; 4], Amount) {
     let mut amount = Amount::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
-            let asset_type =
-                make_asset_type(Some(epoch), token, sub_prefix, denom);
+            let asset_type = make_asset_type(Some(epoch), token, denom);
             // Combine the value and unit into one amount
             amount +=
                 Amount::from_nonnegative(asset_type, denom.denominate(&val))

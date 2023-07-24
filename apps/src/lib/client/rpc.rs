@@ -1,9 +1,9 @@
 //! Client RPC queries
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
-use std::io::{self, Write};
+use std::io;
 use std::iter::Iterator;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -16,7 +16,6 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::types::transaction::governance::ProposalType;
-use namada::ledger::args::InputAmount;
 use namada::ledger::events::Event;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::governance::storage as gov_storage;
@@ -36,7 +35,7 @@ use namada::ledger::rpc::{
 };
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
-use namada::proof_of_stake::types::WeightedValidator;
+use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::governance::{
@@ -47,7 +46,7 @@ use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::types::token::{Change, Denomination, MaspDenom, TokenAddress};
+use namada::types::token::{Change, MaspDenom};
 use namada::types::{storage, token};
 use namada::{display, display_line, edisplay};
 use tokio::time::Instant;
@@ -55,6 +54,7 @@ use tokio::time::Instant;
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
+use crate::prompt;
 use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
@@ -129,7 +129,6 @@ pub async fn query_transfers<
     args: args::QueryTransfers,
 ) {
     let query_token = args.token;
-    let sub_prefix = args.sub_prefix.map(|s| Key::parse(s).unwrap());
     let query_owner = args.owner.map_or_else(
         || Either::Right(wallet.get_addresses().into_values().collect()),
         Either::Left,
@@ -183,10 +182,8 @@ pub async fn query_transfers<
         // Check if this transfer pertains to the supplied token
         relevant &= match &query_token {
             Some(token) => {
-                let check = |(tok, chg): (&TokenAddress, &Change)| {
-                    tok.sub_prefix == sub_prefix
-                        && &tok.address == token
-                        && !chg.is_zero()
+                let check = |(tok, chg): (&Address, &Change)| {
+                    tok == token && !chg.is_zero()
                 };
                 tfer_delta.values().cloned().any(
                     |MaspChange { ref asset, change }| check((asset, &change)),
@@ -211,7 +208,7 @@ pub async fn query_transfers<
         for (account, MaspChange { ref asset, change }) in tfer_delta {
             if account != masp() {
                 display!(IO, "  {}:", account);
-                let token_alias = lookup_alias(wallet, &asset.address);
+                let token_alias = lookup_alias(wallet, asset);
                 let sign = match change.cmp(&Change::zero()) {
                     Ordering::Greater => "+",
                     Ordering::Less => "-",
@@ -227,7 +224,7 @@ pub async fn query_transfers<
                         change.into(),
                     )
                     .await,
-                    asset.format_with_alias(&token_alias)
+                    token_alias
                 );
             }
             display_line!(IO, "");
@@ -239,7 +236,7 @@ pub async fn query_transfers<
             if fvk_map.contains_key(&account) {
                 display!(IO, "  {}:", fvk_map[&account]);
                 for (token_addr, val) in masp_change {
-                    let token_alias = lookup_alias(wallet, &token_addr.address);
+                    let token_alias = lookup_alias(wallet, &token_addr);
                     let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -255,7 +252,7 @@ pub async fn query_transfers<
                             val.into(),
                         )
                         .await,
-                        token_addr.format_with_alias(&token_alias),
+                        token_alias,
                     );
                 }
                 display_line!(IO, "");
@@ -341,55 +338,24 @@ pub async fn query_transparent_balance<
     wallet: &mut Wallet<CliWalletUtils>,
     args: args::QueryBalance,
 ) {
-    let tokens = wallet.get_addresses_with_vp_type(AddressVpType::Token);
+    let prefix = Key::from(
+        Address::Internal(namada::types::address::InternalAddress::Multitoken)
+            .to_db_key(),
+    );
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
-            let (balance_key, sub_prefix) = match &args.sub_prefix {
-                Some(sub_prefix) => {
-                    let sub_prefix = Key::parse(sub_prefix).unwrap();
-                    let prefix =
-                        token::multitoken_balance_prefix(&token, &sub_prefix);
-                    (
-                        token::multitoken_balance_key(
-                            &prefix,
-                            &owner.address().unwrap(),
-                        ),
-                        Some(sub_prefix),
-                    )
-                }
-                None => (
-                    token::balance_key(&token, &owner.address().unwrap()),
-                    None,
-                ),
-            };
+            let balance_key =
+                token::balance_key(&token, &owner.address().unwrap());
             let token_alias = lookup_alias(wallet, &token);
             match query_storage_value::<C, token::Amount>(client, &balance_key)
                 .await
             {
                 Some(balance) => {
                     let balance = format_denominated_amount::<_, IO>(
-                        client,
-                        &TokenAddress {
-                            address: token,
-                            sub_prefix,
-                        },
-                        balance,
+                        client, &token, balance,
                     )
                     .await;
-                    match &args.sub_prefix {
-                        Some(sub_prefix) => {
-                            display_line!(
-                                IO,
-                                "{} with {}: {}",
-                                token_alias,
-                                sub_prefix,
-                                balance
-                            );
-                        }
-                        None => {
-                            display_line!(IO, "{}: {}", token_alias, balance)
-                        }
-                    }
+                    display_line!(IO, "{}: {}", token_alias, balance);
                 }
                 None => {
                     display_line!(
@@ -402,23 +368,18 @@ pub async fn query_transparent_balance<
             }
         }
         (None, Some(owner)) => {
-            for token in tokens {
-                let prefix =
-                    token::balance_key(&token, &owner.address().unwrap());
-                let balances = query_storage_prefix::<C, token::Amount, IO>(
-                    client, &prefix,
+            let balances =
+                query_storage_prefix::<C, token::Amount, IO>(client, &prefix)
+                    .await;
+            if let Some(balances) = balances {
+                print_balances::<_, IO>(
+                    client,
+                    wallet,
+                    balances,
+                    None,
+                    owner.address().as_ref(),
                 )
                 .await;
-                if let Some(balances) = balances {
-                    print_balances::<_, IO>(
-                        client,
-                        wallet,
-                        balances,
-                        &token,
-                        owner.address().as_ref(),
-                    )
-                    .await;
-                }
             }
         }
         (Some(token), None) => {
@@ -427,22 +388,23 @@ pub async fn query_transparent_balance<
                 query_storage_prefix::<C, token::Amount, IO>(client, &prefix)
                     .await;
             if let Some(balances) = balances {
-                print_balances::<_, IO>(client, wallet, balances, &token, None)
-                    .await;
+                print_balances::<_, IO>(
+                    client,
+                    wallet,
+                    balances,
+                    Some(&token),
+                    None,
+                )
+                .await;
             }
         }
         (None, None) => {
-            for token in tokens {
-                let key = token::balance_prefix(&token);
-                let balances =
-                    query_storage_prefix::<C, token::Amount, IO>(client, &key)
-                        .await;
-                if let Some(balances) = balances {
-                    print_balances::<_, IO>(
-                        client, wallet, balances, &token, None,
-                    )
+            let balances =
+                query_storage_prefix::<C, token::Amount, IO>(client, &prefix)
                     .await;
-                }
+            if let Some(balances) = balances {
+                print_balances::<_, IO>(client, wallet, balances, None, None)
+                    .await;
             }
         }
     }
@@ -494,10 +456,7 @@ pub async fn query_pinned_balance<
         }
         // If a suitable viewing key was not found, then demand it from the user
         if balance == pinned_error {
-            display!(IO, "Enter the viewing key for {}: ", owner);
-            io::stdout().flush().unwrap();
-            let mut vk_str = String::new();
-            io::stdin().read_line(&mut vk_str).unwrap();
+            let vk_str = prompt!("Enter the viewing key for {}: ", owner);
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {
@@ -513,31 +472,26 @@ pub async fn query_pinned_balance<
         }
 
         // Now print out the received quantities according to CLI arguments
-        match (balance, args.token.as_ref(), args.sub_prefix.as_ref()) {
-            (Err(PinnedBalanceError::InvalidViewingKey), _, _) => {
+        match (balance, args.token.as_ref()) {
+            (Err(PinnedBalanceError::InvalidViewingKey), _) => {
                 display_line!(
                     IO,
                     "Supplied viewing key cannot decode transactions to given \
                      payment address."
                 )
             }
-            (Err(PinnedBalanceError::NoTransactionPinned), _, _) => {
+            (Err(PinnedBalanceError::NoTransactionPinned), _) => {
                 display_line!(
                     IO,
                     "Payment address {} has not yet been consumed.",
                     owner
                 );
             }
-            (Ok((balance, epoch)), Some(token), sub_prefix) => {
+            (Ok((balance, epoch)), Some(token)) => {
                 let token_alias = lookup_alias(wallet, token);
 
-                let token_address = TokenAddress {
-                    address: token.clone(),
-                    sub_prefix: sub_prefix
-                        .map(|string| Key::parse(string).unwrap()),
-                };
                 let total_balance = balance
-                    .get(&(epoch, token_address.clone()))
+                    .get(&(epoch, token.clone()))
                     .cloned()
                     .unwrap_or_default();
 
@@ -548,12 +502,12 @@ pub async fn query_pinned_balance<
                          Received no shielded {}",
                         owner,
                         epoch,
-                        token_address.format_with_alias(&token_alias)
+                        token_alias
                     );
                 } else {
                     let formatted = format_denominated_amount::<_, IO>(
                         client,
-                        &token_address,
+                        token,
                         total_balance.into(),
                     )
                     .await;
@@ -564,11 +518,11 @@ pub async fn query_pinned_balance<
                         owner,
                         epoch,
                         formatted,
-                        token_address.format_with_alias(&token_alias),
+                        token_alias,
                     );
                 }
             }
-            (Ok((balance, epoch)), None, _) => {
+            (Ok((balance, epoch)), None) => {
                 let mut found_any = false;
 
                 for ((_, token_addr), value) in balance
@@ -592,15 +546,10 @@ pub async fn query_pinned_balance<
                     )
                     .await;
                     let token_alias = tokens
-                        .get(&token_addr.address)
+                        .get(token_addr)
                         .map(|a| a.to_string())
-                        .unwrap_or_else(|| token_addr.address.to_string());
-                    display_line!(
-                        IO,
-                        " {}: {}",
-                        token_addr.format_with_alias(&token_alias),
-                        formatted,
-                    );
+                        .unwrap_or_else(|| token_addr.to_string());
+                    display_line!(IO, " {}: {}", token_alias, formatted,);
                 }
                 if !found_any {
                     display_line!(
@@ -620,77 +569,76 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync, IO: Io>(
     client: &C,
     wallet: &Wallet<CliWalletUtils>,
     balances: impl Iterator<Item = (storage::Key, token::Amount)>,
-    token: &Address,
+    token: Option<&Address>,
     target: Option<&Address>,
 ) {
     let stdout = io::stdout();
     let mut w = stdout.lock();
 
-    let token_alias = lookup_alias(wallet, token);
-    display_line!(IO, &mut w; "Token {}", token_alias).unwrap();
     let mut print_num = 0;
+    let mut print_token = None;
     for (key, balance) in balances {
-        let (o, s) = match token::is_any_multitoken_balance_key(&key) {
-            Some((sub_prefix, [tok, owner])) => (
+        // Get the token, the owner, and the balance with the token and the
+        // owner
+        let (t, o, s) = match token::is_any_token_balance_key(&key) {
+            Some([tok, owner]) => (
+                tok.clone(),
                 owner.clone(),
                 format!(
-                    "with {}: {}, owned by {}",
-                    sub_prefix.clone(),
-                    format_denominated_amount::<_, IO>(
-                        client,
-                        &TokenAddress {
-                            address: tok.clone(),
-                            sub_prefix: Some(sub_prefix)
-                        },
-                        balance
-                    )
-                    .await,
+                    ": {}, owned by {}",
+                    format_denominated_amount::<_, IO>(client, tok, balance)
+                        .await,
                     lookup_alias(wallet, owner)
                 ),
             ),
-            None => {
-                if let Some([tok, owner]) =
-                    token::is_any_token_balance_key(&key)
-                {
-                    (
-                        owner.clone(),
-                        format!(
-                            ": {}, owned by {}",
-                            format_denominated_amount::<_, IO>(
-                                client,
-                                &TokenAddress {
-                                    address: tok.clone(),
-                                    sub_prefix: None
-                                },
-                                balance
-                            )
-                            .await,
-                            lookup_alias(wallet, owner)
-                        ),
-                    )
-                } else {
-                    continue;
-                }
+            None => continue,
+        };
+        // Get the token and the balance
+        let (t, s) = match (token, target) {
+            // the given token and the given target are the same as the
+            // retrieved ones
+            (Some(token), Some(target)) if t == *token && o == *target => {
+                (t, s)
             }
+            // the given token is the same as the retrieved one
+            (Some(token), None) if t == *token => (t, s),
+            // the given target is the same as the retrieved one
+            (None, Some(target)) if o == *target => (t, s),
+            // no specified token or target
+            (None, None) => (t, s),
+            // otherwise, this balance will not be printed
+            _ => continue,
         };
-        let s = match target {
-            Some(t) if o == *t => s,
-            Some(_) => continue,
-            None => s,
-        };
+        // Print the token if it isn't printed yet
+        match &print_token {
+            Some(token) if *token == t => {
+                // the token has been already printed
+            }
+            _ => {
+                let token_alias = lookup_alias(wallet, &t);
+                display_line!(IO, &mut w; "Token {}", token_alias).unwrap();
+                print_token = Some(t);
+            }
+        }
+        // Print the balance
         display_line!(IO, &mut w; "{}", s).unwrap();
         print_num += 1;
     }
 
     if print_num == 0 {
-        match target {
-            Some(t) => {
-                display_line!(IO, &mut w; "No balances owned by {}", lookup_alias(wallet, t))
-                    .unwrap()
-            }
-            None => {
+        match (token, target) {
+            (Some(_), Some(target)) | (None, Some(target)) => display_line!(
+                IO,
+                &mut w;
+                "No balances owned by {}",
+                lookup_alias(wallet, target)
+            )
+            .unwrap(),
+            (Some(token), None) => {
+                let token_alias = lookup_alias(wallet, token);
                 display_line!(IO, &mut w; "No balances for token {}", token_alias).unwrap()
             }
+            (None, None) => display_line!(IO, &mut w; "No balances").unwrap(),
         }
     }
 }
@@ -901,29 +849,24 @@ pub async fn query_shielded_balance<
 
             let token_alias = lookup_alias(wallet, &token);
 
-            let token_address = TokenAddress {
-                address: token,
-                sub_prefix: args.sub_prefix.map(|k| Key::parse(k).unwrap()),
-            };
-
             let total_balance = balance
-                .get(&(epoch, token_address.clone()))
+                .get(&(epoch, token.clone()))
                 .cloned()
                 .unwrap_or_default();
             if total_balance.is_zero() {
                 display_line!(
                     IO,
                     "No shielded {} balance found for given key",
-                    token_address.format_with_alias(&token_alias)
+                    token_alias
                 );
             } else {
                 display_line!(
                     IO,
                     "{}: {}",
-                    token_address.format_with_alias(&token_alias),
+                    token_alias,
                     format_denominated_amount::<_, IO>(
                         client,
-                        &token_address,
+                        &token,
                         token::Amount::from(total_balance)
                     )
                     .await
@@ -960,9 +903,6 @@ pub async fn query_shielded_balance<
                 }
             }
 
-            // These are the asset types for which we have human-readable names
-            let mut read_tokens: HashMap<Address, Vec<Option<Key>>> =
-                HashMap::new();
             // Print non-zero balances whose asset types can be decoded
             // TODO Implement a function for this
 
@@ -983,81 +923,20 @@ pub async fn query_shielded_balance<
                     }
                 }
             }
-            for (
-                (
-                    fvk,
-                    TokenAddress {
-                        address: addr,
-                        sub_prefix,
-                    },
-                ),
-                token_balance,
-            ) in balance_map
-            {
-                read_tokens
-                    .entry(addr.clone())
-                    .and_modify(|addr_vec| addr_vec.push(sub_prefix.clone()))
-                    .or_insert_with(|| vec![sub_prefix.clone()]);
-                let token_address = TokenAddress {
-                    address: addr,
-                    sub_prefix,
-                };
+            for ((fvk, token), token_balance) in balance_map {
                 // Only assets with the current timestamp count
                 let alias = tokens
-                    .get(&token_address.address)
+                    .get(&token)
                     .map(|a| a.to_string())
-                    .unwrap_or_else(|| token_address.address.to_string());
-                display_line!(
-                    IO,
-                    "Shielded Token {}:",
-                    token_address.format_with_alias(&alias),
-                );
+                    .unwrap_or_else(|| token.to_string());
+                display_line!(IO, "Shielded Token {}:", alias);
                 let formatted = format_denominated_amount::<_, IO>(
                     client,
-                    &token_address,
+                    &token,
                     token_balance.into(),
                 )
                 .await;
                 display_line!(IO, "  {}, owned by {}", formatted, fvk);
-            }
-            // Print zero balances for remaining assets
-            for token in tokens {
-                if let Some(sub_addrs) = read_tokens.get(&token) {
-                    let token_alias = lookup_alias(wallet, &token);
-                    for sub_addr in sub_addrs {
-                        match sub_addr {
-                            // abstract out these prints
-                            Some(sub_addr) => {
-                                display_line!(
-                                    IO,
-                                    "Shielded Token {}/{}:",
-                                    token_alias,
-                                    sub_addr
-                                );
-                                display_line!(
-                                    IO,
-                                    "No shielded {}/{} balance found for any \
-                                     wallet key",
-                                    token_alias,
-                                    sub_addr
-                                );
-                            }
-                            None => {
-                                display_line!(
-                                    IO,
-                                    "Shielded Token {}:",
-                                    token_alias
-                                );
-                                display_line!(
-                                    IO,
-                                    "No shielded {} balance found for any \
-                                     wallet key",
-                                    token_alias
-                                );
-                            }
-                        }
-                    }
-                }
             }
         }
         // Here the user wants to know the balance for a specific token across
@@ -1076,18 +955,7 @@ pub async fn query_shielded_balance<
             display_line!(IO, "Shielded Token {}:", token_alias);
             let mut found_any = false;
             let token_alias = lookup_alias(wallet, &token);
-            let token_address = TokenAddress {
-                address: token.clone(),
-                sub_prefix: args
-                    .sub_prefix
-                    .as_ref()
-                    .map(|k| Key::parse(k).unwrap()),
-            };
-            display_line!(
-                IO,
-                "Shielded Token {}:",
-                token_address.format_with_alias(&token_alias),
-            );
+            display_line!(IO, "Shielded Token {}:", token_alias,);
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
@@ -1124,7 +992,7 @@ pub async fn query_shielded_balance<
                 display_line!(
                     IO,
                     "No shielded {} balance found for any wallet key",
-                    token_address.format_with_alias(&token_alias),
+                    token_alias,
                 );
             }
         }
@@ -1179,10 +1047,7 @@ pub async fn print_decoded_balance<
             display_line!(
                 IO,
                 "{} : {}",
-                token_addr.format_with_alias(&lookup_alias(
-                    wallet,
-                    &token_addr.address
-                )),
+                lookup_alias(wallet, token_addr),
                 format_denominated_amount::<_, IO>(
                     client,
                     token_addr,
@@ -1209,13 +1074,13 @@ pub async fn print_decoded_balance_with_epoch<
     for ((epoch, token_addr), value) in decoded_balance.iter() {
         let asset_value = (*value).into();
         let alias = tokens
-            .get(&token_addr.address)
+            .get(token_addr)
             .map(|a| a.to_string())
             .unwrap_or_else(|| token_addr.to_string());
         display_line!(
             IO,
             "{} | {} : {}",
-            token_addr.format_with_alias(&alias),
+            alias,
             epoch,
             format_denominated_amount::<_, IO>(client, token_addr, asset_value)
                 .await,
@@ -1228,7 +1093,7 @@ pub async fn get_token_balance<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
-) -> Option<token::Amount> {
+) -> token::Amount {
     namada::ledger::rpc::get_token_balance(client, token, owner).await
 }
 
@@ -1758,14 +1623,14 @@ pub async fn query_bonded_stake<
         }
         None => {
             let consensus =
-                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                unwrap_client_response::<C, BTreeSet<WeightedValidator>>(
                     RPC.vp()
                         .pos()
                         .consensus_validator_set(client, &Some(epoch))
                         .await,
                 );
             let below_capacity =
-                unwrap_client_response::<C, HashSet<WeightedValidator>>(
+                unwrap_client_response::<C, BTreeSet<WeightedValidator>>(
                     RPC.vp()
                         .pos()
                         .below_capacity_validator_set(client, &Some(epoch))
@@ -1777,20 +1642,20 @@ pub async fn query_bonded_stake<
             let mut w = stdout.lock();
 
             display_line!(IO, &mut w; "Consensus validators:").unwrap();
-            for val in consensus {
+            for val in consensus.into_iter().rev() {
                 display_line!(
-                IO,
-                &mut w;
-                "  {}: {}",
-                val.address.encode(),
-                val.bonded_stake.to_string_native()
+                    IO,
+                    &mut w;
+                    "  {}: {}",
+                    val.address.encode(),
+                    val.bonded_stake.to_string_native()
                 )
                 .unwrap();
             }
             if !below_capacity.is_empty() {
                 display_line!(IO, &mut w; "Below capacity validators:")
                     .unwrap();
-                for val in &below_capacity {
+                for val in below_capacity.into_iter().rev() {
                     display_line!(
                         IO,
                         &mut w;
@@ -1827,6 +1692,71 @@ pub async fn query_commission_rate<
             .validator_commission(client, validator, &epoch)
             .await,
     )
+}
+
+/// Query and return validator's state
+pub async fn query_validator_state<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Option<ValidatorState> {
+    unwrap_client_response::<C, Option<ValidatorState>>(
+        RPC.vp()
+            .pos()
+            .validator_state(client, validator, &epoch)
+            .await,
+    )
+}
+
+/// Query a validator's state information
+pub async fn query_and_print_validator_state<
+    C: namada::ledger::queries::Client + Sync,
+    IO: Io,
+>(
+    client: &C,
+    _wallet: &mut Wallet<CliWalletUtils>,
+    args: args::QueryValidatorState,
+) {
+    let validator = args.validator;
+    let state: Option<ValidatorState> =
+        query_validator_state(client, &validator, args.epoch).await;
+
+    match state {
+        Some(state) => match state {
+            ValidatorState::Consensus => {
+                display_line!(
+                    IO,
+                    "Validator {validator} is in the consensus set"
+                )
+            }
+            ValidatorState::BelowCapacity => {
+                display_line!(
+                    IO,
+                    "Validator {validator} is in the below-capacity set"
+                )
+            }
+            ValidatorState::BelowThreshold => {
+                display_line!(
+                    IO,
+                    "Validator {validator} is in the below-threshold set"
+                )
+            }
+            ValidatorState::Inactive => {
+                display_line!(IO, "Validator {validator} is inactive")
+            }
+            ValidatorState::Jailed => {
+                display_line!(IO, "Validator {validator} is jailed")
+            }
+        },
+        None => display_line!(
+            IO,
+            "Validator {validator} is either not a validator, or an epoch \
+             before the current epoch has been queried (and the validator \
+             state information is no longer stored)"
+        ),
+    }
 }
 
 /// Query PoS validator's commission rate information
@@ -1875,11 +1805,6 @@ pub async fn query_slashes<
     _wallet: &mut Wallet<CliWalletUtils>,
     args: args::QuerySlashes,
 ) {
-    let params_key = pos::params_key();
-    let params = query_storage_value::<C, PosParams>(client, &params_key)
-        .await
-        .expect("Parameter should be defined.");
-
     match args.validator {
         Some(validator) => {
             let validator = validator;
@@ -1888,19 +1813,61 @@ pub async fn query_slashes<
                 RPC.vp().pos().validator_slashes(client, &validator).await,
             );
             if !slashes.is_empty() {
+                display_line!(IO, "Processed slashes:");
                 let stdout = io::stdout();
                 let mut w = stdout.lock();
                 for slash in slashes {
                     display_line!(
-                    IO,
-                    &mut w;
-                    "Slash epoch {}, type {}, rate {}",
-                    slash.epoch, slash.r#type, slash.rate
+                        IO,
+                        &mut w;
+                        "Infraction epoch {}, block height {}, type {}, rate \
+                         {}",
+                        slash.epoch,
+                        slash.block_height,
+                        slash.r#type,
+                        slash.rate
                     )
                     .unwrap();
                 }
             } else {
-                display_line!(IO, "No slashes found for {}", validator.encode())
+                display_line!(
+                    IO,
+                    "No processed slashes found for {}",
+                    validator.encode()
+                )
+            }
+            // Find enqueued slashes to be processed in the future for the given
+            // validator
+            let enqueued_slashes: HashMap<
+                Address,
+                BTreeMap<Epoch, Vec<Slash>>,
+            > = unwrap_client_response::<
+                C,
+                HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>,
+            >(RPC.vp().pos().enqueued_slashes(client).await);
+            let enqueued_slashes = enqueued_slashes.get(&validator).cloned();
+            if let Some(enqueued) = enqueued_slashes {
+                display_line!(IO, "\nEnqueued slashes for future processing");
+                for (epoch, slashes) in enqueued {
+                    display_line!(IO, "To be processed in epoch {}", epoch);
+                    for slash in slashes {
+                        let stdout = io::stdout();
+                        let mut w = stdout.lock();
+                        display_line!(
+                            IO,
+                            &mut w;
+                            "Infraction epoch {}, block height {}, type {}",
+                            slash.epoch, slash.block_height, slash.r#type,
+                        )
+                        .unwrap();
+                    }
+                }
+            } else {
+                display_line!(
+                    IO,
+                    "No enqueued slashes found for {}",
+                    validator.encode()
+                )
             }
         }
         None => {
@@ -1912,16 +1879,17 @@ pub async fn query_slashes<
             if !all_slashes.is_empty() {
                 let stdout = io::stdout();
                 let mut w = stdout.lock();
+                display_line!(IO, "Processed slashes:");
                 for (validator, slashes) in all_slashes.into_iter() {
                     for slash in slashes {
                         display_line!(
                             IO,
                             &mut w;
-                            "Slash epoch {}, block height {}, rate {}, type \
-                             {}, validator {}",
+                            "Infraction epoch {}, block height {}, rate {}, \
+                             type {}, validator {}",
                             slash.epoch,
                             slash.block_height,
-                            slash.r#type.get_slash_rate(&params),
+                            slash.rate,
                             slash.r#type,
                             validator,
                         )
@@ -1929,7 +1897,49 @@ pub async fn query_slashes<
                     }
                 }
             } else {
-                display_line!(IO, "No slashes found")
+                display_line!(IO, "No processed slashes found")
+            }
+
+            // Find enqueued slashes to be processed in the future for the given
+            // validator
+            let enqueued_slashes: HashMap<
+                Address,
+                BTreeMap<Epoch, Vec<Slash>>,
+            > = unwrap_client_response::<
+                C,
+                HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>,
+            >(RPC.vp().pos().enqueued_slashes(client).await);
+            if !enqueued_slashes.is_empty() {
+                display_line!(IO, "\nEnqueued slashes for future processing");
+                for (validator, slashes_by_epoch) in enqueued_slashes {
+                    for (epoch, slashes) in slashes_by_epoch {
+                        display_line!(
+                            IO,
+                            "\nTo be processed in epoch {}",
+                            epoch
+                        );
+                        for slash in slashes {
+                            let stdout = io::stdout();
+                            let mut w = stdout.lock();
+                            display_line!(
+                                IO,
+                                &mut w;
+                                "Infraction epoch {}, block height {}, type \
+                                 {}, validator {}",
+                                slash.epoch,
+                                slash.block_height,
+                                slash.r#type,
+                                validator
+                            )
+                            .unwrap();
+                        }
+                    }
+                }
+            } else {
+                display_line!(
+                    IO,
+                    "\nNo enqueued slashes found for future processing"
+                )
             }
         }
     }
@@ -2069,7 +2079,7 @@ pub async fn query_conversions<
             .expect("Conversions should be defined");
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
-    for ((addr, sub, _), epoch, conv, _) in conv_state.assets.values() {
+    for ((addr, _), epoch, conv, _) in conv_state.assets.values() {
         let amt: masp_primitives::transaction::components::Amount =
             conv.clone().into();
         // If the user has specified any targets, then meet them
@@ -2084,9 +2094,8 @@ pub async fn query_conversions<
         // Print the asset to which the conversion applies
         display!(
             IO,
-            "{}{}[{}]: ",
+            "{}[{}]: ",
             tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
-            sub.as_ref().map(|k| format!("/{}", k)).unwrap_or_default(),
             epoch,
         );
         // Now print out the components of the allowed conversion
@@ -2094,15 +2103,14 @@ pub async fn query_conversions<
         for (asset_type, val) in amt.components() {
             // Look up the address and epoch of asset to facilitate pretty
             // printing
-            let ((addr, sub, _), epoch, _, _) = &conv_state.assets[asset_type];
+            let ((addr, _), epoch, _, _) = &conv_state.assets[asset_type];
             // Now print out this component of the conversion
             display!(
                 IO,
-                "{}{} {}{}[{}]",
+                "{}{} {}[{}]",
                 prefix,
                 val,
                 tokens.get(addr).cloned().unwrap_or_else(|| addr.clone()),
-                sub.as_ref().map(|k| format!("/{}", k)).unwrap_or_default(),
                 epoch
             );
             // Future iterations need to be prefixed with +
@@ -2125,7 +2133,6 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     asset_type: AssetType,
 ) -> Option<(
     Address,
-    Option<Key>,
     MaspDenom,
     Epoch,
     masp_primitives::transaction::components::Amount,
@@ -2256,6 +2263,21 @@ pub async fn query_result<C: namada::ledger::queries::Client + Sync, IO: Io>(
                     cli::safe_exit(1)
                 }
             }
+        }
+    }
+}
+
+pub async fn epoch_sleep<C: namada::ledger::queries::Client + Sync, IO: Io>(
+    client: &C,
+    _args: args::Query,
+) {
+    let start_epoch = query_and_print_epoch::<_, IO>(client).await;
+    loop {
+        tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+        let current_epoch = query_epoch(client).await;
+        if current_epoch > start_epoch {
+            display_line!(IO, "Reached epoch {}", current_epoch);
+            break;
         }
     }
 }
@@ -2540,60 +2562,4 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
         eprintln!("Error in the query");
         cli::safe_exit(1)
     })
-}
-
-/// Get the correct representation of the amount given the token type.
-pub async fn validate_amount<
-    C: namada::ledger::queries::Client + Sync,
-    IO: Io,
->(
-    client: &C,
-    amount: InputAmount,
-    token: &Address,
-    sub_prefix: &Option<Key>,
-    force: bool,
-) -> token::DenominatedAmount {
-    let input_amount = match amount {
-        InputAmount::Unvalidated(amt) => amt.canonical(),
-        InputAmount::Validated(amt) => return amt,
-    };
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(client, token, sub_prefix)
-            .await,
-    )
-    .unwrap_or_else(|| {
-        if force {
-            display_line!(
-                IO,
-                "No denomination found for token: {token}, but --force was \
-                 passed. Defaulting to the provided denomination."
-            );
-            input_amount.denom
-        } else {
-            display_line!(
-                IO,
-                "No denomination found for token: {token}, the input \
-                 arguments could not be parsed."
-            );
-            cli::safe_exit(1);
-        }
-    });
-    if denom < input_amount.denom && !force {
-        display_line!(
-            IO,
-            "The input amount contained a higher precision than allowed by \
-             {token}."
-        );
-        cli::safe_exit(1);
-    } else {
-        input_amount.increase_precision(denom).unwrap_or_else(|_| {
-            display_line!(
-                IO,
-                "The amount provided requires more the 256 bits to represent."
-            );
-            cli::safe_exit(1);
-        })
-    }
 }

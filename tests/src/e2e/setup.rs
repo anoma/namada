@@ -21,7 +21,6 @@ use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
-use namada_apps::client::utils::REDUCED_CLI_PRINTING;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
 use namada_apps::config::{ethereum_bridge, Config};
 use namada_apps::{config, wallet};
@@ -42,7 +41,7 @@ pub const APPS_PACKAGE: &str = "namada_apps";
 pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
-const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+pub const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
 
 /// Env. var for temporary path
 const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
@@ -155,7 +154,6 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
-    env::set_var(REDUCED_CLI_PRINTING, "true");
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 
@@ -401,6 +399,7 @@ mod macros {
     }
 }
 
+#[derive(Clone)]
 pub enum Who {
     // A non-validator
     NonValidator,

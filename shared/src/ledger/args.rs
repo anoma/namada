@@ -115,8 +115,6 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub target: C::TransferTarget,
     /// Transferred token address
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
     pub amount: InputAmount,
     /// Native token address
@@ -147,8 +145,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub receiver: String,
     /// Transferred token addres    s
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
     pub amount: token::Amount,
     /// Port ID
@@ -317,8 +313,6 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
-    /// Sub prefix of an account
-    pub sub_prefix: Option<String>,
 }
 
 /// Query historical transfer(s)
@@ -330,8 +324,6 @@ pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
     pub owner: Option<C::BalanceOwner>,
     /// Address of a token
     pub token: Option<C::Address>,
-    /// sub-prefix if querying a multi-token
-    pub sub_prefix: Option<String>,
 }
 
 /// Query PoS bond(s)
@@ -356,6 +348,17 @@ pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
     pub epoch: Option<Epoch>,
 }
 
+/// Query the state of a validator (its validator set or if it is jailed)
+#[derive(Clone, Debug)]
+pub struct QueryValidatorState<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of a validator
+    pub validator: C::Address,
+    /// Epoch in which to find the validator state
+    pub epoch: Option<Epoch>,
+}
+
 #[derive(Clone, Debug)]
 /// Commission rate change args
 pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
@@ -377,7 +380,7 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query PoS commission rate
