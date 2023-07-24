@@ -228,6 +228,12 @@ fn validate_tx(
                 // transaction value pool MUST be nonnegative.
                 return reject();
             }
+            Some(Ordering::Greater) => {
+                debug_log!(
+                    "Transaction fees cannot be paid inside MASP transaction."
+                );
+                return reject();
+            }
             _ => {}
         }
         // Do the expensive proof verification in the VM at the end.
