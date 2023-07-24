@@ -303,6 +303,7 @@ pub async fn query_transparent_balance<
         Address::Internal(namada::types::address::InternalAddress::Multitoken)
             .to_db_key(),
     );
+    let tokens = wallet.tokens_with_aliases();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let balance_key =
@@ -323,17 +324,15 @@ pub async fn query_transparent_balance<
             }
         }
         (None, Some(owner)) => {
-            let balances =
-                query_storage_prefix::<C, token::Amount>(client, &prefix).await;
-            if let Some(balances) = balances {
-                print_balances(
-                    client,
-                    wallet,
-                    balances,
-                    None,
-                    owner.address().as_ref(),
-                )
-                .await;
+            let owner = owner.address().unwrap();
+            for (token_alias, token) in tokens {
+                let balance = get_token_balance(client, &token, &owner).await;
+                if !balance.is_zero() {
+                    let balance =
+                        format_denominated_amount(client, &token, balance)
+                            .await;
+                    println!("{}: {}", token_alias, balance);
+                }
             }
         }
         (Some(token), None) => {
