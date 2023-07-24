@@ -52,13 +52,12 @@ use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
 use namada::types::{error, storage, token};
-use namada::{display, display_line, edisplay_line};
+use namada::{display, display_line, edisplay_line, prompt};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::Proof;
 use crate::facade::tendermint_rpc::error::Error as TError;
-use crate::prompt;
 use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
@@ -461,8 +460,8 @@ pub async fn query_pinned_balance<
             }
         }
         // If a suitable viewing key was not found, then demand it from the user
-        if is_pinned_error(&balance) {
-            let vk_str = prompt!("Enter the viewing key for {}: ", owner);
+        if balance == pinned_error {
+            let vk_str = prompt!(IO, "Enter the viewing key for {}: ", owner);
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {

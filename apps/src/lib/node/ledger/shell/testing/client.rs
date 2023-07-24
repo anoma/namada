@@ -3,14 +3,14 @@ use std::ops::ControlFlow;
 use clap::Command as App;
 use eyre::Report;
 use namada::types::control_flow::Halt;
-use namada::types::io::{DefaultIo, Io};
+use namada::types::io::Io;
 use tendermint_config::net::Address as TendermintAddress;
 
 use super::node::MockNode;
 use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::Global;
 use crate::cli::{args, cmds, Cmd, Context, NamadaClient, NamadaRelayer};
-use crate::node::ledger::shell::testing::utils::Bin;
+use crate::node::ledger::shell::testing::utils::{Bin, TestingIo};
 
 pub fn run(
     node: &MockNode,
@@ -25,7 +25,7 @@ pub fn run(
             wasm_dir: Some(locked.wasm_dir.clone()),
         }
     };
-    let ctx = Context::new::<DefaultIo>(global.clone())?;
+    let ctx = Context::new::<TestingIo>(global.clone())?;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     match who {
@@ -47,7 +47,7 @@ pub fn run(
                     NamadaClient::WithoutContext(sub_cmd, global)
                 }
             };
-            rt.block_on(CliApi::<DefaultIo>::handle_client_command(
+            rt.block_on(CliApi::<TestingIo>::handle_client_command(
                 Some(node),
                 cmd,
             ))
@@ -60,7 +60,7 @@ pub fn run(
 
             let cmd = cmds::NamadaWallet::parse(&matches)
                 .expect("Could not parse wallet command");
-            CliApi::<DefaultIo>::handle_wallet_command(cmd, ctx)
+            CliApi::<TestingIo>::handle_wallet_command(cmd, ctx)
         }
         Bin::Relayer => {
             args.insert(0, "relayer");
@@ -82,7 +82,7 @@ pub fn run(
                     NamadaRelayer::ValidatorSet(sub_cmd)
                 }
             };
-            rt.block_on(CliApi::<DefaultIo>::handle_relayer_command(
+            rt.block_on(CliApi::<TestingIo>::handle_relayer_command(
                 Some(node),
                 cmd,
             ))
