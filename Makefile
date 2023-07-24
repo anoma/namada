@@ -182,7 +182,7 @@ clean:
 	$(cargo) clean
 
 bench:
-	$(cargo) +$(nightly) bench -Z unstable-options
+	$(cargo) bench
 
 build-doc:
 	$(cargo) doc --no-deps
