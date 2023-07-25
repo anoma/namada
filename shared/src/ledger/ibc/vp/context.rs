@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshSerialize;
 use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::storage::write_log::StorageModification;
@@ -11,7 +11,7 @@ use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{is_any_token_balance_key, Amount};
+use namada_core::types::token::{self, Amount};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -115,48 +115,104 @@ where
 
     fn transfer_token(
         &mut self,
-        src: &Key,
-        dest: &Key,
+        src: &Address,
+        dest: &Address,
+        token: &Address,
         amount: Amount,
     ) -> Result<(), Self::Error> {
-        let src_owner = is_any_token_balance_key(src);
-        let mut src_bal = match src_owner {
-            Some(Address::Internal(InternalAddress::IbcMint)) => Amount::max(),
-            Some(Address::Internal(InternalAddress::IbcBurn)) => {
-                unreachable!("Invalid transfer from IBC burn address")
-            }
-            _ => match self.read(src)? {
-                Some(v) => {
-                    Amount::try_from_slice(&v[..]).map_err(Error::Decoding)?
-                }
-                None => unreachable!("The source has no balance"),
-            },
-        };
+        let src_key = token::balance_key(token, src);
+        let dest_key = token::balance_key(token, dest);
+        let src_bal: Option<Amount> =
+            self.ctx.read(&src_key).map_err(Error::NativeVpError)?;
+        let mut src_bal = src_bal.expect("The source has no balance");
         src_bal.spend(&amount);
-        let dest_owner = is_any_token_balance_key(dest);
-        let mut dest_bal = match dest_owner {
-            Some(Address::Internal(InternalAddress::IbcMint)) => {
-                unreachable!("Invalid transfer to IBC mint address")
-            }
-            _ => match self.read(dest)? {
-                Some(v) => {
-                    Amount::try_from_slice(&v[..]).map_err(Error::Decoding)?
-                }
-                None => Amount::default(),
-            },
-        };
+        let mut dest_bal: Amount = self
+            .ctx
+            .read(&dest_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
         dest_bal.receive(&amount);
 
         self.write(
-            src,
+            &src_key,
             src_bal.try_to_vec().expect("encoding shouldn't failed"),
         )?;
         self.write(
-            dest,
+            &dest_key,
             dest_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )
+    }
+
+    fn mint_token(
+        &mut self,
+        target: &Address,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        let target_key = token::balance_key(token, target);
+        let mut target_bal: Amount = self
+            .ctx
+            .read(&target_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        target_bal.receive(&amount);
+
+        let minted_key = token::minted_balance_key(token);
+        let mut minted_bal: Amount = self
+            .ctx
+            .read(&minted_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        minted_bal.receive(&amount);
+
+        self.write(
+            &target_key,
+            target_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )?;
+        self.write(
+            &minted_key,
+            minted_bal.try_to_vec().expect("encoding shouldn't failed"),
         )?;
 
-        Ok(())
+        let minter_key = token::minter_key(token);
+        self.write(
+            &minter_key,
+            Address::Internal(InternalAddress::Ibc)
+                .try_to_vec()
+                .expect("encoding shouldn't failed"),
+        )
+    }
+
+    fn burn_token(
+        &mut self,
+        target: &Address,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Error> {
+        let target_key = token::balance_key(token, target);
+        let mut target_bal: Amount = self
+            .ctx
+            .read(&target_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        target_bal.spend(&amount);
+
+        let minted_key = token::minted_balance_key(token);
+        let mut minted_bal: Amount = self
+            .ctx
+            .read(&minted_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        minted_bal.spend(&amount);
+
+        self.write(
+            &target_key,
+            target_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )?;
+        self.write(
+            &minted_key,
+            minted_bal.try_to_vec().expect("encoding shouldn't failed"),
+        )
     }
 
     /// Get the current height of this chain
@@ -250,14 +306,32 @@ where
         unimplemented!("Validation doesn't emit an event")
     }
 
-    /// Transfer token
     fn transfer_token(
         &mut self,
-        _src: &Key,
-        _dest: &Key,
+        _src: &Address,
+        _dest: &Address,
+        _token: &Address,
         _amount: Amount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't transfer")
+    }
+
+    fn mint_token(
+        &mut self,
+        _target: &Address,
+        _token: &Address,
+        _amount: Amount,
+    ) -> Result<(), Self::Error> {
+        unimplemented!("Validation doesn't mint")
+    }
+
+    fn burn_token(
+        &mut self,
+        _target: &Address,
+        _token: &Address,
+        _amount: Amount,
+    ) -> Result<(), Self::Error> {
+        unimplemented!("Validation doesn't burn")
     }
 
     fn get_height(&self) -> Result<BlockHeight, Self::Error> {

@@ -15,7 +15,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::{
@@ -23,6 +23,7 @@ mod tests {
         read_total_stake, read_validator_stake,
     };
     use namada::proto::{Code, Data, Signature, Tx};
+    use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
     use namada_tests::log::test;
@@ -39,7 +40,6 @@ mod tests {
     use namada_tx_prelude::token;
     use namada_vp_prelude::proof_of_stake::WeightedValidator;
     use proptest::prelude::*;
-    use rust_decimal;
 
     use super::*;
 
@@ -67,17 +67,27 @@ mod tests {
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
+        // Remove the validator stake threshold for simplicity
+        let pos_params = PosParams {
+            validator_stake_threshold: token::Amount::default(),
+            ..pos_params
+        };
+
         dbg!(&initial_stake, &bond);
         let is_delegation =
             matches!(&bond.source, Some(source) if *source != bond.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
-        let commission_rate = rust_decimal::Decimal::new(5, 2);
-        let max_commission_rate_change = rust_decimal::Decimal::new(1, 2);
+        let commission_rate = Dec::new(5, 2).expect("Cannot fail");
+        let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
 
         let genesis_validators = [GenesisValidator {
             address: bond.validator.clone(),
             tokens: initial_stake,
             consensus_key,
+            eth_cold_key,
+            eth_hot_key,
             commission_rate,
             max_commission_rate_change,
         }];
@@ -92,7 +102,7 @@ mod tests {
             // Ensure that the bond's source has enough tokens for the bond
             let target = bond.source.as_ref().unwrap_or(&bond.validator);
             let native_token = tx_env.wl_storage.storage.native_token.clone();
-            tx_env.credit_tokens(target, &native_token, None, bond.amount);
+            tx_env.credit_tokens(target, &native_token, bond.amount);
             native_token
         });
 
@@ -102,11 +112,7 @@ mod tests {
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
-            &key,
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &key,
         )));
         let signed_tx = tx.clone();
@@ -126,7 +132,7 @@ mod tests {
         // Read some data before the tx is executed
         let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
-        let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
+        let mut epoched_validator_set_pre: Vec<BTreeSet<WeightedValidator>> =
             Vec::new();
 
         for epoch in 0..=pos_params.unbonding_len {
@@ -157,7 +163,7 @@ mod tests {
         // Read the data after the tx is executed.
         let mut epoched_total_stake_post: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_post: Vec<token::Amount> = Vec::new();
-        let mut epoched_validator_set_post: Vec<HashSet<WeightedValidator>> =
+        let mut epoched_validator_set_post: Vec<BTreeSet<WeightedValidator>> =
             Vec::new();
 
         println!("\nFILLING POST STATE\n");
@@ -194,7 +200,7 @@ mod tests {
         // Check that the validator set and deltas are unchanged before pipeline
         // length and that they are updated between the pipeline and
         // unbonding lengths
-        if bond.amount == token::Amount::from(0) {
+        if bond.amount.is_zero() {
             // None of the optional storage fields should have been updated
             assert_eq!(epoched_validator_set_pre, epoched_validator_set_post);
             assert_eq!(
@@ -225,7 +231,7 @@ mod tests {
                 ..=pos_params.unbonding_len as usize
             {
                 let expected_stake =
-                    i128::from(initial_stake) + i128::from(bond.amount);
+                    initial_stake.change() + bond.amount.change();
                 assert_eq!(
                     epoched_validator_stake_post[epoch],
                     token::Amount::from_change(expected_stake),
@@ -349,7 +355,7 @@ mod tests {
             // Generate initial stake
             (initial_stake in token::testing::arb_amount_ceiled((i64::MAX/8) as u64))
             // Use the initial stake to limit the bond amount
-            (bond in arb_bond(((i64::MAX/8) as u64) - u64::from(initial_stake)),
+            (bond in arb_bond(((i64::MAX/8) as u64) - u128::try_from(initial_stake).unwrap() as u64),
             // Use the generated initial stake too
             initial_stake in Just(initial_stake),
         ) -> (token::Amount, transaction::pos::Bond) {

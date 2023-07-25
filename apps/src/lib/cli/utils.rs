@@ -1,24 +1,25 @@
 //! Command line interface utilities
 use std::fmt::Debug;
+use std::io::Write;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use clap::ArgMatches;
+use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
+use lazy_static::lazy_static;
 
 use super::args;
 use super::context::{Context, FromContext};
 
 // We only use static strings
-pub type App = clap::App<'static>;
-pub type ClapArg = clap::Arg<'static>;
+pub type App = clap::Command;
+pub type ClapArg = clap::Arg;
 
 pub trait Cmd: Sized {
     fn add_sub(app: App) -> App;
     fn parse(matches: &ArgMatches) -> Option<Self>;
 
     fn parse_or_print_help(app: App) -> Result<(Self, Context)> {
-        let mut app = Self::add_sub(app);
         let matches = app.clone().get_matches();
         match Self::parse(&matches) {
             Some(cmd) => {
@@ -27,6 +28,7 @@ pub trait Cmd: Sized {
                 Ok((cmd, context))
             }
             None => {
+                let mut app = app;
                 app.print_help().unwrap();
                 safe_exit(2);
             }
@@ -160,7 +162,7 @@ impl<T> Arg<T> {
     pub fn def(&self) -> ClapArg {
         ClapArg::new(self.name)
             .long(self.name)
-            .takes_value(true)
+            .num_args(1)
             .required(true)
     }
 }
@@ -177,14 +179,14 @@ where
 
 impl<T> Arg<FromContext<T>> {
     pub fn parse(&self, matches: &ArgMatches) -> FromContext<T> {
-        let raw = matches.value_of(self.name).unwrap();
+        let raw = matches.get_one::<String>(self.name).unwrap();
         FromContext::new(raw.to_string())
     }
 }
 
 impl<T> ArgOpt<T> {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 }
 
@@ -200,7 +202,7 @@ where
 
 impl<T> ArgOpt<FromContext<T>> {
     pub fn parse(&self, matches: &ArgMatches) -> Option<FromContext<T>> {
-        let raw = matches.value_of(self.name)?;
+        let raw = matches.get_one::<String>(self.name).map(|s| s.as_str())?;
         Some(FromContext::new(raw.to_string()))
     }
 }
@@ -211,7 +213,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> T {
@@ -228,7 +230,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(true)
+        ClapArg::new(self.name).long(self.name).num_args(1)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> FromContext<T> {
@@ -242,11 +244,13 @@ where
 
 impl ArgFlag {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).takes_value(false)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .action(ArgAction::SetTrue)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> bool {
-        matches.is_present(self.name)
+        matches.get_flag(self.name)
     }
 }
 
@@ -257,14 +261,16 @@ where
     <T as FromStr>::Err: Debug,
 {
     pub fn def(&self) -> ClapArg {
-        ClapArg::new(self.name).long(self.name).multiple(true)
+        ClapArg::new(self.name)
+            .long(self.name)
+            .action(ArgAction::Append)
     }
 
     pub fn parse(&self, matches: &ArgMatches) -> Vec<T> {
         matches
-            .values_of(self.name)
+            .get_many(self.name)
             .unwrap_or_default()
-            .map(|raw| {
+            .map(|raw: &String| {
                 raw.parse().unwrap_or_else(|e| {
                     eprintln!(
                         "Failed to parse the {} argument. Raw value: {}, \
@@ -307,23 +313,81 @@ where
     T: FromStr,
     T::Err: Debug,
 {
-    args.value_of(field).map(|arg| {
-        arg.parse().unwrap_or_else(|e| {
+    args.get_one::<String>(field).map(|s| {
+        s.as_str().parse().unwrap_or_else(|e| {
             eprintln!(
                 "Failed to parse the argument {}. Raw value: {}, error: {:?}",
-                field, arg, e
+                field, s, e
             );
             safe_exit(1)
         })
     })
 }
 
+#[cfg(not(feature = "testing"))]
 /// A helper to exit after flushing output, borrowed from `clap::util` module.
 pub fn safe_exit(code: i32) -> ! {
-    use std::io::Write;
-
     let _ = std::io::stdout().lock().flush();
     let _ = std::io::stderr().lock().flush();
 
     std::process::exit(code)
+}
+
+#[cfg(feature = "testing")]
+/// A helper to exit after flushing output, borrowed from `clap::util` module.
+pub fn safe_exit(_: i32) -> ! {
+    let _ = std::io::stdout().lock().flush();
+    let _ = std::io::stderr().lock().flush();
+
+    panic!("Test failed because the client exited unexpectedly.")
+}
+
+lazy_static! {
+    /// A replacement for stdin in testing.
+    pub static ref TESTIN: std::sync::Arc<std::sync::Mutex<Vec<u8>>> =
+    std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+}
+
+/// A generic function for displaying a prompt to users and reading
+/// in their response.
+fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
+where
+    R: std::io::Read,
+    W: Write,
+{
+    write!(&mut writer, "{}", question).expect("Unable to write");
+    writer.flush().unwrap();
+    let mut s = String::new();
+    reader.read_to_string(&mut s).expect("Unable to read");
+    s
+}
+
+/// A function that chooses how to dispatch prompts
+/// to users. There is a hierarchy of feature flags
+/// that determines this. If no flags are set,
+/// the question is printed to stdout and response
+/// read from stdin.
+pub fn dispatch_prompt(question: impl AsRef<str>) -> String {
+    if cfg!(feature = "testing") {
+        prompt_aux(
+            TESTIN.lock().unwrap().as_slice(),
+            std::io::stdout(),
+            question.as_ref(),
+        )
+    } else {
+        prompt_aux(
+            std::io::stdin().lock(),
+            std::io::stdout(),
+            question.as_ref(),
+        )
+    }
+}
+
+#[macro_export]
+/// A convenience macro for formatting the user prompt before
+/// forwarding it to the `[dispatch_prompt]` method.
+macro_rules! prompt {
+    ($($arg:tt)*) => {{
+        $crate::cli::dispatch_prompt(format!("{}", format_args!($($arg)*)))
+    }}
 }

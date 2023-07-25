@@ -22,6 +22,7 @@ use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
 use namada_apps::client::utils;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
+use namada_apps::config::{ethereum_bridge, Config};
 use namada_apps::{config, wallet};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -40,7 +41,7 @@ pub const APPS_PACKAGE: &str = "namada_apps";
 pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
 
 /// Env. var for keeping temporary files created by the E2E tests
-const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
+pub const ENV_VAR_KEEP_TEMP: &str = "NAMADA_E2E_KEEP_TEMP";
 
 /// Env. var for temporary path
 const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
@@ -68,6 +69,41 @@ pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1000;
 /// adding multiple validators to a network
 pub fn default_port_offset(ix: u8) -> u16 {
     6 * ix as u16
+}
+
+/// Update the config of some node `who`.
+pub fn update_actor_config<F>(
+    test: &Test,
+    chain_id: &ChainId,
+    who: &Who,
+    update: F,
+) where
+    F: FnOnce(&mut Config),
+{
+    let validator_base_dir = test.get_base_dir(who);
+    let mut validator_config =
+        Config::load(&validator_base_dir, chain_id, None);
+    update(&mut validator_config);
+    validator_config
+        .write(&validator_base_dir, chain_id, true)
+        .unwrap();
+}
+
+/// Configures the Ethereum bridge mode of `who`. This should be done before
+/// `who` starts running.
+pub fn set_ethereum_bridge_mode(
+    test: &Test,
+    chain_id: &ChainId,
+    who: &Who,
+    mode: ethereum_bridge::ledger::Mode,
+    rpc_endpoint: Option<&str>,
+) {
+    update_actor_config(test, chain_id, who, |config| {
+        config.ledger.ethereum_bridge.mode = mode;
+        if let Some(addr) = rpc_endpoint {
+            config.ledger.ethereum_bridge.oracle_rpc_endpoint = addr.into();
+        }
+    });
 }
 
 /// Set `num` validators to the genesis config. Note that called from inside
@@ -118,7 +154,6 @@ pub fn network(
             eprintln!("Failed setting up colorful error reports {}", err);
         }
     });
-
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 
@@ -181,6 +216,10 @@ pub fn network(
     println!("'init-network' output: {}", unread);
     let net = Network { chain_id };
 
+    // release lock on wallet by dropping the
+    // child process
+    drop(init_network);
+
     // Move the "others" accounts wallet in the main base dir, so that we can
     // use them with `Who::NonValidator`
     let chain_dir = test_dir.path().join(net.chain_id.as_str());
@@ -212,10 +251,12 @@ pub fn network(
 
 /// Namada binaries
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum Bin {
     Node,
     Client,
     Wallet,
+    Relayer,
 }
 
 #[derive(Debug)]
@@ -359,6 +400,7 @@ mod macros {
     }
 }
 
+#[derive(Clone)]
 pub enum Who {
     // A non-validator
     NonValidator,
@@ -685,10 +727,11 @@ where
     S: AsRef<OsStr>,
 {
     // Root cargo workspace manifest path
-    let bin_name = match bin {
-        Bin::Node => "namadan",
-        Bin::Client => "namadac",
-        Bin::Wallet => "namadaw",
+    let (bin_name, log_level) = match bin {
+        Bin::Node => ("namadan", "info"),
+        Bin::Client => ("namadac", "tendermint_rpc=debug"),
+        Bin::Wallet => ("namadaw", "info"),
+        Bin::Relayer => ("namadar", "info"),
     };
 
     let mut run_cmd = generate_bin_command(
@@ -697,8 +740,9 @@ where
     );
 
     run_cmd
-        .env("NAMADA_LOG", "info")
-        .env("TM_LOG_LEVEL", "info")
+        .env("NAMADA_LOG", log_level)
+        .env("NAMADA_CMT_STDOUT", "false")
+        .env("CMT_LOG_LEVEL", "info")
         .env("NAMADA_LOG_COLOR", "false")
         .current_dir(working_dir)
         .args(["--base-dir", &base_dir.as_ref().to_string_lossy()]);
@@ -796,6 +840,7 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
+    pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
     pub const MASP: &str = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5";
 

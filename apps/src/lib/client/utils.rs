@@ -13,11 +13,11 @@ use flate2::Compression;
 use namada::ledger::wallet::Wallet;
 use namada::types::address;
 use namada::types::chain::ChainId;
+use namada::types::dec::Dec;
 use namada::types::key::*;
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
-use rust_decimal::Decimal;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -529,6 +529,50 @@ pub fn init_network(
             keypair.ref_to()
         });
 
+        let eth_hot_pk = try_parse_public_key(
+            format!("validator {name} eth hot key"),
+            &config.eth_hot_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-hot-key", name);
+            println!("Generating validator {} eth hot key...", name);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet
+                .gen_key(
+                    SchemeType::Secp256k1,
+                    Some(alias),
+                    true,
+                    password,
+                    None,
+                )
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
+            keypair.ref_to()
+        });
+
+        let eth_cold_pk = try_parse_public_key(
+            format!("validator {name} eth cold key"),
+            &config.eth_cold_key,
+        )
+        .unwrap_or_else(|| {
+            let alias = format!("{}-eth-cold-key", name);
+            println!("Generating validator {} eth cold key...", name);
+            let password =
+                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            let (_alias, keypair) = wallet
+                .gen_key(
+                    SchemeType::Secp256k1,
+                    Some(alias),
+                    true,
+                    password,
+                    None,
+                )
+                .expect("Key generation should not fail.")
+                .expect("No existing alias expected.");
+            keypair.ref_to()
+        });
+
         let dkg_pk = &config
             .dkg_public_key
             .as_ref()
@@ -547,6 +591,7 @@ pub fn init_network(
 
                 let validator_keys = crate::wallet::gen_validator_keys(
                     &mut wallet,
+                    Some(eth_hot_pk.clone()),
                     Some(protocol_pk.clone()),
                     SchemeType::Ed25519,
                 )
@@ -561,6 +606,10 @@ pub fn init_network(
             Some(genesis_config::HexString(consensus_pk.to_string()));
         config.account_public_key =
             Some(genesis_config::HexString(account_pk.to_string()));
+        config.eth_cold_key =
+            Some(genesis_config::HexString(eth_cold_pk.to_string()));
+        config.eth_hot_key =
+            Some(genesis_config::HexString(eth_hot_pk.to_string()));
 
         config.protocol_public_key =
             Some(genesis_config::HexString(protocol_pk.to_string()));
@@ -743,33 +792,41 @@ pub fn init_network(
             config.ledger.cometbft.p2p.addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
-            let ip = SocketAddr::from_str(&net_address).unwrap().ip();
+            let _ip = SocketAddr::from_str(&net_address).unwrap().ip();
             let first_port = SocketAddr::from_str(&net_address).unwrap().port();
-            if !localhost {
+            if localhost {
+                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port),
+                )
+                .unwrap();
+            } else {
                 config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
                     &format!("0.0.0.0:{}", first_port),
                 )
                 .unwrap();
             }
-            config.ledger.cometbft.p2p.laddr =
-                TendermintAddress::from_str(&format!("{}:{}", ip, first_port))
-                    .unwrap();
-            if !localhost {
+            if localhost {
+                config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port + 1),
+                )
+                .unwrap();
+            } else {
                 config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
                     &format!("0.0.0.0:{}", first_port + 1),
                 )
                 .unwrap();
             }
-            config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
-                &format!("{}:{}", ip, first_port + 1),
-            )
-            .unwrap();
-
-            config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
-                &format!("{}:{}", ip, first_port + 2),
-            )
-            .unwrap();
-
+            if localhost {
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("127.0.0.1:{}", first_port + 2),
+                )
+                .unwrap();
+            } else {
+                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
+                    &format!("0.0.0.0:{}", first_port + 2),
+                )
+                .unwrap();
+            }
             config.write(&validator_dir, &chain_id, true).unwrap();
         },
     );
@@ -916,16 +973,11 @@ pub fn init_genesis_validator(
     }: args::InitGenesisValidator,
 ) {
     // Validate the commission rate data
-    if commission_rate > Decimal::ONE || commission_rate < Decimal::ZERO {
-        eprintln!(
-            "The validator commission rate must not exceed 1.0 or 100%, and \
-             it must be 0 or positive"
-        );
+    if commission_rate > Dec::one() {
+        eprintln!("The validator commission rate must not exceed 1.0 or 100%");
         cli::safe_exit(1)
     }
-    if max_commission_rate_change > Decimal::ONE
-        || max_commission_rate_change < Decimal::ZERO
-    {
+    if max_commission_rate_change > Dec::one() {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
@@ -958,6 +1010,12 @@ pub fn init_genesis_validator(
             genesis_config::ValidatorConfig {
                 consensus_public_key: Some(HexString(
                     pre_genesis.consensus_key.ref_to().to_string(),
+                )),
+                eth_cold_key: Some(HexString(
+                    pre_genesis.eth_cold_key.ref_to().to_string(),
+                )),
+                eth_hot_key: Some(HexString(
+                    pre_genesis.eth_hot_key.ref_to().to_string(),
                 )),
                 account_public_key: Some(HexString(
                     pre_genesis.account_key.ref_to().to_string(),
@@ -1090,6 +1148,30 @@ pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
 }
 
+/// Add a spinning wheel to a message for long running commands.
+/// Can be turned off for E2E tests by setting the `REDUCED_CLI_PRINTING`
+/// environment variable.
+pub fn with_spinny_wheel<F, Out>(msg: &str, func: F) -> Out
+where
+    F: FnOnce() -> Out + Send + 'static,
+    Out: Send + 'static,
+{
+    let task = std::thread::spawn(func);
+    let spinny_wheel = "|/-\\";
+    print!("{}", msg);
+    _ = std::io::stdout().flush();
+    for c in spinny_wheel.chars().cycle() {
+        print!("{}", c);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        print!("{}", (8u8 as char));
+        if task.is_finished() {
+            break;
+        }
+    }
+    println!();
+    task.join().unwrap()
+}
+
 fn is_valid_validator_for_current_chain(
     tendermint_node_pk: &common::PublicKey,
     genesis_config: &GenesisConfig,
@@ -1101,4 +1183,17 @@ fn is_valid_validator_for_current_chain(
             false
         }
     })
+}
+
+/// Replace the contents of `addr` with a dummy address.
+#[inline]
+pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
+    std::mem::replace(
+        addr,
+        TendermintAddress::Tcp {
+            peer_id: None,
+            host: String::new(),
+            port: 0,
+        },
+    )
 }

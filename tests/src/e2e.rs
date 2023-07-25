@@ -11,10 +11,10 @@
 //! To keep the temporary files created by a test, use env var
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 
+#[cfg(DISABLED_UNTIL_ERC20_WHITELISTS_IMPLEMENTED)]
 pub mod eth_bridge_tests;
 pub mod helpers;
 pub mod ibc_tests;
 pub mod ledger_tests;
-pub mod multitoken_tests;
 pub mod setup;
 pub mod wallet_tests;

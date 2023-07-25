@@ -14,6 +14,8 @@ const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";
 pub const VALIDATOR_STORAGE_PREFIX: &str = "validator";
 const VALIDATOR_ADDRESS_RAW_HASH: &str = "address_raw_hash";
 const VALIDATOR_CONSENSUS_KEY_STORAGE_KEY: &str = "consensus_key";
+const VALIDATOR_ETH_COLD_KEY_STORAGE_KEY: &str = "eth_cold_key";
+const VALIDATOR_ETH_HOT_KEY_STORAGE_KEY: &str = "eth_hot_key";
 const VALIDATOR_STATE_STORAGE_KEY: &str = "state";
 const VALIDATOR_DELTAS_STORAGE_KEY: &str = "deltas";
 const VALIDATOR_COMMISSION_RATE_STORAGE_KEY: &str = "commission_rate";
@@ -34,6 +36,7 @@ const VALIDATOR_TOTAL_UNBONDED_STORAGE_KEY: &str = "total_unbonded";
 const VALIDATOR_SETS_STORAGE_PREFIX: &str = "validator_sets";
 const CONSENSUS_VALIDATOR_SET_STORAGE_KEY: &str = "consensus";
 const BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY: &str = "below_capacity";
+const TOTAL_CONSENSUS_STAKE_STORAGE_KEY: &str = "total_consensus_stake";
 const TOTAL_DELTAS_STORAGE_KEY: &str = "total_deltas";
 const VALIDATOR_SET_POSITIONS_KEY: &str = "validator_set_positions";
 const CONSENSUS_KEYS: &str = "consensus_keys";
@@ -113,6 +116,56 @@ pub fn is_validator_consensus_key_key(key: &Key) -> Option<&Address> {
         ] if addr == &ADDRESS
             && prefix == VALIDATOR_STORAGE_PREFIX
             && key == VALIDATOR_CONSENSUS_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's eth cold key.
+pub fn validator_eth_cold_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_COLD_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth cold key?
+pub fn is_validator_eth_cold_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_COLD_KEY_STORAGE_KEY =>
+        {
+            Some(validator)
+        }
+        _ => None,
+    }
+}
+
+/// Storage key for validator's eth hot key.
+pub fn validator_eth_hot_key_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ETH_HOT_KEY_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator's eth hot key?
+pub fn is_validator_eth_hot_key_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::AddressSeg(validator),
+            DbKeySeg::StringSeg(key),
+        ] if addr == &ADDRESS
+            && prefix == VALIDATOR_STORAGE_PREFIX
+            && key == VALIDATOR_ETH_HOT_KEY_STORAGE_KEY =>
         {
             Some(validator)
         }
@@ -530,6 +583,21 @@ pub fn is_consensus_validator_set_key(key: &Key) -> bool {
 /// Is storage key for the below-capacity validator set?
 pub fn is_below_capacity_validator_set_key(key: &Key) -> bool {
     matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY && lazy_map == LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
+}
+
+/// Storage key for total consensus stake
+pub fn total_consensus_stake_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_CONSENSUS_STAKE_STORAGE_KEY.to_owned())
+        .expect("Cannot obtain a total consensus stake key")
+}
+
+/// Is storage key for the total consensus stake?
+pub fn is_total_consensus_stake_key(key: &Key) -> bool {
+    matches!(&key.segments[..], [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(key)
+            ] if addr == &ADDRESS && key == TOTAL_CONSENSUS_STAKE_STORAGE_KEY)
 }
 
 /// Storage key for total deltas of all validators.

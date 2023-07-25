@@ -5,8 +5,8 @@ use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::token;
 pub use crate::types::token::{
-    balance_key, is_balance_key, is_total_supply_key, total_supply_key, Amount,
-    Change,
+    balance_key, is_any_minted_balance_key, is_balance_key, minted_balance_key,
+    minter_key, Amount, Change,
 };
 
 /// Read the balance of a given token and owner.
@@ -31,9 +31,41 @@ pub fn read_total_supply<S>(
 where
     S: StorageRead,
 {
-    let key = token::total_supply_key(token);
+    let key = token::minted_balance_key(token);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     Ok(balance)
+}
+
+/// Read the denomination of a given token, if any. Note that native
+/// transparent tokens do not have this set and instead use the constant
+/// [`token::NATIVE_MAX_DECIMAL_PLACES`].
+pub fn read_denom<S>(
+    storage: &S,
+    token: &Address,
+) -> storage_api::Result<Option<token::Denomination>>
+where
+    S: StorageRead,
+{
+    let key = token::denom_key(token);
+    storage.read(&key).map(|opt_denom| {
+        Some(
+            opt_denom
+                .unwrap_or_else(|| token::NATIVE_MAX_DECIMAL_PLACES.into()),
+        )
+    })
+}
+
+/// Write the denomination of a given token.
+pub fn write_denom<S>(
+    storage: &mut S,
+    token: &Address,
+    denom: token::Denomination,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = token::denom_key(token);
+    storage.write(&key, denom)
 }
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
@@ -91,7 +123,7 @@ where
         storage_api::Error::new_const("Token balance overflow")
     })?;
 
-    let total_supply_key = token::total_supply_key(token);
+    let total_supply_key = token::minted_balance_key(token);
     let cur_supply = storage
         .read::<Amount>(&total_supply_key)?
         .unwrap_or_default();

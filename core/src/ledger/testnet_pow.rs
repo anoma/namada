@@ -11,8 +11,8 @@ use super::storage_api::{self, StorageRead, StorageWrite};
 use crate::ledger::storage_api::collections::LazyMap;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::storage::{self, DbKeySeg};
-use crate::types::token;
+use crate::types::storage::{self, DbKeySeg, Key};
+use crate::types::uint::Uint;
 
 /// Initialize faucet's storage. This must be called at genesis if faucet
 /// account is being used.
@@ -20,7 +20,7 @@ pub fn init_faucet_storage<S>(
     storage: &mut S,
     address: &Address,
     difficulty: Difficulty,
-    withdrawal_limit: token::Amount,
+    withdrawal_limit: Uint,
 ) -> storage_api::Result<()>
 where
     S: StorageWrite,
@@ -457,7 +457,7 @@ where
 pub fn read_withdrawal_limit<S>(
     storage: &S,
     address: &Address,
-) -> storage_api::Result<token::Amount>
+) -> storage_api::Result<Uint>
 where
     S: StorageRead,
 {
@@ -471,7 +471,7 @@ where
 pub fn write_withdrawal_limit<S>(
     storage: &mut S,
     address: &Address,
-    withdrawal_limit: token::Amount,
+    withdrawal_limit: Uint,
 ) -> Result<(), storage_api::Error>
 where
     S: StorageWrite,

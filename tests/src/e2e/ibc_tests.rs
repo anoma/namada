@@ -69,15 +69,16 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{self, PosParams};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::ledger::storage::Sha256Hasher;
+use namada::ledger::storage::traits::Sha256Hasher;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Key, RESERVED_ADDRESS_PREFIX};
+use namada::types::storage::{BlockHeight, Key};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
@@ -87,6 +88,7 @@ use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
 use setup::constants::*;
 
+use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
@@ -94,6 +96,20 @@ use crate::{run, run_as};
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let (test_a, test_b) = setup_two_single_node_nets()?;
+    set_ethereum_bridge_mode(
+        &test_a,
+        &test_a.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+    set_ethereum_bridge_mode(
+        &test_b,
+        &test_b.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // Run Chain A
     let mut ledger_a = run_as!(
@@ -699,9 +715,8 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_a,
-        None,
         None,
     )?;
     let packet = match get_event(test_a, height)? {
@@ -760,13 +775,10 @@ fn transfer_received_token(
         "{}/{}/{}",
         port_channel_id.port_id, port_channel_id.channel_id, xan
     );
-    let sub_prefix = ibc_token_prefix(denom)
-        .unwrap()
-        .sub_key()
-        .unwrap()
-        .to_string();
+    let ibc_token = ibc_token(denom).to_string();
 
     let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
         "transfer",
         "--source",
@@ -774,11 +786,9 @@ fn transfer_received_token(
         "--target",
         ALBERT,
         "--token",
-        NAM,
-        "--sub-prefix",
-        &sub_prefix,
+        &ibc_token,
         "--amount",
-        "50000",
+        &amount,
         "--fee-token",
         NAM,
         "--node",
@@ -807,22 +817,15 @@ fn transfer_back(
         "{}/{}/{}",
         port_channel_id_b.port_id, port_channel_id_b.channel_id, xan
     );
-    let hash = calc_hash(denom_raw);
-    let ibc_token = Address::Internal(InternalAddress::IbcToken(hash));
-    // Need the address prefix for ibc-transfer command
-    let sub_prefix = format!(
-        "{}/{}{}",
-        MULTITOKEN_STORAGE_KEY, RESERVED_ADDRESS_PREFIX, ibc_token
-    );
+    let ibc_token = ibc_token(denom_raw).to_string();
     // Send a token from Chain B
     let height = transfer(
         test_b,
         BERTHA,
         &receiver,
-        NAM,
-        &Amount::whole(50000),
+        ibc_token,
+        &Amount::native_whole(50000),
         port_channel_id_b,
-        Some(sub_prefix),
         None,
     )?;
     let packet = match get_event(test_b, height)? {
@@ -879,9 +882,8 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::whole(100000),
+        &Amount::native_whole(100000),
         port_channel_id_a,
-        None,
         Some(Duration::new(5, 0)),
     )?;
     let packet = match get_event(test_a, height)? {
@@ -1011,13 +1013,12 @@ fn transfer(
     token: impl AsRef<str>,
     amount: &Amount,
     port_channel_id: &PortChannelId,
-    sub_prefix: Option<String>,
     timeout_sec: Option<Duration>,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
     let receiver = receiver.to_string();
-    let amount = amount.to_string();
+    let amount = amount.to_string_native();
     let port_id = port_channel_id.port_id.to_string();
     let channel_id = port_channel_id.channel_id.to_string();
     let mut tx_args = vec![
@@ -1039,11 +1040,7 @@ fn transfer(
         "--node",
         &rpc,
     ];
-    let sp = sub_prefix.clone().unwrap_or_default();
-    if sub_prefix.is_some() {
-        tx_args.push("--sub-prefix");
-        tx_args.push(&sp);
-    }
+
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
@@ -1247,7 +1244,7 @@ fn check_balances(
     // Check the escrowed balance
     let expected = format!(
         ": 100000, owned by {}",
-        Address::Internal(InternalAddress::IbcEscrow)
+        Address::Internal(InternalAddress::Ibc)
     );
     client.exp_string(&expected)?;
     // Check the source balance
@@ -1260,21 +1257,12 @@ fn check_balances(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(denom)?;
-    let sub_prefix = key_prefix.sub_key().unwrap().to_string();
+    let ibc_token = ibc_token(denom).to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &sub_prefix,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
     ];
-    let expected = format!("nam with {}: 100000", sub_prefix);
+    let expected = format!("{}: 100000", ibc_token);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1292,40 +1280,23 @@ fn check_balances_after_non_ibc(
         "{}/{}/{}",
         port_channel_id.port_id, port_channel_id.channel_id, token
     );
-    let key_prefix = ibc_token_prefix(denom)?;
-    let sub_prefix = key_prefix.sub_key().unwrap().to_string();
+    let ibc_token = ibc_token(denom).to_string();
 
     // Check the source
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &sub_prefix,
-        "--node",
-        &rpc,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc,
     ];
-    let expected = format!("nam with {}: 50000", sub_prefix);
+    let expected = format!("{}: 50000", ibc_token);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
     // Check the traget
     let query_args = vec![
-        "balance",
-        "--owner",
-        ALBERT,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &sub_prefix,
-        "--node",
-        &rpc,
+        "balance", "--owner", ALBERT, "--token", &ibc_token, "--node", &rpc,
     ];
-    let expected = format!("nam with {}: 50000", sub_prefix);
+    let expected = format!("{}: 50000", ibc_token);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1348,7 +1319,7 @@ fn check_balances_after_back(
     // Check the escrowed balance
     let expected = format!(
         ": 50000, owned by {}",
-        Address::Internal(InternalAddress::IbcEscrow)
+        Address::Internal(InternalAddress::Ibc)
     );
     client.exp_string(&expected)?;
     // Check the source balance
@@ -1361,21 +1332,12 @@ fn check_balances_after_back(
         "{}/{}/{}",
         &dest_port_channel_id.port_id, &dest_port_channel_id.channel_id, &token,
     );
-    let key_prefix = ibc_token_prefix(denom)?;
-    let sub_prefix = key_prefix.sub_key().unwrap().to_string();
+    let ibc_token = ibc_token(denom).to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--sub-prefix",
-        &sub_prefix,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
     ];
-    let expected = format!("nam with {}: 0", sub_prefix);
+    let expected = format!("{}: 0", ibc_token);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();

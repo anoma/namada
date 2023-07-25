@@ -29,7 +29,8 @@ env:
 jobs:
   build-wasm:
     timeout-minutes: 30
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
@@ -70,7 +71,8 @@ jobs:
 
   test-wasm:
     timeout-minutes: 30
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -145,7 +147,8 @@ jobs:
           AWS_REGION: eu-west-1
 
   namada:
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     timeout-minutes: 80
     needs: [build-wasm]
     strategy:
@@ -261,8 +264,9 @@ jobs:
         run: sccache --stop-server || true
 
   namada-release:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    runs-on: 
+      group: gians-runners
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -373,7 +377,8 @@ jobs:
 
 
   namada-e2e:
-    runs-on: ${{ matrix.os }}
+    runs-on: 
+      group: gians-runners
     # timeout-minutes: 80
     strategy:
       fail-fast: false
@@ -387,21 +392,18 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
             wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
             wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 2
             cache_key: namada
             cache_version: v2
-            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
             wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
@@ -492,7 +494,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           check-name: ${{ matrix.make.wait_for }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
+          wait-interval: 42
           allowed-conclusions: success
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
@@ -504,38 +506,26 @@ jobs:
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./target/release/
-      - name: Download tendermint & cometbft
+      - name: Download CometBFT
         run: |
           curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v0.37.2/cometbft_0.37.2_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
-          curl -o tendermint.tar.gz -LO https://github.com/heliaxdev/tendermint/releases/download/v0.1.4-abciplus/tendermint_0.1.4-abciplus_linux_amd64.tar.gz
-          tar -xvzf tendermint.tar.gz
-          mv tendermint /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
           chmod +x target/release/namadaw
           chmod +x target/release/namadan
           chmod +x target/release/namadac
-          chmod +x /usr/local/bin/tendermint
           chmod +x /usr/local/bin/cometbft
       - name: Run e2e test
         run: |
-          mkdir -p /home/runner/work/masp-params
-          curl -o /home/runner/work/masp-params/masp-spend.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params?raw=true
-          curl -o /home/runner/work/masp-params/masp-output.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-          curl -o /home/runner/work/masp-params/masp-convert.params -LO https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
-          ls -l /home/runner/work/masp-params
-          shasum /home/runner/work/masp-params/*.params
           python3 .github/workflows/scripts/schedule-e2e.py
         env:
-          NAMADA_TENDERMINT_WEBSOCKET_TIMEOUT: 20
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"
           NAMADA_LOG_COLOR: "false"
-          # NAMADA_MASP_PARAMS_DIR: "/home/runner/work/masp-params"
           NAMADA_LOG: "info"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
           INDEX: ${{ matrix.make.index }}

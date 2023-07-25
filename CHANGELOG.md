@@ -1,5 +1,124 @@
 # CHANGELOG
 
+## v0.20.0
+
+Namada 0.20.0 is a minor releasing addressing several improvements to the PoS system and the ledger 
+stability.
+
+### BUG FIXES
+
+- Fix genesis `faucet_withdrawal_limit` parser to respect tokens' denomination.
+  ([\#1667](https://github.com/anoma/namada/pull/1667))
+- PoS: ensure that the size of genesis validator set
+  is limited by the `max_validator_slots` parameter.
+  ([\#1686](https://github.com/anoma/namada/pull/1686))
+- Fix inconsistency state before commit
+  ([\#1709](https://github.com/anoma/namada/issues/1709))
+- PoS: Fixed an epoch boundary issue in which a validator who's being slashed
+  on a start of a new epoch is disregarded during processing of block votes.
+  ([\#1729](https://github.com/anoma/namada/pull/1729))
+
+### IMPROVEMENTS
+
+- PoS: purge validator sets for old epochs from the storage; store total
+  validator stake ([\#1129](https://github.com/anoma/namada/issues/1129))
+- Added a reusable token balance query method.
+  ([\#1173](https://github.com/anoma/namada/pull/1173))
+- Replaced file-lock with fd-lock dependency to support Windows build.
+  ([\#1605](https://github.com/anoma/namada/pull/1605))
+- Added a command to wait for the next epoch: `client utils epoch-sleep`.
+  ([\#1621](https://github.com/anoma/namada/pull/1621))
+- Added a client query for `validator-state` and improved the slashes query to
+  show more info. ([\#1656](https://github.com/anoma/namada/pull/1656))
+- Removed associated type on `masp::ShieldedUtils`. This type was an
+  attempt to reduce the number of generic parameters needed when interacting
+  with MASP but resulted in making code re-use extremely difficult.
+  ([\#1670](https://github.com/anoma/namada/pull/1670))
+- Removed `impl From<u64> for EthBridgeVotingPower` and replaced it with a
+  `TryFrom`. ([\#1692](https://github.com/anoma/namada/pull/1692))
+- Updated sysinfo dependency.
+  ([\#1695](https://github.com/anoma/namada/pull/1695))
+- Refactored storage code to only use an immutable reference when reading and
+  writing to a batch. ([\#1717](https://github.com/anoma/namada/pull/1717))
+
+### MISCELLANEOUS
+
+- Replaced token sub-prefix with a multitoken address and native VP for IBC and
+  ETH bridge. ([\#1693](https://github.com/anoma/namada/pull/1693))
+- PoS: Keep the data for last two epochs by default.
+  ([\#1733](https://github.com/anoma/namada/pull/1733))
+- Refactored CLI into libraries for future re-use in integration tests and
+  to enable generic IO. ([\#1738](https://github.com/anoma/namada/pull/1738))
+
+### TESTING
+
+- Added integration testing infrastructure for node, client and
+  the wallet and replaced MASP E2E tests with integration tests.
+  ([\#1714](https://github.com/anoma/namada/pull/1714))
+
+## v0.19.0
+
+Namada 0.19.0 is a minor releasing addressing the integration with the namada trustless ethereum bridge.
+
+## v0.18.1
+
+Namada 0.18.1 is a patch release that addresses transaction format changes and minor ledger storage improvements.
+
+### BUG FIXES
+
+- Fixed bug that allowed transactions to be modified without invalidating
+  transaction hash ([\#1607](https://github.com/anoma/namada/pull/1607))
+- Move the content and code of init proposal transactions
+  into separare section to reduce tx size for hardware wallets
+  ([\#1611](https://github.com/anoma/namada/pull/1611))
+
+### FEATURES
+
+- Storage: Add a function to delete key-vals matching a given prefix.
+  ([\#1632](https://github.com/anoma/namada/pull/1632))
+
+### IMPROVEMENTS
+
+- Separate the transaction building, signing, and submission
+  actions in the SDKs API to enable hardware wallet usage
+  ([\#1498](https://github.com/anoma/namada/pull/1498))
+- Disable encryption when sending transactions
+  ([\#1636](https://github.com/anoma/namada/pull/1636))
+- Storage: Ensure that prefix iterator only returns key-
+  vals in which the prefix key segments are matched fully.
+  ([\#1642](https://github.com/anoma/namada/pull/1642))
+
+## v0.18.0
+
+Namada 0.18.0 is a minor release primarily addressing a major change in the token amount representation, the addition of a new validator set category, and other minor improvements to the ledger stability.
+
+### BUG FIXES
+
+- PoS: Ensure that when a validator is slashed, it gets removed from
+  validator set in the same epoch in Namada state as in CometBFT's state.
+  ([\#1582](https://github.com/anoma/namada/pull/1582))
+- Fix signature verification with secp256k1 in WASM VPs.
+  ([\#1599](https://github.com/anoma/namada/pull/1599))
+- Storage: Fix iterator without a prefix.
+  ([\#1615](https://github.com/anoma/namada/pull/1615))
+
+### FEATURES
+
+- Adds a third validator set, the below threshold set, which contains
+  all validators whose stake is below some parameterizable threshold.
+  ([#1576](https://github.com/anoma/namada/pull/1576))
+- Added `NAMADA_LOG_DIR` env var for logging to file(s) and `NAMADA_LOG_ROLLING`
+  for setting rolling logs frequency. The rolling frequency can be set to
+  never, minutely, hourly or daily. If not set, the default is never.
+  ([\#1578](https://github.com/anoma/namada/pull/1578))
+
+### IMPROVEMENTS
+
+- Update clap to the latest version.
+  ([\#64](https://github.com/anoma/namada/issues/64))
+- Updated wasmer to v2.3.0 and switched from pwasm-utils to wasm-instrument.
+  ([\#1604](https://github.com/anoma/namada/pull/1604))
+
 ## v0.17.5
 
 Namada 0.17.5 is a maintenance release chiefly addressing MASP
@@ -98,6 +217,9 @@ wallet address derivation, transaction structure and the ledger stability.
 
 ### BUG FIXES
 
+- Fixed the PrefixIter order of iteration in the write-
+  log to always match the iteration order in the storage.
+  ([#1141](https://github.com/anoma/namada/pull/1141))
 - Persists a newly added storage field for epoch update blocks delay to be
   available after node restart when not `None` which may break consensus.
   ([\#1455](https://github.com/anoma/namada/pull/1455))
@@ -1033,6 +1155,20 @@ Anoma 0.6.0 is a scheduled minor release.
   file and it is missing ([#1044](https://github.com/anoma/anoma/pull/1044))
 - Wallet: various store and API changes and additions for genesis setup.
   ([#1063](https://github.com/anoma/anoma/pull/1063))
+- Ledger: Updated the version of Tendermint used for ABCI++ ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Add full support for ProcessProposal and FinalizeBlock
+    - Updated the shims
+    - Updated `tendermint-rs`, `ibc-rs`, and `tower-abci` deps
+    - Updated the proto definitions
+    - Added Tendermint's new method of a BFT timestamping
+    - Updated the format of Tendermint's new config
+    - Fixed booting up the tendermint node in the ledger with correct settings
+    - Refactored storage to account for the fact that tendermint no longer passes in block headers
+- Client: Configured Tendermints new event log and JSON RPC API for events querying ([#1088](https://github.com/anoma/anoma/pull/1088))
+    - Added necessary config parameters to our tendermint node's configuration
+    - Wrote a jsonrpc client for querying tendermint's event logs
+    - Refactored how txs are submitted in the client when the `ABCI-plus-plus` feature is
+      set to use jsonrpc calls instead of websockets.
 
 ### MISCELLANEOUS
 

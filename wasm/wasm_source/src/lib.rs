@@ -1,5 +1,7 @@
 #[cfg(feature = "tx_bond")]
 pub mod tx_bond;
+#[cfg(feature = "tx_bridge_pool")]
+pub mod tx_bridge_pool;
 #[cfg(feature = "tx_change_validator_commission")]
 pub mod tx_change_validator_commission;
 #[cfg(feature = "tx_ibc")]
@@ -31,8 +33,6 @@ pub mod vp_implicit;
 pub mod vp_masp;
 #[cfg(feature = "vp_testnet_faucet")]
 pub mod vp_testnet_faucet;
-#[cfg(feature = "vp_token")]
-pub mod vp_token;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 #[cfg(feature = "vp_validator")]

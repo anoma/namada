@@ -1,21 +1,24 @@
 //! Queries router and handlers for PoS validity predicate
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
+use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, WeightedValidator,
+    Slash, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{
-    self, below_capacity_validator_set_handle, bond_amount, bond_handle,
-    consensus_validator_set_handle, find_all_slashes,
-    find_delegation_validators, find_delegations, read_all_validator_addresses,
-    read_pos_params, read_total_stake,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    unbond_handle, validator_commission_rate_handle, validator_slashes_handle,
+    self, bond_amount, bond_handle, find_all_enqueued_slashes,
+    find_all_slashes, find_delegation_validators, find_delegations,
+    read_all_validator_addresses,
+    read_below_capacity_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
+    read_total_stake, read_validator_max_commission_rate_change,
+    read_validator_stake, unbond_handle, validator_commission_rate_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 use crate::ledger::queries::types::RequestCtx;
@@ -43,17 +46,22 @@ router! {POS,
 
         ( "commission" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<CommissionPair> = validator_commission,
+
+        ( "state" / [validator: Address] / [epoch: opt Epoch] )
+            -> Option<ValidatorState> = validator_state,
     },
 
     ( "validator_set" ) = {
         ( "consensus" / [epoch: opt Epoch] )
-            -> HashSet<WeightedValidator> = consensus_validator_set,
+            -> BTreeSet<WeightedValidator> = consensus_validator_set,
 
         ( "below_capacity" / [epoch: opt Epoch] )
-            -> HashSet<WeightedValidator> = below_capacity_validator_set,
+            -> BTreeSet<WeightedValidator> = below_capacity_validator_set,
 
         // TODO: add "below_threshold"
     },
+
+    ( "pos_params") -> PosParams = pos_params,
 
     ( "total_stake" / [epoch: opt Epoch] )
         -> token::Amount = total_stake,
@@ -81,6 +89,9 @@ router! {POS,
 
     ( "bonds_and_unbonds" / [source: opt Address] / [validator: opt Address] )
         -> BondsAndUnbondsDetails = bonds_and_unbonds,
+
+    ( "enqueued_slashes" )
+        -> HashMap<Address, BTreeMap<Epoch, Vec<Slash>>> = enqueued_slashes,
 
     ( "all_slashes" ) -> HashMap<Address, Vec<Slash>> = slashes,
 
@@ -132,6 +143,15 @@ impl<T> Enriched<T> {
 }
 
 // Handlers that implement the functions via `trait StorageRead`:
+
+/// Get the PoS parameters
+fn pos_params<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<PosParams>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    read_pos_params(ctx.wl_storage)
+}
 
 /// Find if the given address belongs to a validator account.
 fn is_validator<D, H>(
@@ -203,11 +223,31 @@ where
     }
 }
 
+/// Get the validator state
+fn validator_state<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    validator: Address,
+    epoch: Option<Epoch>,
+) -> storage_api::Result<Option<ValidatorState>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
+    let params = read_pos_params(ctx.wl_storage)?;
+    let state = validator_state_handle(&validator).get(
+        ctx.wl_storage,
+        epoch,
+        &params,
+    )?;
+    Ok(state)
+}
+
 /// Get the total stake of a validator at the given epoch or current when
 /// `None`. The total stake is a sum of validator's self-bonds and delegations
 /// to their address.
 /// Returns `None` when the given address is not a validator address. For a
-/// validator with `0` stake, this returns `Ok(token::Amount::default())`.
+/// validator with `0` stake, this returns `Ok(token::Amount::zero())`.
 fn validator_stake<D, H>(
     ctx: RequestCtx<'_, D, H>,
     validator: Address,
@@ -226,64 +266,29 @@ where
 fn consensus_validator_set<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    consensus_validator_set_handle()
-        .at(&epoch)
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: bonded_stake,
-                        nested_sub_key: _position,
-                    },
-                    address,
-                )| {
-                    WeightedValidator {
-                        bonded_stake,
-                        address,
-                    }
-                },
-            )
-        })
-        .collect()
+    read_consensus_validator_set_addresses_with_stake(ctx.wl_storage, epoch)
 }
 
 /// Get all the validator in the below-capacity set with their bonded stake.
 fn below_capacity_validator_set<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Option<Epoch>,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
-    below_capacity_validator_set_handle()
-        .at(&epoch)
-        .iter(ctx.wl_storage)?
-        .map(|next_result| {
-            next_result.map(
-                |(
-                    lazy_map::NestedSubKey::Data {
-                        key: bonded_stake,
-                        nested_sub_key: _position,
-                    },
-                    address,
-                )| {
-                    WeightedValidator {
-                        bonded_stake: bonded_stake.into(),
-                        address,
-                    }
-                },
-            )
-        })
-        .collect()
+    read_below_capacity_validator_set_addresses_with_stake(
+        ctx.wl_storage,
+        epoch,
+    )
 }
 
 /// Get the total stake in PoS system at the given epoch or current when `None`.
@@ -415,7 +420,7 @@ where
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
 
     let handle = unbond_handle(&source, &validator);
-    let mut total = token::Amount::default();
+    let mut total = token::Amount::zero();
     for result in handle.iter(ctx.wl_storage)? {
         let (
             lazy_map::NestedSubKey::Data {
@@ -496,7 +501,19 @@ where
     find_all_slashes(ctx.wl_storage)
 }
 
-/// All slashes
+/// Enqueued slashes
+fn enqueued_slashes<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    find_all_enqueued_slashes(ctx.wl_storage, current_epoch)
+}
+
+/// Native validator address by looking up the Tendermint address
 fn validator_by_tm_addr<D, H>(
     ctx: RequestCtx<'_, D, H>,
     tm_addr: String,

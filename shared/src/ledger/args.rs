@@ -1,18 +1,37 @@
 //! Structures encapsulating SDK arguments
+
 use std::path::PathBuf;
+use std::time::Duration as StdDuration;
 
 use namada_core::types::chain::ChainId;
+use namada_core::types::dec::Dec;
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::time::DateTimeUtc;
-use rust_decimal::Decimal;
 use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
+use crate::types::keccak::KeccakHash;
 use crate::types::key::{common, SchemeType};
 use crate::types::masp::MaspValue;
 use crate::types::storage::Epoch;
 use crate::types::transaction::GasLimit;
 use crate::types::{storage, token};
+
+/// [`Duration`](StdDuration) wrapper that provides a
+/// method to parse a value from a string.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+#[repr(transparent)]
+pub struct Duration(pub StdDuration);
+
+impl ::std::str::FromStr for Duration {
+    type Err = ::parse_duration::parse::Error;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ::parse_duration::parse(s).map(Duration)
+    }
+}
 
 /// Abstraction of types being used in Namada
 pub trait NamadaTypes: Clone + std::fmt::Debug {
@@ -24,6 +43,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type Keypair: Clone + std::fmt::Debug;
     /// Represents the address of a Tendermint endpoint
     type TendermintAddress: Clone + std::fmt::Debug;
+    /// Represents the address of an Ethereum endpoint
+    type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
     type ViewingKey: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -46,6 +67,7 @@ impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
     type Data = Vec<u8>;
+    type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
     type NativeAddress = Address;
     type PublicKey = namada_core::types::key::common::PublicKey;
@@ -93,14 +115,23 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub target: C::TransferTarget,
     /// Transferred token address
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: InputAmount,
     /// Native token address
     pub native_token: C::NativeAddress,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
+}
+/// An amount read in by the cli
+#[derive(Copy, Clone, Debug)]
+pub enum InputAmount {
+    /// An amount whose representation has been validated
+    /// against the allowed representation in storage
+    Validated(token::DenominatedAmount),
+    /// The parsed amount read in from the cli. It has
+    /// not yet been validated against the allowed
+    /// representation in storage.
+    Unvalidated(token::DenominatedAmount),
 }
 
 /// IBC transfer transaction arguments
@@ -112,10 +143,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::Address,
     /// Transfer target address
     pub receiver: String,
-    /// Transferred token address
+    /// Transferred token addres    s
     pub token: C::Address,
-    /// Transferred token address
-    pub sub_prefix: Option<String>,
     /// Transferred token amount
     pub amount: token::Amount,
     /// Port ID
@@ -158,12 +187,16 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub account_key: Option<C::PublicKey>,
     /// Consensus key
     pub consensus_key: Option<C::Keypair>,
+    /// Ethereum cold key
+    pub eth_cold_key: Option<C::Keypair>,
+    /// Ethereum hot key
+    pub eth_hot_key: Option<C::Keypair>,
     /// Protocol key
     pub protocol_key: Option<C::PublicKey>,
     /// Commission rate
-    pub commission_rate: Decimal,
+    pub commission_rate: Dec,
     /// Maximum commission rate change
-    pub max_commission_rate_change: Decimal,
+    pub max_commission_rate_change: Dec,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -280,8 +313,6 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
-    /// Sub prefix of an account
-    pub sub_prefix: Option<String>,
 }
 
 /// Query historical transfer(s)
@@ -317,15 +348,26 @@ pub struct QueryBondedStake<C: NamadaTypes = SdkTypes> {
     pub epoch: Option<Epoch>,
 }
 
+/// Query the state of a validator (its validator set or if it is jailed)
+#[derive(Clone, Debug)]
+pub struct QueryValidatorState<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of a validator
+    pub validator: C::Address,
+    /// Epoch in which to find the validator state
+    pub epoch: Option<Epoch>,
+}
+
 #[derive(Clone, Debug)]
 /// Commission rate change args
-pub struct TxCommissionRateChange<C: NamadaTypes = SdkTypes> {
+pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Validator address (should be self)
     pub validator: C::Address,
     /// Value to which the tx changes the commission rate
-    pub rate: Decimal,
+    pub rate: Dec,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -338,7 +380,7 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     /// Validator address (should be self)
     pub validator: C::Address,
     /// Path to the TX WASM code file
-    pub tx_code_path: C::Data,
+    pub tx_code_path: PathBuf,
 }
 
 /// Query PoS commission rate
@@ -410,7 +452,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// wallet.
     pub wallet_alias_force: bool,
     /// The amount being payed (for gas unit) to include the transaction
-    pub fee_amount: Option<token::Amount>,
+    pub fee_amount: Option<InputAmount>,
     /// The token in which the fee is being paid
     pub fee_token: C::Address,
     /// The optional spending key for fee unshielding
@@ -429,6 +471,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signer: Option<C::Address>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
+    /// Sign the tx with the public key for the given alias from your wallet
+    pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
 }
@@ -565,4 +609,141 @@ pub struct AddressAdd {
     pub alias_force: bool,
     /// Address to add
     pub address: Address,
+}
+
+/// Bridge pool batch recommendation.
+#[derive(Clone, Debug)]
+pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The maximum amount of gas to spend.
+    pub max_gas: Option<u64>,
+    /// An optional parameter indicating how much net
+    /// gas the relayer is willing to pay.
+    pub gas: Option<u64>,
+    /// Estimate of amount of NAM a single ETH is worth.
+    pub nam_per_eth: f64,
+}
+
+/// A transfer to be added to the Ethereum bridge pool.
+#[derive(Clone, Debug)]
+pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
+    /// The args for building a tx to the bridge pool
+    pub tx: Tx<C>,
+    /// The type of token
+    pub asset: EthAddress,
+    /// The recipient address
+    pub recipient: EthAddress,
+    /// The sender of the transfer
+    pub sender: C::Address,
+    /// The amount to be transferred
+    pub amount: InputAmount,
+    /// The amount of fees (in NAM)
+    pub gas_amount: token::Amount,
+    /// The account of fee payer.
+    pub gas_payer: C::Address,
+    /// Path to the tx WASM code file
+    pub code_path: C::Data,
+}
+
+/// Bridge pool proof arguments.
+#[derive(Debug, Clone)]
+pub struct BridgePoolProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The keccak hashes of transfers to
+    /// acquire a proof of.
+    pub transfers: Vec<KeccakHash>,
+    /// The address of the node responsible for relaying
+    /// the transfers.
+    ///
+    /// This node will receive the gas fees escrowed in
+    /// the Bridge pool, to compensate the Ethereum relay
+    /// procedure.
+    pub relayer: Address,
+}
+
+/// Arguments to an Ethereum Bridge pool relay operation.
+#[derive(Debug, Clone)]
+pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The hashes of the transfers to be relayed
+    pub transfers: Vec<KeccakHash>,
+    /// The Namada address for receiving fees for relaying
+    pub relayer: Address,
+    /// The number of confirmations to wait for on Ethereum
+    pub confirmations: u64,
+    /// The Ethereum RPC endpoint.
+    pub eth_rpc_endpoint: C::EthereumAddress,
+    /// The Ethereum gas that can be spent during
+    /// the relay call.
+    pub gas: Option<u64>,
+    /// The price of Ethereum gas, during the
+    /// relay call.
+    pub gas_price: Option<u64>,
+    /// The address of the Ethereum wallet to pay the gas fees.
+    /// If unset, the default wallet is used.
+    pub eth_addr: Option<EthAddress>,
+    /// Synchronize with the network, or exit immediately,
+    /// if the Ethereum node has fallen behind.
+    pub sync: bool,
+    /// Safe mode overrides keyboard interrupt signals, to ensure
+    /// Ethereum transfers aren't canceled midway through.
+    pub safe_mode: bool,
+}
+
+/// Consensus validator set arguments.
+#[derive(Debug, Clone)]
+pub struct ConsensusValidatorSet<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The epoch to query.
+    pub epoch: Option<Epoch>,
+}
+
+/// Validator set proof arguments.
+#[derive(Debug, Clone)]
+pub struct ValidatorSetProof<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The epoch to query.
+    pub epoch: Option<Epoch>,
+}
+
+/// Validator set update relayer arguments.
+#[derive(Debug, Clone)]
+pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
+    /// Run in daemon mode, which will continuously
+    /// perform validator set updates.
+    pub daemon: bool,
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The number of block confirmations on Ethereum.
+    pub confirmations: u64,
+    /// The Ethereum RPC endpoint.
+    pub eth_rpc_endpoint: C::EthereumAddress,
+    /// The epoch of the validator set to relay.
+    pub epoch: Option<Epoch>,
+    /// The Ethereum gas that can be spent during
+    /// the relay call.
+    pub gas: Option<u64>,
+    /// The price of Ethereum gas, during the
+    /// relay call.
+    pub gas_price: Option<u64>,
+    /// The address of the Ethereum wallet to pay the gas fees.
+    /// If unset, the default wallet is used.
+    pub eth_addr: Option<EthAddress>,
+    /// Synchronize with the network, or exit immediately,
+    /// if the Ethereum node has fallen behind.
+    pub sync: bool,
+    /// The amount of time to sleep between failed
+    /// daemon mode relays.
+    pub retry_dur: Option<StdDuration>,
+    /// The amount of time to sleep between successful
+    /// daemon mode relays.
+    pub success_dur: Option<StdDuration>,
+    /// Safe mode overrides keyboard interrupt signals, to ensure
+    /// Ethereum transfers aren't canceled midway through.
+    pub safe_mode: bool,
 }

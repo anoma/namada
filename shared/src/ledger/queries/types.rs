@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use namada_core::ledger::storage::WlStorage;
 use thiserror::Error;
@@ -85,7 +85,7 @@ pub trait Router {
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
-    type Error: From<std::io::Error> + Display;
+    type Error: From<std::io::Error> + Display + Debug;
 
     /// Send a simple query request at the given path. For more options, use the
     /// `request` method.
@@ -108,7 +108,7 @@ pub trait Client {
     ) -> Result<EncodedResponseQuery, Self::Error>;
 
     /// `/abci_info`: get information about the ABCI application.
-    async fn abci_info(&self) -> Result<abci_info::AbciInfo, Error> {
+    async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
         Ok(self.perform(abci_info::Request).await?.response)
     }
 
@@ -271,7 +271,7 @@ pub trait Client {
     ///
     /// Returns empty result (200 OK) on success, no response in case of an
     /// error.
-    async fn health(&self) -> Result<(), Error> {
+    async fn health(&self) -> Result<(), RpcError> {
         self.perform(health::Request).await?;
         Ok(())
     }

@@ -20,7 +20,6 @@ use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
-use super::super::Shell;
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 #[cfg(not(feature = "abcipp"))]
 use super::abcipp_shim_types::shim::TxBytes;
@@ -34,6 +33,7 @@ use crate::facade::tendermint_proto::abci::{
 #[cfg(not(feature = "abcipp"))]
 use crate::facade::tower_abci::response::DeliverTx;
 use crate::facade::tower_abci::{BoxError, Request as Req, Response as Resp};
+use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -54,10 +54,12 @@ pub struct AbcippShim {
 impl AbcippShim {
     /// Create a shell with a ABCI service that passes messages to and from the
     /// shell.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: config::Ledger,
         wasm_dir: PathBuf,
         broadcast_sender: UnboundedSender<Vec<u8>>,
+        eth_oracle: Option<EthereumOracleChannels>,
         db_cache: &rocksdb::Cache,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
@@ -75,6 +77,7 @@ impl AbcippShim {
                     config,
                     wasm_dir,
                     broadcast_sender,
+                    eth_oracle,
                     Some(db_cache),
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,

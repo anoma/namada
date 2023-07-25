@@ -1,7 +1,7 @@
-mod cli;
-
 use color_eyre::eyre::Result;
-use namada_apps::logging;
+use namada_apps::cli::api::CliApi;
+use namada_apps::facade::tendermint_rpc::HttpClient;
+use namada_apps::{cli, logging};
 use tracing_subscriber::filter::LevelFilter;
 
 #[tokio::main]
@@ -10,8 +10,12 @@ async fn main() -> Result<()> {
     color_eyre::install()?;
 
     // init logging
-    logging::init_from_env_or(LevelFilter::INFO)?;
+    let _log_guard = logging::init_from_env_or(LevelFilter::INFO)?;
 
     // run the CLI
-    cli::main().await
+    CliApi::<()>::handle_client_command::<HttpClient>(
+        None,
+        cli::namada_client_cli()?,
+    )
+    .await
 }

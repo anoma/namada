@@ -388,7 +388,7 @@ where
         _port_id: &PortId,
         _channel_id: &ChannelId,
     ) -> Result<Self::AccountId, TokenTransferError> {
-        Ok(Address::Internal(InternalAddress::IbcEscrow))
+        Ok(Address::Internal(InternalAddress::Ibc))
     }
 
     fn can_send_coins(&self) -> Result<(), TokenTransferError> {
@@ -444,43 +444,19 @@ where
     ) -> Result<(), TokenTransferError> {
         // Assumes that the coin denom is prefixed with "port-id/channel-id" or
         // has no prefix
-        let (token, amount) = get_token_amount(coin)?;
-
-        let src = if coin.denom.trace_path.is_empty()
-            || *from == Address::Internal(InternalAddress::IbcEscrow)
-            || *from == Address::Internal(InternalAddress::IbcMint)
-        {
-            token::balance_key(&token, from)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, from)
-        };
-
-        let dest = if coin.denom.trace_path.is_empty()
-            || *to == Address::Internal(InternalAddress::IbcEscrow)
-            || *to == Address::Internal(InternalAddress::IbcBurn)
-        {
-            token::balance_key(&token, to)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, to)
-        };
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
-            .transfer_token(&src, &dest, amount)
+            .transfer_token(from, to, &ibc_token, amount)
             .map_err(|_| {
                 TokenTransferError::ContextError(ContextError::ChannelError(
                     ChannelError::Other {
                         description: format!(
                             "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            from,
+                            to,
+                            amount.to_string_native()
                         ),
                     },
                 ))
@@ -492,32 +468,19 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (token, amount) = get_token_amount(coin)?;
-
-        let src = token::balance_key(
-            &token,
-            &Address::Internal(InternalAddress::IbcMint),
-        );
-
-        let dest = if coin.denom.trace_path.is_empty() {
-            token::balance_key(&token, account)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, account)
-        };
+        // The trace path of the denom is already updated if receiving the token
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
-            .transfer_token(&src, &dest, amount)
+            .mint_token(account, &ibc_token, amount)
             .map_err(|_| {
                 TokenTransferError::ContextError(ContextError::ChannelError(
                     ChannelError::Other {
                         description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            "Minting a coin failed: account {}, amount {}",
+                            account,
+                            amount.to_string_native()
                         ),
                     },
                 ))
@@ -529,32 +492,19 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (token, amount) = get_token_amount(coin)?;
+        let (ibc_token, amount) = get_token_amount(coin)?;
 
-        let src = if coin.denom.trace_path.is_empty() {
-            token::balance_key(&token, account)
-        } else {
-            let prefix = storage::ibc_token_prefix(coin.denom.to_string())
-                .map_err(|_| TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?;
-            token::multitoken_balance_key(&prefix, account)
-        };
-
-        let dest = token::balance_key(
-            &token,
-            &Address::Internal(InternalAddress::IbcBurn),
-        );
-
+        // The burn is "unminting" from the minted balance
         self.ctx
             .borrow_mut()
-            .transfer_token(&src, &dest, amount)
+            .burn_token(account, &ibc_token, amount)
             .map_err(|_| {
                 TokenTransferError::ContextError(ContextError::ChannelError(
                     ChannelError::Other {
                         description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            src, dest, amount
+                            "Burning a coin failed: account {}, amount {}",
+                            account,
+                            amount.to_string_native()
                         ),
                     },
                 ))
@@ -599,16 +549,15 @@ where
     }
 }
 
-/// Get the token address and the amount from PrefixedCoin
+/// Get the token address and the amount from PrefixedCoin. If the base denom is
+/// not an address, it returns `IbcToken`
 fn get_token_amount(
     coin: &PrefixedCoin,
 ) -> Result<(Address, token::Amount), TokenTransferError> {
-    let token =
-        Address::decode(coin.denom.base_denom.as_str()).map_err(|_| {
-            TokenTransferError::InvalidCoin {
-                coin: coin.denom.base_denom.to_string(),
-            }
-        })?;
+    let token = match Address::decode(coin.denom.base_denom.as_str()) {
+        Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
+        _ => storage::ibc_token(coin.denom.to_string()),
+    };
 
     let amount = coin.amount.try_into().map_err(|_| {
         TokenTransferError::InvalidCoin {

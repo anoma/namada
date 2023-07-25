@@ -29,7 +29,10 @@ fn validate_tx(
         let pk = key::get(ctx, &addr);
         match pk {
             Ok(Some(pk)) => ctx
-                .verify_tx_section_signature(&pk, tx_data.data_sechash())
+                .verify_tx_section_signature(
+                    &pk,
+                    &[*tx_data.data_sechash(), *tx_data.code_sechash()],
+                )
                 .is_ok(),
             _ => false,
         }
@@ -40,15 +43,26 @@ fn validate_tx(
     }
 
     for key in keys_changed.iter() {
-        let is_valid = if let Some(owner) = token::is_any_token_balance_key(key)
+        let is_valid = if let Some([token, owner]) =
+            token::is_any_token_balance_key(key)
         {
             if owner == &addr {
                 let pre: token::Amount = ctx.read_pre(key)?.unwrap_or_default();
                 let post: token::Amount =
                     ctx.read_post(key)?.unwrap_or_default();
                 let change = post.change() - pre.change();
-
-                if change < 0 {
+                let maybe_denom =
+                    storage_api::token::read_denom(&ctx.pre(), token)?;
+                if maybe_denom.is_none() {
+                    debug_log!(
+                        "A denomination for token address {} does not exist \
+                         in storage",
+                        token,
+                    );
+                    return reject();
+                }
+                let denom = maybe_denom.unwrap();
+                if !change.non_negative() {
                     // Allow to withdraw without a sig if there's a valid PoW
                     if ctx.has_valid_pow() {
                         let max_free_debit =
@@ -56,7 +70,10 @@ fn validate_tx(
                                 &ctx.pre(),
                                 &addr,
                             )?;
-                        change >= -max_free_debit.change()
+
+                        token::Amount::from_uint(change.abs(), 0).unwrap()
+                            <= token::Amount::from_uint(max_free_debit, denom)
+                                .unwrap()
                     } else {
                         debug_log!("No PoW solution, a signature is required");
                         // Debit without a solution has to signed
@@ -100,7 +117,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
-    use namada::proto::{Data, Signature};
+    use namada::proto::{Code, Data, Signature};
     use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
@@ -144,14 +161,19 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(10_098_123);
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &source, &token]);
 
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
+
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -161,7 +183,6 @@ mod tests {
                 &source,
                 address,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -251,8 +272,9 @@ mod tests {
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &keypair,
         )));
         let signed_tx = tx.clone();
@@ -297,25 +319,29 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
         let target = address::testing::established_address_2();
         let token = address::nam();
-        let amount = token::Amount::from(amount);
+        let amount = token::Amount::from_uint(amount, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         tx_env.commit_genesis();
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into()
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
         // Apply transfer in a transaction
-        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
+        tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount, &None, &None, &None).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -338,26 +364,33 @@ mod tests {
         // Init the VP
         let vp_owner = address::testing::established_address_1();
         let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-        let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+        let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
+        testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
         let target = address::testing::established_address_2();
         let target_key = key::testing::keypair_1();
         let token = address::nam();
-        let amount = token::Amount::from(amount);
+        let amount = token::Amount::from_uint(amount, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
+        // write the denomination of NAM into storage
+        storage_api::token::write_denom(&mut tx_env.wl_storage, &token, token::NATIVE_MAX_DECIMAL_PLACES.into()).unwrap();
         tx_env.commit_genesis();
 
         // Construct a PoW solution like a client would
         let challenge = testnet_pow::Challenge::new(&mut tx_env.wl_storage, &vp_owner, target.clone()).unwrap();
         let solution = challenge.solve();
         let solution_bytes = solution.try_to_vec().unwrap();
+
+        let amount = token::DenominatedAmount {
+            amount,
+            denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        };
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -366,7 +399,7 @@ mod tests {
             let valid = solution.validate(tx::ctx(), address, target.clone()).unwrap();
             assert!(valid);
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, None, amount, &None, &None, &None).unwrap();
+            tx_host_env::token::transfer(tx::ctx(), address, &target, &token, amount, &None, &None, &None).unwrap();
         });
 
         let mut vp_env = vp_host_env::take();
@@ -374,7 +407,8 @@ mod tests {
         vp_env.has_valid_pow = true;
         let mut tx_data = Tx::new(TxType::Raw);
         tx_data.set_data(Data::new(solution_bytes));
-        tx_data.add_section(Section::Signature(Signature::new(tx_data.data_sechash(), &target_key)));
+        tx_data.set_code(Code::new(vec![]));
+        tx_data.add_section(Section::Signature(Signature::new(vec![*tx_data.data_sechash(), *tx_data.code_sechash()], &target_key)));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -395,8 +429,8 @@ mod tests {
 
             // Init the VP
             let difficulty = testnet_pow::Difficulty::try_new(0).unwrap();
-            let withdrawal_limit = token::Amount::from(MAX_FREE_DEBIT as u64);
-            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit).unwrap();
+            let withdrawal_limit = token::Amount::from_uint(MAX_FREE_DEBIT as u64, 0).unwrap();
+            testnet_pow::init_faucet_storage(&mut tx_env.wl_storage, &vp_owner, difficulty, withdrawal_limit.into()).unwrap();
 
             let keypair = key::testing::keypair_1();
             let public_key = &keypair.ref_to();
@@ -421,7 +455,8 @@ mod tests {
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(tx.data_sechash(), &keypair)));
+            tx.set_code(Code::new(vec![]));
+            tx.add_section(Section::Signature(Signature::new(vec![*tx.data_sechash(), *tx.code_sechash()], &keypair)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =

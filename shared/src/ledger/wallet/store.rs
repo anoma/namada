@@ -40,6 +40,8 @@ pub enum ConfirmationResponse {
 pub struct ValidatorKeys {
     /// Special keypair for signing protocol txs
     pub protocol_keypair: common::SecretKey,
+    /// Special hot keypair for signing Ethereum bridge txs
+    pub eth_bridge_keypair: common::SecretKey,
     /// Special session keypair needed by validators for participating
     /// in the DKG protocol
     pub dkg_keypair: Option<DkgKeypair>,
@@ -309,14 +311,24 @@ impl Store {
         self.validator_data = Some(ValidatorData { address, keys });
     }
 
-    /// Returns the validator data, if it exists
+    /// Returns a reference to the validator data, if it exists.
     pub fn get_validator_data(&self) -> Option<&ValidatorData> {
         self.validator_data.as_ref()
     }
 
-    /// Returns the validator data, if it exists
-    pub fn validator_data(&mut self) -> Option<&mut ValidatorData> {
+    /// Returns a mut reference to the validator data, if it exists.
+    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
         self.validator_data.as_mut()
+    }
+
+    /// Take the validator data, if it exists.
+    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+        self.validator_data.take()
+    }
+
+    /// Returns the validator data, if it exists.
+    pub fn into_validator_data(self) -> Option<ValidatorData> {
+        self.validator_data
     }
 
     /// Insert a new key with the given alias. If the alias is already used,

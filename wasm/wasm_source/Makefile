@@ -6,6 +6,7 @@ nightly := $(shell cat ../../rust-nightly-version)
 # All the wasms that can be built from this source, switched via Cargo features
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_bond
+wasms += tx_bridge_pool
 wasms += tx_change_validator_commission
 wasms += tx_ibc
 wasms += tx_init_account
@@ -21,7 +22,6 @@ wasms += tx_withdraw
 wasms += vp_implicit
 wasms += vp_masp
 wasms += vp_testnet_faucet
-wasms += vp_token
 wasms += vp_user
 wasms += vp_validator
 

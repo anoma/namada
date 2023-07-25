@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ark_serialize::{Read, Write};
-use file_lock::{FileLock, FileOptions};
+use fd_lock::RwLock;
 use namada::ledger::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
@@ -36,10 +36,11 @@ pub fn gen_and_store(
     let wallet_dir = wallet_path.parent().unwrap();
     fs::create_dir_all(wallet_dir)?;
     // Write the file
-    let options = FileOptions::new().create(true).write(true).truncate(true);
-    let mut filelock =
-        FileLock::lock(wallet_path.to_str().unwrap(), true, options)?;
-    filelock.file.write_all(&data)?;
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    let mut lock = RwLock::new(options.open(wallet_path)?);
+    let mut guard = lock.write()?;
+    guard.write_all(&data)?;
     Ok(validator)
 }
 
@@ -47,53 +48,60 @@ pub fn gen_and_store(
 /// from a TOML file.
 pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
     let wallet_file = validator_file_name(store_dir);
-    match FileLock::lock(
-        wallet_file.to_str().unwrap(),
-        true,
-        FileOptions::new().read(true).write(false),
-    ) {
-        Ok(mut filelock) => {
-            let mut store = Vec::<u8>::new();
-            filelock.file.read_to_end(&mut store).map_err(|err| {
-                ReadError::ReadWallet(
-                    store_dir.to_str().unwrap().into(),
-                    err.to_string(),
-                )
-            })?;
-            let store =
-                ValidatorStore::decode(store).map_err(ReadError::Decode)?;
-
-            let password = if store.account_key.is_encrypted()
-                || store.consensus_key.is_encrypted()
-                || store.account_key.is_encrypted()
-            {
-                Some(CliWalletUtils::read_decryption_password())
-            } else {
-                None
-            };
-
-            let account_key = store
-                .account_key
-                .get::<CliWalletUtils>(true, password.clone())?;
-            let consensus_key = store
-                .consensus_key
-                .get::<CliWalletUtils>(true, password.clone())?;
-            let tendermint_node_key = store
-                .tendermint_node_key
-                .get::<CliWalletUtils>(true, password)?;
-
-            Ok(ValidatorWallet {
-                store,
-                account_key,
-                consensus_key,
-                tendermint_node_key,
-            })
-        }
-        Err(err) => Err(ReadError::ReadWallet(
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(false);
+    let lock = RwLock::new(options.open(&wallet_file).map_err(|err| {
+        ReadError::ReadWallet(
             wallet_file.to_string_lossy().into_owned(),
             err.to_string(),
-        )),
-    }
+        )
+    })?);
+    let guard = lock.read().map_err(|err| {
+        ReadError::ReadWallet(
+            wallet_file.to_string_lossy().into_owned(),
+            err.to_string(),
+        )
+    })?;
+    let mut store = Vec::<u8>::new();
+    (&*guard).read_to_end(&mut store).map_err(|err| {
+        ReadError::ReadWallet(
+            store_dir.to_str().unwrap().into(),
+            err.to_string(),
+        )
+    })?;
+    let store = ValidatorStore::decode(store).map_err(ReadError::Decode)?;
+
+    let password = if store.account_key.is_encrypted()
+        || store.consensus_key.is_encrypted()
+        || store.account_key.is_encrypted()
+    {
+        Some(CliWalletUtils::read_decryption_password())
+    } else {
+        None
+    };
+
+    let account_key = store
+        .account_key
+        .get::<CliWalletUtils>(true, password.clone())?;
+    let consensus_key = store
+        .consensus_key
+        .get::<CliWalletUtils>(true, password.clone())?;
+    let eth_cold_key = store
+        .eth_cold_key
+        .get::<CliWalletUtils>(true, password.clone())?;
+    let eth_hot_key = store.validator_keys.eth_bridge_keypair.clone();
+    let tendermint_node_key = store
+        .tendermint_node_key
+        .get::<CliWalletUtils>(true, password)?;
+
+    Ok(ValidatorWallet {
+        store,
+        account_key,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        tendermint_node_key,
+    })
 }
 
 /// Generate a new [`ValidatorWallet`] with required pre-genesis keys. Will
@@ -108,15 +116,19 @@ fn gen(
         SchemeType::Ed25519,
         password.clone(),
     );
+    let (eth_cold_key, eth_cold_sk) =
+        gen_key_to_store(SchemeType::Secp256k1, password.clone());
     let (tendermint_node_key, tendermint_node_sk) = gen_key_to_store(
         // Note that TM only allows ed25519 for node IDs
         SchemeType::Ed25519,
         password,
     );
-    let validator_keys = gen_validator_keys(None, scheme);
+    let validator_keys = gen_validator_keys(None, None, scheme);
+    let eth_hot_key = validator_keys.eth_bridge_keypair.clone();
     let store = ValidatorStore {
         account_key,
         consensus_key,
+        eth_cold_key,
         tendermint_node_key,
         validator_keys,
     };
@@ -124,6 +136,8 @@ fn gen(
         store,
         account_key: account_sk,
         consensus_key: consensus_sk,
+        eth_cold_key: eth_cold_sk,
+        eth_hot_key,
         tendermint_node_key: tendermint_node_sk,
     }
 }

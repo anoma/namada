@@ -18,6 +18,12 @@ wasms_for_tests := wasm_for_tests/wasm_source
 # Paths for all the wasm templates
 wasm_templates := wasm/tx_template wasm/vp_template
 
+ifdef JOBS
+jobs := -j $(JOBS)
+else
+jobs :=
+endif
+
 # TODO upgrade libp2p
 audit-ignores += RUSTSEC-2021-0076
 
@@ -25,6 +31,7 @@ audit-ignores += RUSTSEC-2021-0076
 crates := namada_core
 crates += namada
 crates += namada_apps
+crates += namada_benchmarks
 crates += namada_encoding_spec
 crates += namada_macros
 crates += namada_proof_of_stake
@@ -35,13 +42,16 @@ crates += namada_vm_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build --workspace --exclude namada_benchmarks
+	$(cargo) build $(jobs) --exclude namada_benchmarks
 
 build-test:
-	$(cargo) build --tests
+	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	NAMADA_DEV=false $(cargo) build --release --package namada_apps --manifest-path Cargo.toml
+	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
+
+build-debug:
+	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
 
 install-release:
 	NAMADA_DEV=false $(cargo) install --path ./apps --locked
@@ -70,7 +80,7 @@ check-crates:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy --all-targets -- -D warnings && \
+	NAMADA_DEV=false $(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -111,7 +121,7 @@ test-unit-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e -Z unstable-options --report-time
+		-- --skip e2e --skip integration -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
@@ -127,23 +137,33 @@ test-e2e:
 	--test-threads=1 \
 	-Z unstable-options --report-time
 
+test-integration:
+	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test integration::$(TEST_FILTER) \
+	-Z unstable-options \
+	-- \
+	-Z unstable-options --report-time
+
 test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
-		-- --skip e2e \
+		$(jobs) \
+		-- --skip e2e --skip integration \
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
 	$(cargo) +$(nightly) test \
 		--features "mainnet" \
 		$(TEST_FILTER) \
-		-- --skip e2e \
+		$(jobs) \
+		-- --skip e2e --skip integration \
 		-Z unstable-options --report-time
 
 test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
-		$(TEST_FILTER) -- \
-		-- --skip e2e \
+		$(jobs) \
+		$(TEST_FILTER) \
+		-- --skip e2e --skip integration \
 		--nocapture \
 		-Z unstable-options --report-time
 

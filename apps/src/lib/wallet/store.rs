@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
-use file_lock::{FileLock, FileOptions};
+use fd_lock::RwLock;
 #[cfg(not(feature = "dev"))]
 use namada::ledger::wallet::store::AddressVpType;
 #[cfg(feature = "dev")]
@@ -48,10 +48,11 @@ pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
     let wallet_dir = wallet_path.parent().unwrap();
     fs::create_dir_all(wallet_dir)?;
     // Write the file
-    let options = FileOptions::new().create(true).write(true).truncate(true);
-    let mut filelock =
-        FileLock::lock(wallet_path.to_str().unwrap(), true, options)?;
-    filelock.file.write_all(&data)
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    let mut lock = RwLock::new(options.open(wallet_path)?);
+    let mut guard = lock.write()?;
+    guard.write_all(&data)
 }
 
 /// Load the store file or create a new one without any keys or addresses.
@@ -88,26 +89,28 @@ pub fn load_or_new_from_genesis(
 /// Attempt to load the store file.
 pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
     let wallet_file = wallet_file(store_dir);
-    match FileLock::lock(
-        wallet_file.to_str().unwrap(),
-        true,
-        FileOptions::new().read(true).write(false),
-    ) {
-        Ok(mut filelock) => {
-            let mut store = Vec::<u8>::new();
-            filelock.file.read_to_end(&mut store).map_err(|err| {
-                LoadStoreError::ReadWallet(
-                    store_dir.to_str().unwrap().parse().unwrap(),
-                    err.to_string(),
-                )
-            })?;
-            Store::decode(store).map_err(LoadStoreError::Decode)
-        }
-        Err(err) => Err(LoadStoreError::ReadWallet(
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(false);
+    let lock = RwLock::new(options.open(&wallet_file).map_err(|err| {
+        LoadStoreError::ReadWallet(
             wallet_file.to_string_lossy().into_owned(),
             err.to_string(),
-        )),
-    }
+        )
+    })?);
+    let guard = lock.read().map_err(|err| {
+        LoadStoreError::ReadWallet(
+            wallet_file.to_string_lossy().into_owned(),
+            err.to_string(),
+        )
+    })?;
+    let mut store = Vec::<u8>::new();
+    (&*guard).read_to_end(&mut store).map_err(|err| {
+        LoadStoreError::ReadWallet(
+            store_dir.to_str().unwrap().parse().unwrap(),
+            err.to_string(),
+        )
+    })?;
+    Store::decode(store).map_err(LoadStoreError::Decode)
 }
 
 /// Add addresses from a genesis configuration.
@@ -166,16 +169,26 @@ fn new() -> Store {
 ///
 /// Note that this removes the validator data.
 pub fn gen_validator_keys(
+    eth_bridge_keypair: Option<common::SecretKey>,
     protocol_keypair: Option<common::SecretKey>,
-    scheme: SchemeType,
+    protocol_keypair_scheme: SchemeType,
 ) -> ValidatorKeys {
+    let eth_bridge_keypair = eth_bridge_keypair
+        .map(|k| {
+            if !matches!(&k, common::SecretKey::Secp256k1(_)) {
+                panic!("Ethereum bridge keys can only be of kind Secp256k1");
+            }
+            k
+        })
+        .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
     let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk_rng(scheme));
+        protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );
     ValidatorKeys {
         protocol_keypair,
+        eth_bridge_keypair,
         dkg_keypair: Some(dkg_keypair.into()),
     }
 }
@@ -189,7 +202,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_ed25519() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, SchemeType::Ed25519);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys
@@ -201,7 +215,8 @@ mod test_wallet {
     #[test]
     fn test_toml_roundtrip_secp256k1() {
         let mut store = new();
-        let validator_keys = gen_validator_keys(None, SchemeType::Secp256k1);
+        let validator_keys =
+            gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(
             Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
             validator_keys

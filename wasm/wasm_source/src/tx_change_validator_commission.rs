@@ -11,7 +11,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         validator,
         new_rate,
     } = transaction::pos::CommissionChange::try_from_slice(&data[..])
-        .wrap_err("failed to decode Decimal value")?;
+        .wrap_err("failed to decode Dec value")?;
     ctx.change_validator_commission_rate(&validator, &new_rate)
 }
 
@@ -22,6 +22,7 @@ mod tests {
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::proto::{Code, Data, Signature, Tx};
+    use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
     use namada_tests::log::test;
@@ -35,8 +36,6 @@ mod tests {
     use namada_tx_prelude::token;
     use namada_vp_prelude::proof_of_stake::GenesisValidator;
     use proptest::prelude::*;
-    use rust_decimal::prelude::ToPrimitive;
-    use rust_decimal::Decimal;
 
     use super::*;
 
@@ -61,19 +60,27 @@ mod tests {
     }
 
     fn test_tx_change_validator_commission_aux(
-        initial_rate: Decimal,
-        max_change: Decimal,
+        initial_rate: Dec,
+        max_change: Dec,
         commission_change: transaction::pos::CommissionChange,
         key: key::common::SecretKey,
         pos_params: PosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
+        let eth_hot_key = key::common::PublicKey::Secp256k1(
+            key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+        );
+        let eth_cold_key = key::common::PublicKey::Secp256k1(
+            key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
+        );
         let genesis_validators = [GenesisValidator {
             address: commission_change.validator.clone(),
-            tokens: token::Amount::from(1_000_000),
+            tokens: token::Amount::from_uint(1_000_000, 0).unwrap(),
             consensus_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
+            eth_hot_key,
+            eth_cold_key,
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -84,11 +91,7 @@ mod tests {
         tx.set_data(Data::new(tx_data));
         tx.set_code(Code::new(tx_code));
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
-            &key,
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
+            vec![*tx.data_sechash(), *tx.code_sechash()],
             &key,
         )));
         let signed_tx = tx.clone();
@@ -97,7 +100,7 @@ mod tests {
         let commission_rate_handle =
             validator_commission_rate_handle(&commission_change.validator);
 
-        let mut commission_rates_pre = Vec::<Option<Decimal>>::new();
+        let mut commission_rates_pre = Vec::<Option<Dec>>::new();
         for epoch in Epoch::default().iter_range(pos_params.unbonding_len + 1) {
             commission_rates_pre.push(commission_rate_handle.get(
                 ctx(),
@@ -156,35 +159,33 @@ mod tests {
         Ok(())
     }
 
-    fn arb_rate(min: Decimal, max: Decimal) -> impl Strategy<Value = Decimal> {
-        let int_min: u64 = (min * scale()).to_u64().unwrap_or_default();
-        let int_max: u64 = (max * scale()).to_u64().unwrap();
-        (int_min..=int_max).prop_map(|num| Decimal::from(num) / scale())
+    fn arb_rate(min: Dec, max: Dec) -> impl Strategy<Value = Dec> {
+        let int_min: i128 = (min * scale()).try_into().unwrap();
+        let int_max: i128 = (max * scale()).try_into().unwrap();
+        (int_min..=int_max).prop_map(|num| {
+            Dec::new(num, POS_DECIMAL_PRECISION).unwrap() / scale()
+        })
     }
 
     fn arb_new_rate(
-        rate_pre: Decimal,
-        max_change: Decimal,
-    ) -> impl Strategy<Value = Decimal> {
-        assert!(max_change > Decimal::ZERO);
-
+        rate_pre: Dec,
+        max_change: Dec,
+    ) -> impl Strategy<Value = Dec> {
+        assert!(max_change > Dec::zero());
         // Arbitrary non-zero change
-        let arb_change = |ceil: Decimal| {
+        let arb_change = |ceil: Dec| {
             // Clamp the `ceil` to `max_change` and convert to an int
-            let ceil = (cmp::min(max_change, ceil) * scale())
-                .abs()
-                .to_u64()
-                .unwrap();
-            (0..ceil).prop_map(|c|
+            let ceil = (cmp::min(max_change, ceil) * scale()).abs().as_u128();
+            (1..ceil).prop_map(|c|
                 // Convert back from an int
-                 Decimal::from(c) / scale())
+                 Dec::new(c as i128, POS_DECIMAL_PRECISION).unwrap() / scale())
         };
 
         // Addition
         let arb_add = || {
             arb_change(
                 // Addition must not go over 1
-                Decimal::ONE - rate_pre,
+                Dec::one() - rate_pre,
             )
             .prop_map(move |c| rate_pre + c)
         };
@@ -198,9 +199,9 @@ mod tests {
         };
 
         // Add or subtract from the previous rate
-        if rate_pre == Decimal::ZERO {
+        if rate_pre == Dec::zero() {
             arb_add().boxed()
-        } else if rate_pre == Decimal::ONE {
+        } else if rate_pre == Dec::one() {
             arb_sub().boxed()
         } else {
             prop_oneof![arb_add(), arb_sub()].boxed()
@@ -208,13 +209,13 @@ mod tests {
     }
 
     fn arb_commission_change(
-        rate_pre: Decimal,
-        max_change: Decimal,
+        rate_pre: Dec,
+        max_change: Dec,
     ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
         (
             arb_established_address(),
-            if max_change == Decimal::ZERO {
-                Just(Decimal::ZERO).boxed()
+            if max_change.is_zero() {
+                Just(Dec::zero()).boxed()
             } else {
                 arb_new_rate(rate_pre, max_change).boxed()
             },
@@ -228,11 +229,12 @@ mod tests {
     }
 
     fn arb_commission_info()
-    -> impl Strategy<Value = (Decimal, Decimal, transaction::pos::CommissionChange)>
+    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
     {
-        let min = Decimal::ZERO;
-        let max = Decimal::ONE;
-        (arb_rate(min, max), arb_rate(min, max)).prop_flat_map(
+        let min = Dec::zero();
+        let max = Dec::one();
+        let non_zero_min = Dec::one() / scale();
+        (arb_rate(min, max), arb_rate(non_zero_min, max)).prop_flat_map(
             |(rate, max_change)| {
                 (
                     Just(rate),
@@ -243,7 +245,7 @@ mod tests {
         )
     }
 
-    fn scale() -> Decimal {
-        Decimal::from(100_000)
+    fn scale() -> Dec {
+        Dec::new(100_000, 0).unwrap()
     }
 }

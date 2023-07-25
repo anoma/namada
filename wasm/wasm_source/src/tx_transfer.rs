@@ -15,7 +15,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         source,
         target,
         token,
-        sub_prefix,
         amount,
         key,
         shielded: shielded_hash,
@@ -25,7 +24,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .map(|hash| {
             signed
                 .get_section(hash)
-                .and_then(Section::masp_tx)
+                .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")
         })
         .transpose()?;
@@ -34,7 +33,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         &source,
         &target,
         &token,
-        sub_prefix,
         amount,
         &key,
         &shielded_hash,

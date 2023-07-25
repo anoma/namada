@@ -1,23 +1,28 @@
 //! Storage types
+use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::Write;
 use std::num::ParseIntError;
-use std::ops::{Add, Deref, Div, Mul, Rem, Sub};
+use std::ops::{Add, AddAssign, Deref, Div, Drop, Mul, Rem, Sub};
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Value;
-use arse_merkle_tree::{InternalKey, Key as TreeKey};
+use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
+use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::common;
 use crate::bytes::ByteBuf;
+use crate::hints;
+use crate::ledger::eth_bridge::storage::bridge_pool::BridgePoolProof;
 use crate::types::address::{self, Address};
+use crate::types::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::types::hash::Hash;
+use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
 
 /// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
@@ -26,18 +31,20 @@ pub const IBC_KEY_LIMIT: usize = 120;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
     #[error("Error parsing address: {0}")]
     ParseAddress(address::DecodeError),
     #[error("Error parsing address from a storage key")]
     ParseAddressFromKey,
     #[error("Reserved prefix or string is specified: {0}")]
     InvalidKeySeg(String),
-    #[error("Error parsing key segment {0}")]
+    #[error("Error parsing key segment: {0}")]
     ParseKeySeg(String),
-    #[error("Could not parse string: '{0}' into requested type: {1}")]
-    ParseError(String, String),
+    #[error("Error parsing block hash: {0}")]
+    ParseBlockHash(String),
+    #[error("The key is empty")]
+    EmptyKey,
+    #[error("They key is missing sub-key segments: {0}")]
+    MissingSegments(String),
 }
 
 /// Result for functions that may fail
@@ -173,15 +180,6 @@ impl Display for BlockHeight {
     }
 }
 
-impl FromStr for BlockHeight {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let raw: u64 = FromStr::from_str(s)?;
-        Ok(Self(raw))
-    }
-}
-
 impl Add<u64> for BlockHeight {
     type Output = BlockHeight;
 
@@ -190,9 +188,37 @@ impl Add<u64> for BlockHeight {
     }
 }
 
+impl Sub<u64> for BlockHeight {
+    type Output = Self;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl AddAssign for BlockHeight {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl AddAssign<u64> for BlockHeight {
+    fn add_assign(&mut self, other: u64) {
+        self.0 += other;
+    }
+}
+
 impl From<BlockHeight> for u64 {
     fn from(height: BlockHeight) -> Self {
         height.0
+    }
+}
+
+impl FromStr for BlockHeight {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(s.parse::<u64>()?))
     }
 }
 
@@ -252,13 +278,11 @@ impl TryFrom<&[u8]> for BlockHash {
 
     fn try_from(value: &[u8]) -> Result<Self> {
         if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
+            return Err(Error::ParseBlockHash(format!(
+                "Unexpected block hash length {}, expected {}",
+                value.len(),
+                BLOCK_HASH_LENGTH
+            )));
         }
         let mut hash = [0; 32];
         hash.copy_from_slice(value);
@@ -270,18 +294,7 @@ impl TryFrom<Vec<u8>> for BlockHash {
     type Error = self::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self> {
-        if value.len() != BLOCK_HASH_LENGTH {
-            return Err(Error::Temporary {
-                error: format!(
-                    "Unexpected block hash length {}, expected {}",
-                    value.len(),
-                    BLOCK_HASH_LENGTH
-                ),
-            });
-        }
-        let mut hash = [0; 32];
-        hash.copy_from_slice(&value);
-        Ok(BlockHash(hash))
+        value.as_slice().try_into()
     }
 }
 
@@ -375,35 +388,6 @@ pub enum TreeKeyError {
     InvalidMerkleKey(String),
 }
 
-impl TreeKey<IBC_KEY_LIMIT> for StringKey {
-    type Error = TreeKeyError;
-
-    fn as_slice(&self) -> &[u8] {
-        &self.original.as_slice()[..self.length]
-    }
-
-    fn try_from_bytes(bytes: &[u8]) -> std::result::Result<Self, Self::Error> {
-        let mut tree_key = [0u8; IBC_KEY_LIMIT];
-        let mut original = [0u8; IBC_KEY_LIMIT];
-        let mut length = 0;
-        for (i, byte) in bytes.iter().enumerate() {
-            if i >= IBC_KEY_LIMIT {
-                return Err(TreeKeyError::InvalidMerkleKey(
-                    "Input IBC key is too large".into(),
-                ));
-            }
-            original[i] = *byte;
-            tree_key[i] = byte.wrapping_add(1);
-            length += 1;
-        }
-        Ok(Self {
-            original,
-            tree_key: tree_key.into(),
-            length,
-        })
-    }
-}
-
 impl Deref for StringKey {
     type Target = InternalKey<IBC_KEY_LIMIT>;
 
@@ -471,13 +455,23 @@ impl From<TreeBytes> for Vec<u8> {
     }
 }
 
-impl Value for TreeBytes {
-    fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
-    }
+/// Type of membership proof from a merkle tree
+pub enum MembershipProof {
+    /// ICS23 compliant membership proof
+    ICS23(CommitmentProof),
+    /// Bespoke membership proof for the Ethereum bridge pool
+    BridgePool(BridgePoolProof),
+}
 
-    fn zero() -> Self {
-        TreeBytes::zero()
+impl From<CommitmentProof> for MembershipProof {
+    fn from(proof: CommitmentProof) -> Self {
+        Self::ICS23(proof)
+    }
+}
+
+impl From<BridgePoolProof> for MembershipProof {
+    fn from(proof: BridgePoolProof) -> Self {
+        Self::BridgePool(proof)
     }
 }
 
@@ -649,21 +643,14 @@ impl Key {
         match self.segments.split_first() {
             Some((_, rest)) => {
                 if rest.is_empty() {
-                    Err(Error::Temporary {
-                        error: format!(
-                            "The key doesn't have the sub segments: {}",
-                            self
-                        ),
-                    })
+                    Err(Error::MissingSegments(format!("{self}")))
                 } else {
                     Ok(Self {
                         segments: rest.to_vec(),
                     })
                 }
             }
-            None => Err(Error::Temporary {
-                error: "The key is empty".to_owned(),
-            }),
+            None => Err(Error::EmptyKey),
         }
     }
 
@@ -837,6 +824,37 @@ impl KeySeg for Address {
 
     fn to_db_key(&self) -> DbKeySeg {
         DbKeySeg::AddressSeg(self.clone())
+    }
+}
+
+impl KeySeg for Hash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into().map_err(|e: crate::types::hash::Error| {
+            Error::ParseKeySeg(e.to_string())
+        })
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
+    }
+}
+
+impl KeySeg for KeccakHash {
+    fn parse(seg: String) -> Result<Self> {
+        seg.try_into()
+            .map_err(|e: TryFromError| Error::ParseKeySeg(e.to_string()))
+    }
+
+    fn raw(&self) -> String {
+        self.to_string()
+    }
+
+    fn to_db_key(&self) -> DbKeySeg {
+        DbKeySeg::StringSeg(self.raw())
     }
 }
 
@@ -1228,6 +1246,14 @@ impl Epochs {
         None
     }
 
+    /// Look-up the block height of a given epoch.
+    pub fn get_height(&self, epoch: Epoch) -> Option<BlockHeight> {
+        // the given epoch should be greater than or equal to the
+        // first known epoch
+        let index = epoch.0.checked_sub(self.first_known_epoch.0)? as usize;
+        self.first_block_heights.get(index).copied()
+    }
+
     /// Return all starting block heights for each successive Epoch.
     ///
     /// __INVARIANT:__ The returned values are sorted in ascending order.
@@ -1243,6 +1269,165 @@ pub struct PrefixValue {
     pub key: Key,
     /// Raw value bytes
     pub value: Vec<u8>,
+}
+
+/// Container of all Ethereum event queues.
+#[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
+pub struct EthEventsQueue {
+    /// Queue of transfer to Namada events.
+    pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
+    // TODO: add queue of update whitelist events
+}
+
+/// A queue of confirmed Ethereum events of type `E`.
+///
+/// __INVARIANT:__ At any given moment, the queue holds the nonce `N`
+/// of the next confirmed event to be processed by the ledger, and any
+/// number of events that have been confirmed with a nonce greater than
+/// or equal to `N`. Events in the queue must be returned in asceding
+/// order of their nonce.
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct InnerEthEventsQueue<E> {
+    next_nonce_to_process: Uint,
+    inner: VecDeque<E>,
+}
+
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Return an Ethereum events queue starting at the specified nonce.
+    pub fn new_at(next_nonce_to_process: Uint) -> Self {
+        Self {
+            next_nonce_to_process,
+            ..Default::default()
+        }
+    }
+}
+
+impl<E: GetEventNonce> Default for InnerEthEventsQueue<E> {
+    fn default() -> Self {
+        Self {
+            next_nonce_to_process: 0u64.into(),
+            inner: Default::default(),
+        }
+    }
+}
+
+/// Draining iterator over a queue of Ethereum events,
+///
+/// At each iteration step, we peek into the head of the
+/// queue, and if an event is present with a nonce equal
+/// to the local nonce maintained by the iterator object,
+/// we pop it and increment the local nonce. Otherwise,
+/// iteration stops.
+///
+/// Upon being dropped, the iterator object updates the
+/// nonce of the next event of type `E` to be processed
+/// by the ledger (stored in an [`InnerEthEventsQueue`]),
+/// if the iterator's nonce was incremented.
+pub struct EthEventsQueueIter<'queue, E> {
+    current_nonce: Uint,
+    queue: &'queue mut InnerEthEventsQueue<E>,
+}
+
+impl<E> Drop for EthEventsQueueIter<'_, E> {
+    fn drop(&mut self) {
+        // on drop, we commit the nonce of the next event to process
+        if self.queue.next_nonce_to_process < self.current_nonce {
+            self.queue.next_nonce_to_process = self.current_nonce;
+        }
+    }
+}
+
+impl<E: GetEventNonce> Iterator for EthEventsQueueIter<'_, E> {
+    type Item = E;
+
+    fn next(&mut self) -> Option<E> {
+        let nonce_in_queue = self.queue.peek_event_nonce()?;
+        if nonce_in_queue == self.current_nonce {
+            self.current_nonce = self
+                .current_nonce
+                .checked_increment()
+                .expect("Nonce overflow");
+            self.queue.pop_event()
+        } else {
+            None
+        }
+    }
+}
+
+impl<E: GetEventNonce> InnerEthEventsQueue<E> {
+    /// Push a new Ethereum event of type `E` into the queue,
+    /// and return a draining iterator over the next events to
+    /// be processed, if any.
+    pub fn push_and_iter(
+        &mut self,
+        latest_event: E,
+    ) -> EthEventsQueueIter<'_, E>
+    where
+        E: std::fmt::Debug,
+    {
+        let event_nonce = latest_event.get_event_nonce();
+        if hints::unlikely(self.next_nonce_to_process > event_nonce) {
+            unreachable!(
+                "Attempted to replay an Ethereum event: {latest_event:#?}"
+            );
+        }
+
+        self.try_push_event(latest_event);
+
+        EthEventsQueueIter {
+            current_nonce: self.next_nonce_to_process,
+            queue: self,
+        }
+    }
+
+    /// Provide a reference to the earliest event stored in the queue.
+    #[inline]
+    fn peek_event_nonce(&self) -> Option<Uint> {
+        self.inner.front().map(GetEventNonce::get_event_nonce)
+    }
+
+    /// Attempt to push a new Ethereum event to the queue.
+    ///
+    /// This operation may panic if a confirmed event is
+    /// already present in the queue.
+    #[inline]
+    fn try_push_event(&mut self, new_event: E)
+    where
+        E: std::fmt::Debug,
+    {
+        self.inner
+            .binary_search_by_key(
+                &new_event.get_event_nonce(),
+                |event_in_queue| event_in_queue.get_event_nonce(),
+            )
+            .map_or_else(
+                |insert_at| {
+                    tracing::debug!(?new_event, "Queueing Ethereum event");
+                    self.inner.insert(insert_at, new_event)
+                },
+                // the event is already present in the queue... this is
+                // certainly a protocol error
+                |_| {
+                    hints::cold();
+                    unreachable!(
+                        "An event with an identical nonce was already present \
+                         in the EthEventsQueue"
+                    )
+                },
+            )
+    }
+
+    /// Pop a transfer to Namada event from the queue.
+    #[inline]
+    fn pop_event(&mut self) -> Option<E> {
+        self.inner.pop_front()
+    }
+}
+
+impl<E> GetEventNonce for InnerEthEventsQueue<E> {
+    fn get_event_nonce(&self) -> Uint {
+        self.next_nonce_to_process
+    }
 }
 
 #[cfg(test)]
@@ -1272,6 +1457,146 @@ mod tests {
             let key = Key::from(addr.to_db_key()).push(&s).expect("cannnot push the segment");
             assert_eq!(key.segments[1].raw(), s);
         }
+
+        /// Test roundtrip parsing of key segments derived from [`Epoch`]
+        /// values.
+        #[test]
+        fn test_parse_epoch_key_segment(e in 0..=u64::MAX) {
+            let original_epoch = Epoch(e);
+            let key_seg = match original_epoch.to_db_key() {
+                DbKeySeg::StringSeg(s) => s,
+                _ => panic!("Test failed"),
+            };
+            let parsed_epoch: Epoch = KeySeg::parse(key_seg).expect("Test failed");
+            assert_eq!(original_epoch, parsed_epoch);
+        }
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce identical to the next expected nonce in Namada yields the
+    /// event itself.
+    #[test]
+    fn test_eth_events_queue_equal_nonces() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 2u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let next_event = queue
+            .transfers_to_namada
+            .push_and_iter(new_event.clone())
+            .next();
+        assert_eq!(next_event, Some(new_event));
+    }
+
+    /// Test that providing an [`EthEventsQueue`] with an event containing
+    /// a nonce lower than the next expected nonce in Namada results in a
+    /// panic.
+    #[test]
+    #[should_panic = "Attempted to replay an Ethereum event"]
+    fn test_eth_events_queue_panic_on_invalid_nonce() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 3u64.into();
+        let new_event = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        _ = queue.transfers_to_namada.push_and_iter(new_event);
+    }
+
+    /// Test enqueueing transfer to Namada events to
+    /// an [`EthEventsQueue`].
+    #[test]
+    fn test_eth_events_queue_enqueue() {
+        let mut queue = EthEventsQueue::default();
+        queue.transfers_to_namada.next_nonce_to_process = 1u64.into();
+
+        let new_event_1 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 1u64.into(),
+        };
+        let new_event_2 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 2u64.into(),
+        };
+        let new_event_3 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 3u64.into(),
+        };
+        let new_event_4 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 4u64.into(),
+        };
+        let new_event_7 = TransfersToNamada {
+            valid_transfers_map: vec![],
+            transfers: vec![],
+            nonce: 7u64.into(),
+        };
+
+        // enqueue events
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_4.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_2.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_3.clone())
+                .next()
+                .is_none()
+        );
+        assert!(
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_7.clone())
+                .next()
+                .is_none()
+        );
+        assert_eq!(
+            &queue.transfers_to_namada.inner,
+            &[
+                new_event_2.clone(),
+                new_event_3.clone(),
+                new_event_4.clone(),
+                new_event_7.clone()
+            ]
+        );
+
+        // start dequeueing events
+        assert_eq!(
+            vec![new_event_1.clone(), new_event_2, new_event_3, new_event_4],
+            queue
+                .transfers_to_namada
+                .push_and_iter(new_event_1)
+                .collect::<Vec<_>>()
+        );
+
+        // check the next nonce to process
+        assert_eq!(queue.transfers_to_namada.get_event_nonce(), 5u64.into());
+
+        // one remaining event with nonce 7
+        assert_eq!(
+            queue.transfers_to_namada.pop_event().expect("Test failed"),
+            new_event_7
+        );
+        assert!(queue.transfers_to_namada.pop_event().is_none());
     }
 
     #[test]
@@ -1327,14 +1652,17 @@ mod tests {
     }
 
     #[test]
-    fn test_predecessor_epochs() {
+    fn test_predecessor_epochs_and_heights() {
         let mut epochs = Epochs::default();
+        println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(0)), Some(BlockHeight(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
         let mut max_age_num_blocks = 100;
 
         // epoch 1
         epochs.new_epoch(BlockHeight(10), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(1)), Some(BlockHeight(10)));
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
         assert_eq!(
             epochs.get_epoch_start_height(BlockHeight(0)),
@@ -1364,6 +1692,7 @@ mod tests {
         // epoch 2
         epochs.new_epoch(BlockHeight(20), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(2)), Some(BlockHeight(20)));
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
@@ -1386,6 +1715,7 @@ mod tests {
         // epoch 3, epoch 0 and 1 should be trimmed
         epochs.new_epoch(BlockHeight(200), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(3)), Some(BlockHeight(200)));
         assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(9)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(10)), None);
@@ -1408,6 +1738,7 @@ mod tests {
         // epoch 4
         epochs.new_epoch(BlockHeight(300), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(4)), Some(BlockHeight(300)));
         assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
@@ -1416,6 +1747,7 @@ mod tests {
         // epoch 5, epoch 2 should be trimmed
         epochs.new_epoch(BlockHeight(499), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(5)), Some(BlockHeight(499)));
         assert_eq!(epochs.get_epoch(BlockHeight(20)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(100)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
@@ -1425,6 +1757,7 @@ mod tests {
         // epoch 6, epoch 3 should be trimmed
         epochs.new_epoch(BlockHeight(500), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(6)), Some(BlockHeight(500)));
         assert_eq!(epochs.get_epoch(BlockHeight(200)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
         assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
@@ -1436,6 +1769,7 @@ mod tests {
         // epoch 7, epoch 4 and 5 should be trimmed
         epochs.new_epoch(BlockHeight(550), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(7)), Some(BlockHeight(550)));
         assert_eq!(epochs.get_epoch(BlockHeight(300)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(499)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
@@ -1444,9 +1778,17 @@ mod tests {
         // epoch 8, epoch 6 should be trimmed
         epochs.new_epoch(BlockHeight(600), max_age_num_blocks);
         println!("epochs {:#?}", epochs);
+        assert_eq!(epochs.get_height(Epoch(7)), Some(BlockHeight(550)));
+        assert_eq!(epochs.get_height(Epoch(8)), Some(BlockHeight(600)));
         assert_eq!(epochs.get_epoch(BlockHeight(500)), None);
         assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
         assert_eq!(epochs.get_epoch(BlockHeight(600)), Some(Epoch(8)));
+
+        // try to fetch height values out of range
+        // at this point, the min known epoch is 7
+        for e in [1, 2, 3, 4, 5, 6, 9, 10, 11, 12] {
+            assert!(epochs.get_height(Epoch(e)).is_none(), "Epoch: {e}");
+        }
     }
 
     proptest! {

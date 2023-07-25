@@ -39,26 +39,44 @@ pub enum EncryptedTxBatchAllocator {
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG decrypted transactions.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum BuildingDecryptedTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of Namada protocol transactions.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum BuildingProtocolTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG encrypted transactions.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
 }
 
 /// Allow block proposals to include encrypted txs.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum WithEncryptedTxs {}
 
 /// Prohibit block proposals from including encrypted txs.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum WithoutEncryptedTxs {}
 
 /// Try to allocate a new transaction on a [`BlockAllocator`] state.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait TryAlloc {
     type Resource<'tx>;
 
@@ -71,9 +89,11 @@ pub trait TryAlloc {
 
 /// Represents a state transition in the [`BlockAllocator`] state machine.
 ///
-/// This trait should not be used directly. Instead, consider using one of
-/// [`NextState`], [`WithEncryptedTxs`] or
-/// [`WithoutEncryptedTxs`].
+/// This trait should not be used directly. Instead, consider using
+/// [`NextState`].
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextStateImpl<Transition = ()> {
     /// The next state in the [`BlockAllocator`] state machine.
     type Next;
@@ -85,6 +105,9 @@ pub trait NextStateImpl<Transition = ()> {
 
 /// Convenience extension of [`NextStateImpl`], to transition to a new
 /// state with a null transition function.
+///
+/// For more info, read the module docs of
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextState: NextStateImpl {
     /// Transition to the next state in the [`BlockAllocator`] state,
     /// using a null transiiton function.

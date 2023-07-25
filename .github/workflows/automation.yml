@@ -38,12 +38,6 @@ jobs:
             command: spawn-devnet.py
             logs: 'false'
             timeout: 25
-          - name: Load tester
-            comment: pls load test
-            command: load-test.py
-            logs: 'true'
-            logs_path: /tmp/namada-load-tester/logs/
-            timeout: 360
 
     steps:
       - name: Configure AWS Credentials
@@ -79,13 +73,6 @@ jobs:
           GITHUB_DISPATCH_TOKEN: ${{ secrets.GT_DISPATCH }}
           SLACK_DEVNET_SECRET: ${{ secrets.SLACK_DEVNET_SECRET }}
           BINARIES_COMMIT_SHA: ${{ steps.comment-branch.outputs.head_sha }}
-      - name: Upload load tester logs
-        if: ${{ matrix.make.logs == 'true' && steps.check.outputs.triggered == 'true' }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: logs-load-tester-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ${{ matrix.make.logs_path }}
-          retention-days: 5
       - name: Comment not found
         if: steps.check.outputs.triggered != 'true'
         run: echo "Comment $COMMENT not found"

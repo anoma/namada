@@ -28,6 +28,9 @@ use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::internal::HostEnvResult;
 use crate::types::storage::{BlockHeight, Key, TxIndex};
+use crate::types::token::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+};
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
@@ -467,7 +470,7 @@ where
 /// Called from tx wasm to request to use the given gas amount
 pub fn tx_charge_gas<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
-    used_gas: i32,
+    used_gas: i64,
 ) -> TxResult<()>
 where
     MEM: VmMemory,
@@ -511,7 +514,7 @@ where
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    used_gas: i32,
+    used_gas: i64,
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
@@ -905,9 +908,20 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    // Get the token if the key is a balance or minter key
+    let token = if let Some([token, _]) = is_any_token_balance_key(key) {
+        Some(token)
+    } else {
+        is_any_minted_balance_key(key).or_else(|| is_any_minter_key(key))
+    };
+
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     for addr in key.find_addresses() {
+        // skip if the address is a token address
+        if Some(&addr) == token {
+            continue;
+        }
         // skip the check for implicit and internal addresses
         if let Address::Implicit(_) | Address::Internal(_) = &addr {
             continue;
@@ -1803,6 +1817,7 @@ where
     vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
     let tx = unsafe { env.ctx.tx.get() };
 
+    //FIXME: this now takes a vector of hashes
     Ok(HostEnvResult::from(tx.verify_signature(&pk, &hash).is_ok()).to_i64())
 }
 
@@ -2014,7 +2029,8 @@ pub mod testing {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::ledger::storage::{self, StorageHasher};
+    use crate::ledger::storage::traits::StorageHasher;
+    use crate::ledger::storage::{self};
     use crate::vm::memory::testing::NativeMemory;
 
     /// Setup a transaction environment
