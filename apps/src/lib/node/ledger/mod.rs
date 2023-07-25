@@ -352,7 +352,11 @@ async fn run_aux_setup(
                     "VP WASM compilation cache size not configured, using 1/6 \
                      of available memory."
                 );
-                *available_memory_bytes / 6
+                if *available_memory_bytes > 0 {
+                    *available_memory_bytes / 6
+                } else {
+                    50000000
+                }
             }
         };
     tracing::info!(
@@ -375,7 +379,11 @@ async fn run_aux_setup(
                     "Tx WASM compilation cache size not configured, using 1/6 \
                      of available memory."
                 );
-                *available_memory_bytes / 6
+                if *available_memory_bytes > 0 {
+                    *available_memory_bytes / 6
+                } else {
+                    100000000
+                }
             }
         };
     tracing::info!(
