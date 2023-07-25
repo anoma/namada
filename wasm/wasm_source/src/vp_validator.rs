@@ -28,10 +28,6 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     fn from(key: &'a storage::Key) -> KeyType<'a> {
         if let Some([_, owner]) = token::is_any_token_balance_key(key) {
             Self::Token { owner }
-        } else if let Some((_, [_, owner])) =
-            token::is_any_multitoken_balance_key(key)
-        {
-            Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
         } else if gov_storage::is_vote_key(key) {
@@ -237,12 +233,11 @@ mod tests {
 
         // Credit the tokens to the source before running the transaction to be
         // able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -259,7 +254,6 @@ mod tests {
                 &source,
                 address,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -297,7 +291,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         let amount = token::DenominatedAmount {
             amount,
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -306,7 +300,6 @@ mod tests {
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -319,7 +312,6 @@ mod tests {
                 address,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -360,12 +352,11 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -383,7 +374,6 @@ mod tests {
                 address,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,
@@ -459,12 +449,11 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -547,12 +536,11 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&vp_owner, &token, None, amount);
+        tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         storage_api::token::write_denom(
             &mut tx_env.wl_storage,
             &token,
-            None,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
@@ -614,7 +602,7 @@ mod tests {
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
-        tx_env.credit_tokens(&source, &token, None, amount);
+        tx_env.credit_tokens(&source, &token, amount);
         let amount = token::DenominatedAmount {
             amount,
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -629,7 +617,6 @@ mod tests {
                 &source,
                 &target,
                 &token,
-                None,
                 amount,
                 &None,
                 &None,

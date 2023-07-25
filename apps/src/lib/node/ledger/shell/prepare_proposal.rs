@@ -16,8 +16,6 @@ use namada::types::transaction::{
 use namada::types::vote_extensions::VoteExtensionDigest;
 
 use super::super::*;
-#[allow(unused_imports)]
-use super::block_space_alloc;
 use super::block_space_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, TryAlloc,
@@ -41,8 +39,8 @@ where
 {
     /// Begin a new block.
     ///
-    /// Block construction is documented in [`block_space_alloc`]
-    /// and [`block_space_alloc::states`].
+    /// Block construction is documented in `block_space_alloc`
+    /// and `block_space_alloc::states` (private modules).
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite

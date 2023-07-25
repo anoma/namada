@@ -9,10 +9,13 @@ use thiserror::Error;
 use crate::ledger;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
-use crate::types::address::{Address, EstablishedAddressGen};
+use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
+use crate::types::token::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -470,21 +473,33 @@ impl WriteLog {
 
         // get changed keys grouped by the address
         for key in changed_keys.iter() {
-            for addr in &key.find_addresses() {
-                if verifiers_from_tx.contains(addr)
-                    || initialized_accounts.contains(addr)
-                {
-                    // We can skip this when the address has been added from the
-                    // Tx above.
-                    // Also skip if it's an address of a newly initialized
-                    // account, because anything can be written into an
-                    // account's storage in the same tx in which it's
-                    // initialized (there is no VP in the state prior to tx
-                    // execution).
-                    continue;
+            // for token keys, trigger Multitoken VP and the owner's VP
+            if let Some([_, owner]) = is_any_token_balance_key(key) {
+                verifiers
+                    .insert(Address::Internal(InternalAddress::Multitoken));
+                verifiers.insert(owner.clone());
+            } else if is_any_minted_balance_key(key).is_some()
+                || is_any_minter_key(key).is_some()
+            {
+                verifiers
+                    .insert(Address::Internal(InternalAddress::Multitoken));
+            } else {
+                for addr in &key.find_addresses() {
+                    if verifiers_from_tx.contains(addr)
+                        || initialized_accounts.contains(addr)
+                    {
+                        // We can skip this when the address has been added from
+                        // the Tx above.
+                        // Also skip if it's an address of a newly initialized
+                        // account, because anything can be written into an
+                        // account's storage in the same tx in which it's
+                        // initialized (there is no VP in the state prior to tx
+                        // execution).
+                        continue;
+                    }
+                    // Add the address as a verifier
+                    verifiers.insert(addr.clone());
                 }
-                // Add the address as a verifier
-                verifiers.insert(addr.clone());
             }
         }
         (verifiers, changed_keys)

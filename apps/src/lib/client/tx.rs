@@ -10,6 +10,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
+use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::find_pk;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -34,7 +35,6 @@ use crate::client::rpc::query_wasm_code_hash;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use crate::facade::tendermint_rpc::HttpClient;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
@@ -545,8 +545,6 @@ impl Default for CLIShieldedUtils {
 
 #[async_trait(?Send)]
 impl masp::ShieldedUtils for CLIShieldedUtils {
-    type C = crate::facade::tendermint_rpc::HttpClient;
-
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
             let params_dir = PathBuf::from(params_dir);
@@ -607,8 +605,8 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-pub async fn submit_transfer(
-    client: &HttpClient,
+pub async fn submit_transfer<C: Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
@@ -832,8 +830,7 @@ where
 
         let balance =
             rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
-                .await
-                .unwrap_or_default();
+                .await;
         if balance
             < token::Amount::from_uint(
                 governance_parameters.min_proposal_fund,
@@ -1556,7 +1553,6 @@ mod test_tx {
     use masp_primitives::transaction::components::Amount;
     use namada::ledger::masp::{make_asset_type, MaspAmount};
     use namada::types::address::testing::gen_established_address;
-    use namada::types::storage::DbKeySeg;
     use namada::types::token::MaspDenom;
 
     use super::*;
@@ -1564,25 +1560,14 @@ mod test_tx {
     #[test]
     fn test_masp_add_amount() {
         let address_1 = gen_established_address();
-        let prefix_1: Key =
-            DbKeySeg::StringSeg("eth_seg".parse().unwrap()).into();
-        let prefix_2: Key =
-            DbKeySeg::StringSeg("crypto_kitty".parse().unwrap()).into();
         let denom_1 = MaspDenom::One;
         let denom_2 = MaspDenom::Three;
         let epoch = Epoch::default();
         let _masp_amount = MaspAmount::default();
 
-        let asset_base = make_asset_type(
-            Some(epoch),
-            &address_1,
-            &Some(prefix_1.clone()),
-            denom_1,
-        );
-        let _asset_denom =
-            make_asset_type(Some(epoch), &address_1, &Some(prefix_1), denom_2);
-        let _asset_prefix =
-            make_asset_type(Some(epoch), &address_1, &Some(prefix_2), denom_1);
+        let asset_base = make_asset_type(Some(epoch), &address_1, denom_1);
+        let _asset_denom = make_asset_type(Some(epoch), &address_1, denom_2);
+        let _asset_prefix = make_asset_type(Some(epoch), &address_1, denom_1);
 
         let _amount_base =
             Amount::from_pair(asset_base, 16).expect("Test failed");

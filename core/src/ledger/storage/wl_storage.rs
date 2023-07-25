@@ -143,6 +143,12 @@ where
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
     pub fn commit_block(&mut self) -> storage_api::Result<()> {
+        if self.storage.last_epoch != self.storage.block.epoch {
+            self.storage
+                .update_epoch_in_merkle_tree()
+                .into_storage_result()?;
+        }
+
         let mut batch = D::batch();
         self.write_log
             .commit_block(&mut self.storage, &mut batch)
@@ -205,7 +211,6 @@ where
                 .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.storage.block.epoch);
         }
-        self.storage.update_epoch_in_merkle_tree()?;
         Ok(new_epoch)
     }
 }

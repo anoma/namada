@@ -16,7 +16,8 @@ pub mod main {
 
     #[transaction]
     fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
+        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
+            .unwrap();
         log_string(format!("allocate len {}", len));
         let bytes: Vec<u8> = vec![6_u8; len];
         // use the variable to prevent it from compiler optimizing it away
@@ -51,7 +52,9 @@ pub mod main {
     #[transaction]
     fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         // Allocates a memory of size given from the `tx_data (usize)`
-        let key = storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
+        let key =
+            storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
+                .unwrap();
         log_string(format!("key {}", key));
         let _result: Vec<u8> = ctx.read(&key)?.unwrap();
         Ok(())
@@ -64,7 +67,7 @@ pub mod main {
     use borsh::BorshDeserialize;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_tx_prelude::{
-        log_string, transaction, Ctx, StorageRead, StorageWrite, TxResult, Tx,
+        log_string, transaction, Ctx, StorageRead, StorageWrite, Tx, TxResult,
     };
 
     const TX_NAME: &str = "tx_write";
@@ -173,8 +176,12 @@ pub mod main {
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
         use validity_predicate::EvalVp;
-        let EvalVp { vp_code_hash, input }: EvalVp =
-            EvalVp::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
+        let EvalVp {
+            vp_code_hash,
+            input,
+        }: EvalVp =
+            EvalVp::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
+                .unwrap();
         ctx.eval(vp_code_hash, input)
     }
 }
@@ -193,7 +200,8 @@ pub mod main {
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
-        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
+        let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
+            .unwrap();
         log_string(format!("allocate len {}", len));
         let bytes: Vec<u8> = vec![6_u8; len];
         // use the variable to prevent it from compiler optimizing it away
@@ -217,7 +225,9 @@ pub mod main {
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
         // Allocates a memory of size given from the `tx_data (usize)`
-        let key = storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
+        let key =
+            storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
+                .unwrap();
         log_string(format!("key {}", key));
         let _result: Vec<u8> = ctx.read_pre(&key)?.unwrap();
         accept()

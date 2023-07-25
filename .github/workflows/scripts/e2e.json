@@ -21,6 +21,7 @@
     "e2e::ledger_tests::test_namada_shuts_down_if_tendermint_dies": 2,
     "e2e::ledger_tests::test_genesis_validators": 14,
     "e2e::ledger_tests::test_node_connectivity_and_consensus": 28,
+    "e2e::ledger_tests::test_epoch_sleep": 12,
     "e2e::wallet_tests::wallet_address_cmds": 1,
     "e2e::wallet_tests::wallet_encrypted_key_cmds": 1,
     "e2e::wallet_tests::wallet_encrypted_key_cmds_env_var": 1,

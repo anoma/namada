@@ -29,6 +29,7 @@ pub fn escrow_key(nam_addr: &Address) -> Key {
 pub fn is_eth_bridge_key(nam_addr: &Address, key: &Key) -> bool {
     key == &escrow_key(nam_addr)
         || matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
+        || wrapped_erc20s::has_erc20_segment(key)
 }
 
 /// A key for storing the active / inactive status
@@ -62,6 +63,7 @@ mod test {
     use super::*;
     use crate::types::address;
     use crate::types::address::nam;
+    use crate::types::ethereum_events::testing::arbitrary_eth_address;
 
     #[test]
     fn test_is_eth_bridge_key_returns_true_for_eth_bridge_address() {
@@ -78,6 +80,17 @@ mod test {
     }
 
     #[test]
+    fn test_is_eth_bridge_key_returns_true_for_eth_bridge_balance_key() {
+        let eth_addr = arbitrary_eth_address();
+        let token = address::Address::Internal(
+            address::InternalAddress::Erc20(eth_addr),
+        );
+        let key =
+            balance_key(&token, &address::testing::established_address_1());
+        assert!(is_eth_bridge_key(&nam(), &key));
+    }
+
+    #[test]
     fn test_is_eth_bridge_key_returns_false_for_different_address() {
         let key =
             Key::from(address::testing::established_address_1().to_db_key());
@@ -90,6 +103,13 @@ mod test {
             Key::from(address::testing::established_address_1().to_db_key())
                 .push(&"arbitrary key segment".to_owned())
                 .expect("Could not set up test");
+        assert!(!is_eth_bridge_key(&nam(), &key));
+    }
+
+    #[test]
+    fn test_is_eth_bridge_key_returns_false_for_non_eth_bridge_balance_key() {
+        let key =
+            balance_key(&nam(), &address::testing::established_address_1());
         assert!(!is_eth_bridge_key(&nam(), &key));
     }
 }

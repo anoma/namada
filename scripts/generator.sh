@@ -19,7 +19,7 @@ elif [ "$1" = "server" ]; then
     
     sed -i 's/^epochs_per_year = 31_536_000$/epochs_per_year = 262_800/' genesis/test-vectors-single-node.toml
     
-    NAMADA_GENESIS_FILE=$(cargo run --bin namadac -- --mode validator utils init-network --genesis-path genesis/test-vectors-single-node.toml --wasm-checksums-path wasm/checksums.json --chain-prefix e2e-test --unsafe-dont-encrypt --localhost --allow-duplicate-ip | grep 'Genesis file generated at ' | sed 's/^Genesis file generated at //')
+    NAMADA_GENESIS_FILE=$(cargo run --bin namadac -- utils init-network --genesis-path genesis/test-vectors-single-node.toml --wasm-checksums-path wasm/checksums.json --chain-prefix e2e-test --unsafe-dont-encrypt --localhost --allow-duplicate-ip | grep 'Genesis file generated at ' | sed 's/^Genesis file generated at //')
     
     rm genesis/test-vectors-single-node.toml
 
@@ -31,7 +31,7 @@ elif [ "$1" = "server" ]; then
 
     cp $NAMADA_BASE_DIR/setup/other/wallet.toml $NAMADA_BASE_DIR/wallet.toml
 
-    cargo run --bin namadan -- --mode validator --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
+    cargo run --bin namadan -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
 elif [ "$1" = "client" ]; then
     echo > $NAMADA_TX_LOG_PATH
 
@@ -296,17 +296,17 @@ elif [ "$1" = "client" ]; then
     
     cargo run --bin namadaw -- masp add --alias bb_payment_address --value patest1vqe0vyxh6wmhahwa52gthgd6edgqxfmgyv8e94jtwn55mdvpvylcyqnp59595272qrz3zxn0ysg
 
-    cargo run --bin namadac --features std -- --mode full transfer --source albert --target aa_payment_address --token btc --amount 20 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source albert --target aa_payment_address --token btc --amount 20 --force --ledger-address 127.0.0.1:27657
     
-    cargo run --bin namadac --features std -- --mode full transfer --source a_spending_key --target ab_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source a_spending_key --target ab_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
     
-    until  cargo run --bin namadac -- --mode full epoch --ledger-address 127.0.0.1:27657 | grep -m1 "Last committed epoch: 2" ; do sleep 10 ; done;
+    until  cargo run --bin namadac -- epoch --ledger-address 127.0.0.1:27657 | grep -m1 "Last committed epoch: 2" ; do sleep 10 ; done;
     
-    cargo run --bin namadac --features std -- --mode full transfer --source a_spending_key --target bb_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source a_spending_key --target bb_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
     
-    cargo run --bin namadac --features std -- --mode full transfer --source a_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source a_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
     
-    cargo run --bin namadac --features std -- --mode full transfer --source b_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source b_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
 
     rm proposal_submission_valid_proposal.json
 

@@ -15,7 +15,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
 
     use namada::ledger::pos::{GenesisValidator, PosParams, PosVP};
     use namada::proof_of_stake::types::WeightedValidator;
@@ -109,12 +109,7 @@ mod tests {
                 // bond first.
                 // First, credit the bond's source with the initial stake,
                 // before we initialize the bond below
-                tx_env.credit_tokens(
-                    source,
-                    &native_token,
-                    None,
-                    initial_stake,
-                );
+                tx_env.credit_tokens(source, &native_token, initial_stake);
             }
             native_token
         });
@@ -163,7 +158,7 @@ mod tests {
         let mut epoched_total_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_validator_stake_pre: Vec<token::Amount> = Vec::new();
         let mut epoched_bonds_pre: Vec<Option<token::Amount>> = Vec::new();
-        let mut epoched_validator_set_pre: Vec<HashSet<WeightedValidator>> =
+        let mut epoched_validator_set_pre: Vec<BTreeSet<WeightedValidator>> =
             Vec::new();
 
         for epoch in 0..=pos_params.unbonding_len {

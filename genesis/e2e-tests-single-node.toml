@@ -4,8 +4,8 @@
 
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
-faucet_pow_difficulty = 0
-faucet_withdrawal_limit = "1000000000"
+faucet_pow_difficulty = 1
+faucet_withdrawal_limit = "1000"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
@@ -28,7 +28,6 @@ net_address = "127.0.0.1:27656"
 [token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
 denom = 6
-vp = "vp_token"
 [token.NAM.balances]
 Albert = "1000000"
 "Albert.public_key" = "100"
@@ -45,7 +44,6 @@ faucet = "9223372036854"
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
 denom = 8
-vp = "vp_token"
 [token.BTC.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -57,7 +55,6 @@ faucet = "9223372036854"
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
 denom = 18
-vp = "vp_token"
 [token.ETH.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -69,7 +66,6 @@ faucet = "9223372036854"
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
 denom = 10
-vp = "vp_token"
 [token.DOT.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -81,7 +77,6 @@ faucet = "9223372036854"
 [token.Schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
 denom = 6
-vp = "vp_token"
 [token.Schnitzel.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -93,7 +88,6 @@ faucet = "9223372036854"
 [token.Apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
 denom = 6
-vp = "vp_token"
 [token.Apfel.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -106,7 +100,6 @@ faucet = "9223372036854"
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
 public_key = ""
 denom = 6
-vp = "vp_token"
 [token.Kartoffel.balances]
 Albert = "1000000"
 Bertha = "1000000"
@@ -150,10 +143,6 @@ filename = "vp_user.wasm"
 [wasm.vp_validator]
 # filename (relative to wasm path used by the node)
 filename = "vp_validator.wasm"
-
-# Token VP
-[wasm.vp_token]
-filename = "vp_token.wasm"
 
 # Faucet VP
 [wasm.vp_testnet_faucet]

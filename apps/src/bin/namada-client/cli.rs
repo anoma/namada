@@ -262,6 +262,20 @@ pub async fn main() -> Result<()> {
                         .await?;
                     }
                 }
+                Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.tx.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    tx::submit_unjail_validator::<HttpClient>(
+                        &client, ctx, args,
+                    )
+                    .await?;
+                }
                 // Ledger queries
                 Sub::QueryEpoch(QueryEpoch(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -352,6 +366,22 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_bonded_stake(&client, args).await;
+                }
+                Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
+                    let client = HttpClient::new(utils::take_config_address(
+                        &mut args.query.ledger_address,
+                    ))
+                    .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_and_print_validator_state(
+                        &client,
+                        &mut ctx.wallet,
+                        args,
+                    )
+                    .await;
                 }
                 Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -492,6 +522,15 @@ pub async fn main() -> Result<()> {
             }
             Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
                 utils::default_base_dir(global_args, args)
+            }
+            Utils::EpochSleep(EpochSleep(args)) => {
+                let mut ctx = cli::Context::new(global_args)
+                    .expect("expected to construct a context");
+                let ledger_address = args.ledger_address.clone();
+                wait_until_node_is_synched(&ledger_address).await;
+                let client = HttpClient::new(ledger_address).unwrap();
+                let args = args.to_sdk(&mut ctx);
+                rpc::epoch_sleep(&client, args).await;
             }
         },
     }

@@ -56,8 +56,9 @@ use storage::{
     validator_address_raw_hash_key, validator_last_slash_key,
     validator_max_commission_rate_change_key, BondDetails,
     BondsAndUnbondsDetail, BondsAndUnbondsDetails, EpochedSlashes,
-    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount, UnbondDetails,
-    ValidatorAddresses, ValidatorUnbondRecords,
+    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount,
+    TotalConsensusStakes, UnbondDetails, ValidatorAddresses,
+    ValidatorUnbondRecords,
 };
 use thiserror::Error;
 use types::{
@@ -84,6 +85,10 @@ pub fn staking_token_address(storage: &impl StorageRead) -> Address {
         .expect("Must be able to read native token address")
 }
 
+/// Number of epochs below the current epoch for which full validator sets are
+/// stored
+const STORE_VALIDATOR_SETS_LEN: u64 = 2;
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum GenesisError {
@@ -96,6 +101,8 @@ pub enum GenesisError {
 pub enum InflationError {
     #[error("Error in calculating rewards: {0}")]
     Rewards(rewards::RewardsError),
+    #[error("Expected validator {0} to be in consensus set but got: {1:?}")]
+    ExpectedValidatorInConsensus(Address, Option<ValidatorState>),
 }
 
 #[allow(missing_docs)]
@@ -272,6 +279,12 @@ pub fn validator_eth_cold_key_handle(
 ) -> ValidatorEthColdKeys {
     let key = storage::validator_eth_cold_key_key(validator);
     ValidatorEthColdKeys::open(key)
+}
+
+/// Get the storage handle to the total consensus validator stake
+pub fn total_consensus_stake_key_handle() -> TotalConsensusStakes {
+    let key = storage::total_consensus_stake_key();
+    TotalConsensusStakes::open(key)
 }
 
 /// Get the storage handle to a PoS validator's state
@@ -476,6 +489,9 @@ where
         )?;
     }
 
+    // Store the total consensus validator stake to storage
+    store_total_consensus_stake(storage, current_epoch)?;
+
     // Write total deltas to storage
     total_deltas_handle().init_at_genesis(
         storage,
@@ -488,13 +504,7 @@ where
     credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
-        copy_validator_sets_and_positions(
-            storage,
-            current_epoch,
-            epoch,
-            &consensus_validator_set_handle(),
-            &below_capacity_validator_set_handle(),
-        )?;
+        copy_validator_sets_and_positions(storage, current_epoch, epoch)?;
     }
 
     tracing::debug!("Genesis initialized");
@@ -748,7 +758,7 @@ where
 pub fn read_consensus_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
 {
@@ -792,7 +802,7 @@ where
 pub fn read_below_capacity_validator_set_addresses_with_stake<S>(
     storage: &S,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<HashSet<WeightedValidator>>
+) -> storage_api::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
 {
@@ -1528,13 +1538,14 @@ pub fn copy_validator_sets_and_positions<S>(
     storage: &mut S,
     current_epoch: Epoch,
     target_epoch: Epoch,
-    consensus_validator_set: &ConsensusValidatorSets,
-    below_capacity_validator_set: &BelowCapacityValidatorSets,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let prev_epoch = target_epoch.prev();
+
+    let consensus_validator_set = consensus_validator_set_handle();
+    let below_capacity_validator_set = below_capacity_validator_set_handle();
 
     let (consensus, below_capacity) = (
         consensus_validator_set.at(&prev_epoch),
@@ -1597,33 +1608,98 @@ where
 
     // Copy validator positions
     let mut positions = HashMap::<Address, Position>::default();
-    let positions_handle = validator_set_positions_handle().at(&prev_epoch);
+    let validator_set_positions_handle = validator_set_positions_handle();
+    let positions_handle = validator_set_positions_handle.at(&prev_epoch);
+
     for result in positions_handle.iter(storage)? {
         let (validator, position) = result?;
         positions.insert(validator, position);
     }
-    let new_positions_handle =
-        validator_set_positions_handle().at(&target_epoch);
+
+    let new_positions_handle = validator_set_positions_handle.at(&target_epoch);
     for (validator, position) in positions {
         let prev = new_positions_handle.insert(storage, validator, position)?;
         debug_assert!(prev.is_none());
     }
-    validator_set_positions_handle().set_last_update(storage, current_epoch)?;
+    validator_set_positions_handle.set_last_update(storage, current_epoch)?;
 
     // Copy set of all validator addresses
     let mut all_validators = HashSet::<Address>::default();
-    let all_validators_handle = validator_addresses_handle().at(&prev_epoch);
+    let validator_addresses_handle = validator_addresses_handle();
+    let all_validators_handle = validator_addresses_handle.at(&prev_epoch);
     for result in all_validators_handle.iter(storage)? {
         let validator = result?;
         all_validators.insert(validator);
     }
     let new_all_validators_handle =
-        validator_addresses_handle().at(&target_epoch);
+        validator_addresses_handle.at(&target_epoch);
     for validator in all_validators {
         let was_in = new_all_validators_handle.insert(storage, validator)?;
         debug_assert!(!was_in);
     }
 
+    Ok(())
+}
+
+/// Compute total validator stake for the current epoch
+fn compute_total_consensus_stake<S>(
+    storage: &S,
+    epoch: Epoch,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    consensus_validator_set_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .fold(Ok(token::Amount::zero()), |acc, entry| {
+            let acc = acc?;
+            let (
+                NestedSubKey::Data {
+                    key: amount,
+                    nested_sub_key: _,
+                },
+                _validator,
+            ) = entry?;
+            Ok(acc + amount)
+        })
+}
+
+/// Store total consensus stake
+pub fn store_total_consensus_stake<S>(
+    storage: &mut S,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let total = compute_total_consensus_stake(storage, epoch)?;
+    tracing::debug!(
+        "Computed total consensus stake for epoch {}: {}",
+        epoch,
+        total.to_string_native()
+    );
+    total_consensus_stake_key_handle().set(storage, total, epoch, 0)
+}
+
+/// Purge the validator sets from the epochs older than the current epoch minus
+/// `STORE_VALIDATOR_SETS_LEN`
+pub fn purge_validator_sets_for_old_epoch<S>(
+    storage: &mut S,
+    epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    if Epoch(STORE_VALIDATOR_SETS_LEN) < epoch {
+        let old_epoch = epoch - STORE_VALIDATOR_SETS_LEN - 1;
+        consensus_validator_set_handle()
+            .get_data_handler()
+            .remove_all(storage, &old_epoch)?;
+        below_capacity_validator_set_handle()
+            .get_data_handler()
+            .remove_all(storage, &old_epoch)?;
+    }
     Ok(())
 }
 
@@ -2455,6 +2531,41 @@ where
     Ok((total, total_active))
 }
 
+/// Get the genesis consensus validators stake and consensus key for Tendermint,
+/// converted from [`ValidatorSetUpdate`]s using the given function.
+pub fn genesis_validator_set_tendermint<S, T>(
+    storage: &S,
+    params: &PosParams,
+    current_epoch: Epoch,
+    mut f: impl FnMut(ValidatorSetUpdate) -> T,
+) -> storage_api::Result<Vec<T>>
+where
+    S: StorageRead,
+{
+    let consensus_validator_handle =
+        consensus_validator_set_handle().at(&current_epoch);
+    let iter = consensus_validator_handle.iter(storage)?;
+
+    iter.map(|validator| {
+        let (
+            NestedSubKey::Data {
+                key: new_stake,
+                nested_sub_key: _,
+            },
+            address,
+        ) = validator?;
+        let consensus_key = validator_consensus_key_handle(&address)
+            .get(storage, current_epoch, params)?
+            .unwrap();
+        let converted = f(ValidatorSetUpdate::Consensus(ConsensusValidator {
+            consensus_key,
+            bonded_stake: new_stake,
+        }));
+        Ok(converted)
+    })
+    .collect()
+}
+
 /// Communicate imminent validator set updates to Tendermint. This function is
 /// called two blocks before the start of a new epoch because Tendermint
 /// validator updates become active two blocks after the updates are submitted.
@@ -2751,6 +2862,42 @@ where
             get_multiple_bonds_and_unbonds(storage, &params, source, validator)
         }
     }
+}
+
+/// Collect the details of all of the enqueued slashes to be processed in future
+/// epochs into a nested map
+pub fn find_all_enqueued_slashes<S>(
+    storage: &S,
+    epoch: Epoch,
+) -> storage_api::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+where
+    S: StorageRead,
+{
+    let mut enqueued = HashMap::<Address, BTreeMap<Epoch, Vec<Slash>>>::new();
+    for res in enqueued_slashes_handle().get_data_handler().iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: processing_epoch,
+                nested_sub_key:
+                    NestedSubKey::Data {
+                        key: address,
+                        nested_sub_key: _,
+                    },
+            },
+            slash,
+        ) = res?;
+        if processing_epoch <= epoch {
+            continue;
+        }
+
+        let slashes = enqueued
+            .entry(address)
+            .or_default()
+            .entry(processing_epoch)
+            .or_default();
+        slashes.push(slash);
+    }
+    Ok(enqueued)
 }
 
 /// Find all slashes and the associated validators in the PoS system
@@ -3136,7 +3283,11 @@ where
         let state = validator_state_handle(&validator_address)
             .get(storage, epoch, &params)?;
         if state != Some(ValidatorState::Consensus) {
-            continue;
+            return Err(InflationError::ExpectedValidatorInConsensus(
+                validator_address,
+                state,
+            ))
+            .into_storage_result();
         }
 
         let stake_from_deltas =
@@ -3252,9 +3403,9 @@ where
 
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
-            Dec::from(get_total_consensus_stake(storage, epoch)?);
+            Dec::from(get_total_consensus_stake(storage, epoch, params)?);
         tracing::debug!(
-            "Consensus stake in epoch {}: {}",
+            "Total consensus stake in epoch {}: {}",
             epoch,
             consensus_stake
         );
@@ -3263,6 +3414,7 @@ where
         let infracting_stake = slashes.iter(storage)?.fold(
             Ok(Dec::zero()),
             |acc: storage_api::Result<Dec>, res| {
+                let acc = acc?;
                 let (
                     NestedSubKey::Data {
                         key: validator,
@@ -3276,11 +3428,7 @@ where
                         .unwrap_or_default();
                 // println!("Val {} stake: {}", &validator, validator_stake);
 
-                if let Ok(inner) = acc {
-                    Ok(inner + Dec::from(validator_stake))
-                } else {
-                    acc
-                }
+                Ok(acc + Dec::from(validator_stake))
                 // TODO: does something more complex need to be done
                 // here in the event some of these slashes correspond to
                 // the same validator?
@@ -3438,8 +3586,10 @@ where
             }
         }
     }
+    // Safe sub cause `validator_set_update_epoch > current_epoch`
+    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
     // Set the validator state as `Jailed` thru the pipeline epoch
-    for offset in 1..=params.pipeline_len {
+    for offset in start_offset..=params.pipeline_len {
         validator_state_handle(validator).set(
             storage,
             ValidatorState::Jailed,
@@ -3856,22 +4006,14 @@ where
 fn get_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
+    params: &PosParams,
 ) -> storage_api::Result<token::Amount>
 where
     S: StorageRead,
 {
-    let mut total = token::Amount::default();
-    for res in consensus_validator_set_handle().at(&epoch).iter(storage)? {
-        let (
-            NestedSubKey::Data {
-                key: bonded_stake,
-                nested_sub_key: _,
-            },
-            _validator,
-        ) = res?;
-        total += bonded_stake;
-    }
-    Ok(total)
+    total_consensus_stake_key_handle()
+        .get(storage, epoch, params)
+        .map(|o| o.expect("Total consensus stake could not be retrieved."))
 }
 
 /// Find slashes applicable to a validator with inclusive `start` and exclusive

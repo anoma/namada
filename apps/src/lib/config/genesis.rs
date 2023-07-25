@@ -22,6 +22,7 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
+use namada::types::uint::Uint;
 use namada::types::{storage, token};
 
 /// Genesis configuration file format
@@ -45,6 +46,7 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
+    use namada::types::uint::Uint;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -122,8 +124,9 @@ pub mod genesis_config {
         /// Testnet faucet PoW difficulty - defaults to `0` when not set
         pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
         #[cfg(not(feature = "mainnet"))]
-        /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
-        pub faucet_withdrawal_limit: Option<token::Amount>,
+        /// Testnet faucet withdrawal limit - defaults to 1000 tokens when not
+        /// set
+        pub faucet_withdrawal_limit: Option<Uint>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -394,27 +397,13 @@ pub mod genesis_config {
 
     fn load_token(
         config: &TokenAccountConfig,
-        wasm: &HashMap<String, WasmConfig>,
         validators: &HashMap<String, Validator>,
         established_accounts: &HashMap<String, EstablishedAccount>,
         implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
-        let token_vp_name = config.vp.as_ref().unwrap();
-        let token_vp_config = wasm.get(token_vp_name).unwrap();
-
         TokenAccount {
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
-            vp_code_path: token_vp_config.filename.to_owned(),
-            vp_sha256: token_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown token VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
             balances: config
                 .balances
                 .as_ref()
@@ -559,7 +548,6 @@ pub mod genesis_config {
                 .expect("Missing native token address"),
         )
         .expect("Invalid address");
-
         let validators: HashMap<String, Validator> = validator
             .iter()
             .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
@@ -581,7 +569,6 @@ pub mod genesis_config {
             .map(|(_name, cfg)| {
                 load_token(
                     cfg,
-                    &wasm,
                     &validators,
                     &established_accounts,
                     &implicit_accounts,
@@ -737,7 +724,7 @@ pub struct Genesis {
     #[cfg(not(feature = "mainnet"))]
     pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
     #[cfg(not(feature = "mainnet"))]
-    pub faucet_withdrawal_limit: Option<token::Amount>,
+    pub faucet_withdrawal_limit: Option<Uint>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -819,10 +806,6 @@ pub struct TokenAccount {
     pub address: Address,
     /// The number of decimal places amounts of this token has
     pub denom: Denomination,
-    /// Validity predicate code WASM
-    pub vp_code_path: String,
-    /// Expected SHA-256 hash of the validity predicate wasm
-    pub vp_sha256: [u8; 32],
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
@@ -910,7 +893,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
     use crate::wallet;
 
     let vp_implicit_path = "vp_implicit.wasm";
-    let vp_token_path = "vp_token.wasm";
     let vp_user_path = "vp_user.wasm";
 
     // NOTE When the validator's key changes, tendermint must be reset with
@@ -1044,9 +1026,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
             public_key: wallet::defaults::ester_keypair().ref_to(),
         },
     ];
-    let default_user_tokens = token::Amount::native_whole(1_000_000);
-    let default_key_tokens = token::Amount::native_whole(1_000);
-    let mut balances: HashMap<Address, token::Amount> = HashMap::from_iter([
+    let default_user_tokens = Uint::from(1_000_000);
+    let default_key_tokens = Uint::from(1_000_000);
+    let mut balances: HashMap<Address, Uint> = HashMap::from_iter([
         // established accounts' balances
         (wallet::defaults::albert_address(), default_user_tokens),
         (wallet::defaults::bertha_address(), default_user_tokens),
@@ -1090,9 +1072,11 @@ pub fn genesis(num_validators: u64) -> Genesis {
         .map(|(address, (_, denom))| TokenAccount {
             address,
             denom,
-            vp_code_path: vp_token_path.into(),
-            vp_sha256: Default::default(),
-            balances: balances.clone(),
+            balances: balances
+                .clone()
+                .into_iter()
+                .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
+                .collect(),
         })
         .collect();
     Genesis {

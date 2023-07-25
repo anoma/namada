@@ -26,9 +26,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::storage::{BlockHeight, Key, KeySeg};
 use namada_core::types::token;
-use namada_core::types::token::{
-    balance_key, multitoken_balance_key, multitoken_balance_prefix,
-};
+use namada_core::types::token::{balance_key, minted_balance_key};
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
@@ -234,8 +232,8 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    let keys: wrapped_erc20s::Keys = asset.into();
-    let balance_key = keys.balance(receiver);
+    let token = wrapped_erc20s::token(asset);
+    let balance_key = balance_key(&token, receiver);
     update::amount(wl_storage, &balance_key, |balance| {
         tracing::debug!(
             %balance_key,
@@ -251,7 +249,7 @@ where
     })?;
     _ = changed_keys.insert(balance_key);
 
-    let supply_key = keys.supply();
+    let supply_key = minted_balance_key(&token);
     update::amount(wl_storage, &supply_key, |supply| {
         tracing::debug!(
             %supply_key,
@@ -266,6 +264,10 @@ where
         );
     })?;
     _ = changed_keys.insert(supply_key);
+
+    // mint the token without a minter because a protocol tx doesn't need to
+    // trigger a VP
+
     Ok(changed_keys)
 }
 
@@ -477,12 +479,9 @@ where
         );
         (escrow_balance_key, sender_balance_key)
     } else {
-        let sub_prefix = wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
-        let prefix = multitoken_balance_prefix(&BRIDGE_ADDRESS, &sub_prefix);
-        let escrow_balance_key =
-            multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
-        let sender_balance_key =
-            multitoken_balance_key(&prefix, &transfer.transfer.sender);
+        let token = wrapped_erc20s::token(&transfer.transfer.asset);
+        let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
+        let sender_balance_key = balance_key(&token, &transfer.transfer.sender);
         (escrow_balance_key, sender_balance_key)
     };
     update::amount(wl_storage, &source, |balance| {
@@ -518,15 +517,15 @@ where
         return Ok(changed_keys);
     }
 
-    let keys: wrapped_erc20s::Keys = (&transfer.transfer.asset).into();
+    let token = wrapped_erc20s::token(&transfer.transfer.asset);
 
-    let escrow_balance_key = keys.balance(&BRIDGE_POOL_ADDRESS);
+    let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &escrow_balance_key, |balance| {
         balance.spend(&transfer.transfer.amount);
     })?;
     _ = changed_keys.insert(escrow_balance_key);
 
-    let supply_key = keys.supply();
+    let supply_key = minted_balance_key(&token);
     update::amount(wl_storage, &supply_key, |supply| {
         supply.spend(&transfer.transfer.amount);
     })?;
@@ -659,12 +658,8 @@ mod tests {
                     )
                     .expect("Test failed");
             } else {
-                let sub_prefix =
-                    wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
-                let prefix =
-                    multitoken_balance_prefix(&BRIDGE_ADDRESS, &sub_prefix);
-                let sender_key =
-                    multitoken_balance_key(&prefix, &transfer.transfer.sender);
+                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
                     .write_bytes(
@@ -672,8 +667,7 @@ mod tests {
                         sender_balance.try_to_vec().expect("Test failed"),
                     )
                     .expect("Test failed");
-                let escrow_key =
-                    multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
+                let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let escrow_balance = Amount::from(10);
                 wl_storage
                     .write_bytes(
@@ -681,11 +675,13 @@ mod tests {
                         escrow_balance.try_to_vec().expect("Test failed"),
                     )
                     .expect("Test failed");
-                let asset_keys: wrapped_erc20s::Keys =
-                    (&transfer.transfer.asset).into();
-                update::amount(wl_storage, &asset_keys.supply(), |supply| {
-                    supply.receive(&transfer.transfer.amount);
-                })
+                update::amount(
+                    wl_storage,
+                    &minted_balance_key(&token),
+                    |supply| {
+                        supply.receive(&transfer.transfer.amount);
+                    },
+                )
                 .expect("Test failed");
             };
             let gas_fee = Amount::from(1);
@@ -786,9 +782,9 @@ mod tests {
         )
         .unwrap();
 
-        let wdai: wrapped_erc20s::Keys = (&DAI_ERC20_ETH_ADDRESS).into();
-        let receiver_balance_key = wdai.balance(&receiver);
-        let wdai_supply_key = wdai.supply();
+        let wdai = wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS);
+        let receiver_balance_key = balance_key(&wdai, &receiver);
+        let wdai_supply_key = minted_balance_key(&wdai);
 
         assert_eq!(
             stored_keys_count(&wl_storage),
@@ -814,7 +810,7 @@ mod tests {
         let native_erc20 =
             read_native_erc20_address(&wl_storage).expect("Test failed");
         let random_erc20 = EthAddress([0xff; 20]);
-        let random_erc20_keys: wrapped_erc20s::Keys = (&random_erc20).into();
+        let random_erc20_token = wrapped_erc20s::token(&random_erc20);
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [native_erc20, random_erc20],
@@ -853,10 +849,12 @@ mod tests {
         let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
 
         assert!(
-            changed_keys
-                .remove(&random_erc20_keys.balance(&BRIDGE_POOL_ADDRESS))
+            changed_keys.remove(&balance_key(
+                &random_erc20_token,
+                &BRIDGE_POOL_ADDRESS
+            ))
         );
-        assert!(changed_keys.remove(&random_erc20_keys.supply()));
+        assert!(changed_keys.remove(&minted_balance_key(&random_erc20_token)));
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
         assert!(changed_keys.remove(&get_nonce_key()));
@@ -987,20 +985,15 @@ mod tests {
                         .expect("Test failed");
                 assert_eq!(escrow_balance, Amount::from(0));
             } else {
-                let sub_prefix =
-                    wrapped_erc20s::sub_prefix(&transfer.transfer.asset);
-                let prefix =
-                    multitoken_balance_prefix(&BRIDGE_ADDRESS, &sub_prefix);
-                let sender_key =
-                    multitoken_balance_key(&prefix, &transfer.transfer.sender);
+                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
                 let sender_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
                 assert_eq!(sender_balance, transfer.transfer.amount);
-                let escrow_key =
-                    multitoken_balance_key(&prefix, &BRIDGE_POOL_ADDRESS);
+                let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let value =
                     wl_storage.read_bytes(&escrow_key).expect("Test failed");
                 let escrow_balance =
@@ -1129,12 +1122,12 @@ mod tests {
                     if asset == &native_erc20 {
                         return None;
                     }
-                    let asset_keys: wrapped_erc20s::Keys = asset.into();
+                    let erc20_token = wrapped_erc20s::token(asset);
                     let prev_balance = wl_storage
-                        .read(&asset_keys.balance(&BRIDGE_POOL_ADDRESS))
+                        .read(&balance_key(&erc20_token, &BRIDGE_POOL_ADDRESS))
                         .expect("Test failed");
                     let prev_supply = wl_storage
-                        .read(&asset_keys.supply())
+                        .read(&minted_balance_key(&erc20_token))
                         .expect("Test failed");
                     Some(Delta {
                         asset: *asset,
@@ -1163,14 +1156,14 @@ mod tests {
                     .checked_sub(sent_amount)
                     .expect("Test failed");
 
-                let asset_keys: wrapped_erc20s::Keys = asset.into();
+                let erc20_token = wrapped_erc20s::token(asset);
 
                 let balance: token::Amount = wl_storage
-                    .read(&asset_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .read(&balance_key(&erc20_token, &BRIDGE_POOL_ADDRESS))
                     .expect("Read must succeed")
                     .expect("Balance must exist");
                 let supply: token::Amount = wl_storage
-                    .read(&asset_keys.supply())
+                    .read(&minted_balance_key(&erc20_token))
                     .expect("Read must succeed")
                     .expect("Balance must exist");
 
@@ -1189,19 +1182,19 @@ mod tests {
         test_wrapped_erc20s_aux(|wl_storage, event| {
             let native_erc20 =
                 read_native_erc20_address(wl_storage).expect("Test failed");
-            let wnam_keys: wrapped_erc20s::Keys = (&native_erc20).into();
+            let wnam = wrapped_erc20s::token(&native_erc20);
             let escrow_balance_key = balance_key(&nam(), &BRIDGE_ADDRESS);
 
             // check pre supply
             assert!(
                 wl_storage
-                    .read_bytes(&wnam_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
             assert!(
                 wl_storage
-                    .read_bytes(&wnam_keys.supply())
+                    .read_bytes(&minted_balance_key(&wnam))
                     .expect("Test failed")
                     .is_none()
             );
@@ -1217,13 +1210,13 @@ mod tests {
             // check post supply
             assert!(
                 wl_storage
-                    .read_bytes(&wnam_keys.balance(&BRIDGE_POOL_ADDRESS))
+                    .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
             assert!(
                 wl_storage
-                    .read_bytes(&wnam_keys.supply())
+                    .read_bytes(&minted_balance_key(&wnam))
                     .expect("Test failed")
                     .is_none()
             );

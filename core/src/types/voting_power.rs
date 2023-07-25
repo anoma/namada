@@ -31,9 +31,22 @@ use crate::types::uint::Uint;
 )]
 pub struct EthBridgeVotingPower(u64);
 
-impl From<u64> for EthBridgeVotingPower {
-    fn from(val: u64) -> Self {
-        Self(val)
+impl EthBridgeVotingPower {
+    /// Maximum value that can be represented for the voting power
+    /// stored in an Ethereum bridge smart contract.
+    pub const MAX: Self = Self(1 << 32);
+}
+
+impl TryFrom<u64> for EthBridgeVotingPower {
+    type Error = ();
+
+    #[inline]
+    fn try_from(val: u64) -> Result<Self, ()> {
+        if val <= Self::MAX.0 {
+            Ok(Self(val))
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -41,7 +54,8 @@ impl From<&FractionalVotingPower> for EthBridgeVotingPower {
     fn from(ratio: &FractionalVotingPower) -> Self {
         // normalize the voting power
         // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-        const NORMALIZED_VOTING_POWER: Uint = Uint::from_u64(1 << 32);
+        const NORMALIZED_VOTING_POWER: Uint =
+            Uint::from_u64(EthBridgeVotingPower::MAX.0);
 
         let voting_power = ratio.0 * NORMALIZED_VOTING_POWER;
         let voting_power = voting_power.round().to_integer().low_u64();

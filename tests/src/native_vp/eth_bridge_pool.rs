@@ -6,7 +6,6 @@ mod test_bridge_pool_vp {
     use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::{
         wrapped_erc20s, Contracts, EthereumBridgeConfig, UpgradeableContract,
-        ADDRESS,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::proto::Tx;
@@ -84,27 +83,12 @@ mod test_bridge_pool_vp {
         // initialize Bertha's account
         env.spawn_accounts([&albert_address(), &bertha_address(), &nam()]);
         // enrich Albert
-        env.credit_tokens(
-            &albert_address(),
-            &nam(),
-            None,
-            BERTHA_WEALTH.into(),
-        );
+        env.credit_tokens(&albert_address(), &nam(), BERTHA_WEALTH.into());
         // enrich Bertha
-        env.credit_tokens(
-            &bertha_address(),
-            &nam(),
-            None,
-            BERTHA_WEALTH.into(),
-        );
+        env.credit_tokens(&bertha_address(), &nam(), BERTHA_WEALTH.into());
         // Bertha has ERC20 tokens too.
-        let sub_prefix = wrapped_erc20s::sub_prefix(&ASSET);
-        env.credit_tokens(
-            &bertha_address(),
-            &ADDRESS,
-            Some(sub_prefix),
-            BERTHA_TOKENS.into(),
-        );
+        let token = wrapped_erc20s::token(&ASSET);
+        env.credit_tokens(&bertha_address(), &token, BERTHA_TOKENS.into());
         env
     }
 
