@@ -117,6 +117,7 @@ test: test-unit test-e2e test-wasm
 
 # Integration and unit tests with coverage report
 test-coverage:
+	RUSTFLAGS="-C opt-level=2 -C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold" \
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
