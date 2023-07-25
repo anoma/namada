@@ -146,7 +146,7 @@ jobs:
           BUCKET_NAME: namada-wasm-master
           AWS_REGION: eu-west-1
 
-  namada:
+  unit-and-integration-tests:
     runs-on: 
       group: gians-runners
     timeout-minutes: 80
@@ -238,6 +238,12 @@ jobs:
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Download MASP parameters
+        run: |
+          mkdir -p /home/runner/.masp-params
+          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -246,9 +252,10 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Check crates build with default features
         run: make check-crates
-      - name: Run unit test
-        run: make test-unit-coverage${{ matrix.make.suffix }}
+      - name: Run unit and integration tests
+        run: make test-coverage${{ matrix.make.suffix }}
         env:
+          NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
         uses: actions/upload-artifact@v3
