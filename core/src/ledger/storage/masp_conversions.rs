@@ -274,12 +274,6 @@ where
             new_normed_inflation =
                 normed_inflation + (normed_inflation * reward.0) / reward.1;
 
-            println!("==============================================");
-            println!(
-                "reward before nam total_reward: {}",
-                total_reward.to_string_native()
-            );
-            println!("==============================================");
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
             total_reward +=
@@ -297,12 +291,6 @@ where
             // epoch
             real_reward = (reward.0 * ref_inflation) / normed_inflation;
 
-            println!("==============================================");
-            println!(
-                "reward before non nam total_reward: {}",
-                total_reward.to_string_native()
-            );
-            println!("==============================================");
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
             total_reward += ((addr_bal * (real_reward, reward.1)).0
@@ -329,13 +317,6 @@ where
                 denom,
                 wl_storage.storage.block.epoch,
             );
-
-            println!("==============================================");
-            println!(
-                "final total_reward for denom {:?}: {:?}",
-                denom, total_reward
-            );
-            println!("==============================================");
 
             if *addr == address::nam() {
                 let new_normed_inflation =
@@ -371,12 +352,6 @@ where
             }
 
             // Add a conversion from the previous asset type
-            println!("==============================================");
-            println!("inserting conversions now");
-            println!("old_asset: {}", old_asset);
-            println!("denom: {:?}", denom);
-            println!("addr, sub_prefix: {:?}", (addr, sub_prefix));
-            println!("==============================================");
             wl_storage.storage.conversion_state.assets.insert(
                 old_asset,
                 (
@@ -422,9 +397,6 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    println!("==============================================");
-    println!("current total_reward: {}", total_reward.to_string_native());
-    println!("==============================================");
     mint_tokens(wl_storage, &masp_addr, &address::nam(), total_reward)?;
 
     // Try to distribute Merkle tree construction as evenly as possible
