@@ -87,7 +87,7 @@ impl RewardsController {
         } else {
             Dec::zero()
         };
-        let inflation = token::Amount::from(inflation);
+        let inflation = token::Amount::from_uint(inflation.to_uint().unwrap(), 0).unwrap();
 
         ValsToUpdate {
             locked_ratio,
