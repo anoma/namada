@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
-    self, NestedMap,
+    self, Collectable, NestedMap,
 };
 use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
@@ -2567,8 +2567,7 @@ fn test_compute_slashable_amount() {
     let slash1 = Slash {
         epoch: init_epoch
             + params.unbonding_len
-            + params.cubic_slashing_window_length
-            + 1u64,
+            + params.cubic_slashing_window_length,
         block_height: Default::default(),
         r#type: SlashType::DuplicateVote,
         rate: Dec::one(),
@@ -2578,7 +2577,7 @@ fn test_compute_slashable_amount() {
         epoch: init_epoch
             + params.unbonding_len
             + params.cubic_slashing_window_length
-            + 2u64,
+            + 1u64,
         block_height: Default::default(),
         r#type: SlashType::DuplicateVote,
         rate: Dec::one(),
@@ -3807,6 +3806,8 @@ fn test_slash_validator() {
 
     let total_bonded = total_bonded_handle(&bob);
     let total_unbonded = unbond_records_handle(&bob);
+    let total_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(&bob);
     let total_redelegated_unbonded =
         validator_total_redelegated_unbonded_handle(&bob);
 
@@ -3825,17 +3826,14 @@ fn test_slash_validator() {
     let current_epoch = Epoch(10);
     let slash_rate = Dec::one();
 
-    // Insert initial stakes
+    // Insert initial stake at epoch 0
     validator_deltas_handle(&bob)
-        .set(
-            &mut storage,
-            infraction_stake,
-            current_epoch.next() - params.pipeline_len,
-            params.pipeline_len,
-        )
+        .set(&mut storage, infraction_stake, Epoch::default(), 0)
         .unwrap();
 
     // Test case 1
+    // There are no non-genesis bonds or slashes
+    println!("\nTEST 1:");
     let res = slash_validator(
         &mut storage,
         &params,
@@ -3848,6 +3846,8 @@ fn test_slash_validator() {
     assert_eq!(res, initial_stakes);
 
     // Test case 2
+    // A bond to bob becomes active at current epoch
+    println!("\nTEST 2:");
     total_bonded
         .set(
             &mut storage,
@@ -3859,15 +3859,15 @@ fn test_slash_validator() {
     validator_deltas_handle(&bob)
         .set(
             &mut storage,
-            infraction_stake + token::Change::from(6),
-            current_epoch.next() - params.pipeline_len,
+            token::Change::from(6),
+            current_epoch - params.pipeline_len,
             params.pipeline_len,
         )
         .unwrap();
     let res = slash_validator(
         &mut storage,
         &params,
-        &alice,
+        &bob,
         slash_rate,
         current_epoch,
         &Default::default(),
@@ -3876,6 +3876,9 @@ fn test_slash_validator() {
     assert_eq!(res, initial_stakes);
 
     // Test case 3
+    // A bond that became active at the current epoch is fully unbonded at
+    // current epoch + 1
+    println!("\nTEST 3:");
     total_unbonded
         .at(&current_epoch.next())
         .insert(&mut storage, current_epoch, token::Amount::from(6))
@@ -3883,7 +3886,7 @@ fn test_slash_validator() {
     validator_deltas_handle(&bob)
         .set(
             &mut storage,
-            infraction_stake,
+            token::Change::from(-6),
             current_epoch.next() - params.pipeline_len,
             params.pipeline_len,
         )
@@ -3891,7 +3894,7 @@ fn test_slash_validator() {
     let res = slash_validator(
         &mut storage,
         &params,
-        &alice,
+        &bob,
         slash_rate,
         current_epoch,
         &Default::default(),
@@ -3900,6 +3903,9 @@ fn test_slash_validator() {
     assert_eq!(res, initial_stakes);
 
     // Test case 4
+    // A bond that became active at the current epoch is partially unbonded at
+    // current epoch + 1
+    println!("\nTEST 4:");
     total_unbonded
         .at(&current_epoch.next())
         .insert(&mut storage, current_epoch, token::Amount::from(3))
@@ -3907,7 +3913,7 @@ fn test_slash_validator() {
     validator_deltas_handle(&bob)
         .set(
             &mut storage,
-            infraction_stake + token::Change::from(3),
+            token::Change::from(-3),
             current_epoch.next() - params.pipeline_len,
             params.pipeline_len,
         )
@@ -3915,11 +3921,229 @@ fn test_slash_validator() {
     let res = slash_validator(
         &mut storage,
         &params,
-        &alice,
+        &bob,
         slash_rate,
         current_epoch,
         &Default::default(),
     )
     .unwrap();
     assert_eq!(res, initial_stakes);
+
+    // Test case 5
+    // A redelegation from alice to bob becomes active at current epoch
+    println!("\nTEST 5:");
+    total_bonded
+        .get_data_handler()
+        .remove(&mut storage, &current_epoch)
+        .unwrap();
+    total_unbonded
+        .remove_all(&mut storage, &current_epoch.next())
+        .unwrap();
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            token::Change::zero(),
+            current_epoch.next() - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    total_redelegated_bonded
+        .at(&current_epoch)
+        .at(&alice)
+        .insert(&mut storage, Epoch(2), token::Change::from(5))
+        .unwrap();
+    total_redelegated_bonded
+        .at(&current_epoch)
+        .at(&alice)
+        .insert(&mut storage, Epoch(3), token::Change::from(1))
+        .unwrap();
+    let res = slash_validator(
+        &mut storage,
+        &params,
+        &bob,
+        slash_rate,
+        current_epoch,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(res, initial_stakes);
+
+    // Test case 6
+    // A redelegation that became active at current epoch is fully unbonded at
+    // current epoch + 1
+    println!("Test case 6");
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .at(&current_epoch)
+        .at(&alice)
+        .insert(&mut storage, Epoch(2), token::Change::from(5))
+        .unwrap();
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .at(&current_epoch)
+        .at(&alice)
+        .insert(&mut storage, Epoch(3), token::Change::from(1))
+        .unwrap();
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            token::Change::from(-6),
+            current_epoch.next() - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    let res = slash_validator(
+        &mut storage,
+        &params,
+        &bob,
+        slash_rate,
+        current_epoch,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(res, initial_stakes);
+
+    // Test case 7
+    // A redelegation that became active at current epoch is partially unbonded
+    // at current epoch + 1
+    println!("Test case 7");
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            token::Change::from(-4),
+            current_epoch.next() - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .at(&current_epoch)
+        .at(&alice)
+        .insert(&mut storage, Epoch(2), token::Change::from(4))
+        .unwrap();
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .at(&current_epoch)
+        .at(&alice)
+        .remove(&mut storage, &Epoch(3))
+        .unwrap();
+    let res = slash_validator(
+        &mut storage,
+        &params,
+        &bob,
+        slash_rate,
+        current_epoch,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(res, initial_stakes);
+
+    // Test case 8
+    // A bond is active at current epoch and a redelegation becomes active at
+    // current epoch + 1. The redelegation is partially unbonded at current
+    // epoch + 1 as well
+    println!("Test case 8");
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            token::Change::from(12),
+            current_epoch - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    total_redelegated_bonded
+        .remove_all(&mut storage, &current_epoch)
+        .unwrap();
+    total_redelegated_bonded
+        .at(&current_epoch.next())
+        .at(&alice)
+        .insert(&mut storage, Epoch(2), token::Change::from(5))
+        .unwrap();
+    total_redelegated_bonded
+        .at(&current_epoch.next())
+        .at(&alice)
+        .insert(&mut storage, Epoch(3), token::Change::from(1))
+        .unwrap();
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .remove_all(&mut storage, &current_epoch)
+        .unwrap();
+    total_redelegated_unbonded
+        .at(&current_epoch.next())
+        .at(&current_epoch.next())
+        .at(&alice)
+        .insert(&mut storage, Epoch(2), token::Change::from(4))
+        .unwrap();
+    total_bonded
+        .get_data_handler()
+        .insert(&mut storage, current_epoch, token::Change::from(6))
+        .unwrap();
+    let res = slash_validator(
+        &mut storage,
+        &params,
+        &bob,
+        slash_rate,
+        current_epoch,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(res, initial_stakes);
+
+    // Test case 9
+    // A bond is active at current epoch and a slash exists for alice
+    println!("Test case 9");
+    total_redelegated_bonded
+        .remove_all(&mut storage, &current_epoch.next())
+        .unwrap();
+    total_redelegated_bonded
+        .remove_all(&mut storage, &current_epoch.next())
+        .unwrap();
+    validator_deltas_handle(&bob)
+        .get_data_handler()
+        .remove(&mut storage, &current_epoch.next())
+        .unwrap();
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            token::Change::from(6),
+            current_epoch - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    validator_deltas_handle(&bob)
+        .set(
+            &mut storage,
+            -infraction_stake,
+            current_epoch.prev() - params.pipeline_len,
+            params.pipeline_len,
+        )
+        .unwrap();
+    validator_slashes_handle(&alice)
+        .push(
+            &mut storage,
+            Slash {
+                epoch: current_epoch.prev()
+                    - params.slash_processing_epoch_offset(),
+                rate: Dec::one(),
+                block_height: Default::default(),
+                r#type: SlashType::DuplicateVote,
+            },
+        )
+        .unwrap();
+    let res = slash_validator(
+        &mut storage,
+        &params,
+        &bob,
+        slash_rate,
+        current_epoch,
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        BTreeMap::from_iter([
+            (current_epoch.next(), token::Change::zero()),
+            (current_epoch.next().next(), token::Change::zero())
+        ])
+    );
 }

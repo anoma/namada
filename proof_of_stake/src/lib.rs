@@ -2604,7 +2604,8 @@ fn compute_slashable_amount(
         .iter()
         .filter(|(&epoch, _)| {
             // TODO: check if bounds correct!
-            epoch + params.slash_processing_epoch_offset() < slash.epoch
+            // slashes that have already been applied and processed
+            epoch + params.slash_processing_epoch_offset() <= slash.epoch
         })
         .fold(amount, |acc, (_, amnt)| {
             cmp::max(token::Change::zero(), acc - *amnt)
@@ -3198,6 +3199,7 @@ where
             .map(Result::unwrap)
             .filter(|slash| {
                 start_epoch <= slash.epoch
+                    // TODO: check bounds here!
                     && withdraw_epoch - params.slash_processing_epoch_offset()
                         > slash.epoch
             })
@@ -5027,7 +5029,6 @@ where
         .get_sum(storage, infraction_epoch, params)?
         .unwrap_or_default();
 
-    let slashes = validator_slashes_handle(validator);
     let total_unbonded = unbond_records_handle(validator);
     let total_redelegated_unbonded =
         validator_total_redelegated_unbonded_handle(validator);
@@ -5086,16 +5087,18 @@ where
                 &total_unbonded.at(&epoch),
                 &total_redelegated_unbonded.at(&epoch),
             )?;
-        let updated_bonds_balance = init_bond_balance
-            + total_bonded
-                .get_delta_val(storage, epoch)?
-                .unwrap_or_default()
-            - compute_recent_total_unbonded(
+        let updated_bonds_balance = dbg!(init_bond_balance)
+            + dbg!(
+                total_bonded
+                    .get_delta_val(storage, epoch)?
+                    .unwrap_or_default()
+            )
+            - dbg!(compute_recent_total_unbonded(
                 storage,
                 infraction_epoch,
                 &total_unbonded.at(&epoch),
                 &total_redelegated_unbonded.at(&epoch),
-            )?;
+            ))?;
         compute_redelegated_bonds_balance(
             storage,
             params,
@@ -5122,6 +5125,10 @@ where
 
         let cur_amount = slashed_amounts.entry(epoch).or_default();
         *cur_amount += cmp::min(slashed_amount, slashable_stake);
+
+        init_total_unbonded = updated_total_unbonded;
+        init_bond_balance = updated_bonds_balance;
+
     }
 
     Ok(slashed_amounts)
@@ -5322,6 +5329,13 @@ fn compute_total_unbonded<S>(
 where
     S: StorageRead,
 {
+    // let eager_tot_unbonded = total_unbonded.collect_map(storage)?;
+    // let eager_tot_redelegated_unbonded =
+    //     total_redelegated_unbonded.collect_map(storage)?;
+
+    // dbg!(&eager_tot_unbonded);
+    // dbg!(&eager_tot_redelegated_unbonded);
+
     let total = total_unbonded
         .iter(storage)?
         .map(Result::unwrap)
@@ -5335,12 +5349,13 @@ where
                 .filter(|s| {
                     // TODO: check bounds!
                     epoch <= s.epoch
+                        // slashes that have already been applied and processed
                         && s.epoch + params.slash_processing_epoch_offset()
-                            < infraction_epoch
+                            <= infraction_epoch
                 })
                 .collect::<Vec<_>>();
 
-            dbg!(&list_slashes);
+            // dbg!(&list_slashes);
 
             let tot_redelegated_unbonded =
                 total_redelegated_unbonded.at(&epoch);
@@ -5351,9 +5366,10 @@ where
                         tot_redelegated_unbonded.collect_map(storage).unwrap();
 
                     // Used to accomplish `filteredSlashMap`
+                    // slashes that have already been applied and processed
                     let slash_epoch_filter = |e: Epoch| {
                         e + params.slash_processing_epoch_offset()
-                            < infraction_epoch
+                            <= infraction_epoch
                     };
                     fold_and_slash_redelegated_bonds(
                         storage,
@@ -5367,7 +5383,7 @@ where
                     FoldRedelegatedBondsResult::default()
                 };
 
-            dbg!(&result_fold);
+            // dbg!(&result_fold);
 
             let total_not_redelegated = total_unbonded
                 .get(storage, &epoch)
@@ -5375,20 +5391,20 @@ where
                 .unwrap_or_default()
                 - result_fold.total_redelegated;
 
-            dbg!(&total_not_redelegated);
+            // dbg!(&total_not_redelegated);
 
             let after_not_redelegated = apply_list_slashes(
                 params,
                 &list_slashes,
                 total_not_redelegated.change(),
             );
-            dbg!(&after_not_redelegated);
+            // dbg!(&after_not_redelegated);
 
             let amount_after_slashing =
                 after_not_redelegated + result_fold.total_after_slashing;
 
-            dbg!(&amount_after_slashing);
-            dbg!(acc + amount_after_slashing.change());
+            // dbg!(&amount_after_slashing);
+            // dbg!(acc + amount_after_slashing.change());
 
             acc + amount_after_slashing.change()
         });

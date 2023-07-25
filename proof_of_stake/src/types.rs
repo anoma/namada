@@ -206,7 +206,7 @@ pub type TotalRedelegatedBonded = NestedMap<Epoch, RedelegatedBonds>;
 /// A validator's total redelegated unbonded tokens
 /// TODO: understand better, better description
 pub type TotalRedelegatedUnbonded = NestedMap<
-    // unbond withdrawble epoch
+    // unbond epoch
     Epoch,
     NestedMap<
         // redelegation start epoch
