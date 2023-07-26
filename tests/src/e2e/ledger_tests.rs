@@ -612,13 +612,41 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect a decimal
-            r"nam: \d+(\.\d+)?",
+            vec![r"nam: \d+(\.\d+)?"],
+        ),
+        // Unspecified token expect all tokens from wallet derived from genesis
+        (
+            vec!["balance", "--owner", BERTHA, "--node", &validator_one_rpc],
+            // expect all genesis tokens, sorted by alias
+            vec![
+                r"apfel: \d+(\.\d+)?",
+                r"btc: \d+(\.\d+)?",
+                r"dot: \d+(\.\d+)?",
+                r"eth: \d+(\.\d+)?",
+                r"kartoffel: \d+(\.\d+)?",
+                r"schnitzel: \d+(\.\d+)?",
+            ],
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
+        // Run as a non-validator
         let mut client = run!(test, Bin::Client, query_args, Some(40))?;
-        client.exp_regex(expected)?;
+        for pattern in expected {
+            client.exp_regex(pattern)?;
+        }
+        client.assert_success();
 
+        // Run as a validator
+        let mut client = run_as!(
+            test,
+            Who::Validator(0),
+            Bin::Client,
+            query_args,
+            Some(40)
+        )?;
+        for pattern in expected {
+            client.exp_regex(pattern)?;
+        }
         client.assert_success();
     }
     let christel = find_address(&test, CHRISTEL)?;
