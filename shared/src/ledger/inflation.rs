@@ -78,13 +78,21 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let control_val = token::Amount::from_uint(
-            control_val
-                .to_uint()
-                .expect("Should not fail to convert Dec to Uint"),
-            0,
-        )
-        .expect("Should not fail to convert Uint to Amount");
+        let last_inflation_amount =
+            Dec::try_from(last_inflation_amount.raw_amount())
+                .expect("Should not fail to convert token Amount to Dec");
+        let new_inflation_amount_raw = last_inflation_amount + control_val;
+        let new_inflation_amount = if new_inflation_amount_raw.is_negative() {
+            token::Amount::zero()
+        } else {
+            token::Amount::from_uint(
+                new_inflation_amount_raw
+                    .to_uint()
+                    .expect("Should not fail to convert Dec to Uint"),
+                0,
+            )
+            .expect("Should not fail to convert Uint to Amount")
+        };
 
         let max_inflation = token::Amount::from_uint(
             max_inflation
@@ -93,8 +101,6 @@ impl RewardsController {
             0,
         )
         .expect("Should not fail to convert Uint to Amount");
-
-        let new_inflation_amount = last_inflation_amount + control_val;
 
         let inflation = std::cmp::min(new_inflation_amount, max_inflation);
         ValsToUpdate {
