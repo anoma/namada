@@ -68,6 +68,7 @@ lazy_static! {
 
 pub struct TestingIo;
 
+#[async_trait::async_trait(?Send)]
 impl Io for TestingIo {
     fn print(output: impl AsRef<str>) {
         let mut testout = TESTOUT.lock().unwrap();
@@ -107,11 +108,11 @@ impl Io for TestingIo {
         eprintln!("{}", output.as_ref());
     }
 
-    fn read() -> std::io::Result<String> {
+    async fn read() -> std::io::Result<String> {
         read_aux(TESTIN.lock().unwrap().as_slice())
     }
 
-    fn prompt(question: impl AsRef<str>) -> String {
+    async fn prompt(question: impl AsRef<str>) -> String {
         prompt_aux(
             TESTIN.lock().unwrap().as_slice(),
             std::io::stdout(),
