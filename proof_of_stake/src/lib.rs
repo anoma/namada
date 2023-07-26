@@ -4791,6 +4791,42 @@ where
     // TODO: why does it seem like we are updating epoched data for epochs
     // starting at cur - unbonding - cubic_offste + 1???
 
+    // Write slashes themselves into storage
+    for (validator, slashes) in eager_validator_slashes {
+        let validator_slashes = validator_slashes_handle(&validator);
+        for slash in slashes {
+            validator_slashes.push(storage, slash)?;
+        }
+    }
+
+    // Update the validator stakes
+    for (validator, slash_amounts) in map_validator_slash {
+        // Use the `slash_amounts` to deduct from the deltas for the current and
+        // the next epochs (no adjusting at pipeline)
+        let delta_cur = slash_amounts
+            .get(&current_epoch)
+            .cloned()
+            .expect("Expected a map element for the current epoch");
+        let delta_next = slash_amounts
+            .get(&current_epoch.next())
+            .cloned()
+            .expect("Expected a map element for the next epoch");
+        update_validator_deltas(
+            storage,
+            &validator,
+            -delta_cur,
+            current_epoch,
+            0,
+        )?;
+        update_validator_deltas(
+            storage,
+            &validator,
+            -delta_next,
+            current_epoch.next(),
+            0,
+        )?;
+    }
+
     Ok(())
 }
 
