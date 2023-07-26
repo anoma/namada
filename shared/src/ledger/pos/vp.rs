@@ -89,8 +89,6 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::PoS;
-
     fn validate_tx(
         &self,
         tx_data: &Tx,
@@ -101,7 +99,7 @@ where
         // use validation::DataUpdate::{self, *};
         // use validation::ValidatorUpdate::*;
 
-        let addr = Address::Internal(Self::ADDR);
+        let addr = Address::Internal(InternalAddress::PoS);
         // let mut changes: Vec<DataUpdate> = vec![];
         let _current_epoch = self.ctx.pre().get_block_epoch()?;
 
