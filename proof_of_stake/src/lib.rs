@@ -1909,7 +1909,7 @@ struct BondAndUnbondUpdates {
 
 /// Unbond tokens that are bonded between a validator and a source (self or
 /// delegator)
-pub fn unbond_tokens<S>(
+pub fn unbond_tokens_old<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -2131,7 +2131,7 @@ pub struct ResultSlashing {
 
 /// Unbond tokens that are bonded between a validator and a source (self or
 /// delegator)
-pub fn unbond_tokens_new<S>(
+pub fn unbond_tokens<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -3140,7 +3140,7 @@ where
 }
 
 /// Withdraw tokens from those that have been unbonded from proof-of-stake
-pub fn withdraw_tokens_new<S>(
+pub fn withdraw_tokens<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -3302,7 +3302,7 @@ where
 }
 
 /// Withdraw tokens from those that have been unbonded from proof-of-stake
-pub fn withdraw_tokens<S>(
+pub fn withdraw_tokens_old<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -4668,7 +4668,7 @@ where
 }
 
 /// Process slashes NEW
-pub fn process_slashes_new<S>(
+pub fn process_slashes<S>(
     storage: &mut S,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -5416,7 +5416,7 @@ where
 /// transfer slashed tokens from PoS to the Slash Pool. This function is called
 /// at the beginning of the epoch that is `unbonding_length + 1 +
 /// cubic_slashing_window_length` epochs after the infraction epoch.
-pub fn process_slashes<S>(
+pub fn process_slashes_old<S>(
     storage: &mut S,
     current_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -5882,7 +5882,7 @@ where
 
     // TODO: the unbond fn itself needs to be updated for redelegation
     // `newDelegatorState` and `newSrcValidatorState` accounted for already
-    let result_slashing = unbond_tokens_new(
+    let result_slashing = unbond_tokens(
         storage,
         Some(owner),
         src_validator,
