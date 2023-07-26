@@ -1022,7 +1022,7 @@ mod test_oracle {
         let confirmed_block_height = 9; // all blocks up to and including this block will have enough confirmations
         let min_confirmations = u64::from(config.min_confirmations);
         controller.apply_cmd(TestCmd::NewHeight(Uint256::from(
-            min_confirmations + confirmed_block_height - 3,
+            min_confirmations + confirmed_block_height - 5,
         )));
 
         // check that the oracle indeed processes the expected blocks
