@@ -5,7 +5,7 @@ mod keys;
 pub mod pre_genesis;
 pub mod store;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -503,6 +503,15 @@ impl<U: WalletUtils> Wallet<U> {
         self.store.find_alias(address)
     }
 
+    /// Try to find an alias for a given address from the wallet. If not found,
+    /// formats the address into a string.
+    pub fn lookup_alias(&self, addr: &Address) -> String {
+        match self.find_alias(addr) {
+            Some(alias) => format!("{}", alias),
+            None => format!("{}", addr),
+        }
+    }
+
     /// Get all known addresses by their alias, paired with PKH, if known.
     pub fn get_addresses(&self) -> HashMap<String, Address> {
         self.store
@@ -677,5 +686,16 @@ impl<U: WalletUtils> Wallet<U> {
     /// Access storage location data
     pub fn store_dir(&self) -> &U::Storage {
         &self.store_dir
+    }
+
+    /// Get addresses with tokens VP type keyed and ordered by their aliases.
+    pub fn tokens_with_aliases(&self) -> BTreeMap<String, Address> {
+        self.get_addresses_with_vp_type(AddressVpType::Token)
+            .into_iter()
+            .map(|addr| {
+                let alias = self.lookup_alias(&addr);
+                (alias, addr)
+            })
+            .collect()
     }
 }
