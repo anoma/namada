@@ -3,6 +3,7 @@
 pub mod control_flow;
 pub mod ibc;
 pub mod key;
+pub mod tx;
 
 pub use namada_core::types::{
     address, chain, dec, eth_abi, eth_bridge_pool, ethereum_events, governance,

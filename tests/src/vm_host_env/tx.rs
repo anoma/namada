@@ -18,7 +18,8 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_tx_prelude::{BorshSerialize, Ctx};
+use namada_tx_prelude::{storage_api, BorshSerialize, Ctx};
+use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
 use crate::vp::TestVpEnv;
@@ -102,6 +103,7 @@ impl TestTxEnv {
         epoch_duration: Option<EpochDuration>,
         vp_whitelist: Option<Vec<String>>,
         tx_whitelist: Option<Vec<String>>,
+        max_signatures_per_transaction: Option<u8>,
     ) {
         parameters::update_epoch_parameter(
             &mut self.wl_storage,
@@ -119,6 +121,11 @@ impl TestTxEnv {
         parameters::update_vp_whitelist_parameter(
             &mut self.wl_storage,
             vp_whitelist.unwrap_or_default(),
+        )
+        .unwrap();
+        parameters::update_max_signature_per_tx(
+            &mut self.wl_storage,
+            max_signatures_per_transaction.unwrap_or(15),
         )
         .unwrap();
     }
@@ -155,6 +162,34 @@ impl TestTxEnv {
         }
     }
 
+    pub fn init_account_storage(
+        &mut self,
+        owner: &Address,
+        public_keys: Vec<common::PublicKey>,
+        threshold: u8,
+    ) {
+        storage_api::account::init_account_storage(
+            &mut self.wl_storage,
+            owner,
+            &public_keys,
+            threshold,
+        )
+        .expect("Unable to write Account substorage.");
+    }
+
+    /// Set public key for the address.
+    pub fn write_account_threshold(
+        &mut self,
+        address: &Address,
+        threshold: u8,
+    ) {
+        let storage_key = key::threshold_key(address);
+        self.wl_storage
+            .storage
+            .write(&storage_key, threshold.try_to_vec().unwrap())
+            .unwrap();
+    }
+
     /// Commit the genesis state. Typically, you'll want to call this after
     /// setting up the initial state, before running a transaction.
     pub fn commit_genesis(&mut self) {
@@ -183,19 +218,6 @@ impl TestTxEnv {
         self.wl_storage
             .storage
             .write(&storage_key, amount.try_to_vec().unwrap())
-            .unwrap();
-    }
-
-    /// Set public key for the address.
-    pub fn write_public_key(
-        &mut self,
-        address: &Address,
-        public_key: &key::common::PublicKey,
-    ) {
-        let storage_key = key::pk_key(address);
-        self.wl_storage
-            .storage
-            .write(&storage_key, public_key.try_to_vec().unwrap())
             .unwrap();
     }
 
