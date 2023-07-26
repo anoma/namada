@@ -687,7 +687,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Threshold: 2",
+            vec!["Threshold: 2"]
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
