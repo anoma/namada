@@ -964,6 +964,7 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
+    use namada::types::tx::TxBuilder;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -1537,12 +1538,13 @@ mod test_process_proposal {
     fn test_unsigned_wrapper_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
+        let public_key = keypair.ref_to();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            keypair.ref_to(),
+            public_key,
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
@@ -1551,6 +1553,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+
         let tx = outer_tx.to_bytes();
 
         let response = {
@@ -1568,12 +1571,14 @@ mod test_process_proposal {
             }
         };
 
+        println!("{}", response.result.info);
+
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert_eq!(
             response.result.info,
             String::from(
-                "WrapperTx signature verification failed: Transaction doesn't \
-                 have any data with a signature."
+                "WrapperTx signature verification failed: The wrapper \
+                 signature is invalid."
             )
         );
     }
@@ -1622,8 +1627,8 @@ mod test_process_proposal {
                     panic!("Test failed")
                 };
                 let expected_error = "WrapperTx signature verification \
-                                      failed: Transaction doesn't have any \
-                                      data with a signature.";
+                                      failed: The wrapper signature is \
+                                      invalid.";
                 assert_eq!(
                     response.result.code,
                     u32::from(ErrorCodes::InvalidSig)
@@ -2023,10 +2028,14 @@ mod test_process_proposal {
     fn test_raw_tx_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        let keypair = crate::wallet::defaults::daewon_keypair();
+
+        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .add_fee_payer(keypair)
+            .build();
 
         let response = {
             let request = ProcessProposal {

@@ -224,6 +224,27 @@ where
     }
 }
 
+impl<T> ArgMulti<FromContext<T>>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    pub fn def(&self) -> ClapArg {
+        ClapArg::new(self.name)
+            .long(self.name)
+            .num_args(1..)
+            .value_delimiter(',')
+    }
+
+    pub fn parse(&self, matches: &ArgMatches) -> Vec<FromContext<T>> {
+        matches
+            .get_many(self.name)
+            .unwrap_or_default()
+            .map(|raw: &String| FromContext::new(raw.to_string()))
+            .collect()
+    }
+}
+
 impl<T> ArgDefaultFromCtx<FromContext<T>>
 where
     T: FromStr,
