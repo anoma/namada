@@ -63,10 +63,10 @@ impl RewardsController {
 
         // Token amounts must be expressed in terms of the raw amount (namnam)
         // to properly run the PD controller
-        let locked =
-            Dec::try_from(locked_tokens.raw_amount()).expect("Should not fail");
-        let total =
-            Dec::try_from(total_tokens.raw_amount()).expect("Should not fail");
+        let locked = Dec::try_from(locked_tokens.raw_amount())
+            .expect("Should not fail to convert token Amount to Dec");
+        let total = Dec::try_from(total_tokens.raw_amount())
+            .expect("Should not fail to convert token Amount to Dec");
         let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
@@ -78,17 +78,25 @@ impl RewardsController {
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
 
-        let last_inflation_amount = Dec::from(last_inflation_amount);
-        let new_inflation_amount = last_inflation_amount + control_val;
-        let inflation = if last_inflation_amount + control_val > max_inflation {
-            max_inflation
-        } else if new_inflation_amount > Dec::zero() {
-            new_inflation_amount
-        } else {
-            Dec::zero()
-        };
-        let inflation = token::Amount::from(inflation);
+        let control_val = token::Amount::from_uint(
+            control_val
+                .to_uint()
+                .expect("Should not fail to convert Dec to Uint"),
+            0,
+        )
+        .expect("Should not fail to convert Uint to Amount");
 
+        let max_inflation = token::Amount::from_uint(
+            max_inflation
+                .to_uint()
+                .expect("Should not fail to convert Dec to Uint"),
+            0,
+        )
+        .expect("Should not fail to convert Uint to Amount");
+
+        let new_inflation_amount = last_inflation_amount + control_val;
+
+        let inflation = std::cmp::min(new_inflation_amount, max_inflation);
         ValsToUpdate {
             locked_ratio,
             inflation,

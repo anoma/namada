@@ -116,11 +116,12 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-test-unit-coverage:
+# Integration and unit tests with coverage report
+test-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e --skip integration -Z unstable-options --report-time
+		-- --skip e2e -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
