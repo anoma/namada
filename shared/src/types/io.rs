@@ -5,8 +5,10 @@
 /// Rust native I/O handling.
 pub struct DefaultIo;
 
+#[async_trait::async_trait(?Send)]
 impl Io for DefaultIo {}
 
+#[async_trait::async_trait(?Send)]
 #[allow(missing_docs)]
 pub trait Io {
     fn print(output: impl AsRef<str>) {
@@ -40,11 +42,11 @@ pub trait Io {
         eprintln!("{}", output.as_ref());
     }
 
-    fn read() -> std::io::Result<String> {
+    async fn read() -> std::io::Result<String> {
         read_aux(std::io::stdin().lock())
     }
 
-    fn prompt(question: impl AsRef<str>) -> String {
+    async fn prompt(question: impl AsRef<str>) -> String {
         prompt_aux(
             std::io::stdin().lock(),
             std::io::stdout(),

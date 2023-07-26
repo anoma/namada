@@ -221,7 +221,7 @@ where
         display!(IO, "\nDo you wish to proceed? (y/n): ");
         IO::flush();
         loop {
-            let resp = IO::read().try_halt(|e| {
+            let resp = IO::read().await.try_halt(|e| {
                 display_line!(
                     IO,
                     "Encountered error reading from STDIN: {e:?}"

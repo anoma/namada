@@ -28,6 +28,8 @@ impl CliClient for HttpClient {
 }
 
 pub struct CliIo;
+
+#[async_trait::async_trait(?Send)]
 impl Io for CliIo {}
 
 pub struct CliApi<IO: Io = CliIo>(PhantomData<IO>);
