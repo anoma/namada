@@ -1586,21 +1586,26 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         code_path,
         data_path,
         owner: _,
-    }: &args::TxCustom,
+    }: args::TxCustom,
     fee_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
-    let chain_id = tx.chain_id.clone().unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash(client, code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
+    let chain_id = tx.chain_id.clone().unwrap();
     let mut tx_builder = TxBuilder::new(chain_id, tx.expiration);
-    tx_builder = tx_builder.add_code(code_path.to_vec());
+
+    tx_builder = tx_builder.add_code_from_hash(tx_code_hash);
 
     if let Some(data) = data_path {
-        tx_builder = tx_builder.add_data(data);
+        tx_builder = tx_builder.add_serialized_data(data);
     }
 
     prepare_tx::<C>(
         client,
-        tx,
+        &tx,
         tx_builder,
         fee_payer.clone(),
         #[cfg(not(feature = "mainnet"))]

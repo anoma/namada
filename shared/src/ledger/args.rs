@@ -99,7 +99,7 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the tx WASM code file
-    pub code_path: C::Data,
+    pub code_path: PathBuf,
     /// Path to the data file
     pub data_path: Option<C::Data>,
     /// The address that correspond to the signatures/signing-keys

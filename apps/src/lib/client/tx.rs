@@ -88,7 +88,7 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = signing::signer_from_address(None);
+    let default_signer = signing::signer_from_address(Some(args.owner.clone()));
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
@@ -99,7 +99,7 @@ where
     .await?;
 
     let tx_builder =
-        tx::build_custom(client, &args, &signing_data.fee_payer).await?;
+        tx::build_custom(client, args.clone(), &signing_data.fee_payer).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);

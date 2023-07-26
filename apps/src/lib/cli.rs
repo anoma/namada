@@ -3145,7 +3145,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                code_path: ctx.read_wasm(self.code_path),
+                code_path: self.code_path,
                 data_path: self.data_path.map(|data_path| {
                     std::fs::read(data_path)
                         .expect("Expected a file at given data path")
