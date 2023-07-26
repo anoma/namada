@@ -23,6 +23,7 @@ use namada::types::address::Address;
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PosParamsConfig,
@@ -644,6 +645,151 @@ fn ledger_txs_and_queries() -> Result<()> {
         client.exp_string(expected)?;
 
         client.assert_success();
+    }
+
+    Ok(())
+}
+
+/// We test shielding, shielded to shielded and unshielding transfers:
+/// 1. Run the ledger node
+/// 2. Send 20 BTC from Albert to PA(A)
+/// 3. Send 7 BTC from SK(A) to PA(B)
+/// 4. Assert BTC balance at VK(A) is 13
+/// 5. Send 5 BTC from SK(B) to Bertha
+/// 6. Assert BTC balance at VK(B) is 2
+#[test]
+fn masp_txs_and_queries() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(3600),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    let txs_args = vec![
+        // 2. Send 20 BTC from Albert to PA(A)
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "20",
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 3. Send 7 BTC from SK(A) to PA(B)
+        (
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "7",
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 4. Assert BTC balance at VK(A) is 13
+        (
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "btc: 13",
+        ),
+        // 5. Send 5 BTC from SK(B) to Bertha
+        (
+            vec![
+                "transfer",
+                "--source",
+                B_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                BTC,
+                "--amount",
+                "5",
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 6. Assert BTC balance at VK(B) is 2
+        (
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "btc: 2",
+        ),
+    ];
+
+    for (tx_args, tx_result) in &txs_args {
+        for &dry_run in &[true, false] {
+            let tx_args = if dry_run && tx_args[0] == "transfer" {
+                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+            } else {
+                tx_args.clone()
+            };
+            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+            if *tx_result == "Transaction is valid" && !dry_run {
+                client.exp_string("Transaction accepted")?;
+                client.exp_string("Transaction applied")?;
+            }
+            client.exp_string(tx_result)?;
+        }
     }
 
     Ok(())
