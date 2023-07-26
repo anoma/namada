@@ -768,14 +768,6 @@ impl MaspDenom {
     }
 }
 
-impl From<IbcAmount> for Amount {
-    fn from(amount: IbcAmount) -> Self {
-        Self {
-            raw: Uint(primitive_types::U256::from(amount).0),
-        }
-    }
-}
-
 impl From<DenominatedAmount> for IbcAmount {
     fn from(amount: DenominatedAmount) -> Self {
         primitive_types::U256(amount.amount.raw.0).into()

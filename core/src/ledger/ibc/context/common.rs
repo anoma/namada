@@ -1,6 +1,6 @@
 //! IbcCommonContext implementation for IBC
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use prost::Message;
 use sha2::Digest;
 
@@ -31,7 +31,9 @@ use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
+use crate::types::address::Address;
 use crate::types::storage::Key;
+use crate::types::token;
 
 /// Context to handle typical IBC data
 pub trait IbcCommonContext: IbcStorageContext {
@@ -357,24 +359,70 @@ pub trait IbcCommonContext: IbcStorageContext {
             })
     }
 
-    /// Write the denom
-    fn store_denom(
+    /// Write the IBC denom
+    fn store_ibc_denom(
         &mut self,
         trace_hash: String,
         denom: PrefixedDenom,
     ) -> Result<(), ContextError> {
         let key = storage::ibc_denom_key(trace_hash);
-        let bytes = denom.to_string().try_to_vec().map_err(|e| {
-            ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Encoding the denom failed: Denom {}, error {}",
-                    denom, e
-                ),
-            })
-        })?;
+        let bytes = denom
+            .to_string()
+            .try_to_vec()
+            .expect("encoding shouldn't fail");
         self.write(&key, bytes).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!("Writing the denom failed: Key {}", key),
+            })
+        })
+    }
+
+    /// Write the IBC denom
+    fn read_token_denom(
+        &self,
+        token: &Address,
+    ) -> Result<Option<token::Denomination>, ContextError> {
+        let key = token::denom_key(token);
+        let bytes = self.read(&key).map_err(|_| {
+            ContextError::ChannelError(ChannelError::Other {
+                description: format!(
+                    "Reading the token denom failed: Key {}",
+                    key
+                ),
+            })
+        })?;
+        match bytes {
+            Some(b) => {
+                let denom =
+                    token::Denomination::try_from_slice(&b).map_err(|_| {
+                        ContextError::ChannelError(ChannelError::Other {
+                            description: format!(
+                                "Decoding the token denom failed: Token {}",
+                                token
+                            ),
+                        })
+                    })?;
+                Ok(Some(denom))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Write the IBC denom
+    fn store_token_denom(
+        &mut self,
+        token: &Address,
+    ) -> Result<(), ContextError> {
+        let key = token::denom_key(token);
+        // IBC denomination should be zero for U256
+        let denom = token::Denomination::from(0);
+        let bytes = denom.try_to_vec().expect("encoding shouldn't fail");
+        self.write(&key, bytes).map_err(|_| {
+            ContextError::ChannelError(ChannelError::Other {
+                description: format!(
+                    "Writing the token denom failed: Key {}",
+                    key
+                ),
             })
         })
     }

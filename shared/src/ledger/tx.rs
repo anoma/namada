@@ -1351,6 +1351,12 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         validate_amount(client, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
+    if validated_amount.canonical().denom.0 != 0 {
+        return Err(Error::Other(format!(
+            "The amount for the IBC transfer should be an integer: {}",
+            validated_amount
+        )));
+    }
     let validate_fee = validate_amount(
         client,
         args.tx.gas_amount,
@@ -1392,7 +1398,8 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     };
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
-        amount: validated_amount.into(),
+        // Set the IBC amount as an integer
+        amount: validated_amount.canonical().into(),
     };
     let packet_data = PacketData {
         token,

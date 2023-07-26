@@ -153,10 +153,35 @@ where
                 let trace_hash = storage::calc_hash(coin.denom.to_string());
                 self.ctx
                     .borrow_mut()
-                    .store_denom(trace_hash, coin.denom)
+                    .store_ibc_denom(trace_hash, coin.denom.clone())
                     .map_err(|e| {
-                        Error::Denom(format!("Write the denom failed: {}", e))
-                    })
+                        Error::Denom(format!(
+                            "Writing the IBC denom failed: {}",
+                            e
+                        ))
+                    })?;
+
+                let token = storage::ibc_token(coin.denom.to_string());
+                let denom =
+                    self.ctx.borrow().read_token_denom(&token).map_err(
+                        |e| {
+                            Error::Denom(format!(
+                                "Reading the token denom failed: {}",
+                                e
+                            ))
+                        },
+                    )?;
+                if denom.is_none() {
+                    self.ctx.borrow_mut().store_token_denom(&token).map_err(
+                        |e| {
+                            Error::Denom(format!(
+                                "Writing the token denom failed: {}",
+                                e
+                            ))
+                        },
+                    )?;
+                }
+                Ok(())
             }
             // other messages
             _ => Ok(()),
