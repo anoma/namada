@@ -2162,7 +2162,7 @@ where
 
     // TODO: only do this iteration of tracing::debug is enabled
     // Check this !!!!
-    if env::var("NAMADA_LOG") == Ok(String::from("debug")) {
+    if env::var("RUST_LOG") == Ok(String::from("debug")) {
         tracing::debug!("\nBonds before decrementing:");
         for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
             let delta =
@@ -2199,15 +2199,14 @@ where
         amount,
     )?;
 
-    // `updatedBonded`
-    if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
-        for epoch in &bonds_to_unbond.epochs {
-            bonds_handle.get_data_handler().remove(storage, epoch)?;
-            bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
-        }
-    } else {
-        for epoch in &bonds_to_unbond.epochs {
-            bonds_handle.get_data_handler().remove(storage, epoch)?;
+    if env::var("RUST_LOG") == Ok(String::from("debug")) {
+        tracing::debug!("\nBonds after decrementing:");
+        for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
+            let delta =
+                bonds_handle.get_delta_val(storage, ep)?.unwrap_or_default();
+            if !delta.is_zero() {
+                tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            }
         }
     }
 
@@ -2278,6 +2277,19 @@ where
         })
         .collect::<BTreeMap<(Epoch, Epoch), token::Change>>();
 
+    // `updatedBonded`
+    // Decrement the bonds in storage
+    if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
+        for epoch in &bonds_to_unbond.epochs {
+            bonds_handle.get_data_handler().remove(storage, epoch)?;
+            bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
+        }
+    } else {
+        for epoch in &bonds_to_unbond.epochs {
+            bonds_handle.get_data_handler().remove(storage, epoch)?;
+        }
+    }
+
     // `updatedUnbonded`
     // TODO: can this be combined with the previous step?
     // TODO: figure out what I do here with both unbonds and unbond_records!
@@ -2294,9 +2306,9 @@ where
                 .at(start_epoch)
                 .get(storage, withdraw_epoch)?
                 .unwrap_or_default();
-            unbonds.at(start_epoch).insert(
+            unbonds.at(withdraw_epoch).insert(
                 storage,
-                *withdraw_epoch,
+                *start_epoch,
                 cur_val + token::Amount::from_change(*unbond_amount),
             )?;
         }
@@ -2490,14 +2502,37 @@ where
             .insert(*start_epoch, amount_after_slashing);
     }
 
-    // update validator stake
-    let validator_deltas = validator_deltas_handle(validator);
-    let cur_pipeline_delta = validator_deltas
-        .get_delta_val(storage, pipeline_epoch)?
-        .unwrap_or_default();
-    validator_deltas.set(
+    let amount_after_slashing = result_slashing.sum.change();
+    // Update the validator set at the pipeline offset. Since unbonding from a
+    // jailed validator who is no longer frozen is allowed, only update the
+    // validator set if the validator is not jailed
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle(validator)
+            .get(storage, pipeline_epoch, &params)?
+            .unwrap(),
+        ValidatorState::Jailed
+    );
+    if !is_jailed_at_pipeline {
+        update_validator_set(
+            storage,
+            &params,
+            validator,
+            -amount_after_slashing,
+            current_epoch,
+        )?;
+    }
+
+    // Update the validator and total deltas at the pipeline offset
+    update_validator_deltas(
         storage,
-        cur_pipeline_delta - result_slashing.sum.change(),
+        validator,
+        -amount_after_slashing,
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    update_total_deltas(
+        storage,
+        -amount_after_slashing,
         current_epoch,
         params.pipeline_len,
     )?;
