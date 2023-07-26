@@ -30,6 +30,7 @@ use namada_apps::config::genesis::genesis_config::{
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_test_utils::TestWasms;
+use namada_vp_prelude::testnet_pow;
 use serde_json::json;
 use setup::constants::*;
 use setup::Test;
@@ -408,7 +409,22 @@ fn stop_ledger_at_height() -> Result<()> {
 /// 8. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let test = setup::network(|genesis| genesis, None)?;
+    let test = setup::network(
+        |genesis| {
+            #[cfg(not(feature = "mainnet"))]
+            {
+                GenesisConfig {
+                    faucet_pow_difficulty: testnet_pow::Difficulty::try_new(1),
+                    ..genesis
+                }
+            }
+            #[cfg(feature = "mainnet")]
+            {
+                genesis
+            }
+        },
+        None,
+    )?;
 
     set_ethereum_bridge_mode(
         &test,
@@ -442,6 +458,9 @@ fn ledger_txs_and_queries() -> Result<()> {
     let tx_data_path = tx_data_path.to_string_lossy();
 
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let multisig_account =
+        format!("{},{},{}", BERTHA_KEY, ALBERT_KEY, CHRISTEL_KEY);
 
     let txs_args = vec![
         // 2. Submit a token transfer tx (from an established account)
@@ -553,10 +572,34 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
             "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
+            "--threshold",
+            "1",
             "--code-path",
             VP_USER_WASM,
             "--alias",
             "Test-Account",
+            "--gas-amount",
+            "0",
+            "--gas-limit",
+            "0",
+            "--gas-token",
+            NAM,
+            "--signing-keys",
+            BERTHA_KEY,
+            "--node",
+            &validator_one_rpc,
+        ],
+        // 5. Submit a tx to initialize a new multisig account
+        vec![
+            "init-account",
+            "--public-keys",
+            &multisig_account,
+            "--threshold",
+            "2",
+            "--code-path",
+            VP_USER_WASM,
+            "--alias",
+            "Test-Account-2",
             "--gas-amount",
             "0",
             "--gas-limit",
@@ -622,6 +665,16 @@ fn ledger_txs_and_queries() -> Result<()> {
             ],
             // expect a decimal
             r"nam: \d+(\.\d+)?",
+        ),
+        (
+            vec![
+                "query-account",
+                "--owner",
+                "Test-Account-2",
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Threshold: 2",
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {
