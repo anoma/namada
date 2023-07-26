@@ -5102,9 +5102,10 @@ where
     let mut init_bond_balance = token::Change::default();
     let mut init_redelegated_bond_balance =
         BTreeMap::<Epoch, token::Change>::new();
-    for epoch in
-        Epoch::iter_bounds_inclusive(infraction_epoch.next(), current_epoch)
-    {
+    for epoch in Epoch::iter_bounds_inclusive(
+        infraction_epoch.next(),
+        current_epoch.prev(),
+    ) {
         init_total_unbonded += compute_total_unbonded(
             storage,
             params,
@@ -5135,11 +5136,9 @@ where
         )?;
     }
 
-    let mut slashed_amounts = slashed_amounts_map.clone();
-    for epoch in Epoch::iter_bounds_inclusive(
-        current_epoch.next(),
-        current_epoch + params.pipeline_len,
-    ) {
+    let mut slashed_amounts: BTreeMap<Epoch, namada_core::types::uint::I256> =
+        slashed_amounts_map.clone();
+    for epoch in Epoch::iter_range(current_epoch, params.pipeline_len) {
         let updated_total_unbonded = init_total_unbonded
             + compute_total_unbonded(
                 storage,
