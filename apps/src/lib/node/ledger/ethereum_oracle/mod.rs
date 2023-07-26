@@ -243,6 +243,18 @@ impl<C: RpcClient> Oracle<C> {
             _ => None,
         }
     }
+
+    /// If the bridge has been deactivated, block here until a new
+    /// config is passed that reactivates the bridge
+    async fn wait_on_reactivation(&mut self) -> Config {
+        loop {
+            if let Some(Command::UpdateConfig(c)) = self.control.recv().await {
+                if c.active {
+                    return c;
+                }
+            }
+        }
+    }
 }
 
 /// Block until an initial configuration is received via the command channel.
@@ -393,6 +405,9 @@ async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
         // check if a new config has been sent.
         if let Some(new_config) = oracle.update_config() {
             config = new_config;
+        }
+        if !config.active {
+            config = oracle.wait_on_reactivation().await;
         }
         next_block_to_process += 1.into();
     }
@@ -977,6 +992,105 @@ mod test_oracle {
         .unwrap();
         assert_eq!(block_processed, Uint256::from(confirmed_block_height + 1));
 
+        drop(eth_recv);
+        oracle.await.expect("Test failed");
+    }
+
+    /// Test that Ethereum oracle can be deactivate and reactivated
+    /// via config updates.
+    /// NOTE: This test can flake due to async channel race
+    /// conditions.
+    #[tokio::test]
+    async fn test_oracle_reactivation() {
+        let TestPackage {
+            oracle,
+            eth_recv,
+            controller,
+            mut blocks_processed_recv,
+            mut control_sender,
+        } = setup();
+        let config = Config::default();
+        let oracle = start_with_default_config(
+            oracle,
+            &mut control_sender,
+            config.clone(),
+        )
+        .await;
+
+        // set the height of the chain such that there are some blocks deep
+        // enough to be considered confirmed by the oracle
+        let confirmed_block_height = 9; // all blocks up to and including this block will have enough confirmations
+        let min_confirmations = u64::from(config.min_confirmations);
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(
+            min_confirmations + confirmed_block_height - 3,
+        )));
+
+        // check that the oracle indeed processes the expected blocks
+        for height in 0u64..(confirmed_block_height - 4) {
+            let block_processed = timeout(
+                std::time::Duration::from_secs(3),
+                blocks_processed_recv.recv(),
+            )
+            .await
+            .expect("Timed out waiting for block to be checked")
+            .unwrap();
+            assert_eq!(block_processed, Uint256::from(height));
+        }
+
+        // Deactivate the bridge before all confirmed events are confirmed and
+        // processed There is a very fine needle to thread here. A block
+        // must be processed **after** this config is sent in order for
+        // the updated config to be received. However, this test can
+        // flake due to channel race conditions.
+        control_sender
+            .try_send(Command::UpdateConfig(Config {
+                active: false,
+                ..Default::default()
+            }))
+            .expect("Test failed");
+        std::thread::sleep(Duration::from_secs(1));
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(
+            min_confirmations + confirmed_block_height - 4,
+        )));
+
+        let block_processed = timeout(
+            std::time::Duration::from_secs(3),
+            blocks_processed_recv.recv(),
+        )
+        .await
+        .expect("Timed out waiting for block to be checked")
+        .unwrap();
+        assert_eq!(block_processed, Uint256::from(confirmed_block_height - 4));
+
+        // check that the oracle hasn't yet checked any further blocks
+        // TODO: check this in a deterministic way rather than just waiting a
+        // bit
+        let res = timeout(
+            std::time::Duration::from_secs(3),
+            blocks_processed_recv.recv(),
+        )
+        .await;
+        assert!(res.is_err());
+
+        // reactivate the bridge and check that the oracle
+        // processed the rest of the confirmed blocks
+        control_sender
+            .try_send(Command::UpdateConfig(Default::default()))
+            .expect("Test failed");
+
+        controller.apply_cmd(TestCmd::NewHeight(Uint256::from(
+            min_confirmations + confirmed_block_height,
+        )));
+        for height in (confirmed_block_height - 3)..=confirmed_block_height {
+            let block_processed = timeout(
+                std::time::Duration::from_secs(3),
+                blocks_processed_recv.recv(),
+            )
+            .await
+            .expect("Timed out waiting for block to be checked")
+            .unwrap();
+            assert_eq!(block_processed, Uint256::from(height));
+        }
         drop(eth_recv);
         oracle.await.expect("Test failed");
     }

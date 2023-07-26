@@ -37,14 +37,34 @@ pub enum SendValsetUpd {
     AtPrevHeight,
 }
 
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+)]
 /// An enum indicating if the Ethereum bridge is enabled.
 pub enum EthBridgeStatus {
     Disabled,
     Enabled(EthBridgeEnabled),
 }
 
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 /// Enum indicating if the bridge was initialized at genesis
 /// or a later epoch.
 pub enum EthBridgeEnabled {

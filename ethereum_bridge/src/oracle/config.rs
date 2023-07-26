@@ -16,6 +16,8 @@ pub struct Config {
     pub governance_contract: EthAddress,
     /// The earliest Ethereum block from which events may be processed.
     pub start_block: ethereum_structs::BlockHeight,
+    /// The status of the Ethereum bridge (active / inactive)
+    pub active: bool,
 }
 
 // TODO: this production Default implementation is temporary, there should be no
@@ -29,6 +31,7 @@ impl std::default::Default for Config {
             bridge_contract: EthAddress([0; 20]),
             governance_contract: EthAddress([1; 20]),
             start_block: 0.into(),
+            active: true,
         }
     }
 }
