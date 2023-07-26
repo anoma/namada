@@ -454,7 +454,8 @@ pub async fn query_pinned_balance<
         }
         // If a suitable viewing key was not found, then demand it from the user
         if balance == pinned_error {
-            let vk_str = prompt!(IO, "Enter the viewing key for {}: ", owner);
+            let vk_str =
+                prompt!(IO, "Enter the viewing key for {}: ", owner).await;
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
                 _ => {
