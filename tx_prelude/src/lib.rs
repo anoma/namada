@@ -6,6 +6,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+pub mod account;
 pub mod ibc;
 pub mod key;
 pub mod proof_of_stake;
