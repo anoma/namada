@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
-    self, Collectable, NestedMap,
+    self, NestedMap,
 };
 use namada_core::ledger::storage_api::collections::LazyCollection;
 use namada_core::ledger::storage_api::token::{credit_tokens, read_balance};
@@ -58,7 +58,7 @@ use crate::{
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
-    read_validator_delta_value, read_validator_stake, slash,
+    read_validator_deltas_value, read_validator_stake, slash,
     slash_redelegation, slash_validator, slash_validator_redelegation,
     staking_token_address, store_total_consensus_stake, total_bonded_handle,
     total_deltas_handle, unbond_handle, unbond_records_handle, unbond_tokens,
@@ -319,13 +319,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         }
     ));
 
-    let val_deltas = read_validator_delta_value(
-        &s,
-        &params,
-        &validator.address,
-        &pipeline_epoch,
-    )
-    .unwrap();
+    let val_deltas =
+        read_validator_deltas_value(&s, &validator.address, &pipeline_epoch)
+            .unwrap();
     assert_eq!(val_deltas, Some(amount_self_bond.change()));
 
     let total_deltas_handle = total_deltas_handle();
@@ -559,13 +555,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         read_validator_stake(&s, &params, &validator.address, pipeline_epoch)
             .unwrap();
 
-    let val_delta = read_validator_delta_value(
-        &s,
-        &params,
-        &validator.address,
-        &pipeline_epoch,
-    )
-    .unwrap();
+    let val_delta =
+        read_validator_deltas_value(&s, &validator.address, &pipeline_epoch)
+            .unwrap();
     let unbond = unbond_handle(&validator.address, &validator.address);
 
     assert_eq!(val_delta, Some(-amount_self_unbond.change()));
@@ -692,13 +684,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     let val_stake_post =
         read_validator_stake(&s, &params, &validator.address, pipeline_epoch)
             .unwrap();
-    let val_delta = read_validator_delta_value(
-        &s,
-        &params,
-        &validator.address,
-        &pipeline_epoch,
-    )
-    .unwrap();
+    let val_delta =
+        read_validator_deltas_value(&s, &validator.address, &pipeline_epoch)
+            .unwrap();
     let unbond = unbond_handle(&delegator, &validator.address);
 
     assert_eq!(
@@ -1162,7 +1150,6 @@ fn test_validator_sets() {
 
         update_validator_deltas(
             s,
-            &params,
             addr,
             stake.change(),
             epoch,
@@ -1462,7 +1449,6 @@ fn test_validator_sets() {
         .unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val1,
         -unbond.change(),
         epoch,
@@ -1657,7 +1643,6 @@ fn test_validator_sets() {
     update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val6,
         bond.change(),
         epoch,
@@ -1843,7 +1828,6 @@ fn test_validator_sets_swap() {
 
         update_validator_deltas(
             s,
-            &params,
             addr,
             stake.change(),
             epoch,
@@ -1939,7 +1923,6 @@ fn test_validator_sets_swap() {
         .unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val2,
         bond2.change(),
         epoch,
@@ -1951,7 +1934,6 @@ fn test_validator_sets_swap() {
         .unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val3,
         bond3.change(),
         epoch,
@@ -1978,7 +1960,6 @@ fn test_validator_sets_swap() {
         .unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val2,
         bonds.change(),
         epoch,
@@ -1990,7 +1971,6 @@ fn test_validator_sets_swap() {
         .unwrap();
     update_validator_deltas(
         &mut s,
-        &params,
         &val3,
         bonds.change(),
         epoch,
@@ -3810,11 +3790,6 @@ fn test_slash_validator() {
         validator_total_redelegated_bonded_handle(&bob);
     let total_redelegated_unbonded =
         validator_total_redelegated_unbonded_handle(&bob);
-
-    let outgoing_redelegations =
-        validator_outgoing_redelegations_handle(&alice).at(&bob);
-
-    let slashes = validator_slashes_handle(&alice);
 
     let infraction_stake = token::Change::from(23);
 

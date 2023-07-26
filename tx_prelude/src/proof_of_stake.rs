@@ -10,7 +10,7 @@ use namada_proof_of_stake::{
     read_pos_params, redelegate_tokens, unbond_tokens, unjail_validator,
     withdraw_tokens, BecomeValidator,
 };
-pub use namada_proof_of_stake::{parameters, types};
+pub use namada_proof_of_stake::{parameters, types, ResultSlashing};
 
 use super::*;
 
@@ -36,7 +36,7 @@ impl Ctx {
         source: Option<&Address>,
         validator: &Address,
         amount: token::Amount,
-    ) -> TxResult {
+    ) -> EnvResult<ResultSlashing> {
         let current_epoch = self.get_block_epoch()?;
         unbond_tokens(self, source, validator, amount, current_epoch, false)
     }

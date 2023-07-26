@@ -272,13 +272,6 @@ mod tests {
         let bonds_post = bond_handle(&bond_src, &bond.validator);
         // let bonds_post = ctx().read_bond(&bond_id)?.unwrap();
 
-        for epoch in 0..pos_params.unbonding_len {
-            dbg!(
-                epoch,
-                bonds_post.get_delta_val(ctx(), Epoch(epoch), &pos_params)?
-            );
-        }
-
         if is_delegation {
             // A delegation is applied at pipeline offset
             // Check that bond is empty before pipeline offset

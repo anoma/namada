@@ -703,9 +703,8 @@ where
 }
 
 /// Read PoS validator's delta value.
-pub fn read_validator_delta_value<S>(
+pub fn read_validator_deltas_value<S>(
     storage: &S,
-    params: &PosParams,
     validator: &Address,
     epoch: &namada_core::types::storage::Epoch,
 ) -> storage_api::Result<Option<token::Change>>
@@ -738,7 +737,6 @@ where
 /// Add or remove PoS validator's stake delta value
 pub fn update_validator_deltas<S>(
     storage: &mut S,
-    params: &PosParams,
     validator: &Address,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
@@ -917,7 +915,6 @@ where
 /// Note: for EpochedDelta, write the value to change storage by
 pub fn update_total_deltas<S>(
     storage: &mut S,
-    params: &PosParams,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
     offset: u64,
@@ -1084,16 +1081,9 @@ where
     }
 
     // Update the validator and total deltas
-    update_validator_deltas(
-        storage,
-        &params,
-        validator,
-        amount,
-        current_epoch,
-        offset,
-    )?;
+    update_validator_deltas(storage, validator, amount, current_epoch, offset)?;
 
-    update_total_deltas(storage, &params, amount, current_epoch, offset)?;
+    update_total_deltas(storage, amount, current_epoch, offset)?;
 
     // Transfer the bonded tokens from the source to PoS
     let staking_token = staking_token_address(storage);
@@ -2104,7 +2094,6 @@ where
     // Update the validator and total deltas at the pipeline offset
     update_validator_deltas(
         storage,
-        &params,
         validator,
         -amount_after_slashing,
         current_epoch,
@@ -2112,7 +2101,6 @@ where
     )?;
     update_total_deltas(
         storage,
-        &params,
         -amount_after_slashing,
         current_epoch,
         params.pipeline_len,
@@ -2125,8 +2113,11 @@ where
 /// int, epochMap: Epoch -> int}`
 #[derive(Debug, Default)]
 pub struct ResultSlashing {
-    sum: token::Amount,
-    epoch_map: BTreeMap<Epoch, token::Amount>,
+    /// The token amount unbonded from the validator stake after accounting for
+    /// slashes
+    pub sum: token::Amount,
+    /// TODO
+    pub epoch_map: BTreeMap<Epoch, token::Amount>,
 }
 
 /// Unbond tokens that are bonded between a validator and a source (self or
@@ -5690,19 +5681,12 @@ where
 
             update_validator_deltas(
                 storage,
-                &params,
                 &validator,
                 delta,
                 current_epoch,
                 offset,
             )?;
-            update_total_deltas(
-                storage,
-                &params,
-                delta,
-                current_epoch,
-                offset,
-            )?;
+            update_total_deltas(storage, delta, current_epoch, offset)?;
         }
     }
 
@@ -5972,7 +5956,6 @@ where
     // validator deltas
     update_validator_deltas(
         storage,
-        &params,
         dest_validator,
         amount_after_slashing,
         current_epoch,

@@ -10,7 +10,18 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("failed to decode Unbond")?;
 
-    ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
+    let proof_of_stake::ResultSlashing { sum, epoch_map: _ } = ctx
+        .unbond_tokens(
+            unbond.source.as_ref(),
+            &unbond.validator,
+            unbond.amount,
+        )?;
+    // TODO: do something for real here
+    if sum != token::Amount::zero() {
+        debug_log!("Say something for {}", sum.to_string_native());
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -179,7 +190,7 @@ mod tests {
             );
             epoched_bonds_pre.push(
                 bond_handle
-                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .get_delta_val(ctx(), Epoch(epoch))?
                     .map(token::Amount::from_change),
             );
             epoched_validator_set_pre.push(
@@ -205,7 +216,7 @@ mod tests {
         for epoch in 0..=pos_params.unbonding_len {
             epoched_bonds_post.push(
                 bond_handle
-                    .get_delta_val(ctx(), Epoch(epoch), &pos_params)?
+                    .get_delta_val(ctx(), Epoch(epoch))?
                     .map(token::Amount::from_change),
             );
         }
