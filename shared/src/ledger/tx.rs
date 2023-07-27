@@ -33,7 +33,7 @@ use crate::ibc::Height as IbcHeight;
 use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::governance::storage as gov_storage;
-use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
+use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
     TxResponse,
@@ -1459,30 +1459,34 @@ pub async fn build_transfer<
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
     // Add the MASP Transaction and its Builder to facilitate validation
-    let (masp_hash, shielded_tx_epoch) = if let Some(shielded_parts) =
-        shielded_parts
+    let (masp_hash, shielded_tx_epoch) = if let Some(ShieldedTransfer {
+        builder,
+        masp_tx,
+        metadata,
+        epoch,
+    }) = shielded_parts
     {
         // Add a MASP Transaction section to the Tx
-        let masp_tx = tx.add_section(Section::MaspTx(shielded_parts.1));
+        let masp_tx = tx.add_section(Section::MaspTx(masp_tx));
         // Get the hash of the MASP Transaction section
         let masp_hash = masp_tx.get_hash();
         // Get the decoded asset types used in the transaction to give
         // offline wallet users more information
-        let asset_types = used_asset_types(shielded, client, &shielded_parts.0)
+        let asset_types = used_asset_types(shielded, client, &builder)
             .await
             .unwrap_or_default();
         // Add the MASP Transaction's Builder to the Tx
         tx.add_section(Section::MaspBuilder(MaspBuilder {
             asset_types,
             // Store how the Info objects map to Descriptors/Outputs
-            metadata: shielded_parts.2,
+            metadata,
             // Store the data that was used to construct the Transaction
-            builder: shielded_parts.0,
+            builder,
             // Link the Builder to the Transaction by hash code
             target: masp_hash,
         }));
         // The MASP Transaction section hash will be used in Transfer
-        (Some(masp_hash), Some(shielded_parts.3))
+        (Some(masp_hash), Some(epoch))
     } else {
         (None, None)
     };
