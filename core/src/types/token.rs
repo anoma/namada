@@ -379,12 +379,12 @@ impl FromStr for DenominatedAmount {
         {
             return Err(AmountParseError::NotNumeric);
         }
-        if digits.len() > 77 {
+        /*if digits.len() > 77 {
             return Err(AmountParseError::ScaleTooLarge(
                 digits.len() as u32,
                 77,
             ));
-        }
+        }*/
         let mut value = Uint::default();
         let ten = Uint::from(10);
         for (pow, digit) in digits.into_iter().enumerate() {

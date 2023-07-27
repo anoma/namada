@@ -372,11 +372,11 @@ impl Code {
 )]
 pub struct Signature {
     /// Additional random data
-    salt: [u8; 8],
+    pub salt: [u8; 8],
     /// The hash of the section being signed
-    targets: Vec<crate::types::hash::Hash>,
+    pub targets: Vec<crate::types::hash::Hash>,
     /// The public key to verify the below signature
-    pub_key: common::PublicKey,
+    pub pub_key: common::PublicKey,
     /// The signature over the above hashes
     pub signature: Option<common::Signature>,
 }
