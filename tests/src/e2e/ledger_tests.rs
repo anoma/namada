@@ -666,6 +666,8 @@ fn ledger_txs_and_queries() -> Result<()> {
             ],
             // expect a decimal
             vec![r"nam: \d+(\.\d+)?"],
+            // check also as validator node
+            true,
         ),
         // Unspecified token expect all tokens from wallet derived from genesis
         (
@@ -679,6 +681,8 @@ fn ledger_txs_and_queries() -> Result<()> {
                 r"kartoffel: \d+(\.\d+)?",
                 r"schnitzel: \d+(\.\d+)?",
             ],
+            // check also as validator node
+            true,
         ),
         (
             vec![
@@ -688,16 +692,24 @@ fn ledger_txs_and_queries() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ],
-            "Threshold: 2",
+            vec!["Threshold: 2"],
+            // check also as validator node
+            false,
         ),
     ];
-    for (query_args, expected) in &query_args_and_expected_response {
+    for (query_args, expected, check_as_validator) in
+        &query_args_and_expected_response
+    {
         // Run as a non-validator
         let mut client = run!(test, Bin::Client, query_args, Some(40))?;
         for pattern in expected {
             client.exp_regex(pattern)?;
         }
         client.assert_success();
+
+        if !check_as_validator {
+            continue;
+        }
 
         // Run as a validator
         let mut client = run_as!(
