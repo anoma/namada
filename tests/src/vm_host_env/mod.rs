@@ -1187,7 +1187,10 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
@@ -1195,7 +1198,10 @@ mod tests {
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(100)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(100, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
@@ -1221,7 +1227,7 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
         let balance_key = token::balance_key(&ibc_token, &sender);
-        let init_bal = Amount::native_whole(100);
+        let init_bal = Amount::from_u64(100);
         writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
         let minted_key = token::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.try_to_vec().unwrap());
@@ -1274,11 +1280,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(balance, Some(Amount::from_u64(0)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(0)));
+        assert_eq!(minted, Some(Amount::from_u64(0)));
     }
 
     #[test]
@@ -1351,11 +1357,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(100)));
+        assert_eq!(minted, Some(Amount::from_u64(100)));
     }
 
     #[test]
@@ -1390,7 +1396,10 @@ mod tests {
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_uint(100, ibc::ANY_DENOMINATION)
+            .unwrap()
+            .try_to_vec()
+            .unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1443,11 +1452,17 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(200)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(200, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
@@ -1486,7 +1501,7 @@ mod tests {
             denom,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_u64(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1545,11 +1560,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(escrow, Some(Amount::from_u64(0)));
     }
 
     #[test]

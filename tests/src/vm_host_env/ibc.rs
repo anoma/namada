@@ -88,7 +88,7 @@ use namada_tx_prelude::BorshSerialize;
 use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
-
+pub const ANY_DENOMINATION: u8 = 4;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
@@ -228,14 +228,21 @@ pub fn init_storage() -> (Address, Address) {
 
     // initialize a token
     let token = tx_host_env::ctx().init_account(code_hash).unwrap();
-
+    let denom_key = token::denom_key(&token);
+    let token_denom = token::Denomination(ANY_DENOMINATION);
     // initialize an account
     let account = tx_host_env::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::native_whole(100);
-    let bytes = init_bal.try_to_vec().expect("encoding failed");
+    let init_bal = Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {
-        env.wl_storage.storage.write(&key, &bytes).unwrap();
+        env.wl_storage
+            .storage
+            .write(&denom_key, &token_denom.try_to_vec().unwrap())
+            .unwrap();
+        env.wl_storage
+            .storage
+            .write(&key, &init_bal.try_to_vec().unwrap())
+            .unwrap();
     });
 
     // epoch duration

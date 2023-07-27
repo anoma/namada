@@ -1399,7 +1399,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
         // Set the IBC amount as an integer
-        amount: validated_amount.canonical().into(),
+        amount: validated_amount.into(),
     };
     let packet_data = PacketData {
         token,
