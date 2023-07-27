@@ -2109,6 +2109,7 @@ fn arb_genesis_validators(
         )
 }
 
+/// `iterateBondsUpToAmountTest`
 #[test]
 fn test_find_bonds_to_remove() {
     let mut storage = TestWlStorage::default();
@@ -2175,6 +2176,7 @@ fn test_find_bonds_to_remove() {
     assert_eq!(bonds_for_removal.new_entry, Some((Epoch(1), I256::from(4))));
 }
 
+/// `computeModifiedRedelegationTest`
 #[test]
 fn test_compute_modified_redelegation() {
     let mut storage = TestWlStorage::default();
@@ -2228,6 +2230,7 @@ fn test_compute_modified_redelegation() {
     // synced between Rust and Quint
 }
 
+/// `mergeRedelegatedBondsMapTest`
 #[test]
 fn test_merge_redelegated_bonds_map() {
     let alice_address = established_address_1();
@@ -2325,6 +2328,7 @@ fn test_merge_redelegated_bonds_map() {
     )
 }
 
+/// `computeNewRedelegatedUnbondsTest`
 #[test]
 fn test_compute_new_redelegated_unbonds() {
     let mut storage = TestWlStorage::default();
@@ -2489,6 +2493,7 @@ fn test_compute_new_redelegated_unbonds() {
     assert_eq!(res, exp_res);
 }
 
+/// `applyListSlashesTest`
 #[test]
 fn test_apply_list_slashes() {
     let init_epoch = Epoch(2);
@@ -2536,6 +2541,7 @@ fn test_apply_list_slashes() {
     assert_eq!(res, token::Amount::zero());
 }
 
+/// `computeSlashableAmountTest`
 #[test]
 fn test_compute_slashable_amount() {
     let init_epoch = Epoch(2);
@@ -2592,6 +2598,7 @@ fn test_compute_slashable_amount() {
     assert_eq!(res, token::Change::from(100));
 }
 
+/// `foldAndSlashRedelegatedBondsMapTest`
 #[test]
 fn test_fold_and_slash_redelegated_bonds() {
     let mut storage = TestWlStorage::default();
@@ -2690,6 +2697,7 @@ fn test_fold_and_slash_redelegated_bonds() {
     );
 }
 
+/// `mergeOutgoingRedelegationsTest`
 #[test]
 fn test_merge_outgoing_redelegations() {
     let ep6 = Epoch(6);
@@ -2747,6 +2755,7 @@ fn test_merge_outgoing_redelegations() {
     );
 }
 
+/// `computeTotalUnbondedTest`
 #[test]
 fn test_compute_total_unbonded() {
     let mut storage = TestWlStorage::default();
@@ -2849,6 +2858,7 @@ fn test_compute_total_unbonded() {
     assert_eq!(res, I256::from(10));
 }
 
+/// `foldRedelegatedBondsMapTest`
 #[test]
 fn test_fold_redelegated_bonds() {
     let mut storage = TestWlStorage::default();
@@ -2884,6 +2894,7 @@ fn test_fold_redelegated_bonds() {
     assert_eq!(res, token::Change::from(21));
 }
 
+/// `computeRecentTotalUnbondedTest`
 #[test]
 fn test_compute_recent_total_unbonded() {
     let mut storage = TestWlStorage::default();
@@ -2970,6 +2981,7 @@ fn test_compute_recent_total_unbonded() {
     assert_eq!(res, I256::from(20));
 }
 
+/// `hasRedelegationTest`
 #[test]
 fn test_has_redelegation() {
     let mut storage = TestWlStorage::default();
@@ -3023,6 +3035,7 @@ fn test_has_redelegation() {
     assert!(!has_redelegation(&storage, &test_redelegations, &redel,).unwrap());
 }
 
+/// `computeRemainderRedelegationTest`
 #[test]
 fn test_compute_remainder_redelegation() {
     let mut storage = TestWlStorage::default();
@@ -3251,6 +3264,7 @@ fn test_compute_remainder_redelegation() {
     assert_eq!(balances, exp_balances);
 }
 
+/// `computeBalanceRedelegatedBondsTest`
 #[test]
 fn test_compute_redelegated_bonds_balance() {
     let mut storage = TestWlStorage::default();
@@ -3411,6 +3425,7 @@ fn test_compute_redelegated_bonds_balance() {
     assert_eq!(balances, exp_balances);
 }
 
+/// `slashRedelegationTest`
 #[test]
 fn test_slash_redelegation() {
     let mut storage = TestWlStorage::default();
@@ -3598,6 +3613,7 @@ fn test_slash_redelegation() {
     assert_eq!(slashed_amounts_map, empty_slash_amounts);
 }
 
+/// `slashValidatorRedelegationTest`
 #[test]
 fn test_slash_validator_redelegation() {
     let mut storage = TestWlStorage::default();
@@ -3774,6 +3790,7 @@ fn test_slash_validator_redelegation() {
     assert_eq!(slashed_amounts_map, empty_slash_amounts);
 }
 
+/// `slashValidatorTest`
 #[test]
 fn test_slash_validator() {
     let mut storage = TestWlStorage::default();
