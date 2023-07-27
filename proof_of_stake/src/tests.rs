@@ -3811,8 +3811,8 @@ fn test_slash_validator() {
     let infraction_stake = token::Change::from(23);
 
     let initial_stakes = BTreeMap::from_iter([
+        (Epoch(10), infraction_stake),
         (Epoch(11), infraction_stake),
-        (Epoch(12), infraction_stake),
     ]);
 
     let current_epoch = Epoch(10);
@@ -4134,8 +4134,8 @@ fn test_slash_validator() {
     assert_eq!(
         res,
         BTreeMap::from_iter([
-            (current_epoch.next(), token::Change::zero()),
-            (current_epoch.next().next(), token::Change::zero())
+            (current_epoch, token::Change::zero()),
+            (current_epoch.next(), token::Change::zero())
         ])
     );
 }

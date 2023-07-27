@@ -4800,17 +4800,23 @@ where
     }
 
     // Update the validator stakes
+    // TODO: need to generalize for arbitrary pipeline_len!!
     for (validator, slash_amounts) in map_validator_slash {
         // Use the `slash_amounts` to deduct from the deltas for the current and
         // the next epochs (no adjusting at pipeline)
+
+        let next_stake_pre = read_validator_stake(
+            storage,
+            &params,
+            &validator,
+            current_epoch.next(),
+        )?
+        .unwrap_or_default()
+        .change();
         let delta_cur = slash_amounts
             .get(&current_epoch)
             .cloned()
-            .expect("Expected a map element for the current epoch");
-        let delta_next = slash_amounts
-            .get(&current_epoch.next())
-            .cloned()
-            .expect("Expected a map element for the next epoch");
+            .unwrap_or_default();
         update_validator_deltas(
             storage,
             &validator,
@@ -4818,6 +4824,24 @@ where
             current_epoch,
             0,
         )?;
+        update_total_deltas(storage, -delta_cur, current_epoch, 0)?;
+
+        let next_stake_post = next_stake_pre
+            - slash_amounts
+                .get(&current_epoch.next())
+                .cloned()
+                .unwrap_or_default();
+
+        let next_stake_read = read_validator_stake(
+            storage,
+            &params,
+            &validator,
+            current_epoch.next(),
+        )?
+        .unwrap_or_default()
+        .change();
+        let delta_next = next_stake_post - next_stake_read;
+
         update_validator_deltas(
             storage,
             &validator,
@@ -4825,6 +4849,7 @@ where
             current_epoch.next(),
             0,
         )?;
+        update_total_deltas(storage, -delta_next, current_epoch.next(), 0)?;
     }
 
     Ok(())
