@@ -42,8 +42,8 @@ pub trait Io {
         eprintln!("{}", output.as_ref());
     }
 
-    async fn read() -> std::io::Result<String> {
-        read_aux(std::io::stdin().lock())
+    async fn read() -> tokio::io::Result<String> {
+        read_aux(tokio::io::stdin()).await
     }
 
     async fn prompt(question: impl AsRef<str>) -> String {
@@ -74,12 +74,12 @@ where
 }
 
 /// A generic function for reading input from users
-pub fn read_aux<R>(mut reader: R) -> std::io::Result<String>
+pub async fn read_aux<R>(mut reader: R) -> tokio::io::Result<String>
 where
-    R: std::io::Read,
+    R: tokio::io::AsyncReadExt + Unpin,
 {
     let mut s = String::new();
-    reader.read_to_string(&mut s)?;
+    reader.read_to_string(&mut s).await?;
     Ok(s)
 }
 
