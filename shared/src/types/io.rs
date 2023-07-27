@@ -47,25 +47,29 @@ pub trait Io {
     }
 
     async fn prompt(question: impl AsRef<str>) -> String {
-        prompt_aux(
-            std::io::stdin().lock(),
-            std::io::stdout(),
-            question.as_ref(),
-        )
+        prompt_aux(tokio::io::stdin(), tokio::io::stdout(), question.as_ref())
+            .await
     }
 }
 
 /// A generic function for displaying a prompt to users and reading
 /// in their response.
-pub fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
+pub async fn prompt_aux<R, W>(
+    mut reader: R,
+    mut writer: W,
+    question: &str,
+) -> String
 where
-    R: std::io::Read,
-    W: std::io::Write,
+    R: tokio::io::AsyncReadExt + Unpin,
+    W: tokio::io::AsyncWriteExt + Unpin,
 {
-    write!(&mut writer, "{}", question).expect("Unable to write");
-    writer.flush().unwrap();
+    writer
+        .write_all(question.as_bytes())
+        .await
+        .expect("Unable to write");
+    writer.flush().await.unwrap();
     let mut s = String::new();
-    reader.read_to_string(&mut s).expect("Unable to read");
+    reader.read_to_string(&mut s).await.expect("Unable to read");
     s
 }
 
