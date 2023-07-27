@@ -7,7 +7,7 @@ use namada_tx_prelude::*;
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
-    let tx_data = transaction::InitAccount::try_from_slice(&data[..])
+    let tx_data = transaction::account::InitAccount::try_from_slice(&data[..])
         .wrap_err("failed to decode InitAccount")?;
     debug_log!("apply_tx called to init a new established account");
 
@@ -18,8 +18,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .ok_or_err_msg("vp code section must be tagged as extra")?
         .code
         .hash();
+
     let address = ctx.init_account(vp_code)?;
-    let pk_key = key::pk_key(&address);
-    ctx.write(&pk_key, &tx_data.public_key)?;
+
+    match account::init_account(ctx, &address, tx_data) {
+        Ok(address) => {
+            debug_log!("Created account {}", address.encode(),)
+        }
+        Err(err) => {
+            debug_log!("Account creation failed with: {}", err);
+            panic!()
+        }
+    }
     Ok(())
 }

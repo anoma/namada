@@ -44,6 +44,7 @@ struct Keys {
     max_proposal_bytes: &'static str,
     faucet_account: &'static str,
     wrapper_tx_fees: &'static str,
+    max_signatures_per_transaction: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -182,4 +183,9 @@ pub fn get_faucet_account_key() -> Key {
 /// Storage key used for staked ratio parameter.
 pub fn get_wrapper_tx_fees_key() -> Key {
     get_wrapper_tx_fees_key_at_addr(ADDRESS)
+}
+
+/// Storage key used for the max signatures per transaction key
+pub fn get_max_signatures_per_transaction_key() -> Key {
+    get_max_signatures_per_transaction_key_at_addr(ADDRESS)
 }

@@ -3,6 +3,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::ledger::tx::dump_tx;
 use namada::ledger::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
@@ -67,7 +68,7 @@ pub async fn main() -> Result<()> {
                     tx::submit_ibc_transfer::<HttpClient>(&client, ctx, args)
                         .await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
@@ -76,8 +77,10 @@ pub async fn main() -> Result<()> {
                         .await
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
-                    tx::submit_update_vp::<HttpClient>(&client, &mut ctx, args)
-                        .await?;
+                    tx::submit_update_account::<HttpClient>(
+                        &client, &mut ctx, args,
+                    )
+                    .await?;
                 }
                 Sub::TxInitAccount(TxInitAccount(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -213,26 +216,51 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
-                    let (mut tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
+
+                    let default_signer =
+                        signing::signer_from_address(Some(args.sender.clone()));
+                    let signing_data = signing::aux_signing_data(
                         &client,
                         &mut ctx.wallet,
-                        args,
-                    )
-                    .await
-                    .unwrap();
-                    tx::submit_reveal_aux(
-                        &client,
-                        &mut ctx,
-                        &tx_args,
-                        addr,
-                        pk.clone(),
-                        &mut tx,
+                        &args.tx,
+                        &args.sender,
+                        default_signer,
                     )
                     .await?;
-                    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk)
+
+                    let tx_builder = bridge_pool::build_bridge_pool_tx(
+                        &client,
+                        args.clone(),
+                        signing_data.fee_payer.clone(),
+                    )
+                    .await?;
+
+                    if args.tx.dump_tx {
+                        dump_tx(&args.tx, tx_builder);
+                    } else {
+                        tx::submit_reveal_aux(
+                            &client,
+                            &mut ctx,
+                            tx_args.clone(),
+                            &args.sender,
+                        )
                         .await?;
-                    sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
+
+                        let tx_builder = signing::sign_tx(
+                            &mut ctx.wallet,
+                            &tx_args,
+                            tx_builder,
+                            signing_data,
+                        )?;
+
+                        sdk_tx::process_tx(
+                            &client,
+                            &mut ctx.wallet,
+                            &tx_args,
+                            tx_builder,
+                        )
                         .await?;
+                    }
                 }
                 Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -462,6 +490,16 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
+                }
+                Sub::QueryAccount(QueryAccount(args)) => {
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_account(&client, args).await;
                 }
             }
         }

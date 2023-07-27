@@ -70,10 +70,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key_schema = PublicKey::schema_container();
     // TODO update after <https://github.com/anoma/namada/issues/225>
     let signature_schema = Signature::schema_container();
-    let init_account_schema = transaction::InitAccount::schema_container();
-    let init_validator_schema = transaction::InitValidator::schema_container();
+    let init_account_schema =
+        transaction::account::InitAccount::schema_container();
+    let init_validator_schema =
+        transaction::pos::InitValidator::schema_container();
     let token_transfer_schema = token::Transfer::schema_container();
-    let update_vp_schema = transaction::UpdateVp::schema_container();
+    let update_account =
+        transaction::account::UpdateAccount::schema_container();
     let pos_bond_schema = pos::Bond::schema_container();
     let pos_withdraw_schema = pos::Withdraw::schema_container();
     let wrapper_tx_schema = transaction::WrapperTx::schema_container();
@@ -98,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     definitions.extend(init_account_schema.definitions);
     definitions.extend(init_validator_schema.definitions);
     definitions.extend(token_transfer_schema.definitions);
-    definitions.extend(update_vp_schema.definitions);
+    definitions.extend(update_account.definitions);
     definitions.extend(pos_bond_schema.definitions);
     definitions.extend(pos_withdraw_schema.definitions);
     definitions.extend(wrapper_tx_schema.definitions);
@@ -179,11 +182,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Transfer.html");
     tables.push(token_transfer_table);
 
-    let update_vp_definition =
-        definitions.remove(&update_vp_schema.declaration).unwrap();
-    let update_vp_table =
-        definition_to_table(update_vp_schema.declaration, update_vp_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.UpdateVp.html");
-    tables.push(update_vp_table);
+    let update_account_definition =
+        definitions.remove(&update_account.declaration).unwrap();
+    let update_accoun_table =
+        definition_to_table(update_account.declaration, update_account_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.UpdateVp.html");
+    tables.push(update_accoun_table);
 
     let pos_bond_definition =
         definitions.remove(&pos_bond_schema.declaration).unwrap();

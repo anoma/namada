@@ -482,6 +482,7 @@ mod tests {
     use crate::proto::{Code, Data};
     use crate::types::hash::Hash;
     use crate::types::transaction::TxType;
+    use crate::types::tx::TxBuilder;
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
@@ -617,18 +618,21 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let input = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(input));
+
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(vec![])
+            .add_serialized_data(input)
+            .build();
+
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
-        let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
-        outer_tx.set_code(Code::new(vec![]));
-        outer_tx.set_data(Data::new(tx_data));
+
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
@@ -652,18 +656,17 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(input));
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let tx = tx_builder.add_code(vec![]).add_data(input).build();
+
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
-        let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
-        outer_tx.set_data(Data::new(tx_data));
-        outer_tx.set_code(Code::new(vec![]));
+
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
@@ -1022,18 +1025,21 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let input = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(input));
-        tx.set_code(Code::new(vec![]));
+
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(vec![])
+            .add_serialized_data(input)
+            .build();
+
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
             input: tx,
         };
-        let tx_data = eval_vp.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
-        outer_tx.header.chain_id = storage.chain_id.clone();
-        outer_tx.set_data(Data::new(tx_data));
-        outer_tx.set_code(Code::new(vec![]));
+
+        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
+        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
             &code_hash,

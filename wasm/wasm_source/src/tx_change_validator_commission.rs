@@ -21,15 +21,15 @@ mod tests {
 
     use namada::ledger::pos::{PosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
-    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
-    use namada::types::transaction::TxType;
+    use namada::types::tx::TxBuilder;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
     use namada_tests::tx::*;
     use namada_tx_prelude::address::testing::arb_established_address;
+    use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
@@ -87,14 +87,14 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(tx_data));
-        tx.set_code(Code::new(tx_code));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash(), *tx.code_sechash()],
-            &key,
-        )));
-        let signed_tx = tx.clone();
+        let tx_builder = TxBuilder::new(ChainId::default(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_fee_payer(key)
+            .build();
+
+        let signed_tx = tx;
 
         // Read the data before the tx is executed
         let commission_rate_handle =
