@@ -146,7 +146,7 @@ jobs:
           BUCKET_NAME: namada-wasm-master
           AWS_REGION: eu-west-1
 
-  namada:
+  unit-and-integration-tests:
     runs-on: 
       group: gians-runners
     timeout-minutes: 80
@@ -238,6 +238,12 @@ jobs:
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Download MASP parameters
+        run: |
+          mkdir -p /home/runner/.masp-params
+          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -246,9 +252,10 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Check crates build with default features
         run: make check-crates
-      - name: Run unit test
-        run: make test-unit-coverage${{ matrix.make.suffix }}
+      - name: Run unit and integration tests
+        run: make test-coverage${{ matrix.make.suffix }}
         env:
+          NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
         uses: actions/upload-artifact@v3
@@ -386,6 +393,7 @@ jobs:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
+        comet_bft: [0.37.2]
         make:
           - name: e2e
             suffix: ''
@@ -488,6 +496,12 @@ jobs:
         run: make build-test
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Download MASP parameters
+        run: |
+          mkdir -p /home/runner/.masp-params
+          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Wait for release binaries
         uses: lewagon/wait-on-check-action@v1.2.0
         with:
@@ -508,7 +522,7 @@ jobs:
           path: ./target/release/
       - name: Download CometBFT
         run: |
-          curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v0.37.2/cometbft_0.37.2_linux_amd64.tar.gz
+          curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
       - name: Change permissions
@@ -522,6 +536,7 @@ jobs:
         run: |
           python3 .github/workflows/scripts/schedule-e2e.py
         env:
+          NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"

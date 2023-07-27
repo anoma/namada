@@ -1,6 +1,5 @@
 //! CLI input types can be used for command arguments
 
-use std::collections::{HashMap, HashSet};
 use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -8,7 +7,6 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
-use namada::ledger::wallet::store::AddressVpType;
 use namada::ledger::wallet::Wallet;
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
@@ -193,32 +191,6 @@ impl Context {
     /// Read the given WASM file from the WASM directory or an absolute path.
     pub fn read_wasm(&self, file_name: impl AsRef<Path>) -> Vec<u8> {
         wasm_loader::read_wasm_or_exit(self.wasm_dir(), file_name)
-    }
-
-    /// Try to find an alias for a given address from the wallet. If not found,
-    /// formats the address into a string.
-    pub fn lookup_alias(&self, addr: &Address) -> String {
-        match self.wallet.find_alias(addr) {
-            Some(alias) => alias.to_string(),
-            None => addr.to_string(),
-        }
-    }
-
-    /// Get addresses with tokens VP type.
-    pub fn tokens(&self) -> HashSet<Address> {
-        self.wallet.get_addresses_with_vp_type(AddressVpType::Token)
-    }
-
-    /// Get addresses with tokens VP type associated with their aliases.
-    pub fn tokens_with_aliases(&self) -> HashMap<Address, String> {
-        self.wallet
-            .get_addresses_with_vp_type(AddressVpType::Token)
-            .into_iter()
-            .map(|addr| {
-                let alias = self.lookup_alias(&addr);
-                (addr, alias)
-            })
-            .collect()
     }
 }
 
