@@ -168,18 +168,16 @@ where
                 .wl_storage
                 .write(&pending_execution_key, ())
                 .expect("Should be able to write to storage.");
-            let tx_result = protocol::dispatch_tx(
+            let tx_result = protocol::apply_wasm_tx(
                 tx,
-                &vec![],
-                TxIndex::default(),
-                &mut TxGasMeter::new_from_micro_limit(u64::MAX.into()), /* No gas limit for
-                                                                         * governance proposals */
-                gas_table,
-                &mut shell.wl_storage.write_log,
-                &mut shell.wl_storage,
-                &mut shell.vp_wasm_cache,
-                &mut shell.tx_wasm_cache,
-                None,
+                &TxIndex::default(),
+                ShellParams::new(
+                    &mut TxGasMeter::new_from_micro_limit(u64::MAX.into()), // No gas limit for governance proposal
+                    gas_table,
+                    &mut shell.wl_storage,
+                    &mut shell.vp_wasm_cache,
+                    &mut shell.tx_wasm_cache,
+                ),
                 #[cfg(not(feature = "mainnet"))]
                 false,
             );

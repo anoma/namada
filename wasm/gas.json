@@ -1,5 +1,6 @@
 {
     "tx_bond.wasm": 160,
+    "tx_bridge_pool.wasm": 100,
     "tx_change_validator_commission.wasm": 220,
     "tx_ibc.wasm": 1240,
     "tx_init_account.wasm": 230,

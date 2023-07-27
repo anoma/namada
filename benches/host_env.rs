@@ -4,6 +4,7 @@ use namada::core::types::address;
 use namada::core::types::key::RefTo;
 use namada::core::types::token::{Amount, Transfer};
 use namada::proto::Section;
+use namada::types::token::DenominatedAmount;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, TX_TRANSFER_WASM};
 
@@ -14,8 +15,7 @@ fn tx_signature_validation(c: &mut Criterion) {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(500),
+            amount: Amount::native_whole(500).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -24,13 +24,13 @@ fn tx_signature_validation(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let data_hash = tx.data_sechash();
+    let data_hash = [tx.data_sechash().to_owned()];
 
     c.bench_function("tx_signature_validation", |b| {
         b.iter(|| {
             tx.verify_signature(
                 &defaults::albert_keypair().ref_to(),
-                &data_hash,
+                &data_hash[..],
             )
             .unwrap()
         })

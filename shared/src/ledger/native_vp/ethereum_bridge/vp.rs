@@ -255,18 +255,17 @@ pub(super) fn check_balance_changes(
         .read_pre_value::<Amount>(receiver)?
         .unwrap_or_default()
         .change();
-    let receiver_balance_post = match reader
-        .read_post_value::<Amount>(receiver)?
-    {
-        Some(value) => value,
-        None => {
-            return Err(eyre!(
+    let receiver_balance_post =
+        match reader.read_post_value::<Amount>(receiver)? {
+            Some(value) => value,
+            None => {
+                return Err(eyre!(
                 "Rejecting transaction as could not read_post balance key {}",
                 receiver,
             ));
+            }
         }
-    }
-    .change();
+        .change();
 
     let sender_balance_delta =
         calculate_delta(sender_balance_pre, sender_balance_post)?;
@@ -336,6 +335,7 @@ mod tests {
     use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
@@ -428,7 +428,9 @@ mod tests {
             write_log,
             tx,
             &TxIndex(0),
-            VpGasMeter::new(0u64),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro_limit(
+                u64::MAX.into(),
+            )),
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),

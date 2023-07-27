@@ -97,8 +97,10 @@ where
 
     use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
     use namada_core::ledger::parameters;
+    use namada_core::ledger::storage::TempWlStorage;
     use namada_core::types::transaction::DecryptedTx;
 
+    use crate::ledger::protocol::{self, ShellParams};
     use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
@@ -112,10 +114,9 @@ where
         .expect("Missing gas table in storage");
 
     let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-<<<<<<< HEAD
-    tx.validate_header().into_storage_result()?;
+    tx.validate_tx().into_storage_result()?;
 
-    let mut write_log = WriteLog::default();
+    let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
     let mut cumulated_gas = Gas::default();
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
@@ -123,23 +124,24 @@ where
         TxType::Wrapper(wrapper) => {
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.to_owned().into());
-            protocol::apply_tx(
-                tx.to_owned(),
+            protocol::apply_wrapper_tx(
+                &wrapper,
+                None,
                 &request.data,
-                TxIndex::default(),
-                &mut tx_gas_meter,
-                &gas_table,
-                &mut write_log,
-                &ctx.wl_storage.storage,
-                &mut ctx.vp_wasm_cache,
-                &mut ctx.tx_wasm_cache,
+                ShellParams::new(
+                    &mut tx_gas_meter,
+                    &gas_table,
+                    &mut temp_wl_storage,
+                    &mut ctx.vp_wasm_cache,
+                    &mut ctx.tx_wasm_cache,
+                ),
                 None,
                 #[cfg(not(feature = "mainnet"))]
                 false,
             )
             .into_storage_result()?;
 
-            write_log.commit_tx();
+            temp_wl_storage.write_log.commit_tx();
             cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
@@ -179,17 +181,16 @@ where
         }
     };
 
-    let mut data = protocol::apply_wasm_tx( //FIXME: shouldn't this be dispatch_wasm_tx?
+    let mut data = protocol::apply_wasm_tx(
         tx,
-        &vec![],
         &TxIndex(0),
-                &mut tx_gas_meter,
-                &gas_table,
-        ShellParams::DryRun {
-            storage: &ctx.wl_storage.storage,
-            vp_wasm_cache: &mut ctx.vp_wasm_cache,
-            tx_wasm_cache: &mut ctx.tx_wasm_cache,
-        },
+        ShellParams::new(
+            &mut tx_gas_meter,
+            &gas_table,
+            &mut temp_wl_storage,
+            &mut ctx.vp_wasm_cache,
+            &mut ctx.tx_wasm_cache,
+        ),
         #[cfg(not(feature = "mainnet"))]
         true,
     )

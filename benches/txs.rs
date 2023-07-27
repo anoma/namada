@@ -16,7 +16,7 @@ use namada::proto::{Code, Section, Signature, Tx};
 use namada::types::chain::ChainId;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
-use namada::types::key::{ed25519, secp256k1};
+use namada::types::key::{ed25519, secp256k1, PublicKey};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Key;
 use namada::types::transaction::governance::{
@@ -37,16 +37,16 @@ use namada_benches::{
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rust_decimal::Decimal;
 use sha2::Digest;
 
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
+//FIXME: need to benchmark tx_bridge_pool.wasm
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
-    let amount = Amount::whole(500);
+    let amount = Amount::native_whole(500);
 
     for bench_name in ["transparent", "shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
@@ -128,7 +128,7 @@ fn bond(c: &mut Criterion) {
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         },
         None,
@@ -140,7 +140,7 @@ fn bond(c: &mut Criterion) {
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: None,
         },
         None,
@@ -170,7 +170,7 @@ fn unbond(c: &mut Criterion) {
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         },
         None,
@@ -182,7 +182,7 @@ fn unbond(c: &mut Criterion) {
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: None,
         },
         None,
@@ -245,7 +245,7 @@ fn withdraw(c: &mut Criterion) {
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
-                                amount: Amount::whole(1000),
+                                amount: Amount::native_whole(1000),
                                 source: Some(defaults::albert_address()),
                             },
                             None,
@@ -256,7 +256,7 @@ fn withdraw(c: &mut Criterion) {
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
-                                amount: Amount::whole(1000),
+                                amount: Amount::native_whole(1000),
                                 source: None,
                             },
                             None,
@@ -400,7 +400,7 @@ fn init_proposal(c: &mut Criterion) {
                             TX_INIT_PROPOSAL_WASM,
                             InitProposalData {
                                 id: None,
-                                content: vec![],
+                                content: Hash::zero(),
                                 author: defaults::albert_address(),
                                 r#type: ProposalType::Default(None),
                                 voting_start_epoch: 12.into(),
@@ -416,7 +416,7 @@ fn init_proposal(c: &mut Criterion) {
         governance::storage::get_max_proposal_code_size_key();
                             let max_proposal_content_key =
         governance::storage::get_max_proposal_content_key();
-                            let max_code_size = shell
+                            let max_code_size: u64 = shell
                                 .wl_storage
                                 .read(&max_code_size_key)
                                 .expect("Error while reading from storage")
@@ -424,7 +424,7 @@ fn init_proposal(c: &mut Criterion) {
                                     "Missing max_code_size parameter in \
                                      storage",
                                 );
-                            let max_proposal_content_size = shell
+                            let max_proposal_content_size: u64 = shell
                                 .wl_storage
                                 .read(&max_proposal_content_key)
                                 .expect("Error while reading from storage")
@@ -433,14 +433,15 @@ fn init_proposal(c: &mut Criterion) {
                                      in storage",
                                 );
 
+                            //FIXME: put the wasm code in extra section
                             generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: Some(1),
-                                    content: vec![0; max_proposal_content_size],
+                                    content: Hash::zero(),
                                     author: defaults::albert_address(),
                                     r#type: ProposalType::Default(Some(
-                                        vec![0; max_code_size],
+                                        Hash::zero(),
                                     )),
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
@@ -517,6 +518,20 @@ fn init_validator(c: &mut Criterion) {
             .unwrap()
             .to_public();
 
+    let eth_cold_key = secp256k1::PublicKey::try_from_pk(
+        &secp256k1::SigScheme::generate(&mut csprng)
+            .try_to_sk::<common::SecretKey>()
+            .unwrap()
+            .to_public(),
+    )
+    .unwrap();
+    let eth_hot_key = secp256k1::PublicKey::try_from_pk(
+        &secp256k1::SigScheme::generate(&mut csprng)
+            .try_to_sk::<common::SecretKey>()
+            .unwrap()
+            .to_public(),
+    )
+    .unwrap();
     let protocol_key: common::PublicKey =
         secp256k1::SigScheme::generate(&mut csprng)
             .try_to_sk::<common::SecretKey>()
@@ -544,10 +559,12 @@ fn init_validator(c: &mut Criterion) {
     let data = InitValidator {
         account_key: defaults::albert_keypair().to_public(),
         consensus_key,
+        eth_cold_key,
+        eth_hot_key,
         protocol_key,
         dkg_key,
-        commission_rate: Decimal::default(),
-        max_commission_rate_change: Decimal::default(),
+        commission_rate: namada::types::dec::Dec::default(),
+        max_commission_rate_change: namada::types::dec::Dec::default(),
         validator_vp_code_hash: extra_hash,
     };
     let tx = generate_tx(
@@ -572,7 +589,7 @@ fn change_validator_commission(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: Decimal::new(6, 2),
+            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,
@@ -627,6 +644,20 @@ fn unjail_validator(c: &mut Criterion) {
                         .unwrap()
                         .to_public();
 
+                let eth_cold_key = secp256k1::PublicKey::try_from_pk(
+                    &secp256k1::SigScheme::generate(&mut csprng)
+                        .try_to_sk::<common::SecretKey>()
+                        .unwrap()
+                        .to_public(),
+                )
+                .unwrap();
+                let eth_hot_key = secp256k1::PublicKey::try_from_pk(
+                    &secp256k1::SigScheme::generate(&mut csprng)
+                        .try_to_sk::<common::SecretKey>()
+                        .unwrap()
+                        .to_public(),
+                )
+                .unwrap();
                 let protocol_key: common::PublicKey =
                     secp256k1::SigScheme::generate(&mut csprng)
                         .try_to_sk::<common::SecretKey>()
@@ -653,10 +684,13 @@ fn unjail_validator(c: &mut Criterion) {
                 let data = InitValidator {
                     account_key: defaults::albert_keypair().to_public(),
                     consensus_key,
+                    eth_cold_key,
+                    eth_hot_key,
                     protocol_key,
                     dkg_key,
-                    commission_rate: Decimal::default(),
-                    max_commission_rate_change: Decimal::default(),
+                    commission_rate: namada::types::dec::Dec::default(),
+                    max_commission_rate_change:
+                        namada::types::dec::Dec::default(),
                     validator_vp_code_hash: extra_hash,
                 };
                 let tx = generate_tx(
@@ -681,6 +715,7 @@ fn unjail_validator(c: &mut Criterion) {
                     0u64,
                     SlashType::DuplicateVote,
                     &defaults::validator_address(),
+                    current_epoch.next(),
                 )
                 .unwrap();
 

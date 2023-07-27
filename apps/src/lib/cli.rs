@@ -2288,6 +2288,7 @@ pub mod args {
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     pub use namada::ledger::args::*;
+    use namada::ledger::rpc::format_denominated_amount;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
@@ -2387,7 +2388,6 @@ pub mod args {
         arg_opt("fee-amount");
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FORCE: ArgFlag = flag("force");
-    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(200)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
@@ -2704,7 +2704,11 @@ pub mod args {
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let gas_amount = FEE_AMOUNT.parse(matches).amount;
+            let gas_amount = FEE_AMOUNT
+                .parse(matches)
+                .map_or_else(token::Amount::default, |denom_amount| {
+                    denom_amount.amount
+                });
             let gas_payer = FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
@@ -4409,7 +4413,7 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
-                .arg(DISPOSABLE_SIGNING_KEY.def().about("Generates an ephimeral, disposable keypair to sign the wrapper transaction. This keypair will be immediately discarded after use.").requires(FEE_UNSHIELD_SPENDING_KEY.name))
+                .arg(DISPOSABLE_SIGNING_KEY.def().help("Generates an ephimeral, disposable keypair to sign the wrapper transaction. This keypair will be immediately discarded after use.").requires(FEE_UNSHIELD_SPENDING_KEY.name))
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -4454,7 +4458,7 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let fee_amount =
-                InputAmount::Unvalidated(FEE_AMOUNT.parse(matches));
+                FEE_AMOUNT.parse(matches).map(InputAmount::Unvalidated);
             let fee_token = FEE_TOKEN.parse(matches);
             let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);

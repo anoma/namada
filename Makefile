@@ -42,7 +42,7 @@ crates += namada_vm_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build $(jobs) --exclude namada_benchmarks
+	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
@@ -64,8 +64,7 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check --workspace --exclude namada_benchmarks && \
-	$(cargo) +$(nightly) check --benches -Z unstable-options && \
+	$(cargo) check && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true

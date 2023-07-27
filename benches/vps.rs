@@ -31,7 +31,6 @@ use namada_benches::{
     TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM,
     VP_VALIDATOR_WASM, WASM_DIR,
 };
-use rust_decimal::Decimal;
 use sha2::Digest;
 
 const VP_USER_WASM: &str = "vp_user.wasm";
@@ -55,8 +54,7 @@ fn vp_user(c: &mut Criterion) {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -71,8 +69,7 @@ fn vp_user(c: &mut Criterion) {
             source: defaults::bertha_address(),
             target: defaults::albert_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -119,7 +116,7 @@ fn vp_user(c: &mut Criterion) {
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         },
         None,
@@ -196,8 +193,7 @@ fn vp_implicit(c: &mut Criterion) {
             source: Address::from(&implicit_account.to_public()),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(500),
+            amount: Amount::native_whole(500).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -212,8 +208,7 @@ fn vp_implicit(c: &mut Criterion) {
             source: defaults::bertha_address(),
             target: Address::from(&implicit_account.to_public()),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -234,7 +229,7 @@ fn vp_implicit(c: &mut Criterion) {
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: Some(Address::from(&implicit_account.to_public())),
         },
         None,
@@ -342,8 +337,7 @@ fn vp_validator(c: &mut Criterion) {
             source: defaults::validator_address(),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -358,8 +352,7 @@ fn vp_validator(c: &mut Criterion) {
             source: defaults::bertha_address(),
             target: defaults::validator_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -390,7 +383,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: Decimal::new(6, 2),
+            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,
@@ -414,7 +407,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: None,
         },
         None,
@@ -488,8 +481,7 @@ fn vp_token(c: &mut Criterion) {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -540,7 +532,7 @@ fn vp_token(c: &mut Criterion) {
 fn vp_masp(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_masp");
 
-    let amount = Amount::whole(500);
+    let amount = Amount::native_whole(500);
 
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {

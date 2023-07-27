@@ -292,7 +292,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn verify_tx_section_signature(
         &self,
         pk: &crate::key::common::PublicKey,
-        section_hash: &Hash,
+        section_hash: &Vec<Hash>,
     ) -> Result<bool, Error> {
         let pk = pk.try_to_vec().unwrap();
         let hash = section_hash.try_to_vec().unwrap();

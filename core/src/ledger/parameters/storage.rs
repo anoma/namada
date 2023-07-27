@@ -140,36 +140,17 @@ pub fn get_tx_whitelist_storage_key() -> Key {
 
 /// Storage key used for gas cost.
 pub fn get_gas_table_storage_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(Keys::VALUES.gas_table.to_string()),
-        ],
-    }
+    get_gas_table_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the fee unshielding gas limit
 pub fn get_fee_unshielding_gas_limit_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(
-                Keys::VALUES.fee_unshielding_gas_limit.to_string(),
-            ),
-        ],
-    }
+    get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the fee unshielding descriptions limit
 pub fn get_fee_unshielding_descriptions_limit_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(
-                Keys::VALUES.fee_unshielding_descriptions_limit.to_string(),
-            ),
-        ],
-    }
+    get_fee_unshielding_descriptions_limit_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for max_epected_time_per_block parameter.
@@ -214,12 +195,7 @@ pub fn get_max_proposal_bytes_key() -> Key {
 
 /// Storage key used for the max block gas.
 pub fn get_max_block_gas_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(Keys::VALUES.max_block_gas.to_string()),
-        ],
-    }
+    get_max_block_gas_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for faucet account.
@@ -227,13 +203,7 @@ pub fn get_faucet_account_key() -> Key {
     get_faucet_account_key_at_addr(ADDRESS)
 }
 
-//FIXME: use functions
 /// Storage key used for the gas cost table
 pub fn get_gas_cost_key() -> Key {
-    Key {
-        segments: vec![
-            DbKeySeg::AddressSeg(ADDRESS),
-            DbKeySeg::StringSeg(Keys::VALUES.gas_cost.to_string()),
-        ],
-    }
+    get_gas_cost_key_at_addr(ADDRESS)
 }

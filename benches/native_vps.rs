@@ -18,7 +18,7 @@ use namada::ibc::signer::Signer;
 use namada::ibc::tx_msg::Msg;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance;
-use namada::ledger::ibc::vp::{Ibc, IbcToken};
+use namada::ledger::ibc::vp::Ibc;
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::slash_fund::SlashFundVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
@@ -125,7 +125,7 @@ fn governance(c: &mut Criterion) {
                 TX_INIT_PROPOSAL_WASM,
                 InitProposalData {
                     id: None,
-                    content: vec![],
+                    content: namada::types::hash::Hash::zero(),
                     author: defaults::albert_address(),
                     r#type: ProposalType::Default(None),
                     voting_start_epoch: 12.into(),
@@ -141,12 +141,12 @@ fn governance(c: &mut Criterion) {
                     governance::storage::get_max_proposal_code_size_key();
                 let max_proposal_content_key =
                     governance::storage::get_max_proposal_content_key();
-                let max_code_size = shell
+                let max_code_size: u64 = shell
                     .wl_storage
                     .read(&max_code_size_key)
                     .expect("Error while reading from storage")
                     .expect("Missing max_code_size parameter in storage");
-                let max_proposal_content_size = shell
+                let max_proposal_content_size: u64 = shell
                     .wl_storage
                     .read(&max_proposal_content_key)
                     .expect("Error while reading from storage")
@@ -158,12 +158,11 @@ fn governance(c: &mut Criterion) {
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: Some(1),
-                        content: vec![0; max_proposal_content_size],
+                        content: namada::types::hash::Hash::zero(),
                         author: defaults::albert_address(),
-                        r#type: ProposalType::Default(Some(vec![
-                            0;
-                            max_code_size
-                        ])),
+                        r#type: ProposalType::Default(Some(
+                            namada::types::hash::Hash::zero(),
+                        )),
                         voting_start_epoch: 12.into(),
                         voting_end_epoch: 15.into(),
                         grace_epoch: 18.into(),
@@ -216,6 +215,13 @@ fn governance(c: &mut Criterion) {
     group.finish();
 }
 
+//FIXME: missing native vps
+//    - pos
+//    - parameters
+//    - multitoken
+//    - eth bridge
+//    - eth bridge pool
+
 fn slash_fund(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_slash_fund");
 
@@ -227,7 +233,7 @@ fn slash_fund(c: &mut Criterion) {
         TX_INIT_PROPOSAL_WASM,
         InitProposalData {
             id: None,
-            content: vec![],
+            content: namada::types::hash::Hash::zero(),
             author: defaults::albert_address(),
             r#type: ProposalType::Default(None),
             voting_start_epoch: 12.into(),
@@ -370,66 +376,67 @@ fn ibc(c: &mut Criterion) {
     group.finish();
 }
 
-fn ibc_token(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_ibc_token");
+// //FIXME: turn this into multitoken bench
+// fn ibc_token(c: &mut Criterion) {
+//     let mut group = c.benchmark_group("vp_ibc_token");
 
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
-    let outgoing_transfer = generate_ibc_transfer_tx();
+//     let foreign_key_write =
+//         generate_foreign_key_tx(&defaults::albert_keypair());
+//     let outgoing_transfer = generate_ibc_transfer_tx();
 
-    for (signed_tx, bench_name) in [foreign_key_write, outgoing_transfer]
-        .iter()
-        .zip(["foreign_key_write", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
-        shell.init_ibc_channel();
+//     for (signed_tx, bench_name) in [foreign_key_write, outgoing_transfer]
+//         .iter()
+//         .zip(["foreign_key_write", "outgoing_transfer"])
+//     {
+//         let mut shell = BenchShell::default();
+//         shell.init_ibc_channel();
 
-        shell.execute_tx(signed_tx);
+//         shell.execute_tx(signed_tx);
 
-        let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
-            .verifiers_and_changed_keys(&BTreeSet::default());
+//         let (verifiers, keys_changed) = shell
+//             .wl_storage
+//             .write_log
+//             .verifiers_and_changed_keys(&BTreeSet::default());
 
-        let ibc_token_address =
-            namada::core::types::address::InternalAddress::ibc_token_address(
-                PortId::transfer().to_string(),
-                ChannelId::new(5).to_string(),
-                &address::nam(),
-            );
-        let internal_address = Address::Internal(ibc_token_address);
+//         let ibc_token_address =
+//             namada::core::types::address::InternalAddress::ibc_token_address(
+//                 PortId::transfer().to_string(),
+//                 ChannelId::new(5).to_string(),
+//                 &address::nam(),
+//             );
+//         let internal_address = Address::Internal(ibc_token_address);
 
-        let ibc = IbcToken {
-            ctx: Ctx::new(
-                &internal_address,
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
-                signed_tx,
-                &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(
-                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
-                ),
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+//         let ibc = IbcToken {
+//             ctx: Ctx::new(
+//                 &internal_address,
+//                 &shell.wl_storage.storage,
+//                 &shell.wl_storage.write_log,
+//                 signed_tx,
+//                 &TxIndex(0),
+//                 VpGasMeter::new_from_tx_meter(
+//                     &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+//                 ),
+//                 &keys_changed,
+//                 &verifiers,
+//                 shell.vp_wasm_cache.clone(),
+//             ),
+//         };
 
-        group.bench_function(bench_name, |b| {
-            b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
-                        &signed_tx,
-                        ibc.ctx.keys_changed,
-                        ibc.ctx.verifiers,
-                    )
-                    .unwrap())
-            })
-        });
-    }
+//         group.bench_function(bench_name, |b| {
+//             b.iter(|| {
+//                 assert!(ibc
+//                     .validate_tx(
+//                         &signed_tx,
+//                         ibc.ctx.keys_changed,
+//                         ibc.ctx.verifiers,
+//                     )
+//                     .unwrap())
+//             })
+//         });
+//     }
 
-    group.finish();
-}
+//     group.finish();
+// }
 
 criterion_group!(
     native_vps,
@@ -437,6 +444,6 @@ criterion_group!(
     governance,
     slash_fund,
     ibc,
-    ibc_token
+    // ibc_token //FIXME:
 );
 criterion_main!(native_vps);

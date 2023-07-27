@@ -7,7 +7,7 @@ pub mod merkle_tree;
 pub mod mockdb;
 pub mod traits;
 pub mod types;
-mod wl_storage;
+pub mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;

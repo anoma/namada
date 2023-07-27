@@ -1,74 +1,78 @@
 {
     "tx_bond.wasm": {
         "gas": "160",
-        "hash": "6e781606b2d46968e144f03c96b5fcf3ff4aef62952068588327f6e0d4dbd1e8"
+        "hash": "22fb21f507ef305d8cb872ba8d3ed351da726521d434c76da904f5c45fa20bc4"
+    },
+    "tx_bridge_pool.wasm": {
+        "gas": "100",
+        "hash": "b0f668338fa8da28c26f666103c1111f466c446d08f2ca23b1ac6298196cc082"
     },
     "tx_change_validator_commission.wasm": {
         "gas": "220",
-        "hash": "69ac743a652ecd0eaab7c1ae50b36b9644e5c762335aa4554e1069cd13366beb"
+        "hash": "977981f5d3d1a1e12fe792e7dd1d47e1c612886852a686f2cccf25ad419100de"
     },
     "tx_ibc.wasm": {
         "gas": "1240",
-        "hash": "a04d9f531b4b647d3ad47168f239de20990c2c34e6db4dda10ed2bfea882a011"
+        "hash": "3ba363eb4f5a38497eefaef8c59d98e14dfbf4ce8c2f67d4d2e4b94f0d1e99e7"
     },
     "tx_init_account.wasm": {
         "gas": "230",
-        "hash": "748955654cb5b64d7b1215416c382c7c57d07ae42b3617a96b528e9b8cc8f301"
+        "hash": "7facf5ddbea7e1cb244dabf00bae5d37f0bcf2928fd1fb3df4de31fa9e1a24ac"
     },
     "tx_init_proposal.wasm": {
         "gas": "40",
-        "hash": "81625df4fe0b0354e236a7ff6a52150c60c2bb445feab2129d3902bce9ef47f5"
+        "hash": "360638c96b30a1906763593edae4b3d54682f5ed3896f9586755578f19e1ebb9"
     },
     "tx_init_validator.wasm": {
         "gas": "730",
-        "hash": "d99920ec0ed6ff307e741a4e5aafbf0b58286ba0e0072a4d7d659e5d0b311b54"
+        "hash": "48e3778e0d45d50fb196cc53fec2c83e3c1ce62c1426d71c2ffe166bc1b99364"
     },
     "tx_reveal_pk.wasm": {
         "gas": "170",
-        "hash": "ddad5b301e324d6290690782a93889b40f058b4b809eac73e299c22b582a47f7"
+        "hash": "d7fb81c19ee2f245c63e7ebb42ca730baab4b8d8012cd6911c054cf5a9c5b0e5"
     },
     "tx_transfer.wasm": {
         "gas": "110",
-        "hash": "bbddd5216a8b1fcb781bf25107e1ef855b178bbf8df951eff83505902a59327c"
+        "hash": "a543239e5764458cd87c118f1f6d52a2bee9bd8d719c2c657c533ceaf4597b99"
     },
     "tx_unbond.wasm": {
         "gas": "430",
-        "hash": "dc8cf553423c4f4e2019b6800af15f6fd38b25e8bb90541721b19a32c2264573"
+        "hash": "72c97b0c79f39cb0587bdf3137e3c6fe59239199654eae06bf75e23b99f289fe"
+    },
+    "tx_unjail_validator.wasm": {
+        "gas": "340",
+        "hash": "e15f110780d5b0ae21359fa1796c44ce66c48974c60c2346c4cac2a23f490f3f"
     },
     "tx_update_vp.wasm": {
         "gas": "140",
-        "hash": "468cc8579779c67b6cc0d79ee83fb61419eabfa2766f8f755f789922f94a00b8"
+        "hash": "718e947906e04f4f9381281ddfa2c3b22b114daf390391ae2f3b57d145ae5868"
     },
     "tx_vote_proposal.wasm": {
         "gas": "120",
-        "hash": "1ba563f2eb68140f7c3332e417558fc15228c522afde7fd73bb1b799f93757a0"
+        "hash": "0babe6dcb573fe1ed9e1fe32ec1d2a67605ec4e8273946eeae4bbb6fac6acc10"
     },
     "tx_withdraw.wasm": {
         "gas": "260",
-        "hash": "59e95cd6256526251ba9c068ce21afb95814bda7eaf00b054ac1735a630bd758"
+        "hash": "b148b65452ac5e35d25212b70a064a76709f2faa0ea841807ceffca802c68251"
     },
     "vp_implicit.wasm": {
         "gas": "40",
-        "hash": "9645af751ecb888ee3251674c62f7bcec0430154cb301ea502d6502c92d7efb2"
+        "hash": "081c68841acf2892d5a4d4f25231d70982e855847a60630ae4d190a98ea1777b"
     },
     "vp_masp.wasm": {
         "gas": "8030",
-        "hash": "e739eac7efb5e7c8db9620309598d1a113c7105130ef5824d0b462a6f9d12272"
+        "hash": "17939071bea3637da9bcc82ed813a5461f61e9b85368573fad3f7709ac3436ae"
     },
     "vp_testnet_faucet.wasm": {
         "gas": "0",
-        "hash": "ba583fc27664cdc0358ae2983e25cf23979d82358d221dfd20c79f8ec206c3b1"
-    },
-    "vp_token.wasm": {
-        "gas": "30",
-        "hash": "47e81c8b344d5e5debcbc79d0e2ffd88d879390886c3dfb3e615ebff9bf2604a"
+        "hash": "fa891f05c218d11e9b92efa25b443122e39fdc84f427895d5aafaa7ecb6b0c57"
     },
     "vp_user.wasm": {
         "gas": "60",
-        "hash": "4c9b7a9f7e6e181bd402a238e3a09514d9f245304684d5075abb07987ffaf22c"
+        "hash": "24f74168287aaaf774f804da6f5578afa2212bfe2bba150bedf19cc370a2dd4c"
     },
     "vp_validator.wasm": {
         "gas": "50",
-        "hash": "41432a1a62d77f626521f840f6b91f435e03c218911ec523083080ff478c1362"
+        "hash": "1e2d95005e9334678bd84c65c8f617323a3fbebe23b0c4c66b32d4d43d5aaef9"
     }
 }

@@ -239,8 +239,18 @@ where
             n_txs = req.txs.len(),
             "Received block proposal",
         );
-        let (tx_results, meta) =
-            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
+        let native_block_proposer_address = {
+            let tm_raw_hash_string =
+                tm_raw_hash_to_string(&req.proposer_address);
+            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+                .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash")
+        };
+
+        let (tx_results, meta) = self.process_txs(
+            &req.txs,
+            self.get_block_timestamp(req.time),
+            &native_block_proposer_address,
+        );
 
         // Erroneous transactions were detected when processing
         // the leader's proposal. We allow txs that do not
@@ -444,7 +454,7 @@ where
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
     #[allow(clippy::too_many_arguments)]
-    pub fn check_proposal_tx<'a>(
+    pub fn check_proposal_tx<'a, CA>(
         &self,
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a TxInQueue>,
@@ -777,7 +787,7 @@ where
                             // Tx gas (partial check)
                             let tx_hash = match tx
                                 .get_section(tx.code_sechash())
-                                .and_then(Section::code_sec)
+                                .and_then(|hash| Section::code_sec(&hash))
                             {
                                 Some(code) => match code.code {
                                     Commitment::Hash(hash) => hash,
@@ -945,7 +955,7 @@ where
                             tx.get_section(hash)
                                 .map(|section| {
                                     if let Section::MaspTx(transaction) =
-                                        section
+                                        section.as_ref()
                                     {
                                         Some(transaction.to_owned())
                                     } else {
@@ -1687,7 +1697,6 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (shell, _) = test_utils::setup(1);
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1759,7 +1768,7 @@ mod test_process_proposal {
         );
         shell
             .wl_storage
-            .write(&balance_key, Amount::_nativewhole(99))
+            .write(&balance_key, Amount::native_whole(99))
             .unwrap();
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2678,7 +2687,7 @@ mod test_process_proposal {
     /// imposed by its wrapper is rejected.
     #[test]
     fn test_decrypted_gas_limit() {
-        let (mut shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2686,7 +2695,7 @@ mod test_process_proposal {
                 amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2703,7 +2712,7 @@ mod test_process_proposal {
             has_valid_pow: false,
         }));
         decrypted_tx.add_section(Section::Signature(Signature::new(
-            &decrypted_tx.header_hash(),
+            decrypted_tx.sechashes(),
             &keypair,
         )));
 
@@ -2733,7 +2742,7 @@ mod test_process_proposal {
     /// rejection
     #[test]
     fn test_exceeding_max_block_gas_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit: u64 = shell
             .wl_storage
@@ -2747,7 +2756,7 @@ mod test_process_proposal {
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             (block_gas_limit + 1).into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2758,7 +2767,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
@@ -2782,7 +2791,7 @@ mod test_process_proposal {
     // rejection
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2790,7 +2799,7 @@ mod test_process_proposal {
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2801,7 +2810,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
@@ -2824,14 +2833,14 @@ mod test_process_proposal {
     // Check that a wrapper using a non-whitelisted token for fee payment causes a block rejection
     #[test]
     fn test_fee_non_whitelisted_token() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
                 token: address::btc(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2842,7 +2851,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
         wrapper.encrypt(&Default::default());
@@ -2865,14 +2874,14 @@ mod test_process_proposal {
     // Check that a wrapper setting a fee amount lower than the minimum required causes a block rejection
     #[test]
     fn test_fee_wrong_minimum_amount() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2883,7 +2892,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
         wrapper.encrypt(&Default::default());
@@ -2906,14 +2915,14 @@ mod test_process_proposal {
     // Check that a wrapper transactions whose fees cannot be paid causes a block rejection
     #[test]
     fn test_insufficient_balance_for_fee() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 1_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2924,7 +2933,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
         wrapper.encrypt(&Default::default());
@@ -2947,14 +2956,14 @@ mod test_process_proposal {
     // Check that a fee overflow in the wrapper transaction causes a block rejection
     #[test]
     fn test_wrapper_fee_overflow() {
-        let (shell, _) = test_utils::setup(1);
+        let (mut shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: token::Amount::max(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2965,7 +2974,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
         wrapper.encrypt(&Default::default());
@@ -2996,13 +3005,14 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: 0.into(),
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             keypair.ref_to(),
             Epoch(0),
-            Default::default(),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();

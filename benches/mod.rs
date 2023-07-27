@@ -16,10 +16,12 @@
 
 use masp_primitives::transaction::Transaction;
 use masp_proofs::prover::LocalTxProver;
+use namada::ledger::args::InputAmount;
 use namada::ledger::masp;
 use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::tendermint_rpc::{self, HttpClient};
+use namada::types::token::DenominatedAmount;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -169,6 +171,7 @@ impl Default for BenchShell {
             WASM_DIR.into(),
             sender,
             None,
+            None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
             address::nam(),
@@ -191,7 +194,7 @@ impl Default for BenchShell {
         // Bond from Albert to validator
         let bond = Bond {
             validator: defaults::validator_address(),
-            amount: Amount::whole(1000),
+            amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         };
         let signed_tx = generate_tx(
@@ -217,7 +220,7 @@ impl Default for BenchShell {
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
                 id: None,
-                content: vec![],
+                content: namada::types::hash::Hash::zero(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
                 voting_start_epoch: 12.into(),
@@ -271,8 +274,6 @@ impl BenchShell {
             &mut self.wl_storage,
             current_epoch,
             current_epoch + pipeline_len,
-            &proof_of_stake::consensus_validator_set_handle(),
-            &proof_of_stake::below_capacity_validator_set_handle(),
         )
         .unwrap();
     }
@@ -441,13 +442,8 @@ pub fn generate_tx(
     }
 
     if let Some(signer) = signer {
-        // Sign over the transaction data
         tx.add_section(Section::Signature(Signature::new(
-            tx.data_sechash(),
-            signer,
-        )));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.code_sechash(),
+            tx.sechashes(),
             signer,
         )));
     }
@@ -495,10 +491,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         .try_to_vec()
         .unwrap(),
     ));
-    tx.add_section(Section::Signature(Signature::new(
-        &tx.header_hash(),
-        signer,
-    )));
+    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), signer)));
 
     tx
 }
@@ -506,7 +499,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
 pub fn generate_ibc_transfer_tx() -> Tx {
     let token = Coin {
         denom: address::nam().to_string(),
-        amount: Amount::whole(1000).to_string(),
+        amount: format!("{:?}", Amount::native_whole(1000)),
     };
 
     let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
@@ -561,8 +554,6 @@ pub struct BenchShieldedUtils {
 
 #[async_trait::async_trait(?Send)]
 impl ShieldedUtils for BenchShieldedUtils {
-    type C = BenchShell;
-
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = std::env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
             let params_dir = PathBuf::from(params_dir);
@@ -763,6 +754,7 @@ impl BenchShieldedCtx {
             wallet_alias_force: true,
             chain_id: None,
             tx_reveal_code_path: TX_REVEAL_PK_WASM.into(),
+            verification_key: None,
             password: None,
         };
 
@@ -771,8 +763,7 @@ impl BenchShieldedCtx {
             source: source.clone(),
             target: target.clone(),
             token: address::nam(),
-            sub_prefix: None,
-            amount,
+            amount: InputAmount::Validated(DenominatedAmount::native(amount)),
             native_token: self.shell.wl_storage.storage.native_token.clone(),
             tx_code_path: TX_TRANSFER_WASM.into(),
         };
@@ -808,8 +799,7 @@ impl BenchShieldedCtx {
                 source: source.effective_address(),
                 target: target.effective_address(),
                 token: address::nam(),
-                sub_prefix: None,
-                amount,
+                amount: DenominatedAmount::native(amount),
                 key: None,
                 shielded: shielded_section_hash,
             },

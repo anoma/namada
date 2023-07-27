@@ -1,6 +1,6 @@
 //! Functions to sign transactions
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 #[cfg(feature = "std")]
 use std::env;
 #[cfg(feature = "std")]
@@ -22,6 +22,7 @@ use namada_core::types::address::{
 };
 use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::pos;
+use namada_core::types::uint::Uint;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -59,6 +60,7 @@ use crate::types::transaction::{
 };
 
 use super::masp::{ShieldedContext, ShieldedUtils};
+use super::rpc::validate_amount;
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -161,11 +163,9 @@ pub enum TxSigningKey {
 pub async fn tx_signer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
-    V: ShieldedUtils<C = C>,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> Result<(Option<Address>, common::PublicKey), Error> {
@@ -191,7 +191,7 @@ pub async fn tx_signer<
         }
         TxSigningKey::WalletAddress(signer) => Ok((
             Some(signer.clone()),
-            find_pk::<C, U>(client, wallet, &signer, args.password.clone()) //FIXME: need to pass shielded here? Maybe
+            find_pk::<C, U>(client, wallet, &signer, args.password.clone())
                 .await?,
         )),
         TxSigningKey::None => other_err(
@@ -218,7 +218,6 @@ pub async fn sign_tx<U: WalletUtils>(
     args: &args::Tx,
     keypair: &common::PublicKey,
 ) -> Result<(), Error> {
-    //FIXME: return the unshielding Epoch?
     let keypair = find_key_by_pk(wallet, args, keypair)?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
@@ -241,40 +240,24 @@ pub async fn sign_tx<U: WalletUtils>(
 pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
-) -> (Option<crate::core::ledger::testnet_pow::Solution>, Fee) {
-    let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-    let fee_amount = rpc::query_storage_value::<C, token::Amount>(
-        client,
-        &wrapper_tx_fees_key,
-    )
-    .await
-    .unwrap_or_default();
-    let fee_token = &args.fee_token;
-    let source = Address::from(keypair);
-    let balance_key = token::balance_key(fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-    let is_bal_sufficient = fee_amount <= balance;
+    total_fee: Amount,
+    balance: Amount,
+    source: Address,
+) -> Option<crate::core::ledger::testnet_pow::Solution> {
+    let is_bal_sufficient = total_fee <= balance;
     if !is_bal_sufficient {
         let token_addr = args.fee_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
+            format_denominated_amount(client, &token_addr, total_fee).await,
             format_denominated_amount(client, &token_addr, balance).await,
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
         }
     }
-    let fee = Fee {
-        amount: fee_amount,
-        token: fee_token.clone(),
-    };
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
@@ -285,9 +268,9 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
-        (Some(solution), fee)
+        Some(solution)
     } else {
-        (None, fee)
+        None
     }
 }
 
@@ -297,13 +280,71 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
+    source: Address,
 ) {
+    use std::collections::BTreeMap;
+
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
+    .flatten()
+    {
+        Some(amount) => amount,
+        None => {
+            if !args.force && cfg!(feature = "mainnet") {
+                panic!(
+                    "Could not retrieve the gas cost for token {}",
+                    args.fee_token
+                );
+            } else {
+                token::Amount::default()
+            }
+        }
+    };
+    let fee_amount = match args.fee_amount {
+        Some(amount) => {
+            let validated_fee_amount =
+                validate_amount(client, amount, &args.fee_token, args.force)
+                    .await
+                    .expect("Expected to be ablo to validate fee");
+
+            let amount = Amount::from_uint(
+                validated_fee_amount.amount,
+                validated_fee_amount.denom,
+            )
+            .unwrap();
+
+            amount.max(minimum_fee)
+        }
+        None => minimum_fee,
+    };
+    let total_fee = fee_amount * u64::from(args.gas_limit);
+
+    let balance_key = token::balance_key(&args.fee_token, &source);
+    let balance =
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+            .await
+            .unwrap_or_default();
+
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
-        let (pow_solution, fee) =
-            solve_pow_challenge(client, args, keypair, requires_pow).await;
-        wrapper.fee = fee;
+        let pow_solution = solve_pow_challenge(
+            client,
+            args,
+            requires_pow,
+            total_fee,
+            balance,
+            source,
+        )
+        .await;
+        wrapper.fee = Fee {
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
+        };
         wrapper.pow_solution = pow_solution;
     }
 }
@@ -314,7 +355,7 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 pub async fn wrap_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
-    V: ShieldedUtils<C = C>,
+    V: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -325,104 +366,7 @@ pub async fn wrap_tx<
     epoch: Epoch,
     keypair: &common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Tx {
-    //FIXME: return the Optionale unshield epoch coming from sign_wrapper?
-    #[cfg(not(feature = "mainnet"))]
-    let (pow_solution, fee) =
-        solve_pow_challenge(client, args, keypair, requires_pow).await;
-    // This object governs how the payload will be processed
-    tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
-        fee,
-        keypair.clone(),
-        epoch,
-        args.gas_limit.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        pow_solution,
-    ))));
-    tx.header.chain_id = args.chain_id.clone().unwrap();
-    tx.header.expiration = args.expiration;
-
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
-        let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
-    }
-    #[cfg(feature = "std")]
-    // Attempt to decode the construction
-    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
-        let mut tx = tx.clone();
-        // Contract the large data blobs in the transaction
-        tx.wallet_filter();
-        // Record the transaction at the identified path
-        let mut f = File::options()
-            .append(true)
-            .create(true)
-            .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
-    }
-
-    tx
-}
-
-/// Create a wrapper tx from a normal tx. Get the hash of the
-/// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn sign_wrapper<
-    'key,
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils<C = C>,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
-    args: &args::Tx,
-    epoch: Epoch,
-    mut tx: Tx,
-    mut keypair: Cow<'key, common::SecretKey>,
-    mut updated_balance: Option<Amount>,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (TxBroadcastData, Option<Epoch>) {
-    if args.disposable_signing_key {
-        // Create the alias
-        let alias_prefix = "disposable_";
-        let mut ctr = 1;
-        let mut alias = format!("{alias_prefix}_{ctr}");
-
-        while wallet.store().contains_alias(&Alias::from(&alias)) {
-            ctr += 1;
-            alias = format!("{alias_prefix}_{ctr}");
-        }
-        // Generate a disposable keypair to sign the wrapper if requested
-        // NOTE: this key must be stored in the wallet in case there was the need to resubmit the transaction
-        // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
-        let (alias, disposable_keypair) = wallet
-            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
-            .expect("Failed to initialize disposable keypair")
-            .expect("Missing alias and secret key");
-
-        tracing::info!("Created disposable keypair with alias {alias}");
-        keypair = Cow::Owned(disposable_keypair);
-        updated_balance = Some(Amount::default());
-    }
-
+) -> (Tx, Option<Epoch>) {
     // Validate fee amount and token
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
@@ -446,11 +390,24 @@ pub async fn sign_wrapper<
         }
     };
     let fee_amount = match args.fee_amount {
-        Some(amount) if amount >= minimum_fee => amount,
-        _ => minimum_fee,
+        Some(amount) => {
+            let validated_fee_amount =
+                validate_amount(client, amount, &args.fee_token, args.force)
+                    .await
+                    .expect("Expected to be ablo to validate fee");
+
+            let amount = Amount::from_uint(
+                validated_fee_amount.amount,
+                validated_fee_amount.denom,
+            )
+            .unwrap();
+
+            amount.max(minimum_fee)
+        }
+        None => minimum_fee,
     };
 
-    let source = Address::from(&keypair.ref_to());
+    let source = Address::from(keypair);
     let mut updated_balance = match updated_balance {
         Some(balance) => balance,
         None => {
@@ -462,10 +419,7 @@ pub async fn sign_wrapper<
         }
     };
 
-    let total_fee: Amount =
-        u64::checked_mul(fee_amount.into(), u64::from(&args.gas_limit))
-            .expect("Fee computation shouldn't overflow")
-            .into();
+    let total_fee = fee_amount * u64::from(args.gas_limit);
 
     let (unshield, unshielding_epoch) = match total_fee
         .checked_sub(updated_balance)
@@ -474,7 +428,7 @@ pub async fn sign_wrapper<
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
                 let tx_args = args::Tx {
-                    fee_amount: Some(0.into()),
+                    fee_amount: None,
                     fee_unshield: None,
                     ..args.to_owned()
                 };
@@ -485,8 +439,10 @@ pub async fn sign_wrapper<
                         source.clone(),
                     ),
                     token: args.fee_token.clone(),
-                    sub_prefix: None,
-                    amount: diff,
+                    amount: args::InputAmount::Validated(DenominatedAmount {
+                        amount: diff,
+                        denom: 0.into(),
+                    }),
                     // These last two fields are not used in the function, mock them
                     native_token: args.fee_token.clone(),
                     tx_code_path: PathBuf::new(),
@@ -590,7 +546,7 @@ pub async fn sign_wrapper<
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, balance: {}.",
             format_denominated_amount(client, &token_addr, fee_amount).await,
-            format_denominated_amount(client, &token_addr, balance).await,
+            format_denominated_amount(client, &token_addr, updated_balance).await,
         );
                 eprintln!("{}", err_msg);
                 if !args.force && cfg!(feature = "mainnet") {
@@ -603,47 +559,31 @@ pub async fn sign_wrapper<
         _ => (None, None),
     };
 
+    let unshield_section_hash = unshield.map(|masp_tx| {
+        let section = Section::MaspTx(masp_tx);
+        let mut hasher = sha2::Sha256::new();
+        section.hash(&mut hasher);
+        tx.add_section(section);
+        namada_core::types::hash::Hash(hasher.finalize().into())
+    });
+
     #[cfg(not(feature = "mainnet"))]
-    // A PoW solution can be used to allow zero-fee testnet transactions
-    let pow_solution: Option<crate::core::ledger::testnet_pow::Solution> = {
-        // If the address derived from the keypair doesn't have enough balance
-        // to pay for the fee, allow to find a PoW solution instead.
-        if requires_pow || updated_balance < total_fee {
-            println!(
-                "The transaction requires the completion of a PoW challenge."
-            );
-            // Obtain a PoW challenge for faucet withdrawal
-            let challenge =
-                rpc::get_testnet_pow_challenge(client, source).await;
-
-            // Solve the solution, this blocks until a solution is found
-            let solution = challenge.solve();
-            Some(solution)
-        } else {
-            None
-        }
-    };
-
+    let pow_solution = solve_pow_challenge(
+        client,
+        args,
+        requires_pow,
+        total_fee,
+        updated_balance,
+        source,
+    )
+    .await;
     // This object governs how the payload will be processed
-    let (unshield_section_hash, unshield_section) = match unshield {
-        Some(masp_tx) => {
-            let section = Section::MaspTx(masp_tx);
-            let mut hasher = sha2::Sha256::new();
-            section.hash(&mut hasher);
-            (
-                Some(namada_core::types::hash::Hash(hasher.finalize().into())),
-                Some(section),
-            )
-        }
-        None => (None, None),
-    };
-
     tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
         Fee {
             amount_per_gas_unit: fee_amount,
             token: args.fee_token.clone(),
         },
-        keypair.ref_to(),
+        keypair.clone(),
         epoch,
         //TODO: partially validate the gas limit in client
         args.gas_limit.clone(),
@@ -690,10 +630,108 @@ pub async fn sign_wrapper<
         writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
     }
 
+    (tx, unshielding_epoch)
+}
+
+/// Create a wrapper tx from a normal tx. Get the hash of the
+/// wrapper and its payload which is needed for monitoring its
+/// progress on chain.
+pub async fn sign_wrapper<
+    'key,
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
+>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
+    args: &args::Tx,
+    epoch: Epoch,
+    tx: Tx,
+    mut keypair: Cow<'key, common::SecretKey>,
+    mut updated_balance: Option<Amount>,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> (TxBroadcastData, Option<Epoch>) {
+    if args.disposable_signing_key {
+        // Create the alias
+        let alias_prefix = "disposable_";
+        let mut ctr = 1;
+        let mut alias = format!("{alias_prefix}_{ctr}");
+
+        while wallet.store().contains_alias(&Alias::from(&alias)) {
+            ctr += 1;
+            alias = format!("{alias_prefix}_{ctr}");
+        }
+        // Generate a disposable keypair to sign the wrapper if requested
+        // NOTE: this key must be stored in the wallet in case there was the need to resubmit the transaction
+        // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
+        let (alias, disposable_keypair) = wallet
+            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
+            .expect("Failed to initialize disposable keypair")
+            .expect("Missing alias and secret key");
+
+        tracing::info!("Created disposable keypair with alias {alias}");
+        keypair = Cow::Owned(disposable_keypair);
+        updated_balance = Some(Amount::default());
+    }
+
+    let (mut tx, unshielding_epoch) = wrap_tx(
+        client,
+        wallet,
+        shielded,
+        tx,
+        args,
+        updated_balance,
+        epoch,
+        &keypair.as_ref().ref_to(),
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await;
+
+    #[cfg(feature = "std")]
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_LEDGER_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Convert the transaction to Ledger format
+        let decoding = to_ledger_vector(client, wallet, &tx)
+            .await
+            .expect("unable to decode transaction");
+        let output = serde_json::to_string(&decoding)
+            .expect("failed to serialize decoding");
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{},", output)
+            .expect("unable to write test vector to file");
+    }
+    #[cfg(feature = "std")]
+    // Attempt to decode the construction
+    if let Ok(path) = env::var(ENV_VAR_TX_LOG_PATH) {
+        let mut tx = tx.clone();
+        // Contract the large data blobs in the transaction
+        tx.wallet_filter();
+        // Record the transaction at the identified path
+        let mut f = File::options()
+            .append(true)
+            .create(true)
+            .open(path)
+            .expect("failed to open test vector file");
+        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
+    }
+
     // Remove all the sensitive sections
     tx.protocol_filter();
     // Then sign over the bound wrapper committing to all other sections
-    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), keypair)));
+    tx.add_section(Section::Signature(Signature::new(
+        tx.sechashes(),
+        &keypair,
+    )));
     // We use this to determine when the wrapper tx makes it on-chain
     let wrapper_hash = tx.header_hash().to_string();
     // We use this to determine when the decrypted inner tx makes it
@@ -703,7 +741,7 @@ pub async fn sign_wrapper<
         .update_header(TxType::Raw)
         .header_hash()
         .to_string();
-    let to_broadcast = TxBroadcastData::Wrapper {
+    let to_broadcast = TxBroadcastData::Live {
         tx,
         wrapper_hash,
         decrypted_hash,
@@ -1395,7 +1433,7 @@ pub async fn to_ledger_vector<
             Amount::from(wrapper.gas_limit),
         )
         .await;
-        let fee_amount_per_unit = format_denominated_amount(
+        let fee_amount_per_gas_unit = format_denominated_amount(
             client,
             &gas_token,
             wrapper.fee.amount_per_gas_unit,

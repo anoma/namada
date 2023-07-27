@@ -73,7 +73,7 @@ where
             let (encrypted_txs, alloc) = self.build_encrypted_txs(
                 alloc,
                 &req.txs,
-                &req.time,
+                req.time,
                 &block_proposer,
             );
             let mut txs = encrypted_txs;
@@ -149,7 +149,6 @@ where
         block_time: Option<Timestamp>,
         block_proposer: &Address,
     ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
-        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage); //FIXME: need this?
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
@@ -244,7 +243,7 @@ where
             }
         }
 
-        tx.validate_header().map_err(|_| ())?;
+        tx.validate_tx().map_err(|_| ())?;
         if let TxType::Wrapper(wrapper) = tx.header().tx_type {
             // Check tx gas limit for tx size
             let mut tx_gas_meter =
@@ -255,7 +254,7 @@ where
             self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage).map_err(|_| ())?;
 
             // Check fees
-            let fee_unshield = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
+            let fee_unshield = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section.as_ref() {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
             match self.wrapper_fee_check(
                 &wrapper,
                 fee_unshield,
@@ -434,7 +433,7 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &self,
-        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        mut alloc: BlockAllocator<BuildingProtocolTxBatch>,
         txs: &[TxBytes],
     ) -> Vec<TxBytes> {
         if self.wl_storage.storage.last_block.is_none() {
@@ -453,7 +452,7 @@ where
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
+                        AllocFailure::Rejected { bin_resource_left} => {
                             // TODO: maybe we should find a way to include
                             // validator set updates all the time. for instance,
                             // we could have recursive bins -> bin space within
@@ -464,19 +463,19 @@ where
                             // changes (issue #367)
                             tracing::debug!(
                                 ?tx_bytes,
-                                bin_space_left,
+                                bin_resource_left,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
                                 "Dropping protocol tx from the current proposal",
                             );
                             false
                         }
-                        AllocFailure::OverflowsBin { bin_size } => {
+                        AllocFailure::OverflowsBin { bin_resource} => {
                             // TODO: handle tx whose size is greater
                             // than bin size
                             tracing::warn!(
                                 ?tx_bytes,
-                                bin_size,
+                                bin_resource,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
                                 "Dropping large protocol tx from the current proposal",
@@ -513,14 +512,9 @@ mod test_prepare_proposal {
     };
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::proof_of_stake::Epoch;
     use namada::types::address::{self, Address};
-    use namada::types::key::RefTo;
     use namada::types::token;
     use namada::ledger::gas::Gas;
-    use namada::types::token::Amount;
-    use namada::proto::{Code, Data, Header, Section, Signature};
-    use namada::types::transaction::{Fee, WrapperTx};
 use data_encoding::HEXUPPER;
     use namada::core::types::key::PublicKeyTmRawHash;
     use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
@@ -1042,7 +1036,7 @@ use data_encoding::HEXUPPER;
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::whole(1_000).try_to_vec().unwrap())
+            .write(&balance_key, Amount::native_whole(1_000).try_to_vec().unwrap())
             .unwrap();
 
         let mut req = RequestPrepareProposal {
@@ -1372,7 +1366,7 @@ use data_encoding::HEXUPPER;
     /// in the block
     #[test]
     fn test_exceeding_max_block_gas_tx() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit: u64 = shell
             .wl_storage
@@ -1386,7 +1380,7 @@ use data_encoding::HEXUPPER;
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             (block_gas_limit + 1).into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1397,7 +1391,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &keypair)));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &keypair)));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1414,7 +1408,7 @@ use data_encoding::HEXUPPER;
     // the block
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
 
         let wrapper = WrapperTx::new(
@@ -1422,7 +1416,7 @@ use data_encoding::HEXUPPER;
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1434,7 +1428,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &keypair)));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &keypair)));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1450,14 +1444,14 @@ use data_encoding::HEXUPPER;
     // Check that a wrapper using a non-whitelisted token for fee payment is not included in the block
     #[test]
     fn test_fee_non_whitelisted_token() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 100.into(),
                 token: address::btc(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1469,7 +1463,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1485,14 +1479,14 @@ use data_encoding::HEXUPPER;
     // Check that a wrapper setting a fee amount lower than the minimum required is not included in the block
     #[test]
     fn test_fee_wrong_minimum_amount() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1503,7 +1497,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1519,14 +1513,14 @@ use data_encoding::HEXUPPER;
     // Check that a wrapper transactions whose fees cannot be paid is rejected
     #[test]
     fn test_insufficient_balance_for_fee() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 1_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1537,7 +1531,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1553,14 +1547,14 @@ use data_encoding::HEXUPPER;
     // Check that a fee overflow in the wrapper transaction is rejected
     #[test]
     fn test_wrapper_fee_overflow() {
-        let (shell, _) = test_utils::setup(1);
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let wrapper = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: token::Amount::max(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -1571,7 +1565,7 @@ use data_encoding::HEXUPPER;
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(&wrapper_tx.header_hash(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],

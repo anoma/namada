@@ -96,7 +96,11 @@ where
     ) -> Result<bool, storage_api::Error>;
 
     /// Verify the signature of a tx section
-    fn verify_tx_section_signature(&self, pk: &PublicKey, section_hash: &Hash) -> Result<bool, storage_api::Error>;
+    fn verify_tx_section_signature(
+        &self,
+        pk: &PublicKey,
+        section_hash: &Vec<Hash>,
+    ) -> Result<bool, storage_api::Error>;
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error>;

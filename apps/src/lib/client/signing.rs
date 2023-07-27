@@ -46,7 +46,7 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
-    V: ShieldedUtils<C = C>
+    V: ShieldedUtils,
 {
     namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
         .await
@@ -62,19 +62,16 @@ where
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
 ///
 /// If the tx fee is to be unshielded, it also returns the unshielding epoch.
-pub async fn sign_tx<C, U, V>(
+pub async fn sign_tx<C, U>(
     wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
     tx: &mut Tx,
     args: &args::Tx,
     default: &common::PublicKey,
-    //FIXME: also need to pass updated_balance?
-) -> Result<Option<Epoch>, tx::Error>
+) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
-    V: ShieldedUtils<C = C>
 {
     namada::ledger::signing::sign_tx(wallet, tx, args, default).await
 }
@@ -82,8 +79,6 @@ where
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain. Accepts an optional balance reflecting any modification applied to it by the inner tx for a correct fee validation.
-pub async fn sign_wrapper<
-/// progress on chain.
 pub async fn sign_wrapper<'key, C, U, V>(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -91,16 +86,15 @@ pub async fn sign_wrapper<'key, C, U, V>(
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
-    mut keypair: Cow<'key, common::SecretKey>,
-    mut updated_balance: Option<Amount>,
+    keypair: Cow<'key, common::SecretKey>,
+    updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> (TxBroadcastData, Option<Epoch>) 
-) -> TxBroadcastData
+) -> (TxBroadcastData, Option<Epoch>)
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
-    V: ShieldedUtils<C = C>
+    V: ShieldedUtils,
 {
     namada::ledger::signing::sign_wrapper(
         client,

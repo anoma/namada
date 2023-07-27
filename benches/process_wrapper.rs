@@ -6,6 +6,7 @@ use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::TempWlStorage;
 use namada::proto::Signature;
 use namada::types::chain::ChainId;
+use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::{Fee, WrapperTx};
@@ -26,8 +27,7 @@ fn process_tx(c: &mut Criterion) {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::nam(),
-            sub_prefix: None,
-            amount: Amount::whole(1),
+            amount: Amount::native_whole(1).native_denominated(),
             key: None,
             shielded: None,
         },
@@ -42,7 +42,7 @@ fn process_tx(c: &mut Criterion) {
                 token: address::nam(),
                 amount_per_gas_unit: 1.into(),
             },
-            &defaults::albert_keypair(),
+            defaults::albert_keypair().ref_to(),
             0.into(),
             5_000_000.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -51,7 +51,7 @@ fn process_tx(c: &mut Criterion) {
         ),
     )));
     tx.add_section(namada::proto::Section::Signature(Signature::new(
-        &tx.header_hash(),
+        tx.sechashes(),
         &defaults::albert_keypair(),
     )));
     let wrapper = tx.to_bytes();
@@ -83,7 +83,7 @@ fn process_tx(c: &mut Criterion) {
                 assert_eq!(
                     // Assert that the wrapper transaction was valid
                     shell
-                        .process_single_tx(
+                        .check_proposal_tx(
                             &wrapper,
                             &mut tx_queue.iter(),
                             &mut validation_meta,

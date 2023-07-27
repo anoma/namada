@@ -10,6 +10,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::key::common;
+use namada_core::types::storage::Epoch;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,7 @@ use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
+use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::queries::{Client, RPC};
 use crate::ledger::rpc::validate_amount;
 use crate::ledger::signing::TxSigningKey;
@@ -41,11 +43,13 @@ use crate::types::voting_power::FractionalVotingPower;
 pub async fn build_bridge_pool_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
+    V: ShieldedUtils,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: args::EthereumBridgePool,
-) -> Result<(Tx, Option<Address>, common::PublicKey), Error> {
+) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
     let args::EthereumBridgePool {
         ref tx,
         asset,
@@ -84,12 +88,14 @@ pub async fn build_bridge_pool_tx<
     // TODO: change the wasm code to a hash
     transfer_tx.set_code(Code::new(wasm_code));
 
-    prepare_tx::<C, U>(
+    prepare_tx::<C, U, V>(
         client,
         wallet,
+        shielded,
         tx,
         transfer_tx,
         TxSigningKey::None,
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )

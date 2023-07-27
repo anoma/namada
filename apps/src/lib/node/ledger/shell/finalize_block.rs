@@ -184,7 +184,7 @@ where
                 continue;
             }
 
-            if tx.validate_header().is_err() {
+            if tx.validate_tx().is_err() {
                 tracing::error!(
                     "Internal logic error: FinalizeBlock received tx that \
                      could not be deserialized to a valid TxType"
@@ -331,7 +331,7 @@ where
                         DecryptedTx::Undecryptable => {
                             tracing::info!(
                                 "Tx with hash {} was un-decryptable",
-                                wrapper_hash
+                                tx_in_queue.tx.header_hash()
                             );
                             event["info"] = "Transaction is invalid.".into();
                             event["log"] =
@@ -366,9 +366,14 @@ where
                     ProtocolTxType::BridgePoolVext
                     | ProtocolTxType::BridgePool
                     | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => {
-                        (Event::new_tx_event(&tx, height.0), None)
-                    }
+                    | ProtocolTxType::ValidatorSetUpdate => (
+                        Event::new_tx_event(&tx, height.0),
+                        None,
+                        TxGasMeter::new_from_micro_limit(0.into()),
+                        #[cfg(not(feature = "mainnet"))]
+                        false,
+                        None,
+                    ),
                     ProtocolTxType::EthEventsVext => {
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
@@ -387,7 +392,14 @@ where
                                 self.mode.dequeue_eth_event(event);
                             }
                         }
-                        (Event::new_tx_event(&tx, height.0), None)
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_micro_limit(0.into()),
+                            #[cfg(not(feature = "mainnet"))]
+                            false,
+                            None,
+                        )
                     }
                     ProtocolTxType::EthereumEvents => {
                         let digest =
@@ -409,7 +421,14 @@ where
                                 }
                             }
                         }
-                        (Event::new_tx_event(&tx, height.0), None)
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_micro_limit(0.into()),
+                            #[cfg(not(feature = "mainnet"))]
+                            false,
+                            None,
+                        )
                     }
                     ref protocol_tx_type => {
                         tracing::error!(
@@ -425,7 +444,7 @@ where
 
             match protocol::dispatch_tx(
                 tx,
-                processes_tx.tx.as_ref(),
+                processed_tx.tx.as_ref(),
                 TxIndex(
                     tx_index
                         .try_into()
@@ -1032,6 +1051,7 @@ mod test_finalize_block {
                 GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1072,13 +1092,18 @@ mod test_finalize_block {
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
+            None,
         ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(
             "Decrypted transaction data".as_bytes().to_owned(),
         ));
-        shell.enqueue_tx(outer_tx.clone());
+        let gas_limit =
+            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
+                .unwrap();
+        shell.enqueue_tx(outer_tx.clone(), gas_limit);
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
@@ -1245,7 +1270,7 @@ mod test_finalize_block {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2234,7 +2259,7 @@ mod test_finalize_block {
         wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        let mut decrypted_tx = wrapper_tx.clone();
+        let mut decrypted_tx = wrapper.clone();
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -2287,7 +2312,7 @@ mod test_finalize_block {
     #[test]
     /// Test that the hash of the wrapper transaction is committed to storage even if the wrapper tx fails. The inner transaction hash must instead be removed
     fn test_commits_hash_if_wrapper_failure() {
-        let (mut shell, _) = setup(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2295,7 +2320,7 @@ mod test_finalize_block {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             0.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2308,7 +2333,7 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
@@ -2352,7 +2377,7 @@ mod test_finalize_block {
     // Test that if the fee payer doesn't have enough funds for fee payment the ledger drains their balance. Note that because of the checks in process proposal this scenario should never happen
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
-        let (mut shell, _) = setup(1);
+        let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2360,7 +2385,7 @@ mod test_finalize_block {
                 amount_per_gas_unit: 100.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &keypair,
+            keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2373,7 +2398,7 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &keypair,
         )));
         wrapper.encrypt(&Default::default());
@@ -2413,7 +2438,7 @@ mod test_finalize_block {
     // Test that the fees collected from a block are withdrew from the wrapper signer and credited to the block proposer
     #[test]
     fn test_fee_payment_to_block_proposer() {
-        let (mut shell, _) = setup(1);
+        let (mut shell, _, _, _) = setup();
 
         let validator = shell.mode.get_validator_address().unwrap().to_owned();
         let pos_params =
@@ -2443,7 +2468,7 @@ mod test_finalize_block {
                 amount_per_gas_unit: 1.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            &crate::wallet::defaults::albert_keypair(),
+            crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             5_000_000.into(),
             #[cfg(not(feature = "mainnet"))]
@@ -2456,7 +2481,7 @@ mod test_finalize_block {
             "Enxrypted transaction data".as_bytes().to_owned(),
         ));
         wrapper.add_section(Section::Signature(Signature::new(
-            &wrapper.header_hash(),
+            wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
         let fee_amount =
@@ -3765,7 +3790,9 @@ mod test_finalize_block {
             .wl_storage
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+        );
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
         let ctx = namada::ledger::native_vp::Ctx::new(

@@ -27,33 +27,6 @@ where
     pub storage: Storage<D, H>,
 }
 
-#[derive(Debug)]
-/// The write log used in a `TempWlStorage` instance, can be owned (and empty) or can be the mutable reference to an already existing `WriteLog`
-pub enum TempWriteLog<'wl> {
-    Owned(WriteLog),
-    MutBorrow(&'wl mut WriteLog),
-}
-
-impl<'wl> Deref for TempWriteLog<'wl> {
-    type Target = WriteLog;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Owned(wl) => wl,
-            Self::MutBorrow(wl_ref) => wl_ref,
-        }
-    }
-}
-
-impl<'wl> DerefMut for TempWriteLog<'wl> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Owned(wl) => wl,
-            Self::MutBorrow(wl_ref) => wl_ref,
-        }
-    }
-}
-
 /// Temporary storage that can be used for changes that will never be committed
 /// to the DB. This is useful for the shell `PrepareProposal` and
 /// `ProcessProposal` handlers that should not change state, but need to apply
@@ -65,7 +38,7 @@ where
     H: StorageHasher,
 {
     /// Write log
-    pub write_log: TempWriteLog<'a>,
+    pub write_log: WriteLog,
     /// Storage provides access to DB
     pub storage: &'a Storage<D, H>,
 }
@@ -79,19 +52,7 @@ where
     /// DB.
     pub fn new(storage: &'a Storage<D, H>) -> Self {
         Self {
-            write_log: TempWriteLog::Owned(WriteLog::default()),
-            storage,
-        }
-    }
-
-    /// Create a temp storage that can mutated in memory, but never committed to
-    /// DB. Initialized the write log with the provided one
-    pub fn new_from_mut_wl(
-        storage: &'a Storage<D, H>,
-        write_log: &'a mut WriteLog,
-    ) -> Self {
-        Self {
-            write_log: TempWriteLog::MutBorrow(write_log),
+            write_log: WriteLog::default(),
             storage,
         }
     }
@@ -99,7 +60,7 @@ where
 
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
 /// storage_api traits.
-trait WriteLogAndStorage {
+pub trait WriteLogAndStorage {
     // DB type
     type D: DB + for<'iter> DBIter<'iter>;
     // DB hasher type
@@ -113,6 +74,9 @@ trait WriteLogAndStorage {
 
     /// Borrow `Storage`
     fn storage(&self) -> &Storage<Self::D, Self::H>;
+
+    /// Splitting borrow to get immutable reference to the `Storage` and mutable reference to `WriteLog` when in need of both (avoids complain from the borrow checker)
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
 }
 
 impl<D, H> WriteLogAndStorage for WlStorage<D, H>
@@ -134,6 +98,10 @@ where
     fn storage(&self) -> &Storage<D, H> {
         &self.storage
     }
+
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+        (&mut self.write_log, &self.storage)
+    }
 }
 
 impl<D, H> WriteLogAndStorage for TempWlStorage<'_, D, H>
@@ -154,6 +122,10 @@ where
 
     fn storage(&self) -> &Storage<D, H> {
         self.storage
+    }
+
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+        (&mut self.write_log, &self.storage)
     }
 }
 

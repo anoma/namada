@@ -592,7 +592,7 @@ where
         }
         WasmPayload::Code(code) => {
             gas_meter.add_compiling_gas(
-                u64::try_from(code.as_ref().len())
+                u64::try_from(code.len())
                     .map_err(|e| Error::ConversionError(e.to_string()))?,
             )?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;

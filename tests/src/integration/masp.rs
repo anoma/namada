@@ -11,12 +11,15 @@ use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use test_log::test;
 
 use super::setup;
+use crate::e2e::helpers::epoch_sleep;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
 };
+use crate::e2e::setup::Who;
 use crate::integration::utils::CapturedOutput;
+use crate::{run, run_as};
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.
@@ -1200,6 +1203,259 @@ fn masp_txs_and_queries() -> Result<()> {
                 }
             }
         }
+    }
+
+    Ok(())
+}
+
+/// Test the unshielding tx attached to a wrapper:
+///
+/// 1. Shield some tokens to reduce the unshielded balance
+/// 2. Submit a new wrapper with an invalid unshielding tx and assert the
+/// failure
+/// 3. Submit a new wrapper with a valid unshielding tx and assert
+/// success
+#[test]
+fn wrapper_fee_unshielding() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let mut node = setup::setup()?;
+    _ = node.next_epoch();
+    //FIXME:
+    // let test = setup::network(
+    //     |mut genesis| {
+    //         let parameters = ParametersConfig {
+    //             epochs_per_year: epochs_per_year_from_min_duration(
+    //                 if is_debug_mode() { 3600 } else { 360 },
+    //             ),
+    //             min_num_of_blocks: 1,
+    //             ..genesis.parameters
+    //         };
+    //         // Reduce balance of fee payer
+    //         let balance = genesis
+    //             .token
+    //             .get_mut("NAM")
+    //             .unwrap()
+    //             .balances
+    //             .as_mut()
+    //             .unwrap()
+    //             .get_mut("Albert.public_key")
+    //             .unwrap();
+    //         *balance = 200;
+
+    //         GenesisConfig {
+    //             parameters,
+    //             ..genesis
+    //         }
+    //     },
+    //     None,
+    // )?;
+
+    let validator_one_rpc = "127.0.0.1:26567";
+
+    let txs_args = [
+        (
+            vec![
+                // 1. Shield some tokens
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "50000",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 2. Invalid unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--fee-spending-key",
+                B_SPENDING_KEY,
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            // Test the client response
+            "Insufficient transparent balance to pay fees",
+        ),
+        // 3. Valid unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--fee-spending-key",
+                A_SPENDING_KEY,
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+    ];
+
+    // Wait till epoch boundary
+    let _ep2 = node.next_epoch();
+
+    for (tx_args, tx_result) in txs_args {
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
+
+        if tx_result == "Transaction is valid" {
+            assert!(captured.contains("Transaction accepted"));
+            assert!(captured.contains("Transaction applied"));
+        }
+        assert!(captured.contains(tx_result));
+    }
+
+    Ok(())
+}
+
+#[test]
+/// Test the optional disposable keypair for wrapper signing
+///
+/// 1. Test that a tx requesting a disposable signer without unshielding is rejected
+/// 2. Test that a tx requesting a disposable signer providing an unsufficient unshielding is rejected
+/// 3. Test that a tx requesting a disposable signer with a correct unshielding operation is succesful
+fn wrapper_disposable_signer() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let mut node = setup::setup()?;
+    _ = node.next_epoch();
+    //FIXME:
+    // let test = setup::network(
+    //     |genesis| {
+    //         let parameters = ParametersConfig {
+    //             epochs_per_year: epochs_per_year_from_min_duration(
+    //                 if is_debug_mode() { 3600 } else { 360 },
+    //             ),
+    //             min_num_of_blocks: 1,
+    //             ..genesis.parameters
+    //         };
+    //         GenesisConfig {
+    //             parameters,
+    //             ..genesis
+    //         }
+    //     },
+    //     None,
+    // )?;
+
+    let validator_one_rpc = "127.0.0.1:26567";
+
+    let txs_args = [
+        (
+            vec![
+                // Shield some tokens
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "50",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 1. Missing unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "The following required arguments were not provided",
+        ),
+        // 2. Insufficient unshielding
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--fee-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Error in fee unshielding",
+        ),
+        // 3. Valid transaction
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--fee-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-signing-key",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+    ];
+
+    // Wait till epoch boundary
+    let _ep2 = node.next_epoch();
+
+    for (tx_args, tx_result) in txs_args {
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, tx_args.clone()));
+
+        if tx_result == "Transaction is valid" {
+            assert!(captured.contains("Transaction accepted"));
+            assert!(captured.contains("Transaction applied"));
+        }
+        assert!(captured.contains(tx_result));
     }
 
     Ok(())

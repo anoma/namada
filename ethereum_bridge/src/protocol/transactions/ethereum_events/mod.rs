@@ -431,7 +431,8 @@ mod tests {
         };
 
         assert_eq!(
-            tx_result.gas_used, 0,
+            tx_result.gas_used,
+            0.into(),
             "No gas should be used for a derived transaction"
         );
         let eth_msg_keys = vote_tallies::Keys::from(&event);

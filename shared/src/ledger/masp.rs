@@ -1399,64 +1399,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (asset_types, amount) =
             convert_amount(epoch, &args.token, amt.amount);
 
-        let tx_fee =
-        // If there are shielded inputs
-        if let Some(sk) = spending_key {
-            // Locate unspent notes that can help us meet the transaction amount
-            let (_, unspent_notes, used_convs) = self
-                .collect_unspent_notes(
-                    client,
-                    &to_viewing_key(&sk).vk,
-                    amount,
-                    epoch,
-                )
-                .await;
-            // Commit the notes found to our transaction
-            for (diversifier, note, merkle_path) in unspent_notes {
-                builder
-                    .add_sapling_spend(sk, diversifier, note, merkle_path)
-                    .map_err(builder::Error::SaplingBuild)?;
-            }
-            // Commit the conversion notes used during summation
-            for (conv, wit, value) in used_convs.values() {
-                if value.is_positive() {
-                    builder.add_sapling_convert(
-                        conv.clone(),
-                        *value as u64,
-                        wit.clone(),
-                    )
-                    .map_err(builder::Error::SaplingBuild)?;
-                }
-            }
-            shielded_fee
-        } else {
-            // We add a dummy UTXO to our transaction, but only the source of
-            // the parent Transfer object is used to validate fund
-            // availability
-            let source_enc = args
-                .source
-                .address()
-                .expect("source address should be transparent")
-                .try_to_vec()
-                .expect("source address encoding");
-            let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                source_enc.as_ref(),
-            ));
-            let script = TransparentAddress(hash.into());
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
-                builder
-                    .add_transparent_input(TxOut {
-                        asset_type: *asset_type,
-                        value: denom.denominate(&amt) as i128,
-                        address: script,
-                    })
-                    .map_err(builder::Error::TransparentBuild)?;
-            }
-            // No transfer fees come from the shielded transaction for non-MASP
-            // sources
-            Amount::zero()
-        };
-
         // Now handle the outputs of this transaction
         // If there is a shielded output
         if let Some(pa) = payment_address {

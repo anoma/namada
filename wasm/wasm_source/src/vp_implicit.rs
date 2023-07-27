@@ -68,7 +68,7 @@ fn validate_tx(
             Ok(Some(pk)) => ctx
                 .verify_tx_section_signature(
                     &pk,
-                    &[*tx_data.data_sechash(), *tx_data.code_sechash()],
+                    &vec![*tx_data.data_sechash(), *tx_data.code_sechash()],
                 )
                 .is_ok(),
             _ => false,

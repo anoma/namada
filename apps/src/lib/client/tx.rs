@@ -18,6 +18,7 @@ use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::{Code, Data, Section, Tx};
+use namada::tendermint_rpc::HttpClient;
 use namada::types::address::Address;
 use namada::types::dec::Dec;
 use namada::types::governance::{
@@ -41,8 +42,8 @@ use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 // Build a transaction to reveal the signer of the given transaction.
-pub async fn submit_reveal_aux(
-    client: &HttpClient,
+pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: &args::Tx,
     addr: Option<Address>,
@@ -53,66 +54,91 @@ pub async fn submit_reveal_aux(
         let reveal_pk = tx::build_reveal_pk(
             client,
             &mut ctx.wallet,
+            &mut ctx.shielded,
             args::RevealPk {
                 tx: args.clone(),
                 public_key: pk.clone(),
             },
         )
         .await?;
-        if let Some((mut rtx, _, pk)) = reveal_pk {
+        if let Some((mut rtx, epoch, _, pk)) = reveal_pk {
             // Sign the reveal public key transaction with the fee payer
             signing::sign_tx(&mut ctx.wallet, &mut rtx, args, &pk).await?;
             // Submit the reveal public key transaction first
             tx::process_tx(client, &mut ctx.wallet, args, rtx).await?;
             // Update the stateful PoW challenge of the outer transaction
             #[cfg(not(feature = "mainnet"))]
-            signing::update_pow_challenge(client, args, tx, &pk, false).await;
+            signing::update_pow_challenge(
+                client,
+                args,
+                tx,
+                false,
+                Address::from(&pk),
+            )
+            .await;
         }
     }
     Ok(())
 }
 
-pub async fn submit_custom(
-    client: &HttpClient,
+pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::TxCustom,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_custom(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_custom(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
-pub async fn submit_update_vp(
-    client: &HttpClient,
+pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::TxUpdateVp,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_update_vp(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_update_vp(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
-pub async fn submit_init_account(
-    client: &HttpClient,
+pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::TxInitAccount,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_init_account(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_init_account(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
-pub async fn submit_init_validator(
-    client: &HttpClient,
+pub async fn submit_init_validator<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     mut ctx: Context,
     args::TxInitValidator {
         tx: tx_args,
@@ -317,9 +343,10 @@ pub async fn submit_init_validator(
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    let (mut tx, addr, pk) = tx::prepare_tx(
+    let (mut tx, epoch, addr, pk) = tx::prepare_tx(
         client,
         &mut ctx.wallet,
+        &mut ctx.shielded,
         &tx_args,
         tx,
         TxSigningKey::WalletAddress(source),
@@ -507,8 +534,8 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-pub async fn submit_transfer(
-    client: &HttpClient,
+pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
@@ -556,13 +583,18 @@ pub async fn submit_transfer(
     Ok(())
 }
 
-pub async fn submit_ibc_transfer(
-    client: &HttpClient,
+pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::TxIbcTransfer,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_ibc_transfer(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_ibc_transfer(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
@@ -570,8 +602,8 @@ pub async fn submit_ibc_transfer(
     Ok(())
 }
 
-pub async fn submit_init_proposal(
-    client: &HttpClient,
+pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::InitProposal,
 ) -> Result<(), tx::Error> {
@@ -729,9 +761,10 @@ pub async fn submit_init_proposal(
         tx.set_data(Data::new(data));
         tx.set_code(Code::from_hash(tx_code_hash));
 
-        let (mut tx, addr, pk) = tx::prepare_tx(
+        let (mut tx, epoch, addr, pk) = tx::prepare_tx(
             client,
             &mut ctx.wallet,
+            &mut ctx.shielded,
             &args.tx,
             tx,
             TxSigningKey::WalletAddress(signer),
@@ -755,8 +788,8 @@ pub async fn submit_init_proposal(
     }
 }
 
-pub async fn submit_vote_proposal(
-    client: &HttpClient,
+pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::VoteProposal,
 ) -> Result<(), tx::Error> {
@@ -995,9 +1028,10 @@ pub async fn submit_vote_proposal(
                 tx.set_data(Data::new(data));
                 tx.set_code(Code::from_hash(tx_code_hash));
 
-                let (mut tx, addr, pk) = tx::prepare_tx(
+                let (mut tx, epoch, addr, pk) = tx::prepare_tx(
                     client,
                     &mut ctx.wallet,
+                    &mut ctx.shielded,
                     &args.tx,
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),
@@ -1035,14 +1069,19 @@ pub async fn submit_vote_proposal(
     }
 }
 
-pub async fn submit_reveal_pk(
-    client: &HttpClient,
+pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::RevealPk,
 ) -> Result<(), tx::Error> {
-    let reveal_tx =
-        tx::build_reveal_pk(client, &mut ctx.wallet, args.clone()).await?;
-    if let Some((mut tx, _, pk)) = reveal_tx {
+    let reveal_tx = tx::build_reveal_pk(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
+    if let Some((mut tx, epoch, _, pk)) = reveal_tx {
         signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1052,8 +1091,8 @@ pub async fn submit_reveal_pk(
 /// Check if current epoch is in the last third of the voting period of the
 /// proposal. This ensures that it is safe to optimize the vote writing to
 /// storage.
-async fn is_safe_voting_window(
-    client: &HttpClient,
+async fn is_safe_voting_window<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     proposal_id: u64,
     proposal_start_epoch: Epoch,
 ) -> Result<bool, tx::Error> {
@@ -1062,8 +1101,8 @@ async fn is_safe_voting_window(
 
 /// Removes validators whose vote corresponds to that of the delegator (needless
 /// vote)
-async fn filter_delegations(
-    client: &HttpClient,
+async fn filter_delegations<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     delegations: HashSet<Address>,
     proposal_id: u64,
     delegator_vote: &ProposalVote,
@@ -1099,26 +1138,36 @@ async fn filter_delegations(
     delegations.into_iter().flatten().collect()
 }
 
-pub async fn submit_bond(
-    client: &HttpClient,
+pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::Bond,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_bond::<C, _>(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_bond::<_, _, _>(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
-pub async fn submit_unbond(
-    client: &HttpClient,
+pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     ctx: &mut Context,
     args: args::Unbond,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk, latest_withdrawal_pre) =
-        tx::build_unbond(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk, latest_withdrawal_pre) = tx::build_unbond(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
@@ -1126,13 +1175,18 @@ pub async fn submit_unbond(
     Ok(())
 }
 
-pub async fn submit_withdraw(
-    client: &HttpClient,
+pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
     mut ctx: Context,
     args: args::Withdraw,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_withdraw(client, &mut ctx.wallet, args.clone()).await?;
+    let (mut tx, epoch, addr, pk) = tx::build_withdraw(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
@@ -1140,15 +1194,21 @@ pub async fn submit_withdraw(
     Ok(())
 }
 
-pub async fn submit_validator_commission_change(
-    client: &HttpClient,
+pub async fn submit_validator_commission_change<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     mut ctx: Context,
     args: args::CommissionRateChange,
 ) -> Result<(), tx::Error> {
     let arg = args.clone();
-    let (mut tx, addr, pk) =
-        tx::build_validator_commission_change(client, &mut ctx.wallet, arg)
-            .await?;
+    let (mut tx, epoch, addr, pk) = tx::build_validator_commission_change(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        arg,
+    )
+    .await?;
     submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
@@ -1156,14 +1216,20 @@ pub async fn submit_validator_commission_change(
     Ok(())
 }
 
-pub async fn submit_unjail_validator(
-    client: &HttpClient,
+pub async fn submit_unjail_validator<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
     mut ctx: Context,
     args: args::TxUnjailValidator,
 ) -> Result<(), tx::Error> {
-    let (mut tx, addr, pk) =
-        tx::build_unjail_validator(client, &mut ctx.wallet, args.clone())
-            .await?;
+    let (mut tx, epoch, addr, pk) = tx::build_unjail_validator(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+    )
+    .await?;
     submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
     signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
