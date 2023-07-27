@@ -724,7 +724,7 @@ fn try_invalid_transfers(
         "10",
         ALBERT_KEY,
         &"port".parse().unwrap(),
-        &channel_id_a,
+        channel_id_a,
         None,
         Some("Error trying to apply a transaction"),
         false,
