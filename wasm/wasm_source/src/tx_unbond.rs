@@ -131,7 +131,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(key)
+            .add_gas_payer(key)
             .build();
         let signed_tx = tx;
 

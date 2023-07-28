@@ -66,7 +66,7 @@ pub struct SigningTxData {
     /// The public keys to index map associated to an account
     pub account_public_keys_map: AccountPublicKeysMap,
     /// The public keys of the fee payer
-    pub fee_payer: common::PublicKey,
+    pub gas_payer: common::PublicKey,
 }
 
 /// Generate a signing key from an address. Default to None if address is empty.
@@ -223,14 +223,14 @@ pub fn sign_tx<U: WalletUtils>(
         })
         .collect::<Vec<common::SecretKey>>();
 
-    let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.fee_payer).expect("");
+    let gas_payer_keypair =
+        find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
 
     let tx_builder = tx_builder.add_signing_keys(
         signing_tx_keypairs,
         signing_data.account_public_keys_map,
     );
-    let tx_builder = tx_builder.add_fee_payer(fee_payer_keypair);
+    let tx_builder = tx_builder.add_gas_payer(gas_payer_keypair);
 
     Ok(tx_builder)
 }
@@ -268,7 +268,7 @@ pub async fn aux_signing_data<
         }
     };
 
-    let fee_payer = match &args.fee_payer {
+    let gas_payer = match &args.gas_payer {
         Some(keypair) => keypair.ref_to(),
         None => {
             if let Some(public_key) = public_keys.get(0) {
@@ -283,7 +283,7 @@ pub async fn aux_signing_data<
         public_keys,
         threshold,
         account_public_keys_map,
-        fee_payer,
+        gas_payer,
     })
 }
 
@@ -297,26 +297,26 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     requires_pow: bool,
 ) -> (Option<crate::core::ledger::testnet_pow::Solution>, Fee) {
     let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-    let fee_amount = rpc::query_storage_value::<C, token::Amount>(
+    let gas_amount = rpc::query_storage_value::<C, token::Amount>(
         client,
         &wrapper_tx_fees_key,
     )
     .await
     .unwrap_or_default();
-    let fee_token = &args.fee_token;
+    let gas_token = &args.gas_token;
     let source = Address::from(keypair);
-    let balance_key = token::balance_key(fee_token, &source);
+    let balance_key = token::balance_key(gas_token, &source);
     let balance =
         rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
             .await
             .unwrap_or_default();
-    let is_bal_sufficient = fee_amount <= balance;
+    let is_bal_sufficient = gas_amount <= balance;
     if !is_bal_sufficient {
-        let token_addr = args.fee_token.clone();
+        let token_addr = args.gas_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
+            format_denominated_amount(client, &token_addr, gas_amount).await,
             format_denominated_amount(client, &token_addr, balance).await,
         );
         if !args.force && cfg!(feature = "mainnet") {
@@ -324,8 +324,8 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
         }
     }
     let fee = Fee {
-        amount: fee_amount,
-        token: fee_token.clone(),
+        amount: gas_amount,
+        token: gas_token.clone(),
     };
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
@@ -368,16 +368,16 @@ pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
     tx_builder: TxBuilder,
     args: &args::Tx,
     epoch: Epoch,
-    fee_payer: common::PublicKey,
+    gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> TxBuilder {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
-        solve_pow_challenge(client, args, &fee_payer, requires_pow).await;
+        solve_pow_challenge(client, args, &gas_payer, requires_pow).await;
 
     tx_builder.add_wrapper(
         fee,
-        fee_payer,
+        gas_payer,
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]

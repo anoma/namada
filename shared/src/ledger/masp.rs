@@ -1403,13 +1403,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let tx_fee =
         // If there are shielded inputs
         if let Some(sk) = spending_key {
-            let InputAmount::Validated(fee) = args.tx.fee_amount else {
+            let InputAmount::Validated(fee) = args.tx.gas_amount else {
                 unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
             };
             // Transaction fees need to match the amount in the wrapper Transfer
             // when MASP source is used
             let (_, shielded_fee) =
-                convert_amount(epoch, &args.tx.fee_token, fee.amount);
+                convert_amount(epoch, &args.tx.gas_token, fee.amount);
             let required_amt = if shielded_gas {
                 amount + shielded_fee.clone()
             } else {

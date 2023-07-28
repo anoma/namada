@@ -43,11 +43,11 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         recipient,
         sender,
         amount,
-        gas_amount,
-        gas_payer,
+        fee_amount,
+        fee_payer,
         code_path,
     }: args::EthereumBridgePool,
-    fee_payer: common::PublicKey,
+    gas_payer: common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, tx.force)
@@ -62,8 +62,8 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
             amount,
         },
         gas_fee: GasFee {
-            amount: gas_amount,
-            payer: gas_payer,
+            amount: fee_amount,
+            payer: fee_payer,
         },
     };
 
@@ -75,7 +75,6 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     let chain_id = tx.chain_id.clone().unwrap();
     let tx_builder = TxBuilder::new(chain_id, tx.expiration);
 
-    // TODO: change the wasm code to a hash
     let tx_builder = tx_builder
         .add_code_from_hash(tx_code_hash)
         .add_data(transfer);
@@ -84,7 +83,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )

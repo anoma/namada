@@ -228,24 +228,24 @@ pub async fn main() -> Result<()> {
                     )
                     .await?;
 
+                    tx::submit_reveal_aux(
+                        &client,
+                        &mut ctx,
+                        tx_args.clone(),
+                        &args.sender,
+                    )
+                    .await?;
+
                     let tx_builder = bridge_pool::build_bridge_pool_tx(
                         &client,
                         args.clone(),
-                        signing_data.fee_payer.clone(),
+                        signing_data.gas_payer.clone(),
                     )
                     .await?;
 
                     if args.tx.dump_tx {
                         dump_tx(&args.tx, tx_builder);
                     } else {
-                        tx::submit_reveal_aux(
-                            &client,
-                            &mut ctx,
-                            tx_args.clone(),
-                            &args.sender,
-                        )
-                        .await?;
-
                         let tx_builder = signing::sign_tx(
                             &mut ctx.wallet,
                             &tx_args,

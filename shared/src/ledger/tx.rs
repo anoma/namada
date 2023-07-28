@@ -224,7 +224,7 @@ pub enum Error {
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
     /// Couldn't understand who the fee payer is
-    #[error("Either --signing-keys or --fee-payer must be available.")]
+    #[error("Either --signing-keys or --gas-payer must be available.")]
     InvalidFeePayer,
     /// Account threshold is not set
     #[error("Account threshold must be set.")]
@@ -284,7 +284,7 @@ pub async fn prepare_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     tx_builder: TxBuilder,
-    fee_payer: common::PublicKey,
+    gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<TxBuilder, Error> {
     let tx_builder = if args.dry_run {
@@ -296,7 +296,7 @@ pub async fn prepare_tx<C: crate::ledger::queries::Client + Sync>(
             tx_builder,
             args,
             epoch,
-            fee_payer,
+            gas_payer,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
@@ -314,7 +314,7 @@ pub async fn process_tx<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    tx_builder: TxBuilder,
+    tx: Tx,
 ) -> Result<ProcessTxResponse, Error> {
     // NOTE: use this to print the request JSON body:
 
@@ -325,8 +325,6 @@ pub async fn process_tx<
     // use tendermint_rpc::Request;
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
-
-    let tx = tx_builder.build();
 
     #[cfg(feature = "std")]
     {
@@ -400,7 +398,7 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
     args: &args::Tx,
     address: &Address,
     public_key: &common::PublicKey,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     println!(
         "Submitting a tx to reveal the public key for address {address}..."
@@ -424,7 +422,7 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
         client,
         args,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -634,7 +632,7 @@ pub async fn build_validator_commission_change<
         rate,
         tx_code_path,
     }: args::CommissionRateChange,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let epoch = rpc::query_epoch(client).await;
 
@@ -706,7 +704,7 @@ pub async fn build_validator_commission_change<
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -723,7 +721,7 @@ pub async fn build_unjail_validator<
         validator,
         tx_code_path,
     }: args::TxUnjailValidator,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     if !rpc::is_validator(client, &validator).await {
         eprintln!("The given address {} is not a validator.", &validator);
@@ -794,7 +792,7 @@ pub async fn build_unjail_validator<
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -810,7 +808,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
         source,
         tx_code_path,
     }: args::Withdraw,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let epoch = rpc::query_epoch(client).await;
 
@@ -863,7 +861,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -884,7 +882,7 @@ pub async fn build_unbond<
         source,
         tx_code_path,
     }: args::Unbond,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<(TxBuilder, Option<(Epoch, token::Amount)>), Error> {
     let source = source.clone();
     // Check the source's current bond amount
@@ -949,7 +947,7 @@ pub async fn build_unbond<
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1031,7 +1029,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
         native_token,
         tx_code_path,
     }: args::Bond,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let validator =
         known_validator_or_err(validator.clone(), tx.force, client).await?;
@@ -1080,7 +1078,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1132,7 +1130,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         timeout_sec_offset,
         tx_code_path,
     }: args::TxIbcTransfer,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     // Check that the source address exists on chain
     let source = source_exists_or_err(source.clone(), tx.force, client).await?;
@@ -1212,7 +1210,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1300,7 +1298,7 @@ pub async fn build_transfer<
     client: &C,
     shielded: &mut ShieldedContext<U>,
     mut args: args::TxTransfer,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<(TxBuilder, Option<Epoch>), Error> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
@@ -1320,15 +1318,15 @@ pub async fn build_transfer<
             .expect("expected to validate amount");
     let validate_fee = validate_amount(
         client,
-        args.tx.fee_amount,
-        &args.tx.fee_token,
+        args.tx.gas_amount,
+        &args.tx.gas_token,
         args.tx.force,
     )
     .await
     .expect("expected to be able to validate fee");
 
     args.amount = InputAmount::Validated(validated_amount);
-    args.tx.fee_amount = InputAmount::Validated(validate_fee);
+    args.tx.gas_amount = InputAmount::Validated(validate_fee);
     check_balance_too_low_err::<C>(
         &token,
         &source,
@@ -1381,7 +1379,7 @@ pub async fn build_transfer<
                 validated_amount.amount.to_string_native(),
                 Box::new(token.clone()),
                 validate_fee.amount.to_string_native(),
-                Box::new(args.tx.fee_token.clone()),
+                Box::new(args.tx.gas_token.clone()),
             ))
         }
         Err(err) => Err(Error::MaspError(err)),
@@ -1441,7 +1439,7 @@ pub async fn build_transfer<
         client,
         &args.tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
     )
@@ -1460,7 +1458,7 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
         public_keys,
         threshold,
     }: args::TxInitAccount,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path.to_str().unwrap())
@@ -1501,7 +1499,7 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1519,7 +1517,7 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
         public_keys,
         threshold,
     }: args::TxUpdateAccount,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let addr = if let Some(account) = rpc::get_account_info(client, &addr).await
     {
@@ -1571,7 +1569,7 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
@@ -1587,7 +1585,7 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         data_path,
         owner: _,
     }: args::TxCustom,
-    fee_payer: &common::PublicKey,
+    gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
     let tx_code_hash =
         query_wasm_code_hash(client, code_path.to_str().unwrap())
@@ -1607,7 +1605,7 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         client,
         &tx,
         tx_builder,
-        fee_payer.clone(),
+        gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )

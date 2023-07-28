@@ -833,7 +833,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -970,7 +970,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -1173,7 +1173,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -1301,7 +1301,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -1948,7 +1948,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -2086,7 +2086,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -2262,7 +2262,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -2407,7 +2407,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -2557,7 +2557,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);
@@ -2707,7 +2707,7 @@ mod tests {
         let tx = tx_builder
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_fee_payer(keypair_1())
+            .add_gas_payer(keypair_1())
             .build();
 
         let gas_meter = VpGasMeter::new(0);

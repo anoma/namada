@@ -22,7 +22,7 @@ pub struct TxBuilder {
     expiration: Option<DateTimeUtc>,
     sections: Vec<Section>,
     wrapper: Option<WrapperTx>,
-    fee_payer: Option<common::SecretKey>,
+    gas_payer: Option<common::SecretKey>,
     signing_keys: Vec<common::SecretKey>,
     account_public_keys_map: Option<AccountPublicKeysMap>,
 }
@@ -35,7 +35,7 @@ impl TxBuilder {
             expiration,
             sections: vec![],
             wrapper: None,
-            fee_payer: None,
+            gas_payer: None,
             signing_keys: vec![],
             account_public_keys_map: None,
         }
@@ -94,7 +94,7 @@ impl TxBuilder {
     pub fn add_wrapper(
         mut self,
         fee: Fee,
-        fee_payer: common::PublicKey,
+        gas_payer: common::PublicKey,
         epoch: Epoch,
         gas_limit: GasLimit,
         #[cfg(not(feature = "mainnet"))] requires_pow: Option<
@@ -103,7 +103,7 @@ impl TxBuilder {
     ) -> Self {
         self.wrapper = Some(WrapperTx::new(
             fee,
-            fee_payer,
+            gas_payer,
             epoch,
             gas_limit,
             #[cfg(not(feature = "mainnet"))]
@@ -113,8 +113,8 @@ impl TxBuilder {
     }
 
     /// Add fee payer keypair to the tx builder
-    pub fn add_fee_payer(mut self, keypair: common::SecretKey) -> Self {
-        self.fee_payer = Some(keypair);
+    pub fn add_gas_payer(mut self, keypair: common::SecretKey) -> Self {
+        self.gas_payer = Some(keypair);
         self
     }
 
@@ -170,7 +170,7 @@ impl TxBuilder {
             )));
         }
 
-        if let Some(keypair) = self.fee_payer {
+        if let Some(keypair) = self.gas_payer {
             let mut sections_hashes = tx
                 .sections
                 .iter()
