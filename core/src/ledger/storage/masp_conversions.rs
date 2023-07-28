@@ -38,7 +38,7 @@ where
     H: 'static + super::StorageHasher,
 {
     use masp_primitives::ff::PrimeField;
-    use masp_primitives::transaction::components::Amount as MaspAmount;
+    use masp_primitives::transaction::components::I32Sum as MaspAmount;
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
@@ -92,9 +92,9 @@ where
             );
             current_convs.insert(
                 (addr.clone(), denom),
-                (MaspAmount::from_pair(old_asset, -(reward.1 as i64)).unwrap()
-                    + MaspAmount::from_pair(new_asset, reward.1).unwrap()
-                    + MaspAmount::from_pair(reward_asset, reward.0).unwrap())
+                (MaspAmount::from_pair(old_asset, -(reward.1 as i32)).unwrap()
+                    + MaspAmount::from_pair(new_asset, reward.1 as i32).unwrap()
+                    + MaspAmount::from_pair(reward_asset, reward.0 as i32).unwrap())
                 .into(),
             );
             // Add a conversion from the previous asset type

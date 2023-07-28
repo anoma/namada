@@ -1269,7 +1269,7 @@ where
 
 #[cfg(test)]
 mod test_tx {
-    use masp_primitives::transaction::components::Amount;
+    use masp_primitives::transaction::components::ValueSum;
     use namada::ledger::masp::{make_asset_type, MaspAmount};
     use namada::types::address::testing::gen_established_address;
     use namada::types::token::MaspDenom;
@@ -1289,11 +1289,11 @@ mod test_tx {
         let _asset_prefix = make_asset_type(Some(epoch), &address_1, denom_1);
 
         let _amount_base =
-            Amount::from_pair(asset_base, 16).expect("Test failed");
+            ValueSum::from_pair(asset_base, 16).expect("Test failed");
         let _amount_denom =
-            Amount::from_pair(asset_base, 2).expect("Test failed");
+            ValueSum::from_pair(asset_base, 2).expect("Test failed");
         let _amount_prefix =
-            Amount::from_pair(asset_base, 4).expect("Test failed");
+            ValueSum::from_pair(asset_base, 4).expect("Test failed");
 
         // masp_amount += amount_base;
         // assert_eq!(masp_amount.get((epoch,)), Uint::zero());

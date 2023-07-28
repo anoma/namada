@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::components::{I128Sum, ValueSum};
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
@@ -64,10 +64,10 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> (AssetType, Amount) {
+) -> (AssetType, I128Sum) {
     let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
+    let amount = ValueSum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
         .expect("invalid value or asset type for amount");
     (asset_type, amount)
 }
@@ -104,7 +104,7 @@ fn validate_tx(
         })
         .transpose()?;
     if let Some(shielded_tx) = shielded {
-        let mut transparent_tx_pool = Amount::zero();
+        let mut transparent_tx_pool = ValueSum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
@@ -246,7 +246,7 @@ fn validate_tx(
             }
         }
 
-        match transparent_tx_pool.partial_cmp(&Amount::zero()) {
+        match transparent_tx_pool.partial_cmp(&ValueSum::zero()) {
             None | Some(Ordering::Less) => {
                 debug_log!(
                     "Transparent transaction value pool must be nonnegative. \

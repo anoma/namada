@@ -14,7 +14,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
-use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::components::ValueSum as Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
