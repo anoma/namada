@@ -193,7 +193,11 @@ impl PosParams {
         redel_end: Epoch,
     ) -> bool {
         // TODO: check bounds on this!
-        redel_start - self.unbonding_len - self.cubic_slashing_window_length
+        redel_start
+            .checked_sub(Epoch(
+                self.unbonding_len + self.cubic_slashing_window_length,
+            ))
+            .unwrap_or_default()
             <= infraction_epoch
             && infraction_epoch < redel_end
     }

@@ -44,7 +44,8 @@ use crate::types::{
 };
 use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
-    bond_handle, bond_tokens, bonds_and_unbonds, compute_modified_redelegation,
+    bond_handle, bond_tokens, bonds_and_unbonds,
+    compute_amount_after_slashing_unbond, compute_modified_redelegation,
     compute_new_redelegated_unbonds, compute_recent_total_unbonded,
     compute_redelegated_bonds_balance, compute_remainder_redelegation,
     compute_slashable_amount, compute_total_unbonded,
@@ -68,7 +69,7 @@ use crate::{
     validator_slashes_handle, validator_state_handle,
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, withdraw_tokens,
-    write_validator_address_raw_hash, BecomeValidator,
+    write_validator_address_raw_hash, BecomeValidator, EagerRedelegatedUnbonds,
     FoldRedelegatedBondsResult, ModifiedRedelegation, STORE_VALIDATOR_SETS_LEN,
 };
 
@@ -2641,7 +2642,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         &start_epoch,
-        &Vec::new(),
+        &vec![],
         |_| true,
     );
     assert_eq!(
@@ -2685,7 +2686,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         &start_epoch,
-        &Vec::new(),
+        &vec![],
         |_| true,
     );
     assert_eq!(
@@ -4137,5 +4138,122 @@ fn test_slash_validator() {
             (current_epoch, token::Change::zero()),
             (current_epoch.next(), token::Change::zero())
         ])
+    );
+}
+
+/// `computeAmountAfterSlashingUnbondTest`
+#[test]
+fn compute_amount_after_slashing_unbond_test() {
+    let mut storage = TestWlStorage::default();
+    let params = PosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    // Test data
+    let alice = established_address_1();
+    let bob = established_address_2();
+    let unbonds: BTreeMap<(Epoch, Epoch), token::Change> =
+        BTreeMap::from_iter([
+            ((Epoch(2), Epoch(6)), token::Change::from(5)),
+            ((Epoch(4), Epoch(6)), token::Change::from(6)),
+        ]);
+    let redelegated_unbonds: EagerRedelegatedUnbonds = BTreeMap::from_iter([(
+        Epoch(2),
+        BTreeMap::from_iter([(
+            alice.clone(),
+            BTreeMap::from_iter([(Epoch(1), token::Change::from(1))]),
+        )]),
+    )]);
+
+    // Test case 1
+    let slashes = vec![];
+    let result = compute_amount_after_slashing_unbond(
+        &storage,
+        &params,
+        &unbonds,
+        &redelegated_unbonds,
+        slashes,
+    )
+    .unwrap();
+    assert_eq!(result.sum, 11.into());
+    itertools::assert_equal(
+        result.epoch_map,
+        [(2.into(), 5.into()), (4.into(), 6.into())],
+    );
+
+    // Test case 2
+    let bob_slash = Slash {
+        epoch: Epoch(5),
+        block_height: Default::default(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::one(),
+    };
+    let slashes = vec![bob_slash.clone()];
+    validator_slashes_handle(&bob)
+        .push(&mut storage, bob_slash)
+        .unwrap();
+    let result = compute_amount_after_slashing_unbond(
+        &storage,
+        &params,
+        &unbonds,
+        &redelegated_unbonds,
+        slashes,
+    )
+    .unwrap();
+    assert_eq!(result.sum, 0.into());
+    itertools::assert_equal(
+        result.epoch_map,
+        [(2.into(), 0.into()), (4.into(), 0.into())],
+    );
+
+    // Test case 3
+    let alice_slash = Slash {
+        epoch: Epoch(0),
+        block_height: Default::default(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::one(),
+    };
+    let slashes = vec![alice_slash.clone()];
+    validator_slashes_handle(&alice)
+        .push(&mut storage, alice_slash)
+        .unwrap();
+    let result = compute_amount_after_slashing_unbond(
+        &storage,
+        &params,
+        &unbonds,
+        &redelegated_unbonds,
+        slashes,
+    )
+    .unwrap();
+    assert_eq!(result.sum, 11.into());
+    itertools::assert_equal(
+        result.epoch_map,
+        [(2.into(), 5.into()), (4.into(), 6.into())],
+    );
+
+    // Test case 4
+    let alice_slash = Slash {
+        epoch: Epoch(1),
+        block_height: Default::default(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::one(),
+    };
+    let slashes = vec![alice_slash.clone()];
+    validator_slashes_handle(&alice)
+        .push(&mut storage, alice_slash)
+        .unwrap();
+    let result = compute_amount_after_slashing_unbond(
+        &storage,
+        &params,
+        &unbonds,
+        &redelegated_unbonds,
+        slashes,
+    )
+    .unwrap();
+    assert_eq!(result.sum, 10.into());
+    itertools::assert_equal(
+        result.epoch_map,
+        [(2.into(), 4.into()), (4.into(), 6.into())],
     );
 }
