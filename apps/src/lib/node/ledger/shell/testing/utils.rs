@@ -248,7 +248,8 @@ impl<'a> AsyncRead for &'a AtomicBuffer {
     ) -> Poll<std::io::Result<()>> {
         let mut inner = self.lock().unwrap();
         let buf_before = buf.filled().len();
-        let res = AsyncRead::poll_read(Pin::new(&mut inner.as_slice()), cx, buf);
+        let res =
+            AsyncRead::poll_read(Pin::new(&mut inner.as_slice()), cx, buf);
         let amount_read = buf.filled().len() - buf_before;
         *inner.deref_mut() = inner[amount_read..].to_vec();
         res
