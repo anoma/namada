@@ -3082,6 +3082,71 @@ where
     Ok(result_slashing)
 }
 
+// `def computeAmountAfterSlashingWithdraw`
+fn compute_amount_after_slashing_withdraw<S>(
+    storage: &S,
+    params: &PosParams,
+    unbonds_and_redelegated_unbonds: &HashMap<
+        (Epoch, Epoch),
+        (token::Amount, EagerRedelegatedBondsMap),
+    >,
+    slashes: Vec<Slash>,
+) -> storage_api::Result<ResultSlashing>
+where
+    S: StorageRead,
+{
+    let mut result_slashing = ResultSlashing::default();
+
+    for ((start_epoch, withdraw_epoch), (amount, redelegated_unbonds)) in
+        unbonds_and_redelegated_unbonds.iter()
+    {
+        // TODO: check the bounds, and check if slashes in the same epoch can be
+        // folded into one effective slash
+        dbg!(&slashes, withdraw_epoch, start_epoch);
+        let list_slashes = slashes
+            .iter()
+            .filter(|slash| {
+                start_epoch <= &slash.epoch
+                    // TODO: check bounds here!
+                    && *withdraw_epoch - params.slash_processing_epoch_offset()
+                        > slash.epoch
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        dbg!(&list_slashes);
+
+        let result_fold = if !redelegated_unbonds.is_empty() {
+            fold_and_slash_redelegated_bonds(
+                storage,
+                &params,
+                redelegated_unbonds,
+                &start_epoch,
+                &list_slashes,
+                |_| true,
+            )
+        } else {
+            FoldRedelegatedBondsResult::default()
+        };
+
+        let total_not_redelegated = *amount - result_fold.total_redelegated;
+        let after_not_redelegated = apply_list_slashes(
+            &params,
+            &list_slashes,
+            total_not_redelegated.change(),
+        );
+
+        let amount_after_slashing =
+            after_not_redelegated + result_fold.total_after_slashing;
+
+        result_slashing.sum += amount_after_slashing;
+        result_slashing
+            .epoch_map
+            .insert(*start_epoch, amount_after_slashing);
+    }
+
+    Ok(result_slashing)
+}
+
 /// Arguments to [`become_validator`].
 pub struct BecomeValidator<'a, S> {
     /// Storage implementation.
@@ -3212,8 +3277,10 @@ where
         .into());
     }
 
-    let mut result_slashing = ResultSlashing::default();
-    let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
+    let mut unbonds_and_redelegated_unbonds: HashMap<
+        (Epoch, Epoch),
+        (token::Amount, EagerRedelegatedBondsMap),
+    > = HashMap::new();
 
     for unbond in unbond_handle.iter(storage)? {
         let (
@@ -3236,22 +3303,9 @@ where
             continue;
         }
 
-        // TODO: check the bounds, and check if slashes in the same epoch can be
-        // folded into one effective slash
-        let list_slashes = validator_slashes_handle(validator)
-            .iter(storage)?
-            .map(Result::unwrap)
-            .filter(|slash| {
-                start_epoch <= slash.epoch
-                    // TODO: check bounds here!
-                    && withdraw_epoch - params.slash_processing_epoch_offset()
-                        > slash.epoch
-            })
-            .collect::<Vec<_>>();
-
+        let mut eager_redelegated_unbonds = EagerRedelegatedBondsMap::default();
         let matching_redelegated_unbonds =
             redelegated_unbonds.at(&start_epoch).at(&withdraw_epoch);
-        let mut eager_redelegated_unbonds = EagerRedelegatedBondsMap::default();
         for ub in matching_redelegated_unbonds.iter(storage)? {
             let (
                 NestedSubKey::Data {
@@ -3267,36 +3321,19 @@ where
                 .or_insert(amount);
         }
 
-        let result_fold = if !matching_redelegated_unbonds.is_empty(storage)? {
-            fold_and_slash_redelegated_bonds(
-                storage,
-                &params,
-                &eager_redelegated_unbonds,
-                &start_epoch,
-                &list_slashes,
-                |_| true,
-            )
-        } else {
-            FoldRedelegatedBondsResult::default()
-        };
-
-        let total_not_redelegated = amount - result_fold.total_redelegated;
-        let after_not_redelegated = apply_list_slashes(
-            &params,
-            &list_slashes,
-            total_not_redelegated.change(),
+        unbonds_and_redelegated_unbonds.insert(
+            (start_epoch, withdraw_epoch),
+            (amount, eager_redelegated_unbonds),
         );
-
-        let amount_after_slashing =
-            after_not_redelegated + result_fold.total_after_slashing;
-
-        result_slashing.sum += amount_after_slashing;
-        result_slashing
-            .epoch_map
-            .insert(start_epoch, amount_after_slashing);
-
-        unbonds_to_remove.push((withdraw_epoch, start_epoch));
     }
+    let slashes = find_validator_slashes(storage, validator)?;
+    // `val resultSlashing`
+    let result_slashing = compute_amount_after_slashing_withdraw(
+        storage,
+        &params,
+        &unbonds_and_redelegated_unbonds,
+        slashes,
+    )?;
     let withdrawable_amount = result_slashing.sum;
     tracing::debug!(
         "Withdrawing total {}",
@@ -3304,7 +3341,9 @@ where
     );
 
     // `updateDelegator` with `unbonded` and `redelegeatedUnbonded`
-    for (withdraw_epoch, start_epoch) in unbonds_to_remove {
+    for ((start_epoch, withdraw_epoch), _unbond_and_redelegations) in
+        unbonds_and_redelegated_unbonds
+    {
         tracing::debug!("Remove ({start_epoch}..{withdraw_epoch}) from unbond");
         unbond_handle
             .at(&withdraw_epoch)
