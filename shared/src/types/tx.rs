@@ -1,10 +1,13 @@
 //! Helper structures to build transactions
 
+use std::collections::BTreeSet;
+
 use borsh::BorshSerialize;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::testnet_pow;
 use namada_core::proto::{
-    Code, Data, MaspBuilder, MultiSignature, Section, Signature, Tx,
+    Code, Data, MaspBuilder, MultiSignature, Section, Signature,
+    SignatureIndex, Tx,
 };
 use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::chain::ChainId;
@@ -25,6 +28,7 @@ pub struct TxBuilder {
     fee_payer: Option<common::SecretKey>,
     signing_keys: Vec<common::SecretKey>,
     account_public_keys_map: Option<AccountPublicKeysMap>,
+    signatures: BTreeSet<SignatureIndex>,
 }
 
 impl TxBuilder {
@@ -38,6 +42,7 @@ impl TxBuilder {
             fee_payer: None,
             signing_keys: vec![],
             account_public_keys_map: None,
+            signatures: BTreeSet::default(),
         }
     }
 
@@ -129,6 +134,15 @@ impl TxBuilder {
         self
     }
 
+    /// Add signature
+    pub fn add_signatures(
+        mut self,
+        signatures: BTreeSet<SignatureIndex>,
+    ) -> Self {
+        self.signatures = signatures;
+        self
+    }
+
     /// Generate the corresponding tx
     pub fn build(self) -> Tx {
         let mut tx = Tx::new(TxType::Raw);
@@ -152,17 +166,16 @@ impl TxBuilder {
             tx.update_header(TxType::Wrapper(Box::new(wrapper)));
         }
 
-        if let Some(account_public_keys_map) = self.account_public_keys_map {
-            let hashes = tx
-                .sections
-                .iter()
-                .filter_map(|section| match section {
-                    Section::Data(_) | Section::Code(_) => {
-                        Some(section.get_hash())
-                    }
-                    _ => None,
-                })
-                .collect();
+        let hashes = tx.inner_section_targets();
+
+        if !self.signatures.is_empty() {
+            tx.add_section(Section::SectionSignature(MultiSignature {
+                targets: hashes,
+                signatures: self.signatures,
+            }));
+        } else if let Some(account_public_keys_map) =
+            self.account_public_keys_map
+        {
             tx.add_section(Section::SectionSignature(MultiSignature::new(
                 hashes,
                 &self.signing_keys,
@@ -190,5 +203,16 @@ impl TxBuilder {
     fn _add_section(&mut self, section: Section) -> Section {
         self.sections.push(section);
         self.sections.last().unwrap().clone()
+    }
+}
+
+impl From<Tx> for TxBuilder {
+    fn from(value: Tx) -> Self {
+        let mut tx_builder =
+            TxBuilder::new(value.header.chain_id, value.header.expiration);
+        for section in value.sections {
+            tx_builder._add_section(section);
+        }
+        tx_builder
     }
 }
