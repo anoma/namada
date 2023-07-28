@@ -503,6 +503,7 @@ const fn not_enough_voting_power_msg() -> &'static str {
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
+    use std::collections::BTreeSet;
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
@@ -512,19 +513,22 @@ mod test_prepare_proposal {
     };
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
+    use namada::ledger::rpc::get_public_key;
+    use namada::proof_of_stake::btree_set::BTreeSetShims;
+    use namada::proof_of_stake::types::WeightedValidator;
     use namada::types::address::{self, Address};
     use namada::types::token;
     use namada::ledger::gas::Gas;
 use data_encoding::HEXUPPER;
     use namada::core::types::key::PublicKeyTmRawHash;
-    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
+    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch, read_consensus_validator_set_addresses_with_stake, validator_consensus_key_handle, read_pos_params};
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
-    use namada::types::key::RefTo;
+    use namada::types::key::{RefTo, tm_consensus_key_raw_hash};
     use namada::types::storage::BlockHeight;
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
@@ -547,8 +551,9 @@ use data_encoding::HEXUPPER;
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell,
+        self, gen_keypair, TestShell, get_pkh_from_address,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
@@ -883,14 +888,18 @@ use data_encoding::HEXUPPER;
         should_panic(expected = "A Tendermint quorum should never")
     )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
+        use crate::facade::tendermint_proto::abci::{VoteInfo, Validator};
+
         const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
         let (mut shell, _recv, _, _oracle_control_recv) =
-            test_utils::setup_at_height(FIRST_HEIGHT);
+            test_utils::setup_with_cfg(test_utils::SetupCfg { last_height: FIRST_HEIGHT, num_validators:2  }); 
+
+        let params = shell.wl_storage.pos_queries().get_pos_params();
 
         // artificially change the voting power of the default validator to
-        // zero, change the block height, and commit a dummy block,
+        // one, change the block height, and commit a dummy block,
         // to move to a new epoch
         let events_epoch = shell
             .wl_storage
@@ -913,18 +922,70 @@ use data_encoding::HEXUPPER;
                 (stake, position, address)
             })
             .collect::<Vec<_>>();
+
+        let mut consensus_set: BTreeSet<WeightedValidator> =
+        read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+        let val1 = consensus_set.pop_first_shim().unwrap();
+        let val2 = consensus_set.pop_first_shim().unwrap();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+        let pkh2 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val2.address.clone(),
+            Epoch::default(),
+        );
+
         for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
+            if address == wallet::defaults::validator_address() {
             validators_handle
                 .at(&val_stake)
                 .remove(&mut shell.wl_storage, &val_position)
                 .expect("Test failed");
             validators_handle
-                .at(&0.into())
+                .at(&1.into())
                 .insert(&mut shell.wl_storage, val_position, address)
                 .expect("Test failed");
+            }
         }
+        // Insert some stake for the second validator to prevent total stake from going to 0
 
-        shell.start_new_epoch();
+        let votes = vec![
+            VoteInfo {
+            validator: Some(Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        },
+        
+            VoteInfo {
+            validator: Some(Validator {
+                address: pkh2,
+                power: u128::try_from(val2.bonded_stake).expect("Test failed")
+                    as i64,
+
+            }),
+            signed_last_block: true,
+        },
+        ];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()  
+        };
+        shell.start_new_epoch(Some(req)); 
         assert_eq!(
             shell.wl_storage.pos_queries().get_epoch(
                 shell.wl_storage.pos_queries().get_current_decision_height()
@@ -1517,7 +1578,7 @@ use data_encoding::HEXUPPER;
 
         let wrapper = WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1_000_000.into(),
+                amount_per_gas_unit: 1_000_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),

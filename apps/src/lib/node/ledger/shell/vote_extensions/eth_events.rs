@@ -313,7 +313,7 @@ where
     pub fn validate_eth_events_vext_list<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-        + 'iter,
+            + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
             (token::Amount, Signed<ethereum_events::Vext>),
@@ -334,7 +334,7 @@ where
     pub fn filter_invalid_eth_events_vexts<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-        + 'iter,
+            + 'iter,
     ) -> impl Iterator<Item = (token::Amount, Signed<ethereum_events::Vext>)> + 'iter
     {
         self.validate_eth_events_vext_list(vote_extensions)
@@ -459,9 +459,14 @@ mod test_vote_extensions {
     };
     use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::consensus_validator_set_handle;
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
+    use namada::tendermint_proto::abci::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
@@ -485,6 +490,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test validating Ethereum events.
     #[test]
@@ -833,7 +839,7 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0 .0, 0);
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
         let consensus_in_mem = validators_handle
@@ -857,27 +863,53 @@ mod test_vote_extensions {
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
-        assert_eq!(shell.start_new_epoch().0, 1);
-        assert!(
-            shell
-                .wl_storage
-                .pos_queries()
-                .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
-                .is_err()
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = shell.wl_storage.pos_queries().get_pos_params();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
         );
+        let votes = vec![VoteInfo {
+            validator: Some(namada::tendermint_proto::abci::Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()
+        };
+        assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
+        assert!(shell
+            .wl_storage
+            .pos_queries()
+            .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
+            .is_err());
         let prev_epoch =
-            Epoch(shell.wl_storage.storage.get_current_epoch().0.0 - 1);
-        assert!(
-            shell
-                .shell
-                .wl_storage
-                .pos_queries()
-                .get_validator_from_protocol_pk(
-                    &signing_key.ref_to(),
-                    Some(prev_epoch)
-                )
-                .is_ok()
-        );
+            Epoch(shell.wl_storage.storage.get_current_epoch().0 .0 - 1);
+        assert!(shell
+            .shell
+            .wl_storage
+            .pos_queries()
+            .get_validator_from_protocol_pk(
+                &signing_key.ref_to(),
+                Some(prev_epoch)
+            )
+            .is_ok());
 
         assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
     }

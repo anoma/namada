@@ -181,7 +181,7 @@ where
     pub fn validate_bp_roots_vext_list<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<bridge_pool_roots::Vext>>
-        + 'iter,
+            + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
             (token::Amount, Signed<bridge_pool_roots::Vext>),
@@ -203,7 +203,7 @@ where
     pub fn filter_invalid_bp_roots_vexts<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<bridge_pool_roots::Vext>>
-        + 'iter,
+            + 'iter,
     ) -> impl Iterator<Item = (token::Amount, Signed<bridge_pool_roots::Vext>)> + 'iter
     {
         self.validate_bp_roots_vext_list(vote_extensions)
@@ -280,11 +280,17 @@ mod test_bp_vote_extensions {
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::proof_of_stake::types::Position as ValidatorPosition;
+    use namada::proof_of_stake::types::{
+        Position as ValidatorPosition, WeightedValidator,
+    };
     use namada::proof_of_stake::{
-        become_validator, consensus_validator_set_handle, BecomeValidator,
+        become_validator, consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, BecomeValidator,
+        Epoch,
     };
     use namada::proto::{SignableEthMessage, Signed};
+    use namada::tendermint_proto::abci::VoteInfo;
+    use namada::tendermint_proto::types::Validator;
     #[cfg(not(feature = "abcipp"))]
     use namada::types::ethereum_events::Uint;
     #[cfg(not(feature = "abcipp"))]
@@ -301,6 +307,7 @@ mod test_bp_vote_extensions {
     use tower_abci_abcipp::request;
 
     use crate::node::ledger::shell::test_utils::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet::defaults::{bertha_address, bertha_keypair};
 
     /// Make Bertha a validator.
@@ -353,7 +360,36 @@ mod test_bp_vote_extensions {
         .expect("Test failed");
 
         // we advance forward to the next epoch
-        assert_eq!(shell.start_new_epoch().0, 1);
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+        let votes = vec![VoteInfo {
+            validator: Some(namada::tendermint_proto::abci::Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()
+        };
+        assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
 
         // Check that Bertha's vote extensions pass validation.
         let to_sign = get_bp_bytes_to_sign();

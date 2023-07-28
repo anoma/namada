@@ -367,11 +367,16 @@ pub mod wrapper_tx {
         fn test_gas_limit_roundtrip() {
             let limit = GasLimit { multiplier: 1 };
             // Test serde roundtrip
-            let js = serde_json::to_string(&limit).expect("Test failed");
-            assert_eq!(js, format!(r#""{}""#, GAS_LIMIT_RESOLUTION));
-            let new_limit: GasLimit =
+            let js = serde_json::to_string(&1).expect("Test failed");
+            assert_eq!(js, format!(r#"{}"#, GAS_LIMIT_RESOLUTION));
+            let new_limit: u64 =
                 serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(new_limit, limit);
+            assert_eq!(
+                GasLimit {
+                    multiplier: new_limit
+                },
+                limit
+            );
 
             // Test borsh roundtrip
             let borsh = limit.try_to_vec().expect("Test failed");
@@ -387,10 +392,12 @@ pub mod wrapper_tx {
         /// multiple
         #[test]
         fn test_deserialize_not_multiple_of_resolution() {
-            let js = format!(r#""{}""#, &(GAS_LIMIT_RESOLUTION + 1));
-            let limit: GasLimit =
-                serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(limit, GasLimit { multiplier: 2 });
+            let js = format!(r#"{}"#, &(GAS_LIMIT_RESOLUTION + 1));
+            let limit: u64 = serde_json::from_str(&js).expect("Test failed");
+            assert_eq!(
+                GasLimit { multiplier: limit },
+                GasLimit { multiplier: 2 }
+            );
         }
 
         /// Test that refund is calculated correctly

@@ -116,7 +116,7 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-test-unit-coverage:
+test-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \

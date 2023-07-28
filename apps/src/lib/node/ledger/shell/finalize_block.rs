@@ -2203,34 +2203,6 @@ mod test_finalize_block {
         }
     }
 
-    fn next_block_for_inflation(
-        shell: &mut TestShell,
-        proposer_address: Vec<u8>,
-        votes: Vec<VoteInfo>,
-        byzantine_validators: Option<Vec<Misbehavior>>,
-    ) {
-        // Let the header time be always ahead of the next epoch min start time
-        let header = Header {
-            time: shell
-                .wl_storage
-                .storage
-                .next_epoch_min_start_time
-                .next_second(),
-            ..Default::default()
-        };
-        let mut req = FinalizeBlock {
-            header,
-            proposer_address,
-            votes,
-            ..Default::default()
-        };
-        if let Some(byz_vals) = byzantine_validators {
-            req.byzantine_validators = byz_vals;
-        }
-        shell.finalize_block(req).unwrap();
-        shell.commit();
-    }
-
     /// Test that if a decrypted transaction fails because of out-of-gas, its
     /// hash is removed from storage to allow rewrapping it
     #[test]
@@ -2336,7 +2308,6 @@ mod test_finalize_block {
             wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         let wrapper_hash_key =
             replay_protection::get_tx_hash_key(&wrapper.header_hash());
@@ -2401,7 +2372,6 @@ mod test_finalize_block {
             wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         let processed_tx = ProcessedTx {
             tx: wrapper.to_bytes(),
@@ -3753,23 +3723,6 @@ mod test_finalize_block {
         shell.wl_storage.storage.block.epoch
     }
 
-    fn get_pkh_from_address<S>(
-        storage: &S,
-        params: &PosParams,
-        address: Address,
-        epoch: Epoch,
-    ) -> Vec<u8>
-    where
-        S: StorageRead,
-    {
-        let ck = validator_consensus_key_handle(&address)
-            .get(storage, epoch, params)
-            .unwrap()
-            .unwrap();
-        let hash_string = tm_consensus_key_raw_hash(&ck);
-        HEXUPPER.decode(hash_string.as_bytes()).unwrap()
-    }
-
     /// Test that updating the ethereum bridge params via governance works.
     #[tokio::test]
     async fn test_eth_bridge_param_updates() {
@@ -3822,10 +3775,36 @@ mod test_finalize_block {
         }
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
+
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+
         let _ = control_receiver.recv().await.expect("Test failed");
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.finalize_block(req).expect("Test failed");
+        // Finalize block 2
+        let votes = vec![VoteInfo {
+            validator: Some(Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        next_block_for_inflation(&mut shell, pkh1.clone(), votes, None);
         let Command::UpdateConfig(cmd) =
             control_receiver.recv().await.expect("Test failed");
         assert_eq!(u64::from(cmd.min_confirmations), 42);

@@ -1591,6 +1591,9 @@ where
 mod test_utils {
     use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
     use data_encoding::HEXUPPER;
+    use namada::proof_of_stake::parameters::PosParams;
+    use namada::proof_of_stake::validator_consensus_key_handle;
+    use namada::tendermint_proto::abci::VoteInfo;
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
@@ -1615,6 +1618,7 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+    use crate::facade::tendermint_proto::abci::Misbehavior;
     use crate::facade::tendermint_proto::abci::{
         RequestInitChain, RequestProcessProposal,
     };
@@ -1900,15 +1904,15 @@ mod test_utils {
 
         /// Simultaneously call the `FinalizeBlock` and
         /// `Commit` handlers.
-        pub fn finalize_and_commit(&mut self) {
-            let mut req = FinalizeBlock::default();
+        pub fn finalize_and_commit(&mut self, req: Option<FinalizeBlock>) {
+            let mut req = req.unwrap_or_default();
             req.header.time = DateTimeUtc::now();
             self.finalize_block(req).expect("Test failed");
             self.commit();
         }
 
         /// Immediately change to the next epoch.
-        pub fn start_new_epoch(&mut self) -> Epoch {
+        pub fn start_new_epoch(&mut self, req: Option<FinalizeBlock>) -> Epoch {
             self.start_new_epoch_in(1);
 
             let next_epoch_min_start_height =
@@ -1918,10 +1922,10 @@ mod test_utils {
             {
                 *height = next_epoch_min_start_height;
             }
-            self.finalize_and_commit();
+            self.finalize_and_commit(req.clone());
 
             for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
-                self.finalize_and_commit();
+                self.finalize_and_commit(req.clone());
             }
             self.wl_storage.storage.get_current_epoch().0
         }
@@ -2156,6 +2160,51 @@ mod test_utils {
             address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
+    }
+
+    pub(super) fn get_pkh_from_address<S>(
+        storage: &S,
+        params: &PosParams,
+        address: Address,
+        epoch: Epoch,
+    ) -> Vec<u8>
+    where
+        S: StorageRead,
+    {
+        let ck = validator_consensus_key_handle(&address)
+            .get(storage, epoch, params)
+            .unwrap()
+            .unwrap();
+        let hash_string = tm_consensus_key_raw_hash(&ck);
+        HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+    }
+
+    pub(super) fn next_block_for_inflation(
+        shell: &mut TestShell,
+        proposer_address: Vec<u8>,
+        votes: Vec<VoteInfo>,
+        byzantine_validators: Option<Vec<Misbehavior>>,
+    ) {
+        // Let the header time be always ahead of the next epoch min start time
+        let header = Header {
+            time: shell
+                .wl_storage
+                .storage
+                .next_epoch_min_start_time
+                .next_second(),
+            ..Default::default()
+        };
+        let mut req = FinalizeBlock {
+            header,
+            proposer_address,
+            votes,
+            ..Default::default()
+        };
+        if let Some(byz_vals) = byzantine_validators {
+            req.byzantine_validators = byz_vals;
+        }
+        shell.finalize_block(req).unwrap();
+        shell.commit();
     }
 }
 
@@ -2736,7 +2785,7 @@ mod test_mempool_validate {
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1_000_000.into(),
+                amount_per_gas_unit: 1_000_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),

@@ -1808,11 +1808,10 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
         assert_eq!(
             response.result.info,
-            "The address given does not have sufficient balance to pay fee"
-                .to_string(),
+            String::from("Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent balance to pay fees")
         );
     }
 
@@ -1870,12 +1869,10 @@ mod test_process_proposal {
                 panic!("Test failed")
             }
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidTx));
+        assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
         assert_eq!(
             response.result.info,
-            String::from(
-                "The address given does not have sufficient balance to pay fee"
-            )
+            String::from("Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent balance to pay fees")
         );
     }
 
@@ -2770,7 +2767,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2813,7 +2809,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &keypair,
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2854,7 +2849,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2895,7 +2889,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2915,11 +2908,11 @@ mod test_process_proposal {
     // Check that a wrapper transactions whose fees cannot be paid causes a block rejection
     #[test]
     fn test_insufficient_balance_for_fee() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: 1_000_000.into(),
+                amount_per_gas_unit: 1_000_000_000.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
@@ -2936,7 +2929,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
@@ -2977,7 +2969,6 @@ mod test_process_proposal {
             wrapper.sechashes(),
             &crate::wallet::defaults::albert_keypair(),
         )));
-        wrapper.encrypt(&Default::default());
 
         // Run validation
         let request = ProcessProposal {
