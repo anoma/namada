@@ -398,6 +398,19 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+/// Sign a transaction offline
+pub struct SignTx<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transaction data
+    pub tx_data: C::Data,
+    /// Path to the output folder
+    pub output_folder: Option<PathBuf>,
+    /// The account address 
+    pub owner: C::Address
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {

@@ -247,8 +247,10 @@ pub mod cmds {
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
                 .subcommand(QueryValidatorState::def().display_order(4))
+                // Actions
+                .subcommand(SignTx::def().display_order(5))
                 // Utils
-                .subcommand(Utils::def().display_order(5))
+                .subcommand(Utils::def().display_order(6))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -299,6 +301,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryValidatorState);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
+            let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -332,6 +335,7 @@ pub mod cmds {
                 .or(query_protocol_parameters)
                 .or(query_validator_state)
                 .or(query_account)
+                .or(sign_tx)
                 .or(utils)
         }
     }
@@ -402,6 +406,7 @@ pub mod cmds {
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
         QueryValidatorState(QueryValidatorState),
+        SignTx(SignTx)
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1518,6 +1523,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct SignTx(pub args::SignTx<args::CliTypes>);
+
+    impl SubCmd for SignTx {
+        const CMD: &'static str = "sign-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                SignTx(args::SignTx::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query PoS bonded stake.")
+                .add_args::<args::SignTx<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryValidatorState(
         pub args::QueryValidatorState<args::CliTypes>,
     );
@@ -2531,6 +2555,7 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -4290,6 +4315,43 @@ pub mod args {
                     "The address of the jailed validator to re-activate.",
                 ),
             )
+        }
+    }
+
+    impl CliToSdk<SignTx<SdkTypes>> for SignTx<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> SignTx<SdkTypes> {
+            SignTx::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                tx_data: std::fs::read(self.tx_data).expect(""),
+                owner: ctx.get(&self.owner),
+                output_folder: None
+            }
+        }
+    }
+
+    impl Args for SignTx<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let tx_path =  TX_PATH.parse(matches);
+            let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
+            let owner = OWNER.parse(matches);
+            Self {
+                tx,
+                tx_data: tx_path,
+                output_folder,
+                owner
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>().arg(
+                TX_PATH.def().help(
+                    "The path to the tx file with the serialized tx.",
+                ))
+                .arg(OUTPUT_FOLDER_PATH.def().help(
+                    "The folder where the serialized signature will be created. Default to current directory."
+                ))
+            
         }
     }
 

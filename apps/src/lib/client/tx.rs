@@ -16,6 +16,7 @@ use namada::ledger::signing::find_pk;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
+use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::governance::{
@@ -1207,10 +1208,78 @@ where
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force { safe_exit(1) } else { Ok(()) }
+                if !args.tx.force {
+                    safe_exit(1)
+                } else {
+                    Ok(())
+                }
             }
         }
     }
+}
+
+pub async fn sign_tx<C>(
+    client: &C,
+    ctx: &mut Context,
+    args::SignTx {
+        tx: tx_args,
+        tx_data,
+        owner,
+        output_folder,
+    }: args::SignTx,
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let tx = if let Ok(tx) = Tx::try_from(tx_data.as_ref()) {
+        tx
+    } else {
+        eprintln!("Couldn't decode the transaction.");
+        safe_exit(1)
+    };
+
+    let default_signer = signing::signer_from_address(Some(owner.clone()));
+    let signing_data = signing::aux_signing_data(
+        client,
+        &mut ctx.wallet,
+        &tx_args,
+        &owner,
+        default_signer,
+    )
+    .await?;
+
+    let secret_keys = &signing_data.public_keys.iter().filter_map(|public_key| {
+        if let Ok(secret_key) = signing::find_key_by_pk(&mut ctx.wallet, &tx_args, public_key) {
+            Some(secret_key)
+        } else {
+            eprintln!("Couldn't find the secret key for {}. Skipping signature generation.", public_key);
+            None
+        }
+    }).collect::<Vec<common::SecretKey>>();
+
+    let signatures = tx.compute_section_signature(
+        secret_keys,
+        &signing_data.account_public_keys_map,
+    );
+
+    for signature in &signatures {
+        let filename = format!(
+            "offline_{}_{}_signature.tx",
+            tx.header_hash(),
+            signature.index
+        );
+        let output_path = match &output_folder {
+            Some(path) => path.join(filename),
+            None => filename.into(),
+        };
+
+        let signature_path = File::create(output_path).expect("Should be able to create signature file.");
+
+        serde_json::to_writer_pretty(signature_path, signature)
+            .expect("Signature should be deserializable.");
+    }
+    Ok(())
 }
 
 pub async fn submit_reveal_pk<C>(

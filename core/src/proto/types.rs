@@ -1384,6 +1384,11 @@ impl Tx {
         valid
     }
 
+    pub fn compute_section_signature(&self, secret_keys: &[common::SecretKey], public_keys_index_map: &AccountPublicKeysMap) -> BTreeSet<SignatureIndex> {
+        let targets = [self.data_sechash().clone(), self.code_sechash().clone()].to_vec();
+        MultiSignature::new(targets, secret_keys, public_keys_index_map).signatures
+    }
+
     /// Decrypt any and all ciphertexts stored in this transaction use the
     /// given decryption key
     #[cfg(feature = "ferveo-tpke")]
