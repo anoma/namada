@@ -212,25 +212,34 @@ pub fn sign_tx<U: WalletUtils>(
     tx_builder: TxBuilder,
     signing_data: SigningTxData,
 ) -> Result<TxBuilder, Error> {
-    let signing_tx_keypairs = signing_data
-        .public_keys
-        .iter()
-        .filter_map(|public_key| {
-            match find_key_by_pk(wallet, args, public_key) {
-                Ok(secret_key) => Some(secret_key),
-                Err(_) => None,
-            }
-        })
-        .collect::<Vec<common::SecretKey>>();
-
     let fee_payer_keypair =
         find_key_by_pk(wallet, args, &signing_data.fee_payer).expect("");
-
-    let tx_builder = tx_builder.add_signing_keys(
-        signing_tx_keypairs,
-        signing_data.account_public_keys_map,
-    );
     let tx_builder = tx_builder.add_fee_payer(fee_payer_keypair);
+
+    let tx_builder = if args.signatures.is_empty() {
+        let signing_tx_keypairs = signing_data
+            .public_keys
+            .iter()
+            .filter_map(|public_key| {
+                match find_key_by_pk(wallet, args, public_key) {
+                    Ok(secret_key) => Some(secret_key),
+                    Err(_) => None,
+                }
+            })
+            .collect::<Vec<common::SecretKey>>();
+
+        tx_builder.add_signing_keys(
+            signing_tx_keypairs,
+            signing_data.account_public_keys_map,
+        )
+    } else {
+        tx_builder.add_signatures(
+            args.signatures
+                .iter()
+                .map(|bytes| serde_json::from_slice(bytes).unwrap())
+                .collect(),
+        )
+    };
 
     Ok(tx_builder)
 }
@@ -330,7 +339,7 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
-    if requires_pow || !is_bal_sufficient {
+    if (requires_pow || !is_bal_sufficient) && !args.dump_tx {
         println!("The transaction requires the completion of a PoW challenge.");
         // Obtain a PoW challenge for faucet withdrawal
         let challenge = rpc::get_testnet_pow_challenge(client, source).await;

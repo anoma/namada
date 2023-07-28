@@ -405,10 +405,8 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Transaction data
     pub tx_data: C::Data,
-    /// Path to the output folder
-    pub output_folder: Option<PathBuf>,
-    /// The account address 
-    pub owner: C::Address
+    /// The account address
+    pub owner: C::Address,
 }
 
 /// Query PoS commission rate
@@ -493,6 +491,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<C::Keypair>,
+    /// List of signatures to attach to the transaction
+    pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Sign the tx with the public key for the given alias from your wallet

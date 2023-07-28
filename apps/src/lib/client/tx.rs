@@ -1208,11 +1208,7 @@ where
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force {
-                    safe_exit(1)
-                } else {
-                    Ok(())
-                }
+                if !args.tx.force { safe_exit(1) } else { Ok(()) }
             }
         }
     }
@@ -1225,15 +1221,21 @@ pub async fn sign_tx<C>(
         tx: tx_args,
         tx_data,
         owner,
-        output_folder,
     }: args::SignTx,
 ) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let tx = if let Ok(tx) = Tx::try_from(tx_data.as_ref()) {
-        tx
+    let tx = if let Ok(hex_encoded_tx) =
+        serde_json::from_slice::<String>(tx_data.as_ref())
+    {
+        if let Ok(tx) = Tx::deserialize(hex_encoded_tx) {
+            tx
+        } else {
+            eprintln!("Couldn't decode the transaction.");
+            safe_exit(1)
+        }
     } else {
         eprintln!("Couldn't decode the transaction.");
         safe_exit(1)
@@ -1249,14 +1251,24 @@ where
     )
     .await?;
 
-    let secret_keys = &signing_data.public_keys.iter().filter_map(|public_key| {
-        if let Ok(secret_key) = signing::find_key_by_pk(&mut ctx.wallet, &tx_args, public_key) {
-            Some(secret_key)
-        } else {
-            eprintln!("Couldn't find the secret key for {}. Skipping signature generation.", public_key);
-            None
-        }
-    }).collect::<Vec<common::SecretKey>>();
+    let secret_keys = &signing_data
+        .public_keys
+        .iter()
+        .filter_map(|public_key| {
+            if let Ok(secret_key) =
+                signing::find_key_by_pk(&mut ctx.wallet, &tx_args, public_key)
+            {
+                Some(secret_key)
+            } else {
+                eprintln!(
+                    "Couldn't find the secret key for {}. Skipping signature \
+                     generation.",
+                    public_key
+                );
+                None
+            }
+        })
+        .collect::<Vec<common::SecretKey>>();
 
     let signatures = tx.compute_section_signature(
         secret_keys,
@@ -1265,19 +1277,28 @@ where
 
     for signature in &signatures {
         let filename = format!(
-            "offline_{}_{}_signature.tx",
+            "offline_signature_{}_{}.tx",
             tx.header_hash(),
             signature.index
         );
-        let output_path = match &output_folder {
+        let output_path = match &tx_args.output_folder {
             Some(path) => path.join(filename),
             None => filename.into(),
         };
 
-        let signature_path = File::create(output_path).expect("Should be able to create signature file.");
+        let signature_path = File::create(&output_path)
+            .expect("Should be able to create signature file.");
 
-        serde_json::to_writer_pretty(signature_path, signature)
+        serde_json::to_writer_pretty(signature_path, &signature.serialize())
             .expect("Signature should be deserializable.");
+        println!(
+            "Signature for {} serialized at {}",
+            &signing_data
+                .account_public_keys_map
+                .get_public_key_from_index(signature.index)
+                .unwrap(),
+            output_path.display()
+        );
     }
     Ok(())
 }

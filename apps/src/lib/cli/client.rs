@@ -569,7 +569,7 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         tx::sign_tx(&client, &mut ctx, args).await?;
-                    },
+                    }
                 }
             }
             cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

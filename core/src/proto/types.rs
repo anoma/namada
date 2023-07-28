@@ -414,6 +414,12 @@ impl SignatureIndex {
             Err(VerifySigError::MissingData)
         }
     }
+
+    pub fn serialize(&self) -> String {
+        let signature_bytes =
+            self.try_to_vec().expect("Signature should be serializable");
+        HEXUPPER.encode(&signature_bytes)
+    }
 }
 
 impl Ord for SignatureIndex {
@@ -440,7 +446,7 @@ impl PartialOrd for SignatureIndex {
 )]
 pub struct MultiSignature {
     /// The hash of the section being signed
-    targets: Vec<crate::types::hash::Hash>,
+    pub targets: Vec<crate::types::hash::Hash>,
     /// The signature over the above hash
     pub signatures: BTreeSet<SignatureIndex>,
 }
@@ -1144,12 +1150,20 @@ impl Tx {
         }
     }
 
-    /// Dump tx to hex string
+    /// Serialize tx to hex string
     pub fn serialize(&self) -> String {
         let tx_bytes = self
             .try_to_vec()
             .expect("Transation should be serializable");
         HEXUPPER.encode(&tx_bytes)
+    }
+
+    // Deserialize from hex encoding
+    pub fn deserialize(hex: String) -> Result<Self> {
+        let bytes = HEXUPPER
+            .decode(hex.as_bytes())
+            .expect("Should be hex decodable.");
+        Tx::try_from_slice(&bytes).map_err(Error::TxDeserializingError)
     }
 
     /// Get the transaction header
@@ -1270,6 +1284,17 @@ impl Tx {
         bytes
     }
 
+    /// Get the inner section hashes
+    pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
+        self.sections
+            .iter()
+            .filter_map(|section| match section {
+                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_section_signatures(
@@ -1384,9 +1409,14 @@ impl Tx {
         valid
     }
 
-    pub fn compute_section_signature(&self, secret_keys: &[common::SecretKey], public_keys_index_map: &AccountPublicKeysMap) -> BTreeSet<SignatureIndex> {
-        let targets = [self.data_sechash().clone(), self.code_sechash().clone()].to_vec();
-        MultiSignature::new(targets, secret_keys, public_keys_index_map).signatures
+    pub fn compute_section_signature(
+        &self,
+        secret_keys: &[common::SecretKey],
+        public_keys_index_map: &AccountPublicKeysMap,
+    ) -> BTreeSet<SignatureIndex> {
+        let targets = [*self.data_sechash(), *self.code_sechash()].to_vec();
+        MultiSignature::new(targets, secret_keys, public_keys_index_map)
+            .signatures
     }
 
     /// Decrypt any and all ciphertexts stored in this transaction use the

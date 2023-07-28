@@ -406,7 +406,7 @@ pub mod cmds {
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
         QueryValidatorState(QueryValidatorState),
-        SignTx(SignTx)
+        SignTx(SignTx),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1529,9 +1529,9 @@ pub mod cmds {
         const CMD: &'static str = "sign-tx";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                SignTx(args::SignTx::parse(matches))
-            })
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| SignTx(args::SignTx::parse(matches)))
         }
 
         fn def() -> App {
@@ -2517,8 +2517,7 @@ pub mod args {
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
-    pub const SIGNATURES: ArgMulti<WalletKeypair> =
-        arg_multi("signatures-paths");
+    pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -4324,7 +4323,6 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 tx_data: std::fs::read(self.tx_data).expect(""),
                 owner: ctx.get(&self.owner),
-                output_folder: None
             }
         }
     }
@@ -4332,26 +4330,23 @@ pub mod args {
     impl Args for SignTx<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let tx_path =  TX_PATH.parse(matches);
-            let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
+            let tx_path = TX_PATH.parse(matches);
             let owner = OWNER.parse(matches);
             Self {
                 tx,
                 tx_data: tx_path,
-                output_folder,
-                owner
+                owner,
             }
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx<CliTypes>>().arg(
-                TX_PATH.def().help(
-                    "The path to the tx file with the serialized tx.",
-                ))
-                .arg(OUTPUT_FOLDER_PATH.def().help(
-                    "The folder where the serialized signature will be created. Default to current directory."
-                ))
-            
+            app.add_args::<Tx<CliTypes>>()
+                .arg(
+                    TX_PATH.def().help(
+                        "The path to the tx file with the serialized tx.",
+                    ),
+                )
+                .arg(OWNER.def().help("The address of the account owner"))
         }
     }
 
@@ -4524,6 +4519,11 @@ pub mod args {
                     .iter()
                     .map(|key| ctx.get_cached(key))
                     .collect(),
+                signatures: self
+                    .signatures
+                    .iter()
+                    .map(|path| std::fs::read(path).unwrap())
+                    .collect(),
                 verification_key: self
                     .verification_key
                     .map(|public_key| ctx.get_cached(&public_key)),
@@ -4587,10 +4587,33 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
-            .arg(SIGNING_KEYS.def().help(
-                "Sign the transaction with the key for the given public key, \
-                 public key hash or alias from your wallet.",
-            ))
+            .arg(
+                SIGNING_KEYS
+                    .def()
+                    .help(
+                        "Sign the transaction with the key for the given \
+                         public key, public key hash or alias from your \
+                         wallet.",
+                    )
+                    .conflicts_with_all([
+                        SIGNATURES.name,
+                        VERIFICATION_KEY.name,
+                    ]),
+            )
+            .arg(
+                SIGNATURES
+                    .def()
+                    .help(
+                        "List of file paths containing a serialized signature \
+                         to be attached to a transaction. Requires to provide \
+                         a gas payer.",
+                    )
+                    .conflicts_with_all([
+                        SIGNING_KEYS.name,
+                        VERIFICATION_KEY.name,
+                    ])
+                    .requires(GAS_PAYER.name),
+            )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
             ))
@@ -4602,7 +4625,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNING_KEYS.name),
+                    .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
         }
@@ -4622,6 +4645,7 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
             let verification_key = VERIFICATION_KEY.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
@@ -4641,6 +4665,7 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_keys,
+                signatures,
                 verification_key,
                 tx_reveal_code_path,
                 password,
