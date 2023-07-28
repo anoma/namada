@@ -1,8 +1,12 @@
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use lazy_static::lazy_static;
 use namada::types::io::{prompt_aux, read_aux, Io};
 use tempfile::tempdir;
+use tokio::io::{AsyncRead, ReadBuf};
 
 /// Namada binaries
 #[derive(Debug)]
@@ -62,8 +66,8 @@ lazy_static! {
 
 lazy_static! {
     /// A replacement for stdin in testing.
-    pub static ref TESTIN: std::sync::Arc<std::sync::Mutex<Vec<u8>>> =
-    std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    pub static ref TESTIN: AtomicBuffer =
+    AtomicBuffer(std::sync::Arc::new(std::sync::Mutex::new(vec![])));
 }
 
 pub struct TestingIo;
@@ -108,16 +112,12 @@ impl Io for TestingIo {
         eprintln!("{}", output.as_ref());
     }
 
-    async fn read() -> std::io::Result<String> {
-        read_aux(TESTIN.lock().unwrap().as_slice())
+    async fn read() -> tokio::io::Result<String> {
+        read_aux(&*TESTIN).await
     }
 
     async fn prompt(question: impl AsRef<str>) -> String {
-        prompt_aux(
-            TESTIN.lock().unwrap().as_slice(),
-            std::io::stdout(),
-            question.as_ref(),
-        )
+        prompt_aux(&*TESTIN, tokio::io::stdout(), question.as_ref()).await
     }
 }
 
@@ -227,6 +227,31 @@ impl FixedBuffer<u8> {
         let mut fresh = vec![];
         std::mem::swap(&mut fresh, &mut self.inner);
         String::from_utf8(fresh).unwrap()
+    }
+}
+
+pub struct AtomicBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl Deref for AtomicBuffer {
+    type Target = std::sync::Arc<std::sync::Mutex<Vec<u8>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> AsyncRead for &'a AtomicBuffer {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let mut inner = self.lock().unwrap();
+        let buf_before = buf.filled().len();
+        let res = AsyncRead::poll_read(Pin::new(&mut inner.as_slice()), cx, buf);
+        let amount_read = buf.filled().len() - buf_before;
+        *inner.deref_mut() = inner[amount_read..].to_vec();
+        res
     }
 }
 
