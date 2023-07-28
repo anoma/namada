@@ -841,14 +841,14 @@ where
                     // transaction key, then the fee payer is effectively
                     // the MASP, otherwise derive
                     // the payer from public key.
-                    let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                        wrapper.fee_payer()
+                    let gas_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                        wrapper.gas_payer()
                     } else {
                         masp()
                     };
                     // check that the fee payer has sufficient balance
                     let balance =
-                        self.get_balance(&wrapper.fee.token, &fee_payer);
+                        self.get_balance(&wrapper.fee.token, &gas_payer);
 
                     // In testnets, tx is allowed to skip fees if it
                     // includes a valid PoW
@@ -2034,7 +2034,7 @@ mod test_process_proposal {
         let tx = tx_builder
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .build();
 
         let response = {

@@ -2407,16 +2407,8 @@ pub mod args {
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FORCE: ArgFlag = flag("force");
-    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("fee-payer").opt();
+    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("gas-payer").opt();
     pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "gas-amount",
         DefaultFn(|| token::DenominatedAmount {
@@ -2433,6 +2425,14 @@ pub mod args {
     );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
+    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "fee-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2737,8 +2737,8 @@ pub mod args {
                 recipient: self.recipient,
                 sender: ctx.get(&self.sender),
                 amount: self.amount,
-                gas_amount: self.gas_amount,
-                gas_payer: ctx.get(&self.gas_payer),
+                fee_amount: self.fee_amount,
+                fee_payer: ctx.get(&self.fee_payer),
                 code_path: self.code_path,
             }
         }
@@ -2751,8 +2751,8 @@ pub mod args {
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let gas_amount = FEE_AMOUNT.parse(matches).amount;
-            let gas_payer = FEE_PAYER.parse(matches);
+            let fee_amount = FEE_AMOUNT.parse(matches).amount;
+            let fee_payer = FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
@@ -2760,8 +2760,8 @@ pub mod args {
                 recipient,
                 sender,
                 amount,
-                gas_amount,
-                gas_payer,
+                fee_amount,
+                fee_payer,
                 code_path,
             }
         }
@@ -4453,9 +4453,9 @@ pub mod args {
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
-                fee_payer: ctx.get_opt_cached(&self.fee_payer),
-                fee_amount: self.fee_amount,
-                fee_token: ctx.get(&self.fee_token),
+                gas_payer: ctx.get_opt_cached(&self.gas_payer),
+                gas_amount: self.gas_amount,
+                gas_token: ctx.get(&self.gas_token),
                 gas_limit: self.gas_limit,
                 signing_keys: self
                     .signing_keys
@@ -4553,10 +4553,10 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let fee_payer = GAS_PAYER.parse(matches);
-            let fee_amount =
+            let gas_payer = GAS_PAYER.parse(matches);
+            let gas_amount =
                 InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
-            let fee_token = GAS_TOKEN.parse(matches);
+            let gas_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
@@ -4573,9 +4573,9 @@ pub mod args {
                 ledger_address,
                 initialized_account_alias,
                 wallet_alias_force,
-                fee_payer,
-                fee_amount,
-                fee_token,
+                gas_payer,
+                gas_amount,
+                gas_token,
                 gas_limit,
                 expiration,
                 signing_keys,

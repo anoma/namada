@@ -247,15 +247,15 @@ where
                         self.invalidate_pow_solution_if_valid(wrapper);
 
                     // Charge fee
-                    let fee_payer =
+                    let gas_payer =
                         if wrapper.pk != address::masp_tx_key().ref_to() {
-                            wrapper.fee_payer()
+                            wrapper.gas_payer()
                         } else {
                             address::masp()
                         };
 
                     let balance_key =
-                        token::balance_key(&wrapper.fee.token, &fee_payer);
+                        token::balance_key(&wrapper.fee.token, &gas_payer);
                     let balance: token::Amount = self
                         .wl_storage
                         .read(&balance_key)

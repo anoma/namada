@@ -254,7 +254,7 @@ impl<IO> CliApi<IO> {
                         let tx_builder = bridge_pool::build_bridge_pool_tx(
                             &client,
                             args.clone(),
-                            signing_data.fee_payer.clone(),
+                            signing_data.gas_payer.clone(),
                         )
                         .await?;
 
@@ -280,7 +280,7 @@ impl<IO> CliApi<IO> {
                                 &client,
                                 &mut ctx.wallet,
                                 &tx_args,
-                                tx_builder,
+                                tx_builder.build(),
                             )
                             .await?;
                         }

@@ -465,7 +465,7 @@ mod tests {
                 let tx = tx_builder
                     .add_code(code.clone())
                     .add_serialized_data(data.to_vec())
-                    .add_fee_payer(keypair.clone())
+                    .add_gas_payer(keypair.clone())
                     .add_signing_keys(keypairs.clone(), pks_map.clone())
                     .build();
 
@@ -563,7 +563,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(input_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         let result = vp::CTX.eval(empty_code, tx).unwrap();
@@ -581,7 +581,7 @@ mod tests {
         let tx = tx_builder
             .add_code_from_hash(code_hash)
             .add_serialized_data(input_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -600,7 +600,7 @@ mod tests {
         let tx = tx_builder
             .add_code_from_hash(code_hash)
             .add_serialized_data(input_data)
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         let result = vp::CTX.eval(code_hash, tx).unwrap();
@@ -627,7 +627,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
 
@@ -663,7 +663,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // update the client with the message
@@ -708,7 +708,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         // init a connection with the message
@@ -743,7 +743,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // open the connection with the message
@@ -789,7 +789,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         // open try a connection with the message
@@ -824,7 +824,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // open the connection with the mssage
@@ -872,7 +872,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         // init a channel with the message
@@ -907,7 +907,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // open the channle with the message
@@ -955,7 +955,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         // try open a channel with the message
@@ -991,7 +991,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // open a channel with the message
@@ -1042,7 +1042,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // close the channel with the message
@@ -1101,7 +1101,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
 
@@ -1157,7 +1157,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
             .build();
         // send the token and a packet with the data
@@ -1206,7 +1206,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // ack the packet with the message
@@ -1293,7 +1293,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // send the token and a packet with the data
@@ -1368,7 +1368,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // receive a packet with the message
@@ -1465,7 +1465,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // receive a packet with the message
@@ -1566,7 +1566,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
         // receive a packet with the message
@@ -1668,7 +1668,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
 
@@ -1759,7 +1759,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
             .build();
 

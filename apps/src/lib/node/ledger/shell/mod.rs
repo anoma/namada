@@ -1242,13 +1242,13 @@ where
                 }
 
                 // Check balance for fee
-                let fee_payer = if wrapper.pk != masp_tx_key().ref_to() {
-                    wrapper.fee_payer()
+                let gas_payer = if wrapper.pk != masp_tx_key().ref_to() {
+                    wrapper.gas_payer()
                 } else {
                     masp()
                 };
                 // check that the fee payer has sufficient balance
-                let balance = self.get_balance(&wrapper.fee.token, &fee_payer);
+                let balance = self.get_balance(&wrapper.fee.token, &gas_payer);
 
                 // In testnets with a faucet, tx is allowed to skip fees if
                 // it includes a valid PoW
@@ -2339,7 +2339,7 @@ mod test_mempool_validate {
         let tx = tx_builder
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .build();
 
         let result = shell.mempool_validate(
@@ -2371,7 +2371,7 @@ mod test_mempool_validate {
         let tx = tx_builder
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
-            .add_fee_payer(keypair)
+            .add_gas_payer(keypair)
             .build();
 
         let result = shell.mempool_validate(

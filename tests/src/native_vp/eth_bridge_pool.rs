@@ -113,7 +113,7 @@ mod test_bridge_pool_vp {
         tx_builder
             .add_code(wasm_code)
             .add_serialized_data(data)
-            .add_fee_payer(keypair.clone())
+            .add_gas_payer(keypair.clone())
             .build()
     }
 

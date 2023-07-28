@@ -467,11 +467,11 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// wallet.
     pub wallet_alias_force: bool,
     /// The fee payer signing key
-    pub fee_payer: Option<C::Keypair>,
+    pub gas_payer: Option<C::Keypair>,
     /// The amount being payed to include the transaction
-    pub fee_amount: InputAmount,
+    pub gas_amount: InputAmount,
     /// The token in which the fee is being paid
-    pub fee_token: C::Address,
+    pub gas_token: C::Address,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
@@ -650,9 +650,9 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     /// The amount to be transferred
     pub amount: InputAmount,
     /// The amount of fees (in NAM)
-    pub gas_amount: token::Amount,
+    pub fee_amount: token::Amount,
     /// The account of fee payer.
-    pub gas_payer: C::Address,
+    pub fee_payer: C::Address,
     /// Path to the tx WASM code file
     pub code_path: PathBuf,
 }

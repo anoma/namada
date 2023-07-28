@@ -256,7 +256,7 @@ pub mod wrapper_tx {
 
         /// Get the address of the implicit account associated
         /// with the public key
-        pub fn fee_payer(&self) -> Address {
+        pub fn gas_payer(&self) -> Address {
             Address::from(&self.pk)
         }
 
