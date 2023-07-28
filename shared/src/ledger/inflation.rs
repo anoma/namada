@@ -70,18 +70,30 @@ impl RewardsController {
         let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
+        println!("Locked ratio: {:?}", locked_ratio);
         let max_inflation = total * max_reward_rate / epochs_py;
+        println!("Max inflation: {:?}", max_inflation);
+
         let p_gain = p_gain_nom * max_inflation;
         let d_gain = d_gain_nom * max_inflation;
+        println!("P gain: {:?}", p_gain);
+        println!("D gain: {:?}", d_gain);
 
         let error = locked_ratio_target - locked_ratio;
         let delta_error = locked_ratio_last - locked_ratio;
         let control_val = p_gain * error - d_gain * delta_error;
+        println!("Control val: {:?}", control_val);
+        println!("error term is {:?}", error);
 
         let last_inflation_amount =
             Dec::try_from(last_inflation_amount.raw_amount())
                 .expect("Should not fail to convert token Amount to Dec");
+        println!("Last inflation amount: {:?}", last_inflation_amount);
         let new_inflation_amount_raw = last_inflation_amount + control_val;
+        println!(
+            "New inflation amount raw: {:?}",
+            new_inflation_amount_raw
+        );
         let new_inflation_amount = if new_inflation_amount_raw.is_negative() {
             token::Amount::zero()
         } else {
@@ -93,6 +105,10 @@ impl RewardsController {
             )
             .expect("Should not fail to convert Uint to Amount")
         };
+        println!(
+            "New inflation amount: {:?}",
+            new_inflation_amount
+        );
 
         let max_inflation = token::Amount::from_uint(
             max_inflation
@@ -101,8 +117,10 @@ impl RewardsController {
             0,
         )
         .expect("Should not fail to convert Uint to Amount");
+        println!("Max inflation: {:?}", max_inflation);
 
         let inflation = std::cmp::min(new_inflation_amount, max_inflation);
+        println!("Inflation: {:?}", inflation);
         ValsToUpdate {
             locked_ratio,
             inflation,
