@@ -35,7 +35,8 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
-    Amount, ConvertDescription, OutputDescription, SpendDescription, TxOut,
+    ConvertDescription, I128Sum, I32Sum, OutputDescription, SpendDescription,
+    TxOut, U64Sum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
@@ -306,7 +307,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
 
     tracing::info!("passed spend/output verification");
 
-    let assets_and_values: Amount = sapling_bundle.value_balance.clone();
+    let assets_and_values: I128Sum = sapling_bundle.value_balance.clone();
 
     tracing::info!(
         "accumulated {} assets/values",
@@ -413,7 +414,7 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 
 /// Determine if using the current note would actually bring us closer to our
 /// target
-pub fn is_amount_required(src: Amount, dest: Amount, delta: Amount) -> bool {
+pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
     let gap = dest - src;
     for (asset_type, value) in gap.components() {
         if *value >= 0 && delta[asset_type] >= 0 {
@@ -519,13 +520,13 @@ impl std::ops::Mul<Change> for MaspAmount {
     }
 }
 
-impl<'a> From<&'a MaspAmount> for Amount {
-    fn from(masp_amount: &'a MaspAmount) -> Amount {
-        let mut res = Amount::zero();
+impl<'a> From<&'a MaspAmount> for I128Sum {
+    fn from(masp_amount: &'a MaspAmount) -> I128Sum {
+        let mut res = I128Sum::zero();
         for ((epoch, token), val) in masp_amount.iter() {
             for denom in MaspDenom::iter() {
                 let asset = make_asset_type(Some(*epoch), token, denom);
-                res += Amount::from_pair(asset, denom.denominate_i128(val))
+                res += I128Sum::from_pair(asset, denom.denominate_i128(val))
                     .unwrap();
             }
         }
@@ -533,7 +534,7 @@ impl<'a> From<&'a MaspAmount> for Amount {
     }
 }
 
-impl From<MaspAmount> for Amount {
+impl From<MaspAmount> for I128Sum {
     fn from(amt: MaspAmount) -> Self {
         Self::from(&amt)
     }
@@ -828,9 +829,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     *balance += self
                         .decode_all_amounts(
                             client,
-                            Amount::from_nonnegative(
+                            I128Sum::from_nonnegative(
                                 note.asset_type,
-                                note.value,
+                                note.value as i128,
                             )
                             .expect(
                                 "found note with invalid value or asset type",
@@ -861,10 +862,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 *balance -= self
                     .decode_all_amounts(
                         client,
-                        Amount::from_nonnegative(note.asset_type, note.value)
-                            .expect(
-                                "found note with invalid value or asset type",
-                            ),
+                        I128Sum::from_nonnegative(
+                            note.asset_type,
+                            note.value as i128,
+                        )
+                        .expect("found note with invalid value or asset type"),
                     )
                     .await;
             }
@@ -910,7 +912,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if !self.pos_map.contains_key(vk) {
             return None;
         }
-        let mut val_acc = Amount::zero();
+        let mut val_acc = I128Sum::zero();
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk) {
             for note_idx in avail_notes {
@@ -921,9 +923,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 // Get note associated with this ID
                 let note = self.note_map.get(note_idx).unwrap();
                 // Finally add value to multi-asset accumulator
-                val_acc +=
-                    Amount::from_nonnegative(note.asset_type, note.value)
-                        .expect("found note with invalid value or asset type");
+                val_acc += I128Sum::from_nonnegative(
+                    note.asset_type,
+                    note.value as i128,
+                )
+                .expect("found note with invalid value or asset type");
             }
         }
         Some(self.decode_all_amounts(client, val_acc).await)
@@ -945,7 +949,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             Address,
             MaspDenom,
             _,
-            Amount,
+            I32Sum,
             MerklePath<Node>,
         ) = rpc::query_conversion(client, asset_type).await?;
         self.asset_types
@@ -970,7 +974,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             {
                 self.asset_types.insert(asset_type, (addr, denom, ep));
                 // If the conversion is 0, then we just have a pure decoding
-                if conv != Amount::zero() {
+                if !conv.is_zero() {
                     conv_entry.insert((conv.into(), path, 0));
                 }
             }
@@ -1026,7 +1030,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             return;
         }
         // If conversion if possible, accumulate the exchanged amount
-        let conv: Amount = conv.into();
+        let conv: I128Sum = I128Sum::from_sum(conv.into());
         // The amount required of current asset to qualify for conversion
         let masp_asset =
             make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2);
@@ -1067,7 +1071,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         mut input: MaspAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
-    ) -> (Amount, Conversions) {
+    ) -> (I128Sum, Conversions) {
         // Where we will store our exchanged value
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
@@ -1166,16 +1170,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         &mut self,
         client: &C,
         vk: &ViewingKey,
-        target: Amount,
+        target: I128Sum,
         target_epoch: Epoch,
     ) -> (
-        Amount,
+        I128Sum,
         Vec<(Diversifier, Note, MerklePath<Node>)>,
         Conversions,
     ) {
         // Establish connection with which to do exchange rate queries
         let mut conversions = BTreeMap::new();
-        let mut val_acc = Amount::zero();
+        let mut val_acc = I128Sum::zero();
         let mut notes = Vec::new();
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk).cloned() {
@@ -1193,8 +1197,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 let note = *self.note_map.get(note_idx).unwrap();
 
                 // The amount contributed by this note before conversion
-                let pre_contr = Amount::from_pair(note.asset_type, note.value)
-                    .expect("received note has invalid value or asset type");
+                let pre_contr =
+                    I128Sum::from_pair(note.asset_type, note.value as i128)
+                        .expect(
+                            "received note has invalid value or asset type",
+                        );
                 let input = self.decode_all_amounts(client, pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
@@ -1236,7 +1243,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(Amount, Epoch), PinnedBalanceError> {
+    ) -> Result<(I128Sum, Epoch), PinnedBalanceError> {
         // Check that the supplied viewing key corresponds to given payment
         // address
         let counter_owner = viewing_key.to_payment_address(
@@ -1271,7 +1278,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .await
             .expect("Ill-formed epoch, transaction pair");
         // Accumulate the combined output note value into this Amount
-        let mut val_acc = Amount::zero();
+        let mut val_acc = I128Sum::zero();
         for so in shielded
             .sapling_bundle()
             .map_or(&vec![], |x| &x.shielded_outputs)
@@ -1286,11 +1293,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             match decres {
                 // So the given viewing key does decrypt this current note...
                 Some((note, pa, _memo)) if pa == owner.into() => {
-                    val_acc +=
-                        Amount::from_nonnegative(note.asset_type, note.value)
-                            .expect(
-                                "found note with invalid value or asset type",
-                            );
+                    val_acc += I128Sum::from_nonnegative(
+                        note.asset_type,
+                        note.value as i128,
+                    )
+                    .expect("found note with invalid value or asset type");
                 }
                 _ => {}
             }
@@ -1331,7 +1338,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn decode_amount<C: Client + Sync>(
         &mut self,
         client: &C,
-        amt: Amount,
+        amt: I128Sum,
         target_epoch: Epoch,
     ) -> HashMap<Address, token::Change> {
         let mut res = HashMap::new();
@@ -1359,7 +1366,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn decode_all_amounts<C: Client + Sync>(
         &mut self,
         client: &C,
-        amt: Amount,
+        amt: I128Sum,
     ) -> MaspAmount {
         let mut res: HashMap<(Epoch, Address), Change> = HashMap::default();
         for (asset_type, val) in amt.components() {
@@ -1473,7 +1480,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .collect_unspent_notes(
                     client,
                     &to_viewing_key(&sk).vk,
-                    required_amt,
+                    I128Sum::from_sum(required_amt),
                     epoch,
                 )
                 .await;
@@ -1513,14 +1520,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 builder
                     .add_transparent_input(TxOut {
                         asset_type: *asset_type,
-                        value: denom.denominate(&amt) as i128,
+                        value: denom.denominate(&amt),
                         address: script,
                     })
                     .map_err(builder::Error::TransparentBuild)?;
             }
             // No transfer fees come from the shielded transaction for non-MASP
             // sources
-            Amount::zero()
+            U64Sum::zero()
         };
 
         // Now handle the outputs of this transaction
@@ -1559,7 +1566,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         .add_transparent_output(
                             &TransparentAddress(hash.into()),
                             *asset_type,
-                            vout as i128,
+                            vout,
                         )
                         .map_err(builder::Error::TransparentBuild)?;
                 }
@@ -1569,12 +1576,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Now add outputs representing the change from this payment
         if let Some(sk) = spending_key {
             // Represents the amount of inputs we are short by
-            let mut additional = Amount::zero();
+            let mut additional = I128Sum::zero();
             // The change left over from this transaction
             let value_balance = builder
                 .value_balance()
                 .expect("unable to compute value balance")
-                - tx_fee.clone();
+                - I128Sum::from_sum(tx_fee.clone());
             for (asset_type, amt) in value_balance.components() {
                 if *amt >= 0 {
                     // Send the change in this asset type back to the sender
@@ -1590,12 +1597,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 } else {
                     // Record how much of the current asset type we are short by
                     additional +=
-                        Amount::from_nonnegative(*asset_type, -*amt).unwrap();
+                        I128Sum::from_nonnegative(*asset_type, -*amt).unwrap();
                 }
             }
             // If we are short by a non-zero amount, then we have insufficient
             // funds
-            if additional != Amount::zero() {
+            if !additional.is_zero() {
                 return Err(builder::Error::InsufficientFunds(additional));
             }
         }
@@ -1832,14 +1839,14 @@ fn convert_amount(
     epoch: Epoch,
     token: &Address,
     val: token::Amount,
-) -> ([AssetType; 4], Amount) {
-    let mut amount = Amount::zero();
+) -> ([AssetType; 4], U64Sum) {
+    let mut amount = U64Sum::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
             let asset_type = make_asset_type(Some(epoch), token, denom);
             // Combine the value and unit into one amount
             amount +=
-                Amount::from_nonnegative(asset_type, denom.denominate(&val))
+                U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
                     .expect("invalid value for amount");
             asset_type
         })
