@@ -2199,17 +2199,6 @@ where
         amount,
     )?;
 
-    if env::var("RUST_LOG") == Ok(String::from("debug")) {
-        tracing::debug!("\nBonds after decrementing:");
-        for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-            let delta =
-                bonds_handle.get_delta_val(storage, ep)?.unwrap_or_default();
-            if !delta.is_zero() {
-                tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
-            }
-        }
-    }
-
     // `modifiedRedelegation`
     let modified_redelegation = match bonds_to_unbond.new_entry {
         Some((bond_epoch, new_bond_amount)) => {
@@ -2279,15 +2268,12 @@ where
 
     // `updatedBonded`
     // Decrement the bonds in storage
+    for epoch in &bonds_to_unbond.epochs {
+        bonds_handle.get_data_handler().remove(storage, epoch)?;
+    }
     if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
-        for epoch in &bonds_to_unbond.epochs {
-            bonds_handle.get_data_handler().remove(storage, epoch)?;
-            bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
-        }
-    } else {
-        for epoch in &bonds_to_unbond.epochs {
-            bonds_handle.get_data_handler().remove(storage, epoch)?;
-        }
+        println!("New bond entry: ({}, {})", bond_epoch, new_bond_amount);
+        bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
     }
 
     // `updatedUnbonded`
@@ -2538,6 +2524,17 @@ where
     )?;
 
     // Should be all done at this point
+
+    if env::var("RUST_LOG") == Ok(String::from("debug")) {
+        tracing::debug!("\nBonds after decrementing:");
+        for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
+            let delta =
+                bonds_handle.get_delta_val(storage, ep)?.unwrap_or_default();
+            if !delta.is_zero() {
+                tracing::debug!("bond ∆ at epoch {}: {}", ep, delta);
+            }
+        }
+    }
 
     Ok(result_slashing)
 }
