@@ -1,10 +1,10 @@
 //! CLI input types can be used for command arguments
 
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::{env, fs};
 
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
@@ -17,7 +17,7 @@ use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::CLIShieldedUtils;
-use crate::config::genesis;
+use crate::config::genesis::{self, genesis_config};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::CliWalletUtils;
@@ -96,16 +96,16 @@ impl Context {
             .base_dir
             .join(global_config.default_chain_id.as_str());
 
-        #[cfg(not(feature = "dev"))]
+        #[cfg(not(any(test, feature = "dev")))]
         let genesis = genesis::genesis(
             &global_args.base_dir,
             &global_config.default_chain_id,
         );
-        #[cfg(feature = "dev")]
+        #[cfg(any(test, feature = "dev"))]
         let genesis = genesis::genesis(1);
 
         let native_token = genesis.native_token;
-        #[cfg(not(feature = "dev"))]
+        #[cfg(not(any(test, feature = "dev")))]
         let wallet = {
             let genesis_file_path = global_args.base_dir.join(format!(
                 "{}.toml",
@@ -116,7 +116,7 @@ impl Context {
             )?;
             crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
         };
-        #[cfg(feature = "dev")]
+        #[cfg(any(test, feature = "dev"))]
         let wallet = crate::wallet::load_or_new(&chain_dir);
 
         // If the WASM dir specified, put it in the config

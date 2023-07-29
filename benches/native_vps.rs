@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address::{self, Address};
+use namada::core::types::token::{Amount, Transfer};
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -19,13 +20,15 @@ use namada::ibc::tx_msg::Msg;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance;
 use namada::ledger::ibc::vp::Ibc;
+use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::slash_fund::SlashFundVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
-use namada::proto::Tx;
+use namada::proto::{Code, Section, Tx};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::TransfersToNamada;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::storage::TxIndex;
 use namada::types::transaction::governance::{
@@ -36,7 +39,7 @@ use namada_apps::wasm_loader;
 use namada_benches::{
     generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
     generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_VOTE_PROPOSAL_WASM, WASM_DIR,
+    TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM, WASM_DIR,
 };
 
 fn replay_protection(c: &mut Criterion) {
@@ -121,21 +124,24 @@ fn governance(c: &mut Criterion) {
                 None,
                 Some(&defaults::validator_keypair()),
             ),
-            "minimal_proposal" => generate_tx(
-                TX_INIT_PROPOSAL_WASM,
-                InitProposalData {
-                    id: None,
-                    content: namada::types::hash::Hash::zero(),
-                    author: defaults::albert_address(),
-                    r#type: ProposalType::Default(None),
-                    voting_start_epoch: 12.into(),
-                    voting_end_epoch: 15.into(),
-                    grace_epoch: 18.into(),
-                },
-                None,
-                None,
-                Some(&defaults::albert_keypair()),
-            ),
+            "minimal_proposal" => {
+                let content_section = Section::ExtraData(Code::new(vec![]));
+                generate_tx(
+                    TX_INIT_PROPOSAL_WASM,
+                    InitProposalData {
+                        id: None,
+                        content: content_section.get_hash(),
+                        author: defaults::albert_address(),
+                        r#type: ProposalType::Default(None),
+                        voting_start_epoch: 12.into(),
+                        voting_end_epoch: 15.into(),
+                        grace_epoch: 18.into(),
+                    },
+                    None,
+                    Some(vec![content_section]),
+                    Some(&defaults::albert_keypair()),
+                )
+            }
             "complete_proposal" => {
                 let max_code_size_key =
                     governance::storage::get_max_proposal_code_size_key();
@@ -153,22 +159,29 @@ fn governance(c: &mut Criterion) {
                     .expect(
                         "Missing max_proposal_content parameter in storage",
                     );
+                let content_section = Section::ExtraData(Code::new(vec![
+                        0;
+                        max_proposal_content_size
+                            as _
+                    ]));
+                let wasm_code_section =
+                    Section::ExtraData(Code::new(vec![0; max_code_size as _]));
 
                 generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: Some(1),
-                        content: namada::types::hash::Hash::zero(),
+                        content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(Some(
-                            namada::types::hash::Hash::zero(),
+                            wasm_code_section.get_hash(),
                         )),
                         voting_start_epoch: 12.into(),
                         voting_end_epoch: 15.into(),
                         grace_epoch: 18.into(),
                     },
                     None,
-                    None,
+                    Some(vec![content_section, wasm_code_section]),
                     Some(&defaults::albert_keypair()),
                 )
             }
@@ -215,10 +228,9 @@ fn governance(c: &mut Criterion) {
     group.finish();
 }
 
-//FIXME: missing native vps
+//TODO: missing native vps
 //    - pos
 //    - parameters
-//    - multitoken
 //    - eth bridge
 //    - eth bridge pool
 
@@ -229,11 +241,12 @@ fn slash_fund(c: &mut Criterion) {
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
+    let content_section = Section::ExtraData(Code::new(vec![]));
     let governance_proposal = generate_tx(
         TX_INIT_PROPOSAL_WASM,
         InitProposalData {
             id: None,
-            content: namada::types::hash::Hash::zero(),
+            content: content_section.get_hash(),
             author: defaults::albert_address(),
             r#type: ProposalType::Default(None),
             voting_start_epoch: 12.into(),
@@ -241,7 +254,7 @@ fn slash_fund(c: &mut Criterion) {
             grace_epoch: 18.into(),
         },
         None,
-        None,
+        Some(vec![content_section]),
         Some(&defaults::albert_keypair()),
     );
 
@@ -376,67 +389,67 @@ fn ibc(c: &mut Criterion) {
     group.finish();
 }
 
-// //FIXME: turn this into multitoken bench
-// fn ibc_token(c: &mut Criterion) {
-//     let mut group = c.benchmark_group("vp_ibc_token");
+fn vp_multitoken(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_token");
 
-//     let foreign_key_write =
-//         generate_foreign_key_tx(&defaults::albert_keypair());
-//     let outgoing_transfer = generate_ibc_transfer_tx();
+    let foreign_key_write =
+        generate_foreign_key_tx(&defaults::albert_keypair());
 
-//     for (signed_tx, bench_name) in [foreign_key_write, outgoing_transfer]
-//         .iter()
-//         .zip(["foreign_key_write", "outgoing_transfer"])
-//     {
-//         let mut shell = BenchShell::default();
-//         shell.init_ibc_channel();
+    let transfer = generate_tx(
+        TX_TRANSFER_WASM,
+        Transfer {
+            source: defaults::albert_address(),
+            target: defaults::bertha_address(),
+            token: address::nam(),
+            amount: Amount::native_whole(1000).native_denominated(),
+            key: None,
+            shielded: None,
+        },
+        None,
+        None,
+        Some(&defaults::albert_keypair()),
+    );
 
-//         shell.execute_tx(signed_tx);
+    for (signed_tx, bench_name) in [foreign_key_write, transfer]
+        .iter()
+        .zip(["foreign_key_write", "transfer"])
+    {
+        let mut shell = BenchShell::default();
+        shell.execute_tx(signed_tx);
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
 
-//         let (verifiers, keys_changed) = shell
-//             .wl_storage
-//             .write_log
-//             .verifiers_and_changed_keys(&BTreeSet::default());
+        let multitoken = MultitokenVp {
+            ctx: Ctx::new(
+                &Address::Internal(InternalAddress::Multitoken),
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+                ),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
 
-//         let ibc_token_address =
-//             namada::core::types::address::InternalAddress::ibc_token_address(
-//                 PortId::transfer().to_string(),
-//                 ChannelId::new(5).to_string(),
-//                 &address::nam(),
-//             );
-//         let internal_address = Address::Internal(ibc_token_address);
-
-//         let ibc = IbcToken {
-//             ctx: Ctx::new(
-//                 &internal_address,
-//                 &shell.wl_storage.storage,
-//                 &shell.wl_storage.write_log,
-//                 signed_tx,
-//                 &TxIndex(0),
-//                 VpGasMeter::new_from_tx_meter(
-//                     &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
-//                 ),
-//                 &keys_changed,
-//                 &verifiers,
-//                 shell.vp_wasm_cache.clone(),
-//             ),
-//         };
-
-//         group.bench_function(bench_name, |b| {
-//             b.iter(|| {
-//                 assert!(ibc
-//                     .validate_tx(
-//                         &signed_tx,
-//                         ibc.ctx.keys_changed,
-//                         ibc.ctx.verifiers,
-//                     )
-//                     .unwrap())
-//             })
-//         });
-//     }
-
-//     group.finish();
-// }
+        group.bench_function(bench_name, |b| {
+            b.iter(|| {
+                assert!(multitoken
+                    .validate_tx(
+                        &signed_tx,
+                        multitoken.ctx.keys_changed,
+                        multitoken.ctx.verifiers,
+                    )
+                    .unwrap())
+            })
+        });
+    }
+}
 
 criterion_group!(
     native_vps,
@@ -444,6 +457,6 @@ criterion_group!(
     governance,
     slash_fund,
     ibc,
-    // ibc_token //FIXME:
+    vp_multitoken
 );
 criterion_main!(native_vps);

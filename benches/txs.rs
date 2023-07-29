@@ -7,6 +7,7 @@ use namada::core::types::storage::KeySeg;
 use namada::core::types::token::Amount;
 use namada::ledger::args::TxUnjailValidator;
 use namada::ledger::governance;
+use namada::ledger::storage_api::token::read_balance;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::{Slash, SlashType, ValidatorStates};
 use namada::proof_of_stake::{
@@ -43,7 +44,7 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
-//FIXME: need to benchmark tx_bridge_pool.wasm
+//TODO: need to benchmark tx_bridge_pool.wasm
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
     let amount = Amount::native_whole(500);
@@ -334,7 +335,7 @@ fn update_vp(c: &mut Criterion) {
         TX_UPDATE_VP_WASM,
         data,
         None,
-        Some(extra_section),
+        Some(vec![extra_section]),
         Some(&defaults::albert_keypair()),
     );
 
@@ -373,7 +374,7 @@ fn init_account(c: &mut Criterion) {
         TX_INIT_ACCOUNT_WASM,
         data,
         None,
-        Some(extra_section),
+        Some(vec![extra_section]),
         Some(&defaults::albert_keypair()),
     );
 
@@ -396,21 +397,25 @@ fn init_proposal(c: &mut Criterion) {
                     let shell = BenchShell::default();
 
                     let signed_tx = match bench_name {
-                        "minimal_proposal" => generate_tx(
-                            TX_INIT_PROPOSAL_WASM,
-                            InitProposalData {
-                                id: None,
-                                content: Hash::zero(),
-                                author: defaults::albert_address(),
-                                r#type: ProposalType::Default(None),
-                                voting_start_epoch: 12.into(),
-                                voting_end_epoch: 15.into(),
-                                grace_epoch: 18.into(),
-                            },
-                            None,
-                            None,
-                            Some(&defaults::albert_keypair()),
-                        ),
+                        "minimal_proposal" => {
+                            let content_section =
+                                Section::ExtraData(Code::new(vec![]));
+                            generate_tx(
+                                TX_INIT_PROPOSAL_WASM,
+                                InitProposalData {
+                                    id: None,
+                                    content: content_section.get_hash(),
+                                    author: defaults::albert_address(),
+                                    r#type: ProposalType::Default(None),
+                                    voting_start_epoch: 12.into(),
+                                    voting_end_epoch: 15.into(),
+                                    grace_epoch: 18.into(),
+                                },
+                                None,
+                                Some(vec![content_section]),
+                                Some(&defaults::albert_keypair()),
+                            )
+                        }
                         "complete_proposal" => {
                             let max_code_size_key =
         governance::storage::get_max_proposal_code_size_key();
@@ -432,23 +437,34 @@ fn init_proposal(c: &mut Criterion) {
                                     "Missing max_proposal_content parameter \
                                      in storage",
                                 );
+                            let content_section =
+                                Section::ExtraData(Code::new(vec![
+                                    0;
+                                    max_proposal_content_size
+                                        as _
+                                ]));
+                            let wasm_code_section =
+                                Section::ExtraData(Code::new(vec![
+                                    0;
+                                    max_code_size
+                                        as _
+                                ]));
 
-                            //FIXME: put the wasm code in extra section
                             generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: Some(1),
-                                    content: Hash::zero(),
+                                    content: content_section.get_hash(),
                                     author: defaults::albert_address(),
                                     r#type: ProposalType::Default(Some(
-                                        Hash::zero(),
+                                        wasm_code_section.get_hash(),
                                     )),
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),
                                 },
                                 None,
-                                None,
+                                Some(vec![content_section, wasm_code_section]),
                                 Some(&defaults::albert_keypair()),
                             )
                         }
@@ -571,7 +587,7 @@ fn init_validator(c: &mut Criterion) {
         TX_INIT_VALIDATOR_WASM,
         data,
         None,
-        Some(extra_section),
+        Some(vec![extra_section]),
         Some(&defaults::albert_keypair()),
     );
 
@@ -635,73 +651,6 @@ fn unjail_validator(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let mut shell = BenchShell::default();
-
-                // Init new validator
-                let mut csprng = rand::rngs::OsRng {};
-                let consensus_key: common::PublicKey =
-                    secp256k1::SigScheme::generate(&mut csprng)
-                        .try_to_sk::<common::SecretKey>()
-                        .unwrap()
-                        .to_public();
-
-                let eth_cold_key = secp256k1::PublicKey::try_from_pk(
-                    &secp256k1::SigScheme::generate(&mut csprng)
-                        .try_to_sk::<common::SecretKey>()
-                        .unwrap()
-                        .to_public(),
-                )
-                .unwrap();
-                let eth_hot_key = secp256k1::PublicKey::try_from_pk(
-                    &secp256k1::SigScheme::generate(&mut csprng)
-                        .try_to_sk::<common::SecretKey>()
-                        .unwrap()
-                        .to_public(),
-                )
-                .unwrap();
-                let protocol_key: common::PublicKey =
-                    secp256k1::SigScheme::generate(&mut csprng)
-                        .try_to_sk::<common::SecretKey>()
-                        .unwrap()
-                        .to_public();
-
-                let dkg_key = ferveo_common::Keypair::<EllipticCurve>::new(
-                    &mut StdRng::from_entropy(),
-                )
-                .public()
-                .into();
-
-                let validator_vp_code_hash: Hash = shell
-                    .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
-                    .unwrap();
-                let extra_section =
-                    Section::ExtraData(Code::from_hash(validator_vp_code_hash));
-                let extra_hash = Hash(
-                    extra_section
-                        .hash(&mut sha2::Sha256::new())
-                        .finalize_reset()
-                        .into(),
-                );
-                let data = InitValidator {
-                    account_key: defaults::albert_keypair().to_public(),
-                    consensus_key,
-                    eth_cold_key,
-                    eth_hot_key,
-                    protocol_key,
-                    dkg_key,
-                    commission_rate: namada::types::dec::Dec::default(),
-                    max_commission_rate_change:
-                        namada::types::dec::Dec::default(),
-                    validator_vp_code_hash: extra_hash,
-                };
-                let tx = generate_tx(
-                    TX_INIT_VALIDATOR_WASM,
-                    data,
-                    None,
-                    Some(extra_section),
-                    Some(&defaults::albert_keypair()),
-                );
-
-                shell.execute_tx(&tx);
 
                 // Jail the validator
                 let pos_params = read_pos_params(&shell.wl_storage).unwrap();

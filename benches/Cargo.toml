@@ -48,7 +48,7 @@ ferveo-common.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
 namada = { path = "../shared" }
-namada_apps = { path = "../apps", features = ["dev"] } # FIXME: safe to use dev flag?
+namada_apps = { path = "../apps" }
 namada_test_utils = { path = "../test_utils" }
 prost.workspace = true
 rand.workspace = true

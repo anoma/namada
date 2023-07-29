@@ -95,7 +95,7 @@ fn vp_user(c: &mut Criterion) {
         TX_UPDATE_VP_WASM,
         data,
         None,
-        Some(extra_section),
+        Some(vec![extra_section]),
         Some(&defaults::albert_keypair()),
     );
 
@@ -375,7 +375,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_UPDATE_VP_WASM,
         data,
         None,
-        Some(extra_section),
+        Some(vec![extra_section]),
         Some(&defaults::validator_keypair()),
     );
 
@@ -469,66 +469,6 @@ fn vp_validator(c: &mut Criterion) {
     group.finish();
 }
 
-fn vp_token(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_token");
-
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
-
-    let transfer = generate_tx(
-        TX_TRANSFER_WASM,
-        Transfer {
-            source: defaults::albert_address(),
-            target: defaults::bertha_address(),
-            token: address::nam(),
-            amount: Amount::native_whole(1000).native_denominated(),
-            key: None,
-            shielded: None,
-        },
-        None,
-        None,
-        Some(&defaults::albert_keypair()),
-    );
-
-    for (signed_tx, bench_name) in [foreign_key_write, transfer]
-        .iter()
-        .zip(["foreign_key_write", "transfer"])
-    {
-        let mut shell = BenchShell::default();
-        let vp_code_hash: Hash = shell
-            .read_storage_key(&Key::wasm_hash(VP_TOKEN_WASM))
-            .unwrap();
-        shell.execute_tx(signed_tx);
-        let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
-            .verifiers_and_changed_keys(&BTreeSet::default());
-
-        group.bench_function(bench_name, |b| {
-            b.iter(|| {
-                assert!(run::vp(
-                    &vp_code_hash,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::albert_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_micro_limit(u64::MAX.into())
-                    ),
-                    &BTreeMap::default(),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                    #[cfg(not(feature = "mainnet"))]
-                    false,
-                )
-                .unwrap());
-            })
-        });
-    }
-}
-
 fn vp_masp(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_masp");
 
@@ -619,12 +559,5 @@ fn vp_masp(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    whitelisted_vps,
-    vp_user,
-    vp_implicit,
-    vp_validator,
-    vp_masp,
-    vp_token
-);
+criterion_group!(whitelisted_vps, vp_user, vp_implicit, vp_validator, vp_masp,);
 criterion_main!(whitelisted_vps);

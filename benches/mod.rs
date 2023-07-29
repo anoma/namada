@@ -163,11 +163,7 @@ impl Default for BenchShell {
         let path = tempdir.path().canonicalize().unwrap();
 
         let mut shell = Shell::new(
-            config::Ledger::new(
-                path,
-                Default::default(),
-                TendermintMode::Validator,
-            ),
+            config::Ledger::new(path, Default::default(), TendermintMode::Full),
             WASM_DIR.into(),
             sender,
             None,
@@ -187,7 +183,7 @@ impl Default for BenchShell {
                     chain_id: ChainId::default().to_string(),
                     ..Default::default()
                 },
-                1,
+                2,
             )
             .unwrap();
 
@@ -216,11 +212,12 @@ impl Default for BenchShell {
         bench_shell.wl_storage.commit_tx();
 
         // Initialize governance proposal
+        let content_section = Section::ExtraData(Code::new(vec![]));
         let signed_tx = generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
                 id: None,
-                content: namada::types::hash::Hash::zero(),
+                content: content_section.get_hash(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
                 voting_start_epoch: 12.into(),
@@ -228,7 +225,7 @@ impl Default for BenchShell {
                 grace_epoch: 18.into(),
             },
             None,
-            None,
+            Some(vec![content_section]),
             Some(&defaults::albert_keypair()),
         );
 
@@ -416,7 +413,7 @@ pub fn generate_tx(
     wasm_code_path: &str,
     data: impl BorshSerialize,
     shielded: Option<Transaction>,
-    extra_section: Option<Section>,
+    extra_section: Option<Vec<Section>>,
     signer: Option<&SecretKey>,
 ) -> Tx {
     let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
@@ -437,8 +434,12 @@ pub fn generate_tx(
         tx.add_section(Section::MaspTx(transaction));
     }
 
-    if let Some(Section::ExtraData(_)) = extra_section {
-        tx.add_section(extra_section.unwrap());
+    if let Some(sections) = extra_section {
+        for section in sections {
+            if let Section::ExtraData(_) = section {
+                tx.add_section(section);
+            }
+        }
     }
 
     if let Some(signer) = signer {
@@ -459,17 +460,13 @@ pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
             has_valid_pow: true,
         },
     ));
-    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
-        wasm_code_path,
-    )));
+    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(WASM_DIR, wasm_code_path)));
 
     let mut data = vec![];
     prost::Message::encode(&msg.to_any(), &mut data).unwrap();
     tx.set_data(Data::new(data));
 
-    //NOTE: the Ibc VP doesn't actually check this signature
-
+    //NOTE: the Ibc VP doesn't actually check the signature
     tx
 }
 
@@ -499,7 +496,12 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
 pub fn generate_ibc_transfer_tx() -> Tx {
     let token = Coin {
         denom: address::nam().to_string(),
-        amount: format!("{:?}", Amount::native_whole(1000)),
+        amount: Amount::native_whole(1000)
+            .to_string_native()
+            .split('.')
+            .next()
+            .unwrap()
+            .to_string(),
     };
 
     let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
@@ -667,7 +669,7 @@ impl Default for BenchShieldedCtx {
         let mut ctx = Context::new(namada_apps::cli::args::Global {
             chain_id: None,
             base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
-            wasm_dir: None,
+            wasm_dir: Some(WASM_DIR.into()),
         })
         .unwrap();
 
@@ -763,7 +765,10 @@ impl BenchShieldedCtx {
             source: source.clone(),
             target: target.clone(),
             token: address::nam(),
-            amount: InputAmount::Validated(DenominatedAmount::native(amount)),
+            amount: InputAmount::Validated(DenominatedAmount {
+                amount,
+                denom: 0.into(),
+            }),
             native_token: self.shell.wl_storage.storage.native_token.clone(),
             tx_code_path: TX_TRANSFER_WASM.into(),
         };
