@@ -1583,23 +1583,33 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         tx,
         code_path,
         data_path,
+        serialized_tx,
         owner: _,
     }: args::TxCustom,
     gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
-    let tx_code_hash =
-        query_wasm_code_hash(client, code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_builder = if let Some(serialized_tx) = serialized_tx {
+        let tx = Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
+            Error::Other("Invalid tx deserialization.".to_string())
+        })?;
+        TxBuilder::from(tx)
+    } else {
+        let tx_code_hash =
+            query_wasm_code_hash(client, code_path.unwrap().to_str().unwrap())
+                .await
+                .unwrap();
 
-    let chain_id = tx.chain_id.clone().unwrap();
-    let mut tx_builder = TxBuilder::new(chain_id, tx.expiration);
+        let chain_id = tx.chain_id.clone().unwrap();
+        let mut tx_builder = TxBuilder::new(chain_id, tx.expiration);
 
-    tx_builder = tx_builder.add_code_from_hash(tx_code_hash);
+        tx_builder = tx_builder.add_code_from_hash(tx_code_hash);
 
-    if let Some(data) = data_path {
-        tx_builder = tx_builder.add_serialized_data(data);
-    }
+        if let Some(data) = data_path {
+            tx_builder = tx_builder.add_serialized_data(data);
+        }
+
+        tx_builder
+    };
 
     prepare_tx::<C>(
         client,

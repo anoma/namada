@@ -52,6 +52,8 @@ pub enum Error {
     TxDecodingError(prost::DecodeError),
     #[error("Error deserializing transaction field bytes: {0}")]
     TxDeserializingError(std::io::Error),
+    #[error("Error deserializing transaction")]
+    OfflineTxDeserializationError,
     #[error("Error decoding an DkgGossipMessage from bytes: {0}")]
     DkgDecodingError(prost::DecodeError),
     #[error("Dkg is empty")]
@@ -414,6 +416,24 @@ impl SignatureIndex {
             Err(VerifySigError::MissingData)
         }
     }
+
+    pub fn serialize(&self) -> String {
+        let signature_bytes =
+            self.try_to_vec().expect("Signature should be serializable");
+        HEXUPPER.encode(&signature_bytes)
+    }
+
+    pub fn deserialize(data: &[u8]) -> Result<Self> {
+        if let Ok(hex) = serde_json::from_slice::<String>(data) {
+            match HEXUPPER.decode(hex.as_bytes()) {
+                Ok(bytes) => Self::try_from_slice(&bytes)
+                    .map_err(Error::TxDeserializingError),
+                Err(_) => Err(Error::OfflineTxDeserializationError),
+            }
+        } else {
+            Err(Error::OfflineTxDeserializationError)
+        }
+    }
 }
 
 impl Ord for SignatureIndex {
@@ -440,7 +460,7 @@ impl PartialOrd for SignatureIndex {
 )]
 pub struct MultiSignature {
     /// The hash of the section being signed
-    targets: Vec<crate::types::hash::Hash>,
+    pub targets: Vec<crate::types::hash::Hash>,
     /// The signature over the above hash
     pub signatures: BTreeSet<SignatureIndex>,
 }
@@ -1144,12 +1164,25 @@ impl Tx {
         }
     }
 
-    /// Dump tx to hex string
+    /// Serialize tx to hex string
     pub fn serialize(&self) -> String {
         let tx_bytes = self
             .try_to_vec()
             .expect("Transation should be serializable");
         HEXUPPER.encode(&tx_bytes)
+    }
+
+    // Deserialize from hex encoding
+    pub fn deserialize(data: &[u8]) -> Result<Self> {
+        if let Ok(hex) = serde_json::from_slice::<String>(data) {
+            match HEXUPPER.decode(hex.as_bytes()) {
+                Ok(bytes) => Tx::try_from_slice(&bytes)
+                    .map_err(Error::TxDeserializingError),
+                Err(_) => Err(Error::OfflineTxDeserializationError),
+            }
+        } else {
+            Err(Error::OfflineTxDeserializationError)
+        }
     }
 
     /// Get the transaction header
@@ -1270,6 +1303,17 @@ impl Tx {
         bytes
     }
 
+    /// Get the inner section hashes
+    pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
+        self.sections
+            .iter()
+            .filter_map(|section| match section {
+                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_section_signatures(
@@ -1382,6 +1426,16 @@ impl Tx {
             }
         }
         valid
+    }
+
+    pub fn compute_section_signature(
+        &self,
+        secret_keys: &[common::SecretKey],
+        public_keys_index_map: &AccountPublicKeysMap,
+    ) -> BTreeSet<SignatureIndex> {
+        let targets = [*self.data_sechash(), *self.code_sechash()].to_vec();
+        MultiSignature::new(targets, secret_keys, public_keys_index_map)
+            .signatures
     }
 
     /// Decrypt any and all ciphertexts stored in this transaction use the

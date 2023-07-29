@@ -99,9 +99,11 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the tx WASM code file
-    pub code_path: PathBuf,
+    pub code_path: Option<PathBuf>,
     /// Path to the data file
     pub data_path: Option<C::Data>,
+    /// Path to the serialized transaction
+    pub serialized_tx: Option<C::Data>,
     /// The address that correspond to the signatures/signing-keys
     pub owner: C::Address,
 }
@@ -398,6 +400,17 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+/// Sign a transaction offline
+pub struct SignTx<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transaction data
+    pub tx_data: C::Data,
+    /// The account address
+    pub owner: C::Address,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
@@ -480,6 +493,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<C::Keypair>,
+    /// List of signatures to attach to the transaction
+    pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Sign the tx with the public key for the given alias from your wallet
