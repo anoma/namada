@@ -2368,7 +2368,7 @@ mod test_mempool_validate {
 
     use super::*;
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
+    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
@@ -2790,7 +2790,7 @@ mod test_mempool_validate {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            150_000.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,

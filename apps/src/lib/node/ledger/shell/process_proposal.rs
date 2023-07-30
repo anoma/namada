@@ -1643,7 +1643,7 @@ mod test_process_proposal {
         }
     }
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
+    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
@@ -2917,7 +2917,7 @@ mod test_process_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            150_000.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
             None,
