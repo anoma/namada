@@ -88,6 +88,12 @@ pub type DecodeError = string_encoding::DecodeError;
 /// Result of decoding address from string
 pub type Result<T> = std::result::Result<T, DecodeError>;
 
+/// Error from decoding address from string
+pub type DecodeError = string_encoding::DecodeError;
+
+/// Result of decoding address from string
+pub type Result<T> = std::result::Result<T, DecodeError>;
+
 /// Fixed-length address strings prefix for established addresses.
 const PREFIX_ESTABLISHED: &str = "est";
 /// Fixed-length address strings prefix for implicit addresses.
