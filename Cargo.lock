@@ -3215,7 +3215,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.41.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=1797c2b38eb4a718a63a171f59948f08b427bb1f#1797c2b38eb4a718a63a171f59948f08b427bb1f"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=9db6892da825a8e928d3f175aa43903d19af7806#9db6892da825a8e928d3f175aa43903d19af7806"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",
@@ -3247,7 +3247,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.30.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=349582059c0cf1f4cdce9e93b33552687c9df54a#349582059c0cf1f4cdce9e93b33552687c9df54a"
+source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=31892ee743b2af017d5629b2af419ee20b6100c7#31892ee743b2af017d5629b2af419ee20b6100c7"
 dependencies = [
  "base64 0.21.0",
  "borsh 0.10.3",
