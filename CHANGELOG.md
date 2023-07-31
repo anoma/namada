@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.20.1
+
+Namada 0.20.1 is a patch release addressing a bug in the inflation mechanism and minor ledger improvements.
+
+### BUG FIXES
+
+- Ensure that each crate in the workspace can be built with default features.
+  ([\#1712](https://github.com/anoma/namada/pull/1712))
+- Fixed transparent balance query when only an owner address is specified without
+  an explicit token. ([\#1751](https://github.com/anoma/namada/pull/1751))
+- Fixes how PoS inflation is calculated.
+  ([\#1756](https://github.com/anoma/namada/pull/1756))
+- Fixes the ordering for I256 type.
+  ([\#1763](https://github.com/anoma/namada/pull/1763))
+
+### IMPROVEMENTS
+
+- Removed the associated type for an address from `trait NativeVp`.
+  ([\#1725](https://github.com/anoma/namada/pull/1725))
+
 ## v0.20.0
 
 Namada 0.20.0 is a minor releasing addressing several improvements to the PoS system and the ledger 

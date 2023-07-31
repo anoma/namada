@@ -193,7 +193,7 @@ pub async fn query_transfers<
         for (account, MaspChange { ref asset, change }) in tfer_delta {
             if account != masp() {
                 print!("  {}:", account);
-                let token_alias = lookup_alias(wallet, asset);
+                let token_alias = wallet.lookup_alias(asset);
                 let sign = match change.cmp(&Change::zero()) {
                     Ordering::Greater => "+",
                     Ordering::Less => "-",
@@ -216,7 +216,7 @@ pub async fn query_transfers<
             if fvk_map.contains_key(&account) {
                 print!("  {}:", fvk_map[&account]);
                 for (token_addr, val) in masp_change {
-                    let token_alias = lookup_alias(wallet, &token_addr);
+                    let token_alias = wallet.lookup_alias(&token_addr);
                     let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -303,11 +303,12 @@ pub async fn query_transparent_balance<
         Address::Internal(namada::types::address::InternalAddress::Multitoken)
             .to_db_key(),
     );
+    let tokens = wallet.tokens_with_aliases();
     match (args.token, args.owner) {
         (Some(token), Some(owner)) => {
             let balance_key =
                 token::balance_key(&token, &owner.address().unwrap());
-            let token_alias = lookup_alias(wallet, &token);
+            let token_alias = wallet.lookup_alias(&token);
             match query_storage_value::<C, token::Amount>(client, &balance_key)
                 .await
             {
@@ -323,17 +324,15 @@ pub async fn query_transparent_balance<
             }
         }
         (None, Some(owner)) => {
-            let balances =
-                query_storage_prefix::<C, token::Amount>(client, &prefix).await;
-            if let Some(balances) = balances {
-                print_balances(
-                    client,
-                    wallet,
-                    balances,
-                    None,
-                    owner.address().as_ref(),
-                )
-                .await;
+            let owner = owner.address().unwrap();
+            for (token_alias, token) in tokens {
+                let balance = get_token_balance(client, &token, &owner).await;
+                if !balance.is_zero() {
+                    let balance =
+                        format_denominated_amount(client, &token, balance)
+                            .await;
+                    println!("{}: {}", token_alias, balance);
+                }
             }
         }
         (Some(token), None) => {
@@ -425,7 +424,7 @@ pub async fn query_pinned_balance<
                 println!("Payment address {} has not yet been consumed.", owner)
             }
             (Ok((balance, epoch)), Some(token)) => {
-                let token_alias = lookup_alias(wallet, token);
+                let token_alias = wallet.lookup_alias(token);
 
                 let total_balance = balance
                     .get(&(epoch, token.clone()))
@@ -513,7 +512,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                 format!(
                     ": {}, owned by {}",
                     format_denominated_amount(client, tok, balance).await,
-                    lookup_alias(wallet, owner)
+                    wallet.lookup_alias(owner)
                 ),
             ),
             None => continue,
@@ -540,7 +539,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
                 // the token has been already printed
             }
             _ => {
-                let token_alias = lookup_alias(wallet, &t);
+                let token_alias = wallet.lookup_alias(&t);
                 writeln!(w, "Token {}", token_alias).unwrap();
                 print_token = Some(t);
             }
@@ -555,11 +554,11 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync>(
             (Some(_), Some(target)) | (None, Some(target)) => writeln!(
                 w,
                 "No balances owned by {}",
-                lookup_alias(wallet, target)
+                wallet.lookup_alias(target)
             )
             .unwrap(),
             (Some(token), None) => {
-                let token_alias = lookup_alias(wallet, token);
+                let token_alias = wallet.lookup_alias(token);
                 writeln!(w, "No balances for token {}", token_alias).unwrap()
             }
             (None, None) => writeln!(w, "No balances").unwrap(),
@@ -750,7 +749,7 @@ pub async fn query_shielded_balance<
                     .expect("context should contain viewing key")
             };
 
-            let token_alias = lookup_alias(wallet, &token);
+            let token_alias = wallet.lookup_alias(&token);
 
             let total_balance = balance
                 .get(&(epoch, token.clone()))
@@ -847,10 +846,10 @@ pub async fn query_shielded_balance<
                     .as_ref(),
             )
             .unwrap();
-            let token_alias = lookup_alias(wallet, &token);
+            let token_alias = wallet.lookup_alias(&token);
             println!("Shielded Token {}:", token_alias);
             let mut found_any = false;
-            let token_alias = lookup_alias(wallet, &token);
+            let token_alias = wallet.lookup_alias(&token);
             println!("Shielded Token {}:", token_alias,);
             for fvk in viewing_keys {
                 // Query the multi-asset balance at the given spending key
@@ -928,7 +927,7 @@ pub async fn print_decoded_balance<
         {
             println!(
                 "{} : {}",
-                lookup_alias(wallet, token_addr),
+                wallet.lookup_alias(token_addr),
                 format_denominated_amount(client, token_addr, (*amount).into())
                     .await,
             );
@@ -2288,15 +2287,6 @@ pub async fn get_governance_parameters<
     client: &C,
 ) -> GovParams {
     namada::ledger::rpc::get_governance_parameters(client).await
-}
-
-/// Try to find an alias for a given address from the wallet. If not found,
-/// formats the address into a string.
-fn lookup_alias(wallet: &Wallet<CliWalletUtils>, addr: &Address) -> String {
-    match wallet.find_alias(addr) {
-        Some(alias) => format!("{}", alias),
-        None => format!("{}", addr),
-    }
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.

@@ -4008,7 +4008,7 @@ dependencies = [
 
 [[package]]
 name = "namada"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4076,7 +4076,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4165,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4222,7 +4222,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "itertools",
@@ -4233,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "assert_matches",
  "borsh 0.9.4",
@@ -4257,7 +4257,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4266,7 +4266,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -4284,7 +4284,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -4293,7 +4293,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4339,7 +4339,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -4353,7 +4353,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -4362,7 +4362,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",

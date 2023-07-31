@@ -367,12 +367,12 @@ impl PartialOrd for I256 {
             (true, true) => {
                 let this = self.abs();
                 let that = other.abs();
-                this.0.partial_cmp(&that.0)
+                this.partial_cmp(&that)
             }
             (false, false) => {
                 let this = self.abs();
                 let that = other.abs();
-                that.0.partial_cmp(&this.0)
+                that.partial_cmp(&this)
             }
         }
     }

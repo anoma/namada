@@ -3332,7 +3332,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3392,7 +3392,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "ethers",
@@ -3464,7 +3464,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -3487,7 +3487,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3496,7 +3496,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3525,7 +3525,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3539,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3548,7 +3548,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3561,7 +3561,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -6701,43 +6701,3 @@ dependencies = [
  "quote",
  "syn 2.0.16",
 ]
-
-[[patch.unused]]
-name = "ibc"
-version = "0.36.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=2a5ef5188c8d1e7e91260c3219796239c5053721#2a5ef5188c8d1e7e91260c3219796239c5053721"
-
-[[patch.unused]]
-name = "ibc-proto"
-version = "0.26.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=277f31a69583c12bf8d54a92b5541d8b738d9962#277f31a69583c12bf8d54a92b5541d8b738d9962"
-
-[[patch.unused]]
-name = "tendermint"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"
-
-[[patch.unused]]
-name = "tendermint-config"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"
-
-[[patch.unused]]
-name = "tendermint-light-client-verifier"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"
-
-[[patch.unused]]
-name = "tendermint-proto"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"
-
-[[patch.unused]]
-name = "tendermint-rpc"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"
-
-[[patch.unused]]
-name = "tendermint-testgen"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=2b007eeecb9e2b3d78a858ddf407328d83ac9ec3#2b007eeecb9e2b3d78a858ddf407328d83ac9ec3"

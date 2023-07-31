@@ -244,8 +244,6 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::EthBridgePool;
-
     fn validate_tx(
         &self,
         tx: &Tx,
