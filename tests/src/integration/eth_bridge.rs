@@ -48,16 +48,6 @@ use crate::e2e::setup::constants::{
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
-/// # Examples
-///
-/// ```
-/// let storage_key = storage_key("queue");
-/// assert_eq!(storage_key, "#atest1v9hx7w36g42ysgzzwf5kgem9ypqkgerjv4ehxgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq8f99ew/queue");
-/// ```
-fn storage_key(path: &str) -> String {
-    format!("#{BRIDGE_ADDRESS}/{path}")
-}
-
 /// Tests that we can start the ledger with an endpoint for submitting Ethereum
 /// events. This mode can be used in further end-to-end tests.
 #[test]
