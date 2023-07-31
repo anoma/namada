@@ -2643,7 +2643,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         &start_epoch,
-        &vec![],
+        &[],
         |_| true,
     );
     assert_eq!(
@@ -2687,7 +2687,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         &start_epoch,
-        &vec![],
+        &[],
         |_| true,
     );
     assert_eq!(
@@ -4219,6 +4219,7 @@ fn compute_amount_after_slashing_unbond_test() {
     validator_slashes_handle(&alice)
         .push(&mut storage, alice_slash)
         .unwrap();
+    validator_slashes_handle(&bob).pop(&mut storage).unwrap();
     let result = compute_amount_after_slashing_unbond(
         &storage,
         &params,
@@ -4241,6 +4242,7 @@ fn compute_amount_after_slashing_unbond_test() {
         rate: Dec::one(),
     };
     let slashes = vec![alice_slash.clone()];
+    validator_slashes_handle(&alice).pop(&mut storage).unwrap();
     validator_slashes_handle(&alice)
         .push(&mut storage, alice_slash)
         .unwrap();
@@ -4348,6 +4350,7 @@ fn compute_amount_after_slashing_withdraw_test() {
     validator_slashes_handle(&alice)
         .push(&mut storage, alice_slash)
         .unwrap();
+    validator_slashes_handle(&bob).pop(&mut storage).unwrap();
     let result = compute_amount_after_slashing_withdraw(
         &storage,
         &params,
@@ -4369,6 +4372,7 @@ fn compute_amount_after_slashing_withdraw_test() {
         rate: Dec::one(),
     };
     let slashes = vec![alice_slash.clone()];
+    validator_slashes_handle(&alice).pop(&mut storage).unwrap();
     validator_slashes_handle(&alice)
         .push(&mut storage, alice_slash)
         .unwrap();

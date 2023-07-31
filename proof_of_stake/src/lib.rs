@@ -3040,13 +3040,11 @@ where
     S: StorageRead,
 {
     let mut result_slashing = ResultSlashing::default();
-    for ((start_epoch, withdrawable_epoch), change) in unbonds {
+    for ((start_epoch, _withdrawable_epoch), change) in unbonds {
         // `val listSlashes`
         let list_slashes: Vec<Slash> = slashes
             .iter()
-            .filter(|slash| {
-                &slash.epoch >= start_epoch && &slash.epoch < withdrawable_epoch
-            })
+            .filter(|slash| slash.epoch >= *start_epoch)
             .cloned()
             .collect();
         // `val resultFold`
@@ -3055,7 +3053,7 @@ where
         {
             fold_and_slash_redelegated_bonds(
                 storage,
-                &params,
+                params,
                 redelegated_unbonds,
                 start_epoch,
                 &list_slashes,
@@ -3069,7 +3067,7 @@ where
             *change - result_fold.total_redelegated.change();
         // `val afterNoRedelegated`
         let after_not_redelegated =
-            apply_list_slashes(&params, &list_slashes, total_not_redelegated);
+            apply_list_slashes(params, &list_slashes, total_not_redelegated);
         // `val amountAfterSlashing`
         let amount_after_slashing =
             after_not_redelegated + result_fold.total_after_slashing;
@@ -3108,7 +3106,7 @@ where
             .filter(|slash| {
                 start_epoch <= &slash.epoch
                     // TODO: check bounds here!
-                    && *withdraw_epoch - params.slash_processing_epoch_offset()
+                    && *withdraw_epoch - params.unbonding_len - params.cubic_slashing_window_length
                         > slash.epoch
             })
             .cloned()
@@ -3118,9 +3116,9 @@ where
         let result_fold = if !redelegated_unbonds.is_empty() {
             fold_and_slash_redelegated_bonds(
                 storage,
-                &params,
+                params,
                 redelegated_unbonds,
-                &start_epoch,
+                start_epoch,
                 &list_slashes,
                 |_| true,
             )
@@ -3130,7 +3128,7 @@ where
 
         let total_not_redelegated = *amount - result_fold.total_redelegated;
         let after_not_redelegated = apply_list_slashes(
-            &params,
+            params,
             &list_slashes,
             total_not_redelegated.change(),
         );

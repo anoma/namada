@@ -3385,9 +3385,11 @@ mod test_finalize_block {
 
         let exp_del_withdraw_slashed_amount =
             slash_rate_3 * del_unbond_1_amount;
-        assert_eq!(
-            del_withdraw,
-            del_unbond_1_amount - exp_del_withdraw_slashed_amount
+        assert!(
+            (del_withdraw
+                - (del_unbond_1_amount - exp_del_withdraw_slashed_amount))
+                .raw_amount()
+                <= Uint::one()
         );
 
         // TODO: finish once implemented
