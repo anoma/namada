@@ -15,8 +15,8 @@ use crate::ibc::signer::Signer;
 use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::PublicKeyHash;
-use crate::types::{key, string_encoding};
 use crate::types::token::Denomination;
+use crate::types::{key, string_encoding};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
@@ -81,12 +81,6 @@ mod internal {
     pub const MULTITOKEN: &str =
         "ano::Multitoken                              ";
 }
-
-/// Error from decoding address from string
-pub type DecodeError = string_encoding::DecodeError;
-
-/// Result of decoding address from string
-pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;
