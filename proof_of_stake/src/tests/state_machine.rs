@@ -33,8 +33,8 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
     enqueued_slashes_handle, read_below_threshold_validator_set_addresses,
-    read_pos_params, validator_deltas_handle, validator_slashes_handle,
-    validator_state_handle,
+    read_pos_params, redelegate_tokens, validator_deltas_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 prop_state_machine! {
@@ -121,6 +121,11 @@ enum Transition {
     },
     Withdraw {
         id: BondId,
+    },
+    Redelegate {
+        id: BondId,
+        new_validator: Address,
+        amount: token::Amount,
     },
     Misbehavior {
         address: Address,
@@ -412,6 +417,24 @@ impl StateMachineTest for ConcretePosState {
                 // Post-condition: The increment in source balance should be
                 // equal to the withdrawn amount
                 assert_eq!(src_balance_post - src_balance_pre, withdrawn);
+            }
+            Transition::Redelegate {
+                id,
+                new_validator,
+                amount,
+            } => {
+                let current_epoch = state.current_epoch();
+                redelegate_tokens(
+                    &mut state.s,
+                    &id.source,
+                    &id.validator,
+                    &new_validator,
+                    current_epoch,
+                    amount,
+                )
+                .unwrap();
+
+                // TODO: Post-condition:
             }
             Transition::Misbehavior {
                 address,
@@ -1394,19 +1417,56 @@ impl ReferenceStateMachine for AbstractPosState {
             transitions
         } else {
             let arb_unbondable = prop::sample::select(unbondable);
-            let arb_unbond =
-                arb_unbondable.prop_flat_map(|(id, deltas_sum)| {
+            let validators = state
+                .validator_states
+                .get(&state.pipeline())
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>();
+            let arb_unbond_or_redelegation =
+                arb_unbondable.prop_flat_map(move |(id, deltas_sum)| {
                     let deltas_sum = i128::try_from(deltas_sum).unwrap();
-                    // Generate an amount to unbond, up to the sum
-                    assert!(deltas_sum > 0);
-                    (0..deltas_sum).prop_map(move |to_unbond| {
-                        let id = id.clone();
-                        let amount =
-                            token::Amount::from_change(Change::from(to_unbond));
-                        Transition::Unbond { id, amount }
-                    })
+                    // Generate an amount to unbond or redelegate, up to the sum
+                    assert!(
+                        deltas_sum > 0,
+                        "Bond {id} deltas_sum must be non-zero"
+                    );
+                    let arb_amount = || {
+                        (0..deltas_sum).prop_map(|to_unbond| {
+                            token::Amount::from_change(Change::from(to_unbond))
+                        })
+                    };
+                    // Generate a new validator for redelegation
+                    let current_validator = id.validator.clone();
+                    let new_validators = validators
+                        .iter()
+                        // The validator must be other than the current
+                        .filter(|validator| *validator != &current_validator)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let arb_new_validator =
+                        || prop::sample::select(new_validators);
+                    let id_clone = id.clone();
+                    prop_oneof![
+                        arb_amount().prop_map(move |amount| {
+                            Transition::Unbond {
+                                id: id_clone.clone(),
+                                amount,
+                            }
+                        }),
+                        (arb_amount(), arb_new_validator()).prop_map(
+                            move |(amount, new_validator)| {
+                                Transition::Redelegate {
+                                    id: id.clone(),
+                                    new_validator,
+                                    amount,
+                                }
+                            }
+                        ),
+                    ]
                 });
-            prop_oneof![transitions, arb_unbond].boxed()
+            prop_oneof![transitions, arb_unbond_or_redelegation].boxed()
         };
 
         // Add withdrawals, if any
@@ -1541,6 +1601,26 @@ impl ReferenceStateMachine for AbstractPosState {
                 state.unbonds.retain(|_epoch, unbonds| !unbonds.is_empty());
 
                 // TODO: should we do anything here for slashing?
+            }
+            Transition::Redelegate {
+                id,
+                new_validator,
+                amount,
+            } => {
+                println!(
+                    "ABSTRACT Redelegation, id = {id}, new validator = \
+                     {new_validator}, amount = {}",
+                    amount.to_string_native(),
+                );
+                if *amount != token::Amount::default() {
+                    // Remove the amount from source validator
+                    let change = token::Change::from(*amount);
+                    state.update_state_with_redelegation(
+                        id,
+                        new_validator,
+                        change,
+                    );
+                }
             }
             Transition::Misbehavior {
                 address,
@@ -1919,6 +1999,60 @@ impl ReferenceStateMachine for AbstractPosState {
                     // The amount must be available to unbond
                     && is_withdrawable && !is_jailed
             }
+            Transition::Redelegate {
+                id,
+                new_validator,
+                amount,
+            } => {
+                let pipeline = state.pipeline();
+
+                // The src and dest validator must be known
+                if !state.is_validator(&id.validator, pipeline)
+                    || !state.is_validator(&new_validator, pipeline)
+                {
+                    return false;
+                }
+
+                // The amount must be available to redelegate
+                if !state
+                    .bond_sums()
+                    .get(id)
+                    .map(|sum| *sum >= token::Change::from(*amount))
+                    .unwrap_or_default()
+                {
+                    return false;
+                }
+
+                // The src validator must not be frozen
+                if let Some(last_epoch) =
+                    state.validator_last_slash_epochs.get(&id.validator)
+                {
+                    if *last_epoch
+                        + state.params.unbonding_len
+                        + 1u64
+                        + state.params.cubic_slashing_window_length
+                        > state.epoch
+                    {
+                        return false;
+                    }
+                }
+
+                // The dest validator must not be frozen
+                if let Some(last_epoch) =
+                    state.validator_last_slash_epochs.get(&new_validator)
+                {
+                    if *last_epoch
+                        + state.params.unbonding_len
+                        + 1u64
+                        + state.params.cubic_slashing_window_length
+                        > state.epoch
+                    {
+                        return false;
+                    }
+                }
+
+                true
+            }
             Transition::Misbehavior {
                 address,
                 slash_type: _,
@@ -2195,6 +2329,128 @@ impl AbstractPosState {
             &id.validator,
             -amount_after_slashing,
         );
+    }
+
+    fn update_state_with_redelegation(
+        &mut self,
+        id: &BondId,
+        new_validator: &Address,
+        change: token::Change,
+    ) {
+        let pipeline_epoch = self.pipeline();
+        let bonds = self.bonds.entry(id.clone()).or_default();
+        let unbond_records = self
+            .unbond_records
+            .entry(id.validator.clone())
+            .or_default()
+            .entry(pipeline_epoch)
+            .or_default();
+        let validator_slashes = self
+            .validator_slashes
+            .get(&id.validator)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut remaining = change;
+        let mut amount_after_slashing = token::Change::default();
+
+        tracing::debug!("Bonds before decrementing");
+        for (start, amnt) in bonds.iter() {
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
+        }
+
+        for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
+            tracing::debug!("remaining {}", remaining.to_string_native());
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                bond_epoch,
+                bond_amnt.to_string_native()
+            );
+            let to_redel = cmp::min(*bond_amnt, remaining);
+            tracing::debug!(
+                "to_redel (init) = {}",
+                to_redel.to_string_native()
+            );
+            *bond_amnt -= to_redel;
+
+            let slashes_for_this_bond: BTreeMap<Epoch, Dec> = validator_slashes
+                .iter()
+                .cloned()
+                .filter(|s| *bond_epoch <= s.epoch)
+                .fold(BTreeMap::new(), |mut acc, s| {
+                    let cur = acc.entry(s.epoch).or_default();
+                    *cur += s.rate;
+                    acc
+                });
+            tracing::debug!(
+                "Slashes for this bond{:?}",
+                slashes_for_this_bond.clone()
+            );
+            amount_after_slashing += compute_amount_after_slashing(
+                &slashes_for_this_bond,
+                token::Amount::from_change(to_redel),
+                self.params.unbonding_len,
+                self.params.cubic_slashing_window_length,
+            )
+            .change();
+            tracing::debug!(
+                "Cur amnt after slashing = {}",
+                &amount_after_slashing.to_string_native()
+            );
+
+            let amt = unbond_records.entry(*bond_epoch).or_default();
+            *amt += token::Amount::from_change(to_redel);
+
+            remaining -= to_redel;
+            if remaining.is_zero() {
+                break;
+            }
+        }
+
+        tracing::debug!("Bonds after decrementing");
+        for (start, amnt) in bonds.iter() {
+            tracing::debug!(
+                "Bond epoch {} - amnt {}",
+                start,
+                amnt.to_string_native()
+            );
+        }
+
+        let pipeline_state = self
+            .validator_states
+            .get(&self.pipeline())
+            .unwrap()
+            .get(&id.validator)
+            .unwrap();
+        if *pipeline_state != ValidatorState::Jailed {
+            self.update_validator_sets(&id.validator, -amount_after_slashing);
+        }
+        self.update_validator_total_stake(
+            &id.validator,
+            -amount_after_slashing,
+        );
+
+        // Add the amount to the new validator
+        let change = amount_after_slashing;
+        let new_id = BondId {
+            source: id.source.clone(),
+            validator: new_validator.clone(),
+        };
+        let pipeline_state = self
+            .validator_states
+            .get(&self.pipeline())
+            .unwrap()
+            .get(&new_validator)
+            .unwrap();
+        if *pipeline_state != ValidatorState::Jailed {
+            self.update_validator_sets(&new_validator, change);
+        }
+        self.update_bond(&new_id, change);
+        self.update_validator_total_stake(&new_validator, change);
     }
 
     /// Update validator's total stake with bonded or unbonded change at the
