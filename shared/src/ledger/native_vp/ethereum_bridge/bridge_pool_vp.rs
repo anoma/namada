@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
+use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
@@ -26,7 +27,7 @@ use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::Tx;
 use crate::types::address::{Address, InternalAddress};
-use crate::types::eth_bridge_pool::PendingTransfer;
+use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
 use crate::types::token::{balance_key, Amount};
@@ -316,6 +317,19 @@ where
         }
         // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
+            if hints::unlikely(matches!(
+                &transfer.transfer.kind,
+                TransferToEthereumKind::Nut
+            )) {
+                // NB: this should never be possible: protocol tx state updates
+                // never result in wNAM NUTs being minted. in turn, this means
+                // that users should never hold wNAM NUTs. doesn't hurt to add
+                // the extra check to the vp, though
+                tracing::error!(
+                    "Attempted to add a wNAM NUT transfer to the Bridge pool"
+                );
+                return Ok(false);
+            }
             // if we are going to mint wNam on Ethereum, the appropriate
             // amount of Nam must be escrowed in the Ethereum bridge VP's
             // storage.
@@ -357,9 +371,7 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage_api::StorageWrite;
     use crate::types::address::{nam, wnam};
     use crate::types::chain::ChainId;
-    use crate::types::eth_bridge_pool::{
-        GasFee, TransferToEthereum, TransferToEthereumKind,
-    };
+    use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;
     use crate::types::storage::TxIndex;
     use crate::types::transaction::TxType;
