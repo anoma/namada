@@ -6101,6 +6101,28 @@ where
         )?;
     }
 
+    // Update the validator set
+    // We allow bonding if the validator is jailed, however if jailed, there
+    // must be no changes to the validator set. Check at the pipeline epoch.
+    let validator_state_handle = validator_state_handle(dest_validator);
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle
+            .get(storage, pipeline_epoch, &params)?
+            .unwrap(),
+        ValidatorState::Jailed
+    );
+    if !is_jailed_at_pipeline {
+        // NOTE: This must be called before `update_validator_deltas` as it
+        // reads the prior validator stake
+        update_validator_set(
+            storage,
+            &params,
+            dest_validator,
+            amount.change(),
+            current_epoch,
+        )?;
+    }
+
     // `updatedDestValidator`
     // validator deltas
     update_validator_deltas(
