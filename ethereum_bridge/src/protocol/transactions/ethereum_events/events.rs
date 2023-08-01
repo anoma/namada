@@ -145,14 +145,14 @@ where
             // TODO: query denomination of the whitelisted token from storage,
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
-            if !asset_count.erc20_amount.is_zero() {
+            if asset_count.should_mint_erc20s() {
                 tracing::info!(
                     "Minted wrapped ERC20s - (asset - {asset}, receiver - \
                      {receiver}, amount - {})",
                     asset_count.erc20_amount.to_string_native(),
                 );
             }
-            if !asset_count.nut_amount.is_zero() {
+            if asset_count.should_mint_nuts() {
                 tracing::info!(
                     "Minted NUTs - (asset - {asset}, receiver - {receiver}, \
                      amount - {})",
@@ -254,10 +254,12 @@ where
 
     let assets_to_mint = [
         // check if we should mint nuts
-        (!asset_count.nut_amount.is_zero())
+        asset_count
+            .should_mint_nuts()
             .then(|| (wrapped_erc20s::nut(asset), asset_count.nut_amount)),
         // check if we should mint erc20s
-        (!asset_count.erc20_amount.is_zero())
+        asset_count
+            .should_mint_erc20s()
             .then(|| (wrapped_erc20s::token(asset), asset_count.erc20_amount)),
     ]
     .into_iter()
