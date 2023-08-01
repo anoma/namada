@@ -340,7 +340,8 @@ pub fn validator_commission_rate_handle(
     CommissionRates::open(key)
 }
 
-/// Get the storage handle to a bond
+/// Get the storage handle to a bond, which is dynamically updated with when
+/// unbonding
 pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
     let bond_id = BondId {
         source: source.clone(),
@@ -350,7 +351,8 @@ pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
     Bonds::open(key)
 }
 
-/// Get the storage handle to a validator's total bonds
+/// Get the storage handle to a validator's total bonds, which are not updated
+/// due to unbonding
 pub fn total_bonded_handle(validator: &Address) -> Bonds {
     let key = storage::validator_total_bonded_key(validator);
     Bonds::open(key)
@@ -1021,15 +1023,20 @@ where
         }
     }
 
-    tracing::debug!("\nBonds before incrementing:");
-    for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-        let delta = bond_handle.get_delta_val(storage, ep)?.unwrap_or_default();
-        if !delta.is_zero() {
-            tracing::debug!(
-                "bond ∆ at epoch {}: {}",
-                ep,
-                delta.to_string_native()
-            );
+    if env::var("RUST_LOG") == Ok(String::from("debug")) {
+        tracing::debug!("\nBonds before incrementing:");
+        for ep in Epoch::default()
+            .iter_range(current_epoch.0 + params.pipeline_len + 1)
+        {
+            let delta =
+                bond_handle.get_delta_val(storage, ep)?.unwrap_or_default();
+            if !delta.is_zero() {
+                tracing::debug!(
+                    "bond ∆ at epoch {}: {}",
+                    ep,
+                    delta.to_string_native()
+                );
+            }
         }
     }
 
@@ -1062,7 +1069,7 @@ where
     }
 
     // Update the validator set
-    // We allow bonding if the validator is jailed, however if jailed, there
+    // Allow bonding if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
     let is_jailed_at_pipeline = matches!(
         validator_state_handle
@@ -2160,8 +2167,6 @@ where
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
 
-    // TODO: only do this iteration of tracing::debug is enabled
-    // Check this !!!!
     if env::var("RUST_LOG") == Ok(String::from("debug")) {
         tracing::debug!("\nBonds before decrementing:");
         for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
@@ -2198,10 +2203,15 @@ where
         &bonds_handle.get_data_handler(),
         amount,
     )?;
+    dbg!(&bonds_to_unbond);
 
     // `modifiedRedelegation`
     let modified_redelegation = match bonds_to_unbond.new_entry {
         Some((bond_epoch, new_bond_amount)) => {
+            println!(
+                "\n New redel entry for epoch {} -> amount {}",
+                bond_epoch, new_bond_amount
+            );
             if redelegated_bonds.contains(storage, &bond_epoch)? {
                 compute_modified_redelegation(
                     storage,
@@ -2218,13 +2228,19 @@ where
 
     // `updatedRedelegatedBonded`
     if let Some(epoch) = modified_redelegation.epoch {
+        println!("\nIs modified redelegation");
+        dbg!(&modified_redelegation);
         // First remove redelegation entries corresponding the outer epoch key
         for epoch_to_remove in &bonds_to_unbond.epochs {
             redelegated_bonds.remove_all(storage, epoch_to_remove)?;
         }
         // Then updated the redelegated bonds at this epoch
         let rbonds = redelegated_bonds.at(&epoch);
+        let pre = rbonds.collect_map(storage)?;
+        dbg!(&pre);
         update_redelegated_bonds(storage, &rbonds, &modified_redelegation)?;
+        let post = rbonds.collect_map(storage)?;
+        dbg!(&post);
     } else {
         // Need to remove redelegation entries corresponding the outer epoch key
         for epoch_to_remove in &bonds_to_unbond.epochs {
@@ -2664,6 +2680,7 @@ fn compute_modified_redelegation<S>(
 where
     S: StorageRead,
 {
+    println!("\nCOMPUTE MODIFIED REDELEGATION");
     let mut modified_redelegation = ModifiedRedelegation::default();
 
     let mut validators = HashSet::<Address>::new();
@@ -2683,6 +2700,8 @@ where
     if total_redelegated <= amount {
         return Ok(modified_redelegation);
     }
+
+    dbg!(&validators);
 
     modified_redelegation.epoch = Some(start_epoch);
 
@@ -2711,9 +2730,12 @@ where
             remaining = token::Change::default();
             let bonds_to_remove =
                 find_bonds_to_remove(storage, &rbonds, remaining)?;
+            dbg!(&bonds_to_remove);
+
             if let Some((bond_epoch, new_bond_amount)) =
                 bonds_to_remove.new_entry
             {
+                dbg!(&bond_epoch, &new_bond_amount);
                 modified_redelegation.validator_to_modify = Some(src_validator);
                 modified_redelegation.epochs_to_remove = {
                     let mut epochs = bonds_to_remove.epochs;
@@ -3325,6 +3347,8 @@ where
         );
     }
     let slashes = find_validator_slashes(storage, validator)?;
+    dbg!(&slashes);
+
     // `val resultSlashing`
     let result_slashing = compute_amount_after_slashing_withdraw(
         storage,
@@ -3332,6 +3356,7 @@ where
         &unbonds_and_redelegated_unbonds,
         slashes,
     )?;
+    dbg!(&result_slashing);
     let withdrawable_amount = result_slashing.sum;
     tracing::debug!(
         "Withdrawing total {}",
@@ -5973,10 +5998,6 @@ where
         if start <= slash.epoch
             && end.map(|end| slash.epoch < end).unwrap_or(true)
         {
-            // println!(
-            //     "Slash (epoch, rate) = ({}, {})",
-            //     &slash.epoch, &slash.rate
-            // );
             let cur_rate = slashes.entry(slash.epoch).or_default();
             *cur_rate = cmp::min(*cur_rate + slash.rate, Dec::one());
         }
@@ -5987,7 +6008,7 @@ where
 /// Redelegate bonded tokens from a source validator to a destination validator
 pub fn redelegate_tokens<S>(
     storage: &mut S,
-    owner: &Address,
+    delegator: &Address,
     src_validator: &Address,
     dest_validator: &Address,
     current_epoch: Epoch,
@@ -5996,45 +6017,59 @@ pub fn redelegate_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    tracing::debug!(
+        "Delegator {} redelegating {} tokens from {} to {}",
+        delegator,
+        amount.to_string_native(),
+        src_validator,
+        dest_validator
+    );
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
-
-    let redel_end_epoch =
+    let src_redel_end_epoch =
         validator_incoming_redelegations_handle(src_validator)
-            .get(storage, owner)?;
-    let is_not_chained = if let Some(end_epoch) = redel_end_epoch {
+            .get(storage, delegator)?;
+
+    // Forbid chained redelegations. A redelegation is "chained" if:
+    // 1. the source validator holds bonded tokens that themselves were
+    // redelegated to the src validator
+    // 2. given the latest epoch at which the most recently redelegated tokens
+    // started contributing to the src validator's voting power, these tokens
+    // cannot be slashed anymore
+    let is_not_chained = if let Some(end_epoch) = src_redel_end_epoch {
         // TODO: check bounds for correctness (> and presence of cubic offset)
-        end_epoch + params.unbonding_len > current_epoch
+        end_epoch + params.unbonding_len + params.cubic_slashing_window_length
+            > current_epoch
     } else {
         true
     };
-
     if !is_not_chained {
         return Err(RedelegationError::IsChainedRedelegation.into());
     }
 
-    // TODO: the unbond fn itself needs to be updated for redelegation
-    // `newDelegatorState` and `newSrcValidatorState` accounted for already
-    let result_slashing = unbond_tokens(
+    // Unbond the redelegated tokens from the src validator
+    // `resultUnbond`
+    let result_unbond = unbond_tokens(
         storage,
-        Some(owner),
+        Some(delegator),
         src_validator,
         amount,
         current_epoch,
         true,
     )?;
+
     // `amountAfterSlashing`
-    let amount_after_slashing = result_slashing.sum.change();
+    let amount_after_slashing = result_unbond.sum.change();
 
     // `updatedRedelegatedBonds` with updates to delegatorState
     // `redelegatedBonded`
-    let existing = delegator_redelegated_bonds_handle(owner)
+    let existing = delegator_redelegated_bonds_handle(delegator)
         .at(dest_validator)
         .at(&pipeline_epoch)
         .at(src_validator);
     let existing_iter = existing.iter(storage)?.map(Result::unwrap);
 
-    let result_slashing_iter = result_slashing
+    let result_slashing_iter = result_unbond
         .epoch_map
         .iter()
         .map(|(epoch, amount)| (*epoch, amount.change()));
@@ -6053,7 +6088,7 @@ where
     }
 
     // `updatedDelegator` with updates to `bonded`
-    let bond_handle = bond_handle(owner, dest_validator);
+    let bond_handle = bond_handle(delegator, dest_validator);
     let cur_bond = bond_handle
         .get_delta_val(storage, pipeline_epoch)?
         .unwrap_or_default();
@@ -6082,7 +6117,7 @@ where
         })
         .collect::<BTreeMap<_, _>>();
 
-    let new_epoch_map = result_slashing
+    let new_epoch_map = result_unbond
         .epoch_map
         .iter()
         .map(|(epoch, amount)| (*epoch, amount.change()))
@@ -6101,37 +6136,7 @@ where
         )?;
     }
 
-    // Update the validator set
-    // We allow bonding if the validator is jailed, however if jailed, there
-    // must be no changes to the validator set. Check at the pipeline epoch.
-    let validator_state_handle = validator_state_handle(dest_validator);
-    let is_jailed_at_pipeline = matches!(
-        validator_state_handle
-            .get(storage, pipeline_epoch, &params)?
-            .unwrap(),
-        ValidatorState::Jailed
-    );
-    if !is_jailed_at_pipeline {
-        // NOTE: This must be called before `update_validator_deltas` as it
-        // reads the prior validator stake
-        update_validator_set(
-            storage,
-            &params,
-            dest_validator,
-            amount.change(),
-            current_epoch,
-        )?;
-    }
-
     // `updatedDestValidator`
-    // validator deltas
-    update_validator_deltas(
-        storage,
-        dest_validator,
-        amount_after_slashing,
-        current_epoch,
-        params.pipeline_len,
-    )?;
 
     // validator total redelegated bonded
     let dest_total_redelegated_bonded =
@@ -6158,8 +6163,42 @@ where
         validator_incoming_redelegations_handle(dest_validator);
     dest_incoming_redelegations.insert(
         storage,
-        owner.clone(),
+        delegator.clone(),
         pipeline_epoch,
+    )?;
+
+    // Update validator set for dest validator
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle(dest_validator).get(
+            storage,
+            pipeline_epoch,
+            &params
+        )?,
+        Some(ValidatorState::Jailed)
+    );
+    if !is_jailed_at_pipeline {
+        update_validator_set(
+            storage,
+            &params,
+            dest_validator,
+            amount_after_slashing,
+            current_epoch,
+        )?;
+    }
+
+    // Update deltas
+    update_validator_deltas(
+        storage,
+        dest_validator,
+        amount_after_slashing,
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    update_total_deltas(
+        storage,
+        amount_after_slashing,
+        current_epoch,
+        params.pipeline_len,
     )?;
 
     Ok(())
