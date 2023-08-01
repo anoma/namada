@@ -87,6 +87,8 @@ mod internal {
         "ano::Replay Protection                       ";
     pub const MULTITOKEN: &str =
         "ano::Multitoken                              ";
+    pub const PGF: &str =
+        "ano::Pgf                                     ";
 }
 
 /// Fixed-length address strings prefix for established addresses.
@@ -219,9 +221,6 @@ impl Address {
                     InternalAddress::Governance => {
                         internal::GOVERNANCE.to_string()
                     }
-                    InternalAddress::SlashFund => {
-                        internal::SLASH_FUND.to_string()
-                    }
                     InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::IbcToken(hash) => {
                         format!("{}::{}", PREFIX_IBC, hash)
@@ -242,6 +241,9 @@ impl Address {
                     }
                     InternalAddress::Multitoken => {
                         internal::MULTITOKEN.to_string()
+                    }
+                    InternalAddress::Pgf => {
+                        internal::PGF.to_string()
                     }
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
@@ -304,9 +306,6 @@ impl Address {
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
-                internal::SLASH_FUND => {
-                    Ok(Address::Internal(InternalAddress::SlashFund))
-                }
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
@@ -318,6 +317,9 @@ impl Address {
                 }
                 internal::MULTITOKEN => {
                     Ok(Address::Internal(InternalAddress::Multitoken))
+                }
+                internal::PGF => {
+                    Ok(Address::Internal(InternalAddress::Pgf))
                 }
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
@@ -541,8 +543,6 @@ pub enum InternalAddress {
     IbcToken(String),
     /// Governance address
     Governance,
-    /// SlashFund address for governance
-    SlashFund,
     /// Bridge to Ethereum
     EthBridge,
     /// The pool of transactions to be relayed to Ethereum
@@ -553,6 +553,8 @@ pub enum InternalAddress {
     ReplayProtection,
     /// Multitoken
     Multitoken,
+    /// Pgf
+    Pgf
 }
 
 impl Display for InternalAddress {
@@ -565,7 +567,6 @@ impl Display for InternalAddress {
                 Self::PosSlashPool => "PosSlashPool".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
-                Self::SlashFund => "SlashFund".to_string(),
                 Self::Ibc => "IBC".to_string(),
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
                 Self::EthBridge => "EthBridge".to_string(),
@@ -573,6 +574,7 @@ impl Display for InternalAddress {
                 Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
+                Self::Pgf => "PublicGoodFundings".to_string(),
             }
         )
     }
@@ -859,7 +861,6 @@ pub mod testing {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
             InternalAddress::Governance => {}
-            InternalAddress::SlashFund => {}
             InternalAddress::Parameters => {}
             InternalAddress::Ibc => {}
             InternalAddress::IbcToken(_) => {}
@@ -867,6 +868,7 @@ pub mod testing {
             InternalAddress::EthBridgePool => {}
             InternalAddress::Erc20(_) => {}
             InternalAddress::ReplayProtection => {}
+            InternalAddress::Pgf => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
         };
@@ -877,12 +879,12 @@ pub mod testing {
             Just(InternalAddress::Parameters),
             arb_ibc_token(),
             Just(InternalAddress::Governance),
-            Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
             Just(arb_erc20()),
             Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
+            Just(InternalAddress::Pgf),
         ]
     }
 

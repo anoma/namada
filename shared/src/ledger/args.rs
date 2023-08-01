@@ -163,6 +163,24 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+pub struct InitProposal<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// The proposal data
+    pub proposal_data: C::Data,
+    /// Native token address
+    pub native_token: C::NativeAddress,
+    /// Flag if proposal should be run offline
+    pub is_offline: bool,
+    /// Flag if proposal is of type Pgf stewards
+    pub is_pgf_stewards: bool,
+    /// Flag if proposal is of type Pgf funding
+    pub is_pgf_funding: bool,
+    /// Path to the tx WASM file
+    pub tx_code_path: PathBuf,
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {

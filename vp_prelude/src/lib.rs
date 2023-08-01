@@ -72,7 +72,7 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
 /// Checks if a proposal id is being executed
 pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
     let proposal_execution_key =
-        gov_storage::get_proposal_execution_key(proposal_id);
+        gov_storage::keys::get_proposal_execution_key(proposal_id);
 
     ctx.has_key_pre(&proposal_execution_key)
 }

@@ -8,6 +8,7 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::LastBlock;
 #[cfg(not(feature = "mainnet"))]
 use namada_core::ledger::testnet_pow;
@@ -25,9 +26,7 @@ use serde::Serialize;
 
 use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
-use crate::ledger::governance::parameters::GovParams;
-use crate::ledger::governance::storage as gov_storage;
-use crate::ledger::native_vp::governance::utils::Votes;
+use crate::core::ledger::governance::storage::keys as gov_storage;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
@@ -628,69 +627,6 @@ pub async fn query_tx_response<C: crate::ledger::queries::Client + Sync>(
     Ok(result)
 }
 
-/// Get the votes for a given proposal id
-pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    epoch: Epoch,
-    proposal_id: u64,
-) -> Votes {
-    let validators = get_all_validators(client, epoch).await;
-
-    let vote_prefix_key =
-        gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter =
-        query_storage_prefix::<C, ProposalVote>(client, &vote_prefix_key).await;
-
-    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
-        HashMap::new();
-    let mut delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-
-    if let Some(vote_iter) = vote_iter {
-        for (key, vote) in vote_iter {
-            let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contain the voting address.")
-                .clone();
-            if vote.is_yay() && validators.contains(&voter_address) {
-                let amount: VotePower =
-                    get_validator_stake(client, epoch, &voter_address)
-                        .await
-                        .try_into()
-                        .expect("Amount of bonds");
-                yay_validators.insert(voter_address, (amount, vote));
-            } else if !validators.contains(&voter_address) {
-                let validator_address =
-                    gov_storage::get_vote_delegation_address(&key)
-                        .expect(
-                            "Vote key should contain the delegation address.",
-                        )
-                        .clone();
-                let delegator_token_amount = get_bond_amount_at(
-                    client,
-                    &voter_address,
-                    &validator_address,
-                    epoch,
-                )
-                .await;
-                if let Some(amount) = delegator_token_amount {
-                    let entry = delegators.entry(voter_address).or_default();
-                    entry.insert(
-                        validator_address,
-                        (VotePower::from(amount), vote),
-                    );
-                }
-            }
-        }
-    }
-
-    Votes {
-        yay_validators,
-        delegators,
-    }
-}
-
 /// Get the PoS parameters
 pub async fn get_pos_params<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -904,7 +840,7 @@ pub async fn get_governance_parameters<
     C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
-) -> GovParams {
+) -> GovernanceParameters {
     let key = gov_storage::get_max_proposal_code_size_key();
     let max_proposal_code_size = query_storage_value::<C, u64>(client, &key)
         .await
@@ -935,9 +871,8 @@ pub async fn get_governance_parameters<
         .await
         .expect("Parameter should be definied.");
 
-    GovParams {
-        min_proposal_fund: u128::try_from(min_proposal_fund)
-            .expect("Amount out of bounds") as u64,
+    GovernanceParameters {
+        min_proposal_fund,
         max_proposal_code_size,
         min_proposal_period,
         max_proposal_period,

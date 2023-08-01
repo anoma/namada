@@ -117,9 +117,7 @@ pub enum Tally {
     /// Default proposal
     Default,
     /// PGF proposal
-    PGFCouncil(Council),
-    /// ETH Bridge proposal
-    ETHBridge,
+    PGFCouncil(Council)
 }
 
 /// The result of a proposal
@@ -177,7 +175,7 @@ impl Display for TallyResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TallyResult::Passed(vote) => match vote {
-                Tally::Default | Tally::ETHBridge => write!(f, "passed"),
+                Tally::Default => write!(f, "passed"),
                 Tally::PGFCouncil((council, cap)) => write!(
                     f,
                     "passed with PGF council address: {}, spending cap: {}",

@@ -2496,6 +2496,9 @@ pub mod args {
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
+    pub const PROPOSAL_ETH: ArgFlag = flag("eth");
+    pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
+    pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -3677,26 +3680,15 @@ pub mod args {
                 ))
         }
     }
-    #[derive(Clone, Debug)]
-    pub struct InitProposal<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// The proposal file path
-        pub proposal_data: PathBuf,
-        /// Flag if proposal should be run offline
-        pub offline: bool,
-        /// Native token address
-        pub native_token: C::NativeAddress,
-        /// Path to the TX WASM code file
-        pub tx_code_path: PathBuf,
-    }
 
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                proposal_data: self.proposal_data,
-                offline: self.offline,
+                proposal_data: std::fs::read(self.proposal_data).expect(""),
+                is_offline: self.is_offline,
+                is_pgf_stewards: self.is_pgf_stewards,
+                is_pgf_funding: self.is_pgf_funding,
                 native_token: ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path,
             }
@@ -3707,15 +3699,19 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
+            let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
 
             Self {
                 tx,
                 proposal_data,
-                offline,
                 native_token: (),
                 tx_code_path,
+                is_offline,
+                is_pgf_stewards,
+                is_pgf_funding,
             }
         }
 
@@ -3727,7 +3723,48 @@ pub mod args {
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .help("Flag if the proposal vote should run offline."),
+                        .help(
+                            "Flag if the proposal should be serialized \
+                             offline (only for default types).",
+                        )
+                        .conflicts_with_all([
+                            PROPOSAL_PGF_FUNDING.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                            PROPOSAL_ETH.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_ETH
+                        .def()
+                        .help("Flag if the proposal is of type eth.")
+                        .conflicts_with_all(&[
+                            PROPOSAL_PGF_FUNDING.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_STEWARD
+                        .def()
+                        .help(
+                            "Flag if the proposal is of type pgf-stewards. \
+                             Used to elect/remove stewards.",
+                        )
+                        .conflicts_with_all(&[
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_FUNDING.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_FUNDING
+                        .def()
+                        .help(
+                            "Flag if the proposal is of type pgf-funding. \
+                             Used to control continous/retro pgf fundings.",
+                        )
+                        .conflicts_with_all(&[
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
                 )
         }
     }

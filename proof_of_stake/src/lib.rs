@@ -869,7 +869,7 @@ pub fn is_validator<S>(
     address: &Address,
 ) -> storage_api::Result<bool>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
     let rate = read_validator_max_commission_rate_change(storage, address)?;
     Ok(rate.is_some())

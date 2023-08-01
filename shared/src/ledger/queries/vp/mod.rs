@@ -5,6 +5,13 @@ pub use pos::Pos;
 use pos::POS;
 pub use token::Token;
 use token::TOKEN;
+pub use governance::Gov;
+use governance::GOV;
+mod governance;
+pub use pgf::Pgf;
+use pgf::PGF;
+mod pgf;
+
 
 pub mod pos;
 mod token;
@@ -13,6 +20,8 @@ mod token;
 router! {VP,
     ( "pos" ) = (sub POS),
     ( "token" ) = (sub TOKEN),
+    ( "governance" ) = (sub GOV),
+    ( "pgf" ) = (sub PGF),
 }
 
 /// Client-only methods for the router type are composed from router functions.
