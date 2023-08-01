@@ -254,8 +254,14 @@ pub async fn prepare_tx<
     updated_balance: Option<token::Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
-    let (signer_addr, signer_pk) =
-        tx_signer::<C, U>(client, wallet, args, default_signer.clone()).await?;
+    let (signer_addr, signer_pk) = tx_signer::<C, U>(
+        client,
+        wallet,
+        args,
+        tx.header.wrapper().is_some(),
+        default_signer.clone(),
+    )
+    .await?;
     if args.dry_run {
         Ok((tx, None, signer_addr, signer_pk))
     } else {
@@ -1429,8 +1435,17 @@ pub async fn build_transfer<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     mut args: args::TxTransfer,
-) -> Result<(Tx, Option<Address>, common::PublicKey, Option<Epoch>, bool), Error>
-{
+) -> Result<
+    (
+        Tx,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+        Option<Epoch>,
+        bool,
+    ),
+    Error,
+> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1460,15 +1475,26 @@ pub async fn build_transfer<
         )
         .await?;
 
-        if let Address::Established(_) = source {
-            // Fees will be paid by the underlying implicit account
-            None
-        } else {
+        if let Address::Implicit(_) = source {
             Some(new_balance)
+        } else {
+            // Fees will be paid by the underlying implicit account or by the wrapper signer if the signer of the inner tx is masp
+            None
         }
     };
 
     let masp_addr = masp();
+    // Need a wrapper signer if the source is masp since fees cannot be paid inside the shielded pool
+    let wrapper_signer = if source == masp_addr {
+        Some(
+            tx_signer(client, wallet, &args.tx, true, TxSigningKey::None)
+                .await?
+                .1,
+        )
+    } else {
+        None
+    };
+
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
     // types by setting the transparent value to 0 and token type to a constant.
@@ -1576,7 +1602,7 @@ pub async fn build_transfer<
     // Manage the two masp epochs
     let masp_epoch = match (unshielding_epoch, shielded_tx_epoch) {
         (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
-            // If the two masp epochs are different, wither the wrapper or the inner tx will fail, so abort tx creation
+            // If the two masp epochs are different, either the wrapper or the inner tx will fail, so abort tx creation
             if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
                 return Err(Error::Other("Fee unshilding masp tx and inner tx masp transaction were crafted on an epoch boundary".to_string()));
             }
@@ -1587,7 +1613,14 @@ pub async fn build_transfer<
         (None, Some(transfer_unshield_epoch)) => shielded_tx_epoch,
         (None, None) => None,
     };
-    Ok((tx, signer_addr, def_key, masp_epoch, is_source_faucet))
+    Ok((
+        tx,
+        signer_addr,
+        def_key,
+        wrapper_signer,
+        masp_epoch,
+        is_source_faucet,
+    ))
 }
 
 /// Submit a transaction to initialize an account

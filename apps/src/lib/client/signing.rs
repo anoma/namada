@@ -40,6 +40,7 @@ pub async fn tx_signer<C, U, V>(
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
+    is_wrapper_tx: bool,
     default: TxSigningKey,
 ) -> Result<(Option<Address>, common::PublicKey), tx::Error>
 where
@@ -48,8 +49,14 @@ where
     U: WalletUtils,
     V: ShieldedUtils,
 {
-    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
-        .await
+    namada::ledger::signing::tx_signer::<C, U>(
+        client,
+        wallet,
+        args,
+        is_wrapper_tx,
+        default,
+    )
+    .await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.
@@ -67,13 +74,15 @@ pub async fn sign_tx<C, U>(
     tx: &mut Tx,
     args: &args::Tx,
     default: &common::PublicKey,
+    wrapper_signer: Option<&common::PublicKey>,
 ) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::sign_tx(wallet, tx, args, default).await
+    namada::ledger::signing::sign_tx(wallet, tx, args, default, wrapper_signer)
+        .await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the

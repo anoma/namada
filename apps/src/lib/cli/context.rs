@@ -95,31 +95,18 @@ impl Context {
         let chain_dir = global_args
             .base_dir
             .join(global_config.default_chain_id.as_str());
-
-        #[cfg(not(any(test, feature = "dev")))]
-        let genesis = genesis::genesis(
-            &global_args.base_dir,
-            &global_config.default_chain_id,
-        );
-        #[cfg(any(test, feature = "dev"))]
-        let genesis = genesis::genesis(1);
-
+        let genesis_file_path = global_args
+            .base_dir
+            .join(format!("{}.toml", global_config.default_chain_id.as_str()));
+        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
         let native_token = genesis.native_token;
-        #[cfg(not(any(test, feature = "dev")))]
-        let wallet = {
-            let genesis_file_path = global_args.base_dir.join(format!(
-                "{}.toml",
-                global_config.default_chain_id.as_str()
-            ));
-            let default_genesis = genesis::genesis_config::open_genesis_config(
-                genesis_file_path,
-            )?;
-            crate::wallet::load_or_new_from_genesis(&chain_dir, default_genesis)
-        };
-        #[cfg(any(test, feature = "dev"))]
-        let wallet = crate::wallet::load_or_new(&chain_dir);
+        let default_genesis =
+            genesis_config::open_genesis_config(genesis_file_path)?;
+        let wallet = crate::wallet::load_or_new_from_genesis(
+            &chain_dir,
+            default_genesis,
+        ); // If the WASM dir specified, put it in the config
 
-        // If the WASM dir specified, put it in the config
         match global_args.wasm_dir.as_ref() {
             Some(wasm_dir) => {
                 config.wasm_dir = wasm_dir.clone();

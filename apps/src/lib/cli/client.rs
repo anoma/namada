@@ -260,6 +260,7 @@ impl<IO> CliApi<IO> {
                             &mut tx,
                             &tx_args,
                             &pk,
+                            None,
                         )
                         .await?;
                         sdk_tx::process_tx(

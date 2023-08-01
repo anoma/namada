@@ -167,9 +167,12 @@ pub async fn tx_signer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
+    is_wrapper_tx: bool,
     default: TxSigningKey,
 ) -> Result<(Option<Address>, common::PublicKey), Error> {
-    let signer = if args.dry_run {
+    let signer = if (args.dry_run && !is_wrapper_tx)
+        || (args.dry_run_wrapper && is_wrapper_tx)
+    {
         // We cannot override the signer if we're doing a dry run
         default
     } else if let Some(signing_key) = &args.signing_key {
@@ -206,19 +209,20 @@ pub async fn tx_signer<
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
 ///
+/// It takes also an optional keypair to sign the wrapper header separately (this is useful for masp transactions in which the inner transactions is signed by masp itself but the wrapper must be signed by a valid account).
+///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-///
-/// If the tx fee is to be unshielded, it also returns the unshielding epoch.
 pub async fn sign_tx<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
     keypair: &common::PublicKey,
+    keypair_wrapper: Option<&common::PublicKey>,
 ) -> Result<(), Error> {
-    let keypair = find_key_by_pk(wallet, args, keypair)?;
+    let mut keypair = find_key_by_pk(wallet, args, keypair)?;
     // Sign over the transacttion data
     tx.add_section(Section::Signature(Signature::new(
         vec![*tx.data_sechash(), *tx.code_sechash()],
@@ -227,6 +231,9 @@ pub async fn sign_tx<U: WalletUtils>(
     // Remove all the sensitive sections
     tx.protocol_filter();
     // Then sign over the bound wrapper
+    if let Some(keypair_wrapper) = keypair_wrapper {
+        keypair = find_key_by_pk(wallet, args, keypair_wrapper)?;
+    }
     tx.add_section(Section::Signature(Signature::new(
         tx.sechashes(),
         &keypair,
@@ -394,7 +401,7 @@ pub async fn wrap_tx<
             let validated_fee_amount =
                 validate_amount(client, amount, &args.fee_token, args.force)
                     .await
-                    .expect("Expected to be ablo to validate fee");
+                    .expect("Expected to be able to validate fee");
 
             let amount = Amount::from_uint(
                 validated_fee_amount.amount,
@@ -545,7 +552,7 @@ pub async fn wrap_tx<
                 let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, balance: {}.",
-            format_denominated_amount(client, &token_addr, fee_amount).await,
+            format_denominated_amount(client, &token_addr, total_fee).await,
             format_denominated_amount(client, &token_addr, updated_balance).await,
         );
                 eprintln!("{}", err_msg);

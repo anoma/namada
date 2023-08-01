@@ -2389,7 +2389,7 @@ pub mod args {
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(200)));
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(1000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
