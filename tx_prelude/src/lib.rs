@@ -19,7 +19,6 @@ pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::ledger::eth_bridge;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
-pub use namada_core::ledger::slash_fund::storage as slash_fund_storage;
 pub use namada_core::ledger::storage::types::encode;
 pub use namada_core::ledger::storage_api::{
     self, governance, iter_prefix, iter_prefix_bytes, Error, OptionExt,

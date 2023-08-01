@@ -246,6 +246,7 @@ pub mod cmds {
                 .subcommand(QueryProposal::def().display_order(4))
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
+                .subcommand(QueryPgf::def().display_order(4))
                 .subcommand(QueryValidatorState::def().display_order(4))
                 // Actions
                 .subcommand(SignTx::def().display_order(5))
@@ -297,6 +298,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryProposalResult);
             let query_protocol_parameters =
                 Self::parse_with_ctx(matches, QueryProtocolParameters);
+            let query_pgf = Self::parse_with_ctx(matches, QueryPgf);
             let query_validator_state =
                 Self::parse_with_ctx(matches, QueryValidatorState);
             let add_to_eth_bridge_pool =
@@ -333,6 +335,7 @@ pub mod cmds {
                 .or(query_proposal)
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
+                .or(query_pgf)
                 .or(query_validator_state)
                 .or(query_account)
                 .or(sign_tx)
@@ -405,6 +408,7 @@ pub mod cmds {
         QueryProposal(QueryProposal),
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
+        QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
         SignTx(SignTx),
     }
@@ -1182,6 +1186,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query protocol parameters.")
                 .add_args::<args::QueryProtocolParameters<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryPgf(pub args::QueryPgf<args::CliTypes>);
+
+    impl SubCmd for QueryPgf {
+        const CMD: &'static str = "query-pgf";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryPgf(args::QueryPgf::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query pgf stewards and continous funding.")
+                .add_args::<args::QueryPgf<args::CliTypes>>()
         }
     }
 
@@ -2496,6 +2522,9 @@ pub mod args {
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
+    pub const PROPOSAL_ETH: ArgFlag = flag("eth");
+    pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
+    pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -3677,26 +3706,15 @@ pub mod args {
                 ))
         }
     }
-    #[derive(Clone, Debug)]
-    pub struct InitProposal<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// The proposal file path
-        pub proposal_data: PathBuf,
-        /// Flag if proposal should be run offline
-        pub offline: bool,
-        /// Native token address
-        pub native_token: C::NativeAddress,
-        /// Path to the TX WASM code file
-        pub tx_code_path: PathBuf,
-    }
 
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                proposal_data: self.proposal_data,
-                offline: self.offline,
+                proposal_data: std::fs::read(self.proposal_data).expect(""),
+                is_offline: self.is_offline,
+                is_pgf_stewards: self.is_pgf_stewards,
+                is_pgf_funding: self.is_pgf_funding,
                 native_token: ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path,
             }
@@ -3707,15 +3725,19 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
+            let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
+            let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
 
             Self {
                 tx,
                 proposal_data,
-                offline,
                 native_token: (),
                 tx_code_path,
+                is_offline,
+                is_pgf_stewards,
+                is_pgf_funding,
             }
         }
 
@@ -3727,31 +3749,50 @@ pub mod args {
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
-                        .help("Flag if the proposal vote should run offline."),
+                        .help(
+                            "Flag if the proposal should be serialized \
+                             offline (only for default types).",
+                        )
+                        .conflicts_with_all([
+                            PROPOSAL_PGF_FUNDING.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                            PROPOSAL_ETH.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_ETH
+                        .def()
+                        .help("Flag if the proposal is of type eth.")
+                        .conflicts_with_all([
+                            PROPOSAL_PGF_FUNDING.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_STEWARD
+                        .def()
+                        .help(
+                            "Flag if the proposal is of type pgf-stewards. \
+                             Used to elect/remove stewards.",
+                        )
+                        .conflicts_with_all([
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_FUNDING.name,
+                        ]),
+                )
+                .arg(
+                    PROPOSAL_PGF_FUNDING
+                        .def()
+                        .help(
+                            "Flag if the proposal is of type pgf-funding. \
+                             Used to control continous/retro pgf fundings.",
+                        )
+                        .conflicts_with_all([
+                            PROPOSAL_ETH.name,
+                            PROPOSAL_PGF_STEWARD.name,
+                        ]),
                 )
         }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Proposal id
-        pub proposal_id: Option<u64>,
-        /// The vote
-        pub vote: String,
-        /// The address of the voter
-        pub voter_address: C::Address,
-        /// PGF proposal
-        pub proposal_pgf: Option<String>,
-        /// ETH proposal
-        pub proposal_eth: Option<String>,
-        /// Flag if proposal vote should be run offline
-        pub offline: bool,
-        /// The proposal file path
-        pub proposal_data: Option<PathBuf>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: PathBuf,
     }
 
     impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
@@ -3760,12 +3801,14 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
-                voter_address: ctx.get(&self.voter_address),
-                offline: self.offline,
-                proposal_data: self.proposal_data,
+                voter: ctx.get(&self.voter),
+                is_offline: self.is_offline,
+                proposal_data: self.proposal_data.map(|path| {
+                    println!("Not able to read {}.", path.to_string_lossy());
+                    std::fs::read(path)
+                        .expect("Should be able to read the file.")
+                }),
                 tx_code_path: self.tx_code_path.to_path_buf(),
-                proposal_pgf: self.proposal_pgf,
-                proposal_eth: self.proposal_eth,
             }
         }
     }
@@ -3774,11 +3817,9 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
-            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
-            let voter_address = ADDRESS.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let voter = ADDRESS.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
@@ -3786,10 +3827,8 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
-                proposal_pgf,
-                proposal_eth,
-                offline,
-                voter_address,
+                is_offline,
+                voter,
                 proposal_data,
                 tx_code_path,
             }
@@ -3809,29 +3848,7 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .help("The vote for the proposal. Either yay or nay"),
-                )
-                .arg(
-                    PROPOSAL_VOTE_PGF_OPT
-                        .def()
-                        .help(
-                            "The list of proposed councils and spending \
-                             caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is \
-                             expressed in microNAM",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
-                )
-                .arg(
-                    PROPOSAL_VOTE_ETH_OPT
-                        .def()
-                        .help(
-                            "The signing key and message bytes (hex encoded) \
-                             to be signed: $signing_key $message",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
+                        .help("The vote for the proposal. Either yay or nay."),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
@@ -3846,6 +3863,7 @@ pub mod args {
                             "The data path file (json) that describes the \
                              proposal.",
                         )
+                        .requires(PROPOSAL_OFFLINE.name)
                         .conflicts_with(PROPOSAL_ID.name),
                 )
                 .arg(ADDRESS.def().help("The address of the voter."))
@@ -3938,7 +3956,15 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+                .arg(
+                    PROPOSAL_ID_OPT
+                        .def()
+                        .help("The proposal identifier.")
+                        .conflicts_with_all([
+                            PROPOSAL_OFFLINE.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
@@ -3946,16 +3972,18 @@ pub mod args {
                             "Flag if the proposal result should run on \
                              offline data.",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .conflicts_with(PROPOSAL_ID.name)
+                        .requires(DATA_PATH_OPT.name),
                 )
                 .arg(
                     DATA_PATH_OPT
                         .def()
                         .help(
                             "The path to the folder containing the proposal \
-                             json and votes",
+                             and votes files in json format.",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .conflicts_with(PROPOSAL_ID.name)
+                        .requires(PROPOSAL_OFFLINE.name),
                 )
         }
     }
@@ -3974,6 +4002,26 @@ pub mod args {
     }
 
     impl Args for QueryProtocolParameters<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+        }
+    }
+
+    impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
+            QueryPgf::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+            }
+        }
+    }
+
+    impl Args for QueryPgf<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
 
@@ -4076,9 +4124,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>().arg(
-                BALANCE_OWNER
+                OWNER
                     .def()
-                    .help("The substorage space address to query."),
+                    .help("The substorage space address to query.")
+                    .required(true),
             )
         }
     }

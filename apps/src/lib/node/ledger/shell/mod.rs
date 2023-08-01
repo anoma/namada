@@ -16,6 +16,7 @@ mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
 pub mod testing;
+pub mod utils;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};

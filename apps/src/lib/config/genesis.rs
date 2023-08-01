@@ -4,12 +4,12 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::ledger::governance::parameters::GovernanceParameters;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
 #[cfg(feature = "dev")]
 use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 #[cfg(feature = "dev")]
@@ -35,9 +35,9 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    use namada::core::ledger::governance::parameters::GovernanceParameters;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
-    use namada::ledger::governance::parameters::GovParams;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
@@ -154,7 +154,7 @@ pub mod genesis_config {
         // Maximum size of proposal in kibibytes (KiB)
         pub max_proposal_code_size: u64,
         // Minimum proposal period length in epochs
-        pub min_proposal_period: u64,
+        pub min_proposal_voting_period: u64,
         // Maximum proposal period length in epochs
         pub max_proposal_period: u64,
         // Maximum number of characters in the proposal content
@@ -622,15 +622,15 @@ pub mod genesis_config {
         let GovernanceParamsConfig {
             min_proposal_fund,
             max_proposal_code_size,
-            min_proposal_period,
+            min_proposal_voting_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
             max_proposal_period,
         } = gov_params;
-        let gov_params = GovParams {
-            min_proposal_fund,
+        let gov_params = GovernanceParameters {
+            min_proposal_fund: token::Amount::native_whole(min_proposal_fund),
             max_proposal_code_size,
-            min_proposal_period,
+            min_proposal_voting_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
             max_proposal_period,
@@ -731,7 +731,7 @@ pub struct Genesis {
     pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
     pub pos_params: PosParams,
-    pub gov_params: GovParams,
+    pub gov_params: GovernanceParameters,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
@@ -1087,7 +1087,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         token_accounts,
         parameters,
         pos_params: PosParams::default(),
-        gov_params: GovParams::default(),
+        gov_params: GovernanceParameters::default(),
         ethereum_bridge_params: Some(EthereumBridgeConfig {
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),

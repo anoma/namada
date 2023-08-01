@@ -16,9 +16,17 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::Amount;
+use namada_core::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+};
+use namada_core::ledger::governance::storage::proposal::ProposalType;
+use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
+use namada_core::types::transaction::governance::{
+    InitProposalData, VoteProposalData,
+};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
@@ -34,7 +42,6 @@ use crate::ibc::tx_msg::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
-use crate::ledger::governance::storage as gov_storage;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
@@ -200,6 +207,21 @@ pub enum Error {
     /// Like EncodeTxFailure but for the encode error type
     #[error("Encoding tx data, {0}, shouldn't fail")]
     EncodeFailure(EncodeError),
+    /// Failed to deserialize the proposal data from json
+    #[error("Failed to deserialize the proposal data: {0}")]
+    FailedGovernaneProposalDeserialize(String),
+    /// The proposal data are invalid
+    #[error("Proposal data are invalid: {0}")]
+    InvalidProposal(String),
+    /// The proposal vote is not valid
+    #[error("Proposal vote is invalid")]
+    InvalidProposalVote,
+    /// The proposal can't be voted
+    #[error("Proposal {0} can't be voted")]
+    InvalidProposalVotingPeriod(u64),
+    /// The proposal can't be found
+    #[error("Proposal {0} can't be found")]
+    ProposalDoesNotExist(u64),
     /// Encoding public key failure
     #[error("Encoding a public key, {0}, shouldn't fail")]
     EncodeKeyFailure(std::io::Error),
@@ -1085,34 +1107,236 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
     .await
 }
 
-/// Check if current epoch is in the last third of the voting period of the
-/// proposal. This ensures that it is safe to optimize the vote writing to
-/// storage.
-pub async fn is_safe_voting_window<C: crate::ledger::queries::Client + Sync>(
+/// Build a default proposal governance
+pub async fn build_default_proposal<
+    C: crate::ledger::queries::Client + Sync,
+>(
     client: &C,
-    proposal_id: u64,
-    proposal_start_epoch: Epoch,
-) -> Result<bool, Error> {
-    let current_epoch = rpc::query_epoch(client).await;
+    args::InitProposal {
+        tx,
+        proposal_data: _,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
+        tx_code_path,
+    }: args::InitProposal,
+    proposal: DefaultProposal,
+    gas_payer: &common::PublicKey,
+) -> Result<TxBuilder, Error> {
+    let mut init_proposal_data =
+        InitProposalData::try_from(proposal.clone())
+            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
 
-    let proposal_end_epoch_key =
-        gov_storage::get_voting_end_epoch_key(proposal_id);
-    let proposal_end_epoch =
-        rpc::query_storage_value::<C, Epoch>(client, &proposal_end_epoch_key)
-            .await;
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
-    match proposal_end_epoch {
-        Some(proposal_end_epoch) => {
-            Ok(!crate::ledger::native_vp::governance::utils::is_valid_validator_voting_period(
-                current_epoch,
-                proposal_start_epoch,
-                proposal_end_epoch,
-            ))
-        }
-        None => {
-            Err(Error::EpochNotInStorage)
-        }
+    let chain_id = tx.chain_id.clone().unwrap();
+
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+
+    let (tx_builder, extra_section_hash) = tx_builder
+        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+    init_proposal_data.content = extra_section_hash;
+
+    let tx_builder = if let Some(init_proposal_code) = proposal.data {
+        let (tx_builder, extra_section_hash) =
+            tx_builder.add_extra_section(init_proposal_code);
+        init_proposal_data.r#type =
+            ProposalType::Default(Some(extra_section_hash));
+        tx_builder
+    } else {
+        tx_builder
+    };
+
+    let tx_builder = tx_builder
+        .add_code_from_hash(tx_code_hash)
+        .add_data(init_proposal_data);
+
+    prepare_tx::<C>(
+        client,
+        &tx,
+        tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
+}
+
+/// Build a proposal vote
+pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    args::VoteProposal {
+        tx,
+        proposal_id,
+        vote,
+        voter,
+        is_offline: _,
+        proposal_data: _,
+        tx_code_path,
+    }: args::VoteProposal,
+    epoch: Epoch,
+    gas_payer: &common::PublicKey,
+) -> Result<TxBuilder, Error> {
+    let proposal_vote =
+        ProposalVote::try_from(vote).map_err(|_| Error::InvalidProposalVote)?;
+
+    let proposal_id = proposal_id.expect("Proposal id must be defined.");
+    let proposal = if let Some(proposal) =
+        rpc::query_proposal_by_id(client, proposal_id).await
+    {
+        proposal
+    } else {
+        return Err(Error::ProposalDoesNotExist(proposal_id));
+    };
+
+    let storage_vote =
+        StorageProposalVote::build(&proposal_vote, &proposal.r#type)
+            .expect("Should be able to build the proposal vote");
+
+    let is_validator = rpc::is_validator(client, &voter).await;
+
+    if !proposal.can_be_voted(epoch, is_validator) {
+        return Err(Error::InvalidProposalVotingPeriod(proposal_id));
     }
+
+    let delegations = rpc::get_delegators_delegation_at(
+        client,
+        &voter,
+        proposal.voting_start_epoch,
+    )
+    .await
+    .keys()
+    .cloned()
+    .collect::<Vec<Address>>();
+
+    let data = VoteProposalData {
+        id: proposal_id,
+        vote: storage_vote,
+        voter: voter.clone(),
+        delegations,
+    };
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let chain_id = tx.chain_id.clone().unwrap();
+
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+
+    prepare_tx::<C>(
+        client,
+        &tx,
+        tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
+}
+
+/// Build a pgf funding proposal governance
+pub async fn build_pgf_funding_proposal<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args::InitProposal {
+        tx,
+        proposal_data: _,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
+        tx_code_path,
+    }: args::InitProposal,
+    proposal: PgfFundingProposal,
+    gas_payer: &common::PublicKey,
+) -> Result<TxBuilder, Error> {
+    let mut init_proposal_data =
+        InitProposalData::try_from(proposal.clone())
+            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let chain_id = tx.chain_id.clone().unwrap();
+
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+
+    let (tx_builder, extra_section_hash) = tx_builder
+        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+    init_proposal_data.content = extra_section_hash;
+
+    let tx_builder = tx_builder
+        .add_code_from_hash(tx_code_hash)
+        .add_data(init_proposal_data);
+
+    prepare_tx::<C>(
+        client,
+        &tx,
+        tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
+}
+
+/// Build a pgf funding proposal governance
+pub async fn build_pgf_stewards_proposal<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args::InitProposal {
+        tx,
+        proposal_data: _,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
+        tx_code_path,
+    }: args::InitProposal,
+    proposal: PgfStewardProposal,
+    gas_payer: &common::PublicKey,
+) -> Result<TxBuilder, Error> {
+    let mut init_proposal_data =
+        InitProposalData::try_from(proposal.clone())
+            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let chain_id = tx.chain_id.clone().unwrap();
+
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+
+    let (tx_builder, extra_section_hash) = tx_builder
+        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+    init_proposal_data.content = extra_section_hash;
+
+    let tx_builder = tx_builder
+        .add_code_from_hash(tx_code_hash)
+        .add_data(init_proposal_data);
+
+    prepare_tx::<C>(
+        client,
+        &tx,
+        tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
 }
 
 /// Submit an IBC transfer

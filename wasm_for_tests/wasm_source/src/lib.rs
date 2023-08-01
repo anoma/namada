@@ -34,7 +34,7 @@ pub mod main {
     #[transaction]
     fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         // governance
-        let target_key = gov_storage::get_min_proposal_grace_epoch_key();
+        let target_key = gov_storage::keys::get_min_proposal_grace_epoch_key();
         ctx.write(&target_key, 9_u64)?;
 
         // parameters
