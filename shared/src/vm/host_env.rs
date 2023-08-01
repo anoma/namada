@@ -1007,6 +1007,40 @@ where
     tx_add_gas(env, gas)
 }
 
+/// Getting an IBC event function exposed to the wasm VM Tx environment.
+pub fn tx_get_ibc_event<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    event_type_ptr: u64,
+    event_type_len: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (event_type, gas) = env
+        .memory
+        .read_string(event_type_ptr, event_type_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_add_gas(env, gas)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    for event in write_log.get_ibc_events() {
+        if event.event_type == event_type {
+            let value =
+                event.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            return Ok(len);
+        }
+    }
+    Ok(HostEnvResult::Fail.to_i64())
+}
+
 /// Storage read prior state (before tx execution) function exposed to the wasm
 /// VM VP environment. It will try to read from the storage.
 ///

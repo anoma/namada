@@ -448,6 +448,7 @@ mod native_tx_host_env {
         result_ptr: u64
     ));
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));
+    native_host_fn!(tx_get_ibc_event(event_type_ptr: u64, event_type_len: u64) -> i64);
     native_host_fn!(tx_get_chain_id(result_ptr: u64));
     native_host_fn!(tx_get_block_height() -> u64);
     native_host_fn!(tx_get_tx_index() -> u32);

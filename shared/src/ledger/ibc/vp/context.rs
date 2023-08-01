@@ -81,6 +81,11 @@ where
         }
     }
 
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        Ok(self.store.contains_key(key)
+            || self.ctx.has_key(key).map_err(Error::NativeVpError)?)
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
@@ -111,6 +116,18 @@ where
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
         self.event.insert(event);
         Ok(())
+    }
+
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        for event in &self.event {
+            if event.event_type == *event_type.as_ref() {
+                return Ok(Some(event.clone()));
+            }
+        }
+        Ok(None)
     }
 
     fn transfer_token(
@@ -280,6 +297,10 @@ where
         self.ctx.read_bytes(key).map_err(Error::NativeVpError)
     }
 
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        self.ctx.has_key(key).map_err(Error::NativeVpError)
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
@@ -304,6 +325,13 @@ where
 
     fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't emit an event")
+    }
+
+    fn get_ibc_event(
+        &self,
+        _event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        unimplemented!("Validation doesn't get an event")
     }
 
     fn transfer_token(

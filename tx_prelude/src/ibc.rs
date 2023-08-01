@@ -37,6 +37,10 @@ impl IbcStorageContext for Ctx {
         self.read_bytes(key)
     }
 
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        <Ctx as StorageRead>::has_key(self, key)
+    }
+
     fn write(
         &mut self,
         key: &Key,
@@ -69,6 +73,13 @@ impl IbcStorageContext for Ctx {
         event: IbcEvent,
     ) -> std::result::Result<(), Self::Error> {
         <Ctx as TxEnv>::emit_ibc_event(self, &event)
+    }
+
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        <Ctx as TxEnv>::get_ibc_event(self, &event_type)
     }
 
     fn transfer_token(

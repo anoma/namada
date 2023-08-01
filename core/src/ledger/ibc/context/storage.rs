@@ -31,6 +31,9 @@ pub trait IbcStorageContext {
     /// Read IBC-related data
     fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error>;
 
+    /// Check if the given key is present
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error>;
+
     /// Read IBC-related data with a prefix
     fn iter_prefix<'iter>(
         &'iter self,
@@ -51,6 +54,12 @@ pub trait IbcStorageContext {
 
     /// Emit an IBC event
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error>;
+
+    /// Get an IBC event
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error>;
 
     /// Transfer token
     fn transfer_token(
