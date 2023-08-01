@@ -67,10 +67,15 @@ where
         let account_key = balance_key(&self.ctx.storage.native_token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
-            .unwrap_or_else(|error| {
+            .map_err(|error| {
                 tracing::warn!(?error, %account_key, "reading pre value");
-                None
-            })?;
+            })
+            .ok()?
+            // NB: the previous balance of the given account might
+            // have been null. this is valid if the account is
+            // being credited, such as when we escrow gas under
+            // the Bridge pool
+            .unwrap_or_default();
         let after: Amount = (&self.ctx)
             .read_post_value(&account_key)
             .unwrap_or_else(|error| {
