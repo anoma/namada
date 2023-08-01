@@ -1336,6 +1336,12 @@ impl ReferenceStateMachine for AbstractPosState {
     fn transitions(state: &Self::State) -> BoxedStrategy<Self::Transition> {
         // Let preconditions filter out what unbonds are not allowed
         let unbondable = state.bond_sums().into_iter().collect::<Vec<_>>();
+        let redelegatable = unbondable
+            .iter()
+            // Self-bonds cannot be redelegated
+            .filter(|(id, _)| id.source != id.validator)
+            .cloned()
+            .collect::<Vec<_>>();
 
         let withdrawable =
             state.withdrawable_unbonds().into_iter().collect::<Vec<_>>();
@@ -1417,6 +1423,40 @@ impl ReferenceStateMachine for AbstractPosState {
             transitions
         } else {
             let arb_unbondable = prop::sample::select(unbondable);
+            let arb_unbond =
+                arb_unbondable.prop_flat_map(move |(id, deltas_sum)| {
+                    let deltas_sum = i128::try_from(deltas_sum).unwrap();
+                    // Generate an amount to unbond, up to the sum
+                    assert!(
+                        deltas_sum > 0,
+                        "Bond {id} deltas_sum must be non-zero"
+                    );
+                    (0..deltas_sum).prop_map(move |to_unbond| {
+                        let id = id.clone();
+                        let amount =
+                            token::Amount::from_change(Change::from(to_unbond));
+                        Transition::Unbond { id, amount }
+                    })
+                });
+            prop_oneof![transitions, arb_unbond].boxed()
+        };
+
+        // Add withdrawals, if any
+        let transitions = if withdrawable.is_empty() {
+            transitions
+        } else {
+            let arb_withdrawable = prop::sample::select(withdrawable);
+            let arb_withdrawal = arb_withdrawable
+                .prop_map(|(id, _)| Transition::Withdraw { id });
+
+            prop_oneof![transitions, arb_withdrawal].boxed()
+        };
+
+        // Add redelegations, if any
+        if redelegatable.is_empty() {
+            transitions
+        } else {
+            let arb_redelegatable = prop::sample::select(redelegatable);
             let validators = state
                 .validator_states
                 .get(&state.pipeline())
@@ -1424,19 +1464,17 @@ impl ReferenceStateMachine for AbstractPosState {
                 .keys()
                 .cloned()
                 .collect::<Vec<_>>();
-            let arb_unbond_or_redelegation =
-                arb_unbondable.prop_flat_map(move |(id, deltas_sum)| {
+            let arb_redelegation =
+                arb_redelegatable.prop_flat_map(move |(id, deltas_sum)| {
                     let deltas_sum = i128::try_from(deltas_sum).unwrap();
-                    // Generate an amount to unbond or redelegate, up to the sum
+                    // Generate an amount to redelegate, up to the sum
                     assert!(
                         deltas_sum > 0,
                         "Bond {id} deltas_sum must be non-zero"
                     );
-                    let arb_amount = || {
-                        (0..deltas_sum).prop_map(|to_unbond| {
-                            token::Amount::from_change(Change::from(to_unbond))
-                        })
-                    };
+                    let arb_amount = (0..deltas_sum).prop_map(|to_unbond| {
+                        token::Amount::from_change(Change::from(to_unbond))
+                    });
                     // Generate a new validator for redelegation
                     let current_validator = id.validator.clone();
                     let new_validators = validators
@@ -1446,38 +1484,16 @@ impl ReferenceStateMachine for AbstractPosState {
                         .cloned()
                         .collect::<Vec<_>>();
                     let arb_new_validator =
-                        || prop::sample::select(new_validators);
-                    let id_clone = id.clone();
-                    prop_oneof![
-                        arb_amount().prop_map(move |amount| {
-                            Transition::Unbond {
-                                id: id_clone.clone(),
-                                amount,
-                            }
-                        }),
-                        (arb_amount(), arb_new_validator()).prop_map(
-                            move |(amount, new_validator)| {
-                                Transition::Redelegate {
-                                    id: id.clone(),
-                                    new_validator,
-                                    amount,
-                                }
-                            }
-                        ),
-                    ]
+                        prop::sample::select(new_validators);
+                    (arb_amount, arb_new_validator).prop_map(
+                        move |(amount, new_validator)| Transition::Redelegate {
+                            id: id.clone(),
+                            new_validator,
+                            amount,
+                        },
+                    )
                 });
-            prop_oneof![transitions, arb_unbond_or_redelegation].boxed()
-        };
-
-        // Add withdrawals, if any
-        if withdrawable.is_empty() {
-            transitions
-        } else {
-            let arb_withdrawable = prop::sample::select(withdrawable);
-            let arb_withdrawal = arb_withdrawable
-                .prop_map(|(id, _)| Transition::Withdraw { id });
-
-            prop_oneof![transitions, arb_withdrawal].boxed()
+            prop_oneof![transitions, arb_redelegation].boxed()
         }
     }
 
