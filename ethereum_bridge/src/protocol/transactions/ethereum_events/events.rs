@@ -183,45 +183,44 @@ where
     let receiver_native_token_balance_key =
         token::balance_key(&wl_storage.storage.native_token, receiver);
 
-    let eth_bridge_native_token_balance_pre: token::Amount =
-        StorageRead::read(wl_storage, &eth_bridge_native_token_balance_key)?
-            .expect(
-                "Ethereum bridge must always have an explicit balance of the \
-                 native token",
-            );
-    let receiver_native_token_balance_pre: token::Amount =
-        StorageRead::read(wl_storage, &receiver_native_token_balance_key)?
-            .unwrap_or_default();
-
-    let eth_bridge_native_token_balance_post =
-        eth_bridge_native_token_balance_pre
-            .checked_sub(*amount)
-            .expect(
-                "Ethereum bridge should always have enough native tokens to \
-                 redeem any confirmed transfers",
-            );
-    let receiver_native_token_balance_post = receiver_native_token_balance_pre
-        .checked_add(*amount)
-        .expect("Receiver's balance is full");
-
-    StorageWrite::write(
+    update::amount(
         wl_storage,
         &eth_bridge_native_token_balance_key,
-        eth_bridge_native_token_balance_post,
+        |balance| {
+            tracing::debug!(
+                %eth_bridge_native_token_balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.spend(amount);
+            tracing::debug!(
+                %eth_bridge_native_token_balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        },
     )?;
-    StorageWrite::write(
+    update::amount(
         wl_storage,
         &receiver_native_token_balance_key,
-        receiver_native_token_balance_post,
+        |balance| {
+            tracing::debug!(
+                %receiver_native_token_balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.receive(amount);
+            tracing::debug!(
+                %receiver_native_token_balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        },
     )?;
 
     tracing::info!(
         amount = %amount.to_string_native(),
         %receiver,
-        eth_bridge_native_token_balance_pre = %eth_bridge_native_token_balance_pre.to_string_native(),
-        eth_bridge_native_token_balance_post = %eth_bridge_native_token_balance_post.to_string_native(),
-        receiver_native_token_balance_pre = %receiver_native_token_balance_pre.to_string_native(),
-        receiver_native_token_balance_post = %receiver_native_token_balance_post.to_string_native(),
         "Redeemed native token for wrapped ERC20 token"
     );
     Ok(BTreeSet::from([
