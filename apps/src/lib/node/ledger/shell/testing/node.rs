@@ -138,7 +138,7 @@ impl MockNode {
             .0
     }
 
-    /// Get the address of the block proposera and the votes for the block
+    /// Get the address of the block proposer and the votes for the block
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();

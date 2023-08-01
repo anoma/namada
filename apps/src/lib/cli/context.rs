@@ -98,14 +98,33 @@ impl Context {
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
-        let native_token = genesis.native_token;
-        let default_genesis =
-            genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet = crate::wallet::load_or_new_from_genesis(
-            &chain_dir,
-            default_genesis,
-        ); // If the WASM dir specified, put it in the config
+        // NOTE: workaround to make this function work both in integration tests and benchmarks
+        let (wallet, native_token) = if genesis_file_path.is_file() {
+            let genesis =
+                genesis_config::read_genesis_config(&genesis_file_path);
+
+            let default_genesis =
+                genesis_config::open_genesis_config(genesis_file_path)?;
+
+            (
+                crate::wallet::load_or_new_from_genesis(
+                    &chain_dir,
+                    default_genesis,
+                ),
+                genesis.native_token,
+            ) // If the WASM dir specified, put it in the config
+        } else {
+            #[cfg(not(any(test, feature = "dev")))]
+            panic!("Missing genesis file");
+            #[cfg(any(test, feature = "dev"))]
+            {
+                let default_genesis = genesis::genesis(1);
+                (
+                    crate::wallet::load_or_new(&genesis_file_path),
+                    default_genesis.native_token,
+                )
+            }
+        };
 
         match global_args.wasm_dir.as_ref() {
             Some(wasm_dir) => {
