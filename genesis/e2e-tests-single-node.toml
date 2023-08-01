@@ -30,7 +30,7 @@ address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvf
 denom = 6
 [token.NAM.balances]
 Albert = "1000000"
-"Albert.public_key" = "4000"
+"Albert.public_key" = "100"
 Bertha = "1000000"
 "Bertha.public_key" = "2000"
 Christel = "1000000"
@@ -38,7 +38,7 @@ Christel = "1000000"
 Daewon = "1000000"
 faucet = "9223372036854"
 "faucet.public_key" = "100"
-"validator-0.public_key" = "200"
+"validator-0.public_key" = "100"
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
