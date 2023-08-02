@@ -6039,7 +6039,7 @@ where
     let is_not_chained = if let Some(end_epoch) = src_redel_end_epoch {
         // TODO: check bounds for correctness (> and presence of cubic offset)
         end_epoch + params.unbonding_len + params.cubic_slashing_window_length
-            > current_epoch
+            <= current_epoch
     } else {
         true
     };
