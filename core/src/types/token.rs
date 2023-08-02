@@ -8,6 +8,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
+use num_traits::Signed as SignedTrait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -67,7 +68,7 @@ impl Amount {
 
     /// Get the amount as a [`Change`]
     pub fn change(&self) -> Change {
-        self.raw.try_into().unwrap()
+        Change::from_uint(self.raw).unwrap()
     }
 
     /// Spend a given amount.
@@ -151,7 +152,7 @@ impl Amount {
 
     /// Create amount from the absolute value of `Change`.
     pub fn from_change(change: Change) -> Self {
-        Self { raw: change.abs() }
+        Self { raw: change.abs().0 }
     }
 
     /// Given a string and a denomination, parse an amount from string.
@@ -483,7 +484,7 @@ impl From<Dec> for Amount {
     fn from(dec: Dec) -> Amount {
         if !dec.is_negative() {
             Amount {
-                raw: dec.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize),
+                raw: dec.0.abs().0 / Uint::exp10(POS_DECIMAL_PRECISION as usize),
             }
         } else {
             panic!(
@@ -686,13 +687,13 @@ pub enum AmountParseError {
 
 impl From<Amount> for Change {
     fn from(amount: Amount) -> Self {
-        amount.raw.try_into().unwrap()
+        Self::from_uint(amount.raw).unwrap()
     }
 }
 
 impl From<Change> for Amount {
     fn from(change: Change) -> Self {
-        Amount { raw: change.abs() }
+        Amount { raw: change.abs().0 }
     }
 }
 
@@ -754,7 +755,7 @@ impl MaspDenom {
 
     /// Get the corresponding u64 word from the input uint256.
     pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = amount.abs().0[*self as usize] as i128;
+        let val = amount.abs().0.0[*self as usize] as i128;
         if Change::is_negative(amount) {
             -val
         } else {

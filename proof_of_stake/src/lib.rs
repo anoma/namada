@@ -45,6 +45,7 @@ use namada_core::types::key::{
 };
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token;
+use num_traits::Zero;
 use once_cell::unsync::Lazy;
 use parameters::PosParams;
 use rewards::PosRewardsCalculator;

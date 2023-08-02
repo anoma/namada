@@ -12,6 +12,7 @@ use namada_core::ledger::{eth_bridge, storage as ledger_storage};
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{balance_key, Amount, Change};
+use num_traits::{CheckedSub, Zero};
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
 use crate::proto::Tx;

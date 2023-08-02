@@ -9,11 +9,12 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
+use num_traits::{Signed as SignedTrait, Zero};
 use serde::{Deserialize, Serialize};
 
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
 use crate::types::token::{Amount, Change};
-use crate::types::uint::{Uint, I256};
+use crate::types::uint::{Uint, I256, Signed};
 
 /// The number of Dec places for PoS rational calculations
 pub const POS_DECIMAL_PRECISION: u8 = 12;
@@ -53,13 +54,13 @@ impl Dec {
     /// Division with truncation (TODO: better description)
     pub fn trunc_div(&self, rhs: &Self) -> Option<Self> {
         let is_neg = self.0.is_negative() ^ rhs.0.is_negative();
-        let inner_uint = self.0.abs();
-        let inner_rhs_uint = rhs.0.abs();
+        let inner_uint = self.0.abs().0;
+        let inner_rhs_uint = rhs.0.abs().0;
         match inner_uint
             .fixed_precision_div(&inner_rhs_uint, POS_DECIMAL_PRECISION)
         {
             Some(res) => {
-                let res = I256::try_from(res).ok()?;
+                let res = I256::from_uint(res)?;
                 if is_neg {
                     Some(Self(-res))
                 } else {
@@ -82,7 +83,7 @@ impl Dec {
 
     /// The representation of 1
     pub fn one() -> Self {
-        Self(I256(
+        Self(Signed(
             Uint::one() * Uint::exp10(POS_DECIMAL_PRECISION as usize),
         ))
     }
@@ -103,9 +104,9 @@ impl Dec {
             {
                 Some(res) => {
                     if mantissa.is_negative() {
-                        Some(Self(-I256(res)))
+                        Some(Self(-Signed(res)))
                     } else {
-                        Some(Self(I256(res)))
+                        Some(Self(Signed(res)))
                     }
                 }
                 None => None,
@@ -124,12 +125,12 @@ impl Dec {
 
     /// Get the absolute value of self as integer
     pub fn abs(&self) -> Uint {
-        self.0.abs()
+        self.0.abs().0
     }
 
     /// Convert the Dec type into a I256 with truncation
     pub fn to_i256(&self) -> I256 {
-        self.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize)
+        self.0 / Signed::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap()
     }
 
     /// Convert the Dec type into a Uint with truncation
@@ -137,7 +138,7 @@ impl Dec {
         if self.is_negative() {
             None
         } else {
-            Some(self.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize))
+            Some(self.0.abs().0 / Uint::exp10(POS_DECIMAL_PRECISION as usize))
         }
     }
 
@@ -202,8 +203,8 @@ impl FromStr for Dec {
                     num_large
                 )
             })?;
-        let inner = I256::try_from(int_part + decimal_part)
-            .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
+        let inner = I256::from_uint(int_part + decimal_part)
+            .ok_or(eyre!("Could not convert Uint to I256: The given integer is too large to be represented as a SignedUint"))?;
         if is_neg {
             Ok(Dec(-inner))
         } else {
@@ -222,12 +223,12 @@ impl TryFrom<String> for Dec {
 
 impl From<Amount> for Dec {
     fn from(amt: Amount) -> Self {
-        match I256::try_from(amt.raw_amount()).ok() {
+        match I256::from_uint(amt.raw_amount()) {
             Some(raw) => Self(
-                raw * Uint::exp10(
+                raw * I256::from_uint(Uint::exp10(
                     (POS_DECIMAL_PRECISION - NATIVE_MAX_DECIMAL_PLACES)
                         as usize,
-                ),
+                )).unwrap(),
             ),
             None => Self::zero(),
         }
@@ -238,15 +239,15 @@ impl TryFrom<Uint> for Dec {
     type Error = Error;
 
     fn try_from(value: Uint) -> std::result::Result<Self, Self::Error> {
-        let i256 = I256::try_from(value)
-            .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
-        Ok(Self(i256 * Uint::exp10(POS_DECIMAL_PRECISION as usize)))
+        let i256 = I256::from_uint(value)
+            .ok_or(eyre!("Could not convert Uint to I256: The given integer is too large to be represented as a SignedUint"))?;
+        Ok(Self(i256 * Signed::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap()))
     }
 }
 
 impl From<u64> for Dec {
     fn from(num: u64) -> Self {
-        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(I256::from(num) * I256::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap())
     }
 }
 
@@ -258,7 +259,7 @@ impl From<usize> for Dec {
 
 impl From<i128> for Dec {
     fn from(num: i128) -> Self {
-        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(I256::from(num) * I256::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap())
     }
 }
 
@@ -267,8 +268,9 @@ impl TryFrom<u128> for Dec {
 
     fn try_from(num: u128) -> std::result::Result<Self, Self::Error> {
         Ok(Self(
-            I256::try_from(Uint::from(num))?
-                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+            I256::from_uint(Uint::from(num))
+                .ok_or("The given integer is too large to be represented as a SignedUint")?
+                * Signed::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap(),
         ))
     }
 }
@@ -277,14 +279,14 @@ impl TryFrom<Dec> for i128 {
     type Error = std::io::Error;
 
     fn try_from(value: Dec) -> std::result::Result<Self, Self::Error> {
-        value.0.try_into()
+        value.0.try_into().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
     }
 }
 
 // Is error handling needed for this?
 impl From<I256> for Dec {
     fn from(num: I256) -> Self {
-        Self(num * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(num * Signed::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap())
     }
 }
 
@@ -328,7 +330,7 @@ impl Mul<u64> for Dec {
     type Output = Dec;
 
     fn mul(self, rhs: u64) -> Self::Output {
-        Self(self.0 * Uint::from(rhs))
+        Self(self.0 * I256::from_uint(Uint::from(rhs)).unwrap())
     }
 }
 
@@ -336,7 +338,7 @@ impl Mul<u128> for Dec {
     type Output = Dec;
 
     fn mul(self, rhs: u128) -> Self::Output {
-        Self(self.0 * Uint::from(rhs))
+        Self(self.0 * I256::from_uint(Uint::from(rhs)).unwrap())
     }
 }
 
@@ -345,7 +347,7 @@ impl Mul<Amount> for Dec {
 
     fn mul(self, rhs: Amount) -> Self::Output {
         if !self.is_negative() {
-            (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
+            (rhs * self.0.abs().0) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
         } else {
             panic!("aaa");
         }
@@ -358,7 +360,7 @@ impl Mul<Change> for Dec {
     fn mul(self, rhs: Change) -> Self::Output {
         let tot = rhs * self.0;
         let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
-        tot / denom
+        tot / I256::from_uint(denom).unwrap()
     }
 }
 
@@ -368,7 +370,7 @@ impl Mul<Dec> for Dec {
 
     fn mul(self, rhs: Dec) -> Self::Output {
         let prod = self.0 * rhs.0;
-        Self(prod / Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(prod / I256::from_uint(Uint::exp10(POS_DECIMAL_PRECISION as usize)).unwrap())
     }
 }
 
@@ -391,7 +393,7 @@ impl Div<u64> for Dec {
     type Output = Self;
 
     fn div(self, rhs: u64) -> Self::Output {
-        Self(self.0 / Uint::from(rhs))
+        Self(self.0 / I256::from_uint(Uint::from(rhs)).unwrap())
     }
 }
 
@@ -456,7 +458,7 @@ mod test_dec {
         assert_eq!(Dec::new(1, 0).expect("Test failed"), Dec::one());
         assert_eq!(Dec::new(2, 0).expect("Test failed"), Dec::two());
         assert_eq!(
-            Dec(I256(Uint::from(1653))),
+            Dec(Signed(Uint::from(1653))),
             Dec::new(1653, POS_DECIMAL_PRECISION).expect("Test failed")
         );
         assert_eq!(

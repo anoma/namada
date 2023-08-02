@@ -10,6 +10,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::key::common;
+use num_traits::{Signed as SignedTrait, Zero};
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
@@ -403,7 +404,7 @@ where
 
 mod recommendations {
     use borsh::BorshDeserialize;
-    use namada_core::types::uint::{self, Uint, I256};
+    use namada_core::types::uint::{self, Uint, I256, Signed};
 
     use super::*;
     use crate::eth_bridge::storage::bridge_pool::get_signed_root_key;
@@ -418,7 +419,7 @@ mod recommendations {
     }
 
     const fn transfer_fee() -> I256 {
-        I256(unsigned_transfer_fee())
+        Signed(unsigned_transfer_fee())
     }
 
     const fn signature_fee() -> Uint {
@@ -602,7 +603,8 @@ mod recommendations {
         };
 
         let mut total_gas = validator_gas;
-        let mut total_cost = I256::try_from(validator_gas).try_halt(|err| {
+        let mut total_cost = I256::from_uint(validator_gas)
+            .ok_or("The given integer is too large to be represented as a SignedUint").try_halt(|err| {
             tracing::debug!(%err, "Failed to convert value to I256");
         })?;
         let mut total_fees = uint::ZERO;
@@ -791,7 +793,7 @@ mod recommendations {
                 process_transfers(transfers),
                 Uint::from_u64(50_000),
                 Uint::from_u64(150_000),
-                I256(uint::MAX_SIGNED_VALUE),
+                Signed(uint::MAX_SIGNED_VALUE),
             )
             .proceed()
             .expect("Test failed");

@@ -90,11 +90,19 @@ where
                 denom,
                 wl_storage.storage.block.epoch,
             );
+            let numerator = reward
+                .0
+                .try_into()
+                .expect("reward numerator must not exceed i32::MAX");
+            let denominator: i32 = reward
+                .1
+                .try_into()
+                .expect("reward denominator must not exceed i32::MAX");
             current_convs.insert(
                 (addr.clone(), denom),
-                (MaspAmount::from_pair(old_asset, -(reward.1 as i32)).unwrap()
-                    + MaspAmount::from_pair(new_asset, reward.1 as i32).unwrap()
-                    + MaspAmount::from_pair(reward_asset, reward.0 as i32).unwrap())
+                (MaspAmount::from_pair(old_asset, -denominator).unwrap()
+                    + MaspAmount::from_pair(new_asset, denominator).unwrap()
+                    + MaspAmount::from_pair(reward_asset, numerator).unwrap())
                 .into(),
             );
             // Add a conversion from the previous asset type

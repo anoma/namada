@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use num_traits::Zero;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
