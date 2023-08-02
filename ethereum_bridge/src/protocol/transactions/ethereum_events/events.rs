@@ -1245,7 +1245,7 @@ mod tests {
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [
-                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Nut),
+                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Erc20),
                 (
                     EthAddress([0xaa; 20]),
                     eth_bridge_pool::TransferToEthereumKind::Erc20,
@@ -1435,18 +1435,20 @@ mod tests {
 
             _ = act_on(wl_storage, event).unwrap();
 
-            // check post supply
+            // check post supply - the wNAM minted supply should increase
+            // by the transferred amount
             assert!(
                 wl_storage
                     .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
-            assert!(
+            assert_eq!(
                 wl_storage
-                    .read_bytes(&minted_balance_key(&wnam))
-                    .expect("Test failed")
-                    .is_none()
+                    .read::<Amount>(&minted_balance_key(&wnam))
+                    .expect("Reading from storage should not fail")
+                    .expect("The wNAM supply should have been updated"),
+                Amount::from_u64(10),
             );
 
             // check post balance
