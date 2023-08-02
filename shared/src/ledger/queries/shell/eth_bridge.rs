@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
+use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{DBIter, StorageHasher, StoreType, DB};
 use namada_core::ledger::storage_api::{
@@ -17,7 +17,7 @@ use namada_core::types::ethereum_events::{
 };
 use namada_core::types::ethereum_structs::RelayProof;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
-use namada_core::types::token::{minted_balance_key, Amount};
+use namada_core::types::token::Amount;
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -41,6 +41,20 @@ use crate::types::eth_bridge_pool::PendingTransfer;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::Epoch;
 use crate::types::storage::MembershipProof::BridgePool;
+
+/// Contains information about the flow control of some ERC20
+/// wrapped asset.
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize,
+)]
+pub struct Erc20FlowControl {
+    /// Whether the wrapped asset is whitelisted.
+    whitelisted: bool,
+    /// Total minted supply of some wrapped asset.
+    supply: Amount,
+    /// The token cap of some wrapped asset.
+    cap: Amount,
+}
 
 pub type RelayProofBytes = Vec<u8>;
 
@@ -104,31 +118,48 @@ router! {ETH_BRIDGE,
     ( "voting_powers" / "epoch" / [epoch: Epoch] )
         -> VotingPowersMap = voting_powers_at_epoch,
 
-    // Read the total supply of some wrapped ERC20 token in Namada.
-    ( "erc20" / "supply" / [asset: EthAddress] )
-        -> Option<Amount> = read_erc20_supply,
+    // Read the total supply and respective cap of some wrapped
+    // ERC20 token in Namada.
+    ( "erc20" / "flow_control" / [asset: EthAddress] )
+        -> Erc20FlowControl = get_erc20_flow_control,
 }
 
-/// Read the total supply of some wrapped ERC20 token in Namada.
-fn read_erc20_supply<D, H>(
+/// Read the total supply and respective cap of some wrapped
+/// ERC20 token in Namada.
+fn get_erc20_flow_control<D, H>(
     ctx: RequestCtx<'_, D, H>,
     asset: EthAddress,
-) -> storage_api::Result<Option<Amount>>
+) -> storage_api::Result<Erc20FlowControl>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let Some(native_erc20) = ctx.wl_storage.read(&native_erc20_key())? else {
-        return Err(storage_api::Error::SimpleMessage(
-            "The Ethereum bridge storage is not initialized",
-        ));
-    };
-    let token = if asset == native_erc20 {
-        ctx.wl_storage.storage.native_token.clone()
-    } else {
-        wrapped_erc20s::token(&asset)
-    };
-    ctx.wl_storage.read(&minted_balance_key(&token))
+    let key = whitelist::Key {
+        asset,
+        suffix: whitelist::KeyType::Whitelisted,
+    }
+    .into();
+    let whitelisted = ctx.wl_storage.read(&key)?.unwrap_or(false);
+
+    let key = whitelist::Key {
+        asset,
+        suffix: whitelist::KeyType::WrappedSupply,
+    }
+    .into();
+    let supply = ctx.wl_storage.read(&key)?.unwrap_or_default();
+
+    let key = whitelist::Key {
+        asset,
+        suffix: whitelist::KeyType::Cap,
+    }
+    .into();
+    let cap = ctx.wl_storage.read(&key)?.unwrap_or_default();
+
+    Ok(Erc20FlowControl {
+        whitelisted,
+        supply,
+        cap,
+    })
 }
 
 /// Helper function to read a smart contract from storage.
@@ -577,7 +608,6 @@ mod test_ethbridge_router {
     use namada_core::types::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
-    use namada_ethereum_bridge::parameters::read_native_erc20_address;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_proof_of_stake::pos_queries::PosQueries;
@@ -1372,45 +1402,9 @@ mod test_ethbridge_router {
         assert!(resp.is_err());
     }
 
-    /// Test reading the wrapped NAM supply
+    /// Test reading the supply and cap of an ERC20 token.
     #[tokio::test]
-    async fn test_read_wnam_supply() {
-        let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
-
-        // initialize storage
-        test_utils::init_default_storage(&mut client.wl_storage);
-
-        let native_erc20 =
-            read_native_erc20_address(&client.wl_storage).expect("Test failed");
-
-        // write tokens to storage
-        let amount = Amount::native_whole(12345);
-        let token = &client.wl_storage.storage.native_token;
-        client
-            .wl_storage
-            .write(&minted_balance_key(token), amount)
-            .expect("Test failed");
-
-        // commit the changes
-        client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
-            .expect("Test failed");
-
-        // check that reading wrapped NAM fails
-        let result = RPC
-            .shell()
-            .eth_bridge()
-            .read_erc20_supply(&client, &native_erc20)
-            .await;
-        assert_matches!(result, Ok(Some(a)) if a == amount);
-    }
-
-    /// Test reading the supply of an ERC20 token.
-    #[tokio::test]
-    async fn test_read_erc20_supply() {
+    async fn test_get_erc20_flow_control() {
         const ERC20_TOKEN: EthAddress = EthAddress([0; 20]);
 
         let mut client = TestClient::new(RPC);
@@ -1419,29 +1413,49 @@ mod test_ethbridge_router {
         // initialize storage
         test_utils::init_default_storage(&mut client.wl_storage);
 
-        // check supply - should be None
+        // check supply - should be 0
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .get_erc20_flow_control(&client, &ERC20_TOKEN)
             .await;
-        assert_matches!(result, Ok(None));
+        assert_matches!(
+            result,
+            Ok(f) if f.supply.is_zero() && f.cap.is_zero()
+        );
 
         // write tokens to storage
-        let amount = Amount::native_whole(12345);
-        let token = wrapped_erc20s::token(&ERC20_TOKEN);
+        let supply_amount = Amount::native_whole(123);
+        let cap_amount = Amount::native_whole(12345);
+        let key = whitelist::Key {
+            asset: ERC20_TOKEN,
+            suffix: whitelist::KeyType::WrappedSupply,
+        }
+        .into();
         client
             .wl_storage
-            .write(&minted_balance_key(&token), amount)
+            .write(&key, supply_amount)
+            .expect("Test failed");
+        let key = whitelist::Key {
+            asset: ERC20_TOKEN,
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+        client
+            .wl_storage
+            .write(&key, cap_amount)
             .expect("Test failed");
 
         // check that the supply was updated
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .get_erc20_flow_control(&client, &ERC20_TOKEN)
             .await;
-        assert_matches!(result, Ok(Some(a)) if a == amount);
+        assert_matches!(
+            result,
+            Ok(f) if f.supply == supply_amount && f.cap == cap_amount
+        );
     }
 }
 
