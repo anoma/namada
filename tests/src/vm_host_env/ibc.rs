@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use namada::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
 use namada::ibc::applications::transfer::coin::PrefixedCoin;
+use namada::ibc::applications::transfer::error::TokenTransferError;
 use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::applications::transfer::packet::PacketData;
 use namada::ibc::applications::transfer::VERSION;
@@ -779,4 +780,10 @@ pub fn packet_from_message(
 pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
     let ibc_token = ibc_token(denom);
     token::balance_key(&ibc_token, owner)
+}
+
+pub fn transfer_ack_with_error() -> TokenTransferAcknowledgement {
+    TokenTransferAcknowledgement::Error(
+        TokenTransferError::PacketDataDeserialization.to_string(),
+    )
 }
