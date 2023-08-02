@@ -18,6 +18,7 @@ use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
 
@@ -39,9 +40,30 @@ use crate::vm::WasmCacheAccess;
 pub struct Error(#[from] eyre::Error);
 
 /// A positive or negative amount
+#[derive(Copy, Clone)]
 enum SignedAmount {
     Positive(Amount),
     Negative(Amount),
+}
+
+/// An [`Amount`] that has been updated with some delta value.
+#[derive(Copy, Clone)]
+struct AmountDelta {
+    /// The base [`Amount`], before applying the delta.
+    base: Amount,
+    /// The delta to be applied to the base amount.
+    delta: SignedAmount,
+}
+
+impl AmountDelta {
+    /// Resolve the updated amount by applying the delta value.
+    #[inline]
+    fn resolve(self) -> Amount {
+        match self.delta {
+            SignedAmount::Positive(delta) => self.base + delta,
+            SignedAmount::Negative(delta) => self.base - delta,
+        }
+    }
 }
 
 /// Validity predicate for the Ethereum bridge
@@ -63,7 +85,7 @@ where
 {
     /// Get the change in the balance of an account
     /// associated with an address
-    fn account_balance_delta(&self, address: &Address) -> Option<SignedAmount> {
+    fn account_balance_delta(&self, address: &Address) -> Option<AmountDelta> {
         let account_key = balance_key(&self.ctx.storage.native_token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
@@ -82,11 +104,14 @@ where
                 tracing::warn!(?error, %account_key, "reading post value");
                 None
             })?;
-        if before > after {
-            Some(SignedAmount::Negative(before - after))
-        } else {
-            Some(SignedAmount::Positive(after - before))
-        }
+        Some(AmountDelta {
+            base: before,
+            delta: if before > after {
+                SignedAmount::Negative(before - after)
+            } else {
+                SignedAmount::Positive(after - before)
+            },
+        })
     }
 
     /// Check that the correct amount of erc20 assets were
@@ -124,41 +149,147 @@ where
 
     /// Check that the correct amount of Nam was sent
     /// from the correct account into escrow
+    #[inline]
     fn check_nam_escrowed(&self, delta: EscrowDelta) -> Result<bool, Error> {
+        self.check_nam_escrowed_balance(delta)
+            .map(|balance| balance.is_some())
+    }
+
+    /// Check that the correct amount of Nam was sent
+    /// from the correct account into escrow, and return
+    /// the updated escrow balance.
+    fn check_nam_escrowed_balance(
+        &self,
+        delta: EscrowDelta,
+    ) -> Result<Option<AmountDelta>, Error> {
         let EscrowDelta {
             payer_account,
             escrow_account,
             expected_debit,
             expected_credit,
         } = delta;
-        let debited = self.account_balance_delta(payer_account);
-        let credited = self.account_balance_delta(escrow_account);
+        let debit = self.account_balance_delta(payer_account);
+        let credit = self.account_balance_delta(escrow_account);
 
-        match (debited, credited) {
+        match (debit, credit) {
+            // success case
             (
-                Some(SignedAmount::Negative(debit)),
-                Some(SignedAmount::Positive(credit)),
-            ) => Ok(debit == expected_debit && credit == expected_credit),
-            (Some(SignedAmount::Positive(_)), _) => {
+                Some(AmountDelta {
+                    delta: SignedAmount::Negative(debit),
+                    ..
+                }),
+                Some(
+                    escrow_balance @ AmountDelta {
+                        delta: SignedAmount::Positive(credit),
+                        ..
+                    },
+                ),
+            ) => Ok((debit == expected_debit && credit == expected_credit)
+                .then_some(escrow_balance)),
+            // user did not debit from their account
+            (
+                Some(AmountDelta {
+                    delta: SignedAmount::Positive(_),
+                    ..
+                }),
+                _,
+            ) => {
                 tracing::debug!(
                     "The account {} was not debited.",
                     payer_account
                 );
-                Ok(false)
+                Ok(None)
             }
-            (_, Some(SignedAmount::Negative(_))) => {
+            // user did not credit escrow account
+            (
+                _,
+                Some(AmountDelta {
+                    delta: SignedAmount::Negative(_),
+                    ..
+                }),
+            ) => {
                 tracing::debug!(
                     "The Ethereum bridge pool's escrow was not credited from \
                      account {}.",
                     payer_account
                 );
-                Ok(false)
+                Ok(None)
             }
+            // some other error occurred while calculating
+            // balance deltas
             (None, _) | (_, None) => Err(Error(eyre!(
                 "Could not calculate the balance delta for {}",
                 payer_account
             ))),
         }
+    }
+
+    /// Validate a wrapped NAM transfer to Ethereum.
+    fn check_wnam_preconditions<'trans>(
+        &self,
+        &wnam_address: &EthAddress,
+        transfer: &'trans PendingTransfer,
+        escrow_checks: EscrowCheck<'trans>,
+    ) -> Result<bool, Error> {
+        if hints::unlikely(matches!(
+            &transfer.transfer.kind,
+            TransferToEthereumKind::Nut
+        )) {
+            // NB: this should never be possible: protocol tx state updates
+            // never result in wNAM NUTs being minted. in turn, this means
+            // that users should never hold wNAM NUTs. doesn't hurt to add
+            // the extra check to the vp, though
+            tracing::error!(
+                "Attempted to add a wNAM NUT transfer to the Bridge pool"
+            );
+            return Ok(false);
+        }
+
+        let wnam_whitelisted = {
+            let key = whitelist::Key {
+                asset: wnam_address,
+                suffix: whitelist::KeyType::Whitelisted,
+            }
+            .into();
+            (&self.ctx).read_pre_value(&key)?.unwrap_or(false)
+        };
+        if !wnam_whitelisted {
+            tracing::debug!(
+                ?transfer,
+                "Wrapped NAM transfers are currently disabled"
+            );
+            return Ok(false);
+        }
+
+        // if we are going to mint wNam on Ethereum, the appropriate
+        // amount of Nam must be escrowed in the Ethereum bridge VP's
+        // storage.
+        let escrowed_balance =
+            match self.check_nam_escrowed_balance(escrow_checks.token_check)? {
+                Some(balance) => balance.resolve(),
+                None => return Ok(false),
+            };
+
+        let wnam_cap = {
+            let key = whitelist::Key {
+                asset: wnam_address,
+                suffix: whitelist::KeyType::Cap,
+            }
+            .into();
+            (&self.ctx).read_pre_value(&key)?.unwrap_or_default()
+        };
+        if escrowed_balance > wnam_cap {
+            tracing::debug!(
+                ?transfer,
+                escrowed_nam = %escrowed_balance.to_string_native(),
+                wnam_cap = %wnam_cap.to_string_native(),
+                "The balance of the escrow account exceeds the amount \
+                 of NAM that is allowed to cross the Ethereum bridge"
+            );
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Deteremine the debit and credit amounts that should be checked.
@@ -226,6 +357,7 @@ where
 
 /// Helper struct for handling the different escrow
 /// checking scenarios.
+#[derive(Copy, Clone)]
 struct EscrowDelta<'a> {
     payer_account: &'a Address,
     escrow_account: &'a Address,
@@ -236,6 +368,7 @@ struct EscrowDelta<'a> {
 /// There are two checks we must do when minting wNam.
 /// 1. Check that gas fees were escrowed.
 /// 2. Check that the Nam to back wNam was escrowed.
+#[derive(Copy, Clone)]
 struct EscrowCheck<'a> {
     gas_check: EscrowDelta<'a>,
     token_check: EscrowDelta<'a>,
@@ -322,36 +455,23 @@ where
         }
         // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
-            if hints::unlikely(matches!(
-                &transfer.transfer.kind,
-                TransferToEthereumKind::Nut
-            )) {
-                // NB: this should never be possible: protocol tx state updates
-                // never result in wNAM NUTs being minted. in turn, this means
-                // that users should never hold wNAM NUTs. doesn't hurt to add
-                // the extra check to the vp, though
-                tracing::error!(
-                    "Attempted to add a wNAM NUT transfer to the Bridge pool"
-                );
-                return Ok(false);
-            }
-            // if we are going to mint wNam on Ethereum, the appropriate
-            // amount of Nam must be escrowed in the Ethereum bridge VP's
-            // storage.
-            self.check_nam_escrowed(escrow_checks.token_check)
-                .map(|ok| {
-                    if ok {
-                        tracing::info!(
-                            "The Ethereum bridge pool VP accepted the \
-                             transfer {:?}.",
-                            transfer
-                        );
-                    }
-                    ok
-                })
+            self.check_wnam_preconditions(
+                &wnam_address,
+                &transfer,
+                escrow_checks,
+            )
         } else {
             self.check_erc20s_escrowed(keys_changed, &transfer)
         }
+        .map(|ok| {
+            if ok {
+                tracing::info!(
+                    "The Ethereum bridge pool VP accepted the transfer {:?}.",
+                    transfer
+                );
+            }
+            ok
+        })
     }
 }
 
@@ -475,6 +595,23 @@ mod test_bridge_pool_vp {
         let transfer = initial_pool();
         writelog
             .write(&get_pending_key(&transfer), transfer.try_to_vec().unwrap())
+            .expect("Test failed");
+        // whitelist wnam
+        let key = whitelist::Key {
+            asset: wnam(),
+            suffix: whitelist::KeyType::Whitelisted,
+        }
+        .into();
+        writelog
+            .write(&key, true.try_to_vec().unwrap())
+            .expect("Test failed");
+        let key = whitelist::Key {
+            asset: wnam(),
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+        writelog
+            .write(&key, Amount::max().try_to_vec().unwrap())
             .expect("Test failed");
         // set up users with ERC20 and NUT balances
         update_balances(

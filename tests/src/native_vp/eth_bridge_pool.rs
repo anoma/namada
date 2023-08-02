@@ -5,7 +5,8 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::{
-        wrapped_erc20s, Contracts, EthereumBridgeConfig, UpgradeableContract,
+        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeConfig,
+        UpgradeableContract,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::proto::Tx;
@@ -63,7 +64,10 @@ mod test_bridge_pool_vp {
             ..Default::default()
         };
         let config = EthereumBridgeConfig {
-            erc20_whitelist: vec![],
+            erc20_whitelist: vec![Erc20WhitelistEntry {
+                token_address: wnam(),
+                token_cap: Amount::max().native_denominated(),
+            }],
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {
