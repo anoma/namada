@@ -619,7 +619,7 @@ mod tests {
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::testing::gen_implicit_address;
-    use namada_core::types::address::{gen_established_address, nam};
+    use namada_core::types::address::{gen_established_address, nam, wnam};
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
@@ -1457,5 +1457,31 @@ mod tests {
 
             assert_eq!(pre_escrowed_balance, post_escrowed_balance);
         })
+    }
+
+    /// Test that the ledger appropriately panics when we try to mint
+    /// wrapped NAM NUTs. Under normal circumstances, this should never
+    /// happen.
+    #[test]
+    #[should_panic(expected = "Attempted to mint wNAM NUTs!")]
+    fn test_wnam_doesnt_mint_nuts() {
+        let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+
+        let transfer = PendingTransfer {
+            transfer: eth_bridge_pool::TransferToEthereum {
+                asset: wnam(),
+                sender: address::testing::established_address_1(),
+                recipient: EthAddress([5; 20]),
+                amount: Amount::from(10),
+                kind: eth_bridge_pool::TransferToEthereumKind::Nut,
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(1),
+                payer: address::testing::established_address_1(),
+            },
+        };
+
+        _ = update_transferred_asset_balances(&mut wl_storage, &transfer);
     }
 }
