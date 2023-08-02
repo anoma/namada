@@ -2,7 +2,9 @@
 
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::ops::Deref;
 
+use assert_matches::assert_matches;
 use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
@@ -34,7 +36,7 @@ use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
     enqueued_slashes_handle, read_below_threshold_validator_set_addresses,
     read_pos_params, redelegate_tokens, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle,
+    validator_slashes_handle, validator_state_handle, RedelegationError,
 };
 
 prop_state_machine! {
@@ -89,6 +91,19 @@ struct AbstractPosState {
     /// Outer `Epoch` is the epoch in which the underlying bond became active.
     unbond_records:
         BTreeMap<Address, BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>>>,
+    /// The outer key is the epoch in which redelegation became active
+    /// (pipeline offset). The next key is the address of the delegator.
+    redelegations: Redelegations,
+}
+
+type Redelegations = BTreeMap<Epoch, BTreeMap<Address, Vec<Redelegation>>>;
+
+#[derive(Clone, Debug)]
+struct Redelegation {
+    src: Address,
+    dest: Address,
+    bond_start: Epoch,
+    amount: token::Amount,
 }
 
 /// The PoS system under test
@@ -123,6 +138,8 @@ enum Transition {
         id: BondId,
     },
     Redelegate {
+        /// A chained redelegation must fail
+        is_chained: bool,
         id: BondId,
         new_validator: Address,
         amount: token::Amount,
@@ -419,20 +436,34 @@ impl StateMachineTest for ConcretePosState {
                 assert_eq!(src_balance_post - src_balance_pre, withdrawn);
             }
             Transition::Redelegate {
+                is_chained,
                 id,
                 new_validator,
                 amount,
             } => {
                 let current_epoch = state.current_epoch();
-                redelegate_tokens(
+                let result = redelegate_tokens(
                     &mut state.s,
                     &id.source,
                     &id.validator,
                     &new_validator,
                     current_epoch,
                     amount,
-                )
-                .unwrap();
+                );
+
+                if is_chained {
+                    assert!(result.is_err());
+                    let err = result.unwrap_err();
+                    let err_str = err.to_string();
+                    assert_matches!(
+                        err.downcast::<RedelegationError>().unwrap().deref(),
+                        RedelegationError::IsChainedRedelegation,
+                        "A chained redelegation must be rejected, got \
+                         {err_str}",
+                    );
+                } else {
+                    result.unwrap();
+                }
 
                 // TODO: Post-condition:
             }
@@ -1243,6 +1274,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     enqueued_slashes: Default::default(),
                     validator_last_slash_epochs: Default::default(),
                     unbond_records: Default::default(),
+                    redelegations: Default::default(),
                 };
 
                 for GenesisValidator {
@@ -1464,6 +1496,9 @@ impl ReferenceStateMachine for AbstractPosState {
                 .keys()
                 .cloned()
                 .collect::<Vec<_>>();
+            let epoch = state.epoch;
+            let params = state.params.clone();
+            let redelegations = state.redelegations.clone();
             let arb_redelegation =
                 arb_redelegatable.prop_flat_map(move |(id, deltas_sum)| {
                     let deltas_sum = i128::try_from(deltas_sum).unwrap();
@@ -1485,8 +1520,17 @@ impl ReferenceStateMachine for AbstractPosState {
                         .collect::<Vec<_>>();
                     let arb_new_validator =
                         prop::sample::select(new_validators);
+                    let params = params.clone();
+                    let redelegations = redelegations.clone();
                     (arb_amount, arb_new_validator).prop_map(
                         move |(amount, new_validator)| Transition::Redelegate {
+                            is_chained: Self::is_chained_redelegation(
+                                epoch,
+                                &params,
+                                &redelegations,
+                                &id.source,
+                                &id.validator,
+                            ),
                             id: id.clone(),
                             new_validator,
                             amount,
@@ -1619,15 +1663,19 @@ impl ReferenceStateMachine for AbstractPosState {
                 // TODO: should we do anything here for slashing?
             }
             Transition::Redelegate {
+                is_chained,
                 id,
                 new_validator,
                 amount,
             } => {
                 println!(
                     "ABSTRACT Redelegation, id = {id}, new validator = \
-                     {new_validator}, amount = {}",
+                     {new_validator}, amount = {}, is_chained = {is_chained}",
                     amount.to_string_native(),
                 );
+                if *is_chained {
+                    return state;
+                }
                 if *amount != token::Amount::default() {
                     // Remove the amount from source validator
                     let change = token::Change::from(*amount);
@@ -2016,58 +2064,69 @@ impl ReferenceStateMachine for AbstractPosState {
                     && is_withdrawable && !is_jailed
             }
             Transition::Redelegate {
+                is_chained,
                 id,
                 new_validator,
                 amount,
             } => {
                 let pipeline = state.pipeline();
 
-                // The src and dest validator must be known
-                if !state.is_validator(&id.validator, pipeline)
-                    || !state.is_validator(&new_validator, pipeline)
-                {
-                    return false;
-                }
-
-                // The amount must be available to redelegate
-                if !state
-                    .bond_sums()
-                    .get(id)
-                    .map(|sum| *sum >= token::Change::from(*amount))
-                    .unwrap_or_default()
-                {
-                    return false;
-                }
-
-                // The src validator must not be frozen
-                if let Some(last_epoch) =
-                    state.validator_last_slash_epochs.get(&id.validator)
-                {
-                    if *last_epoch
-                        + state.params.unbonding_len
-                        + 1u64
-                        + state.params.cubic_slashing_window_length
-                        > state.epoch
+                if *is_chained {
+                    return Self::is_chained_redelegation(
+                        state.epoch,
+                        &state.params,
+                        &state.redelegations,
+                        &id.source,
+                        &new_validator,
+                    );
+                } else {
+                    // The src and dest validator must be known
+                    if !state.is_validator(&id.validator, pipeline)
+                        || !state.is_validator(&new_validator, pipeline)
                     {
                         return false;
                     }
-                }
 
-                // The dest validator must not be frozen
-                if let Some(last_epoch) =
-                    state.validator_last_slash_epochs.get(&new_validator)
-                {
-                    if *last_epoch
-                        + state.params.unbonding_len
-                        + 1u64
-                        + state.params.cubic_slashing_window_length
-                        > state.epoch
+                    // The amount must be available to redelegate
+                    if !state
+                        .bond_sums()
+                        .get(id)
+                        .map(|sum| *sum >= token::Change::from(*amount))
+                        .unwrap_or_default()
                     {
                         return false;
                     }
-                }
 
-                true
+                    // The src validator must not be frozen
+                    if let Some(last_epoch) =
+                        state.validator_last_slash_epochs.get(&id.validator)
+                    {
+                        if *last_epoch
+                            + state.params.unbonding_len
+                            + 1u64
+                            + state.params.cubic_slashing_window_length
+                            > state.epoch
+                        {
+                            return false;
+                        }
+                    }
+
+                    // The dest validator must not be frozen
+                    if let Some(last_epoch) =
+                        state.validator_last_slash_epochs.get(&new_validator)
+                    {
+                        if *last_epoch
+                            + state.params.unbonding_len
+                            + 1u64
+                            + state.params.cubic_slashing_window_length
+                            > state.epoch
+                        {
+                            return false;
+                        }
+                    }
+
+                    true
+                }
             }
             Transition::Misbehavior {
                 address,
@@ -2379,6 +2438,12 @@ impl AbstractPosState {
             );
         }
 
+        let redelegs = self
+            .redelegations
+            .entry(pipeline_epoch)
+            .or_default()
+            .entry(id.source.clone())
+            .or_default();
         for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
             tracing::debug!("remaining {}", remaining.to_string_native());
             tracing::debug!(
@@ -2406,13 +2471,13 @@ impl AbstractPosState {
                 "Slashes for this bond{:?}",
                 slashes_for_this_bond.clone()
             );
-            amount_after_slashing += compute_amount_after_slashing(
+            let to_redel_slashed = compute_amount_after_slashing(
                 &slashes_for_this_bond,
                 token::Amount::from_change(to_redel),
                 self.params.unbonding_len,
                 self.params.cubic_slashing_window_length,
-            )
-            .change();
+            );
+            amount_after_slashing += to_redel_slashed.change();
             tracing::debug!(
                 "Cur amnt after slashing = {}",
                 &amount_after_slashing.to_string_native()
@@ -2420,6 +2485,13 @@ impl AbstractPosState {
 
             let amt = unbond_records.entry(*bond_epoch).or_default();
             *amt += token::Amount::from_change(to_redel);
+
+            redelegs.push(Redelegation {
+                src: id.validator.clone(),
+                dest: new_validator.clone(),
+                bond_start: *bond_epoch,
+                amount: to_redel_slashed,
+            });
 
             remaining -= to_redel;
             if remaining.is_zero() {
@@ -2438,7 +2510,7 @@ impl AbstractPosState {
 
         let pipeline_state = self
             .validator_states
-            .get(&self.pipeline())
+            .get(&pipeline_epoch)
             .unwrap()
             .get(&id.validator)
             .unwrap();
@@ -2458,7 +2530,7 @@ impl AbstractPosState {
         };
         let pipeline_state = self
             .validator_states
-            .get(&self.pipeline())
+            .get(&pipeline_epoch)
             .unwrap()
             .get(&new_validator)
             .unwrap();
@@ -3341,6 +3413,33 @@ impl AbstractPosState {
                 }
             }
         }
+    }
+
+    fn is_chained_redelegation(
+        current_epoch: Epoch,
+        params: &PosParams,
+        redelegations: &Redelegations,
+        delegator: &Address,
+        src_validator: &Address,
+    ) -> bool {
+        let pipeline_epoch = current_epoch + params.pipeline_len;
+        // Find if there are any redelegation from this `delegator` to the
+        // `src_validator` in a slashable epoch range
+        redelegations.iter().any(|(start, redelegations)| {
+            if *start <= pipeline_epoch
+                && *start
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length
+                    > current_epoch
+            {
+                if let Some(redelegations) = redelegations.get(delegator) {
+                    return redelegations.iter().any(
+                        |Redelegation { dest, .. }| dest == src_validator,
+                    );
+                }
+            }
+            false
+        })
     }
 }
 
