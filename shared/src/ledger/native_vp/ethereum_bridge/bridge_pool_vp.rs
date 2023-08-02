@@ -762,14 +762,14 @@ mod test_bridge_pool_vp {
         insert_transfer: F,
         expect: Expect,
     ) where
-        F: FnOnce(PendingTransfer, &mut WriteLog) -> BTreeSet<Key>,
+        F: FnOnce(&mut PendingTransfer, &mut WriteLog) -> BTreeSet<Key>,
     {
         // setup
         let mut wl_storage = setup_storage();
         let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
-        let transfer = PendingTransfer {
+        let mut transfer = PendingTransfer {
             transfer: TransferToEthereum {
                 kind: TransferToEthereumKind::Erc20,
                 asset: ASSET,
@@ -784,7 +784,7 @@ mod test_bridge_pool_vp {
         };
         // add transfer to pool
         let mut keys_changed =
-            insert_transfer(transfer.clone(), &mut wl_storage.write_log);
+            insert_transfer(&mut transfer, &mut wl_storage.write_log);
 
         // change Bertha's balances
         let mut new_keys_changed = update_balances(
@@ -846,11 +846,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::True,
         );
@@ -867,11 +867,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -888,11 +888,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -909,11 +909,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -931,11 +931,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(10.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -952,11 +952,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(10.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -973,11 +973,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -994,11 +994,11 @@ mod test_bridge_pool_vp {
             SignedAmount::Negative(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -1013,7 +1013,7 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(GAS_FEE.into()),
             SignedAmount::Negative(TOKENS.into()),
             SignedAmount::Positive(TOKENS.into()),
-            |transfer, _| BTreeSet::from([get_pending_key(&transfer)]),
+            |transfer, _| BTreeSet::from([get_pending_key(transfer)]),
             Expect::Error,
         );
     }
@@ -1041,9 +1041,9 @@ mod test_bridge_pool_vp {
                         payer: bertha_address(),
                     },
                 };
-                log.write(&get_pending_key(&transfer), t.try_to_vec().unwrap())
+                log.write(&get_pending_key(transfer), t.try_to_vec().unwrap())
                     .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::False,
         );
@@ -1074,7 +1074,7 @@ mod test_bridge_pool_vp {
                 };
                 log.write(&get_pending_key(&t), transfer.try_to_vec().unwrap())
                     .unwrap();
-                BTreeSet::from([get_pending_key(&transfer)])
+                BTreeSet::from([get_pending_key(transfer)])
             },
             Expect::Error,
         );
@@ -1091,12 +1091,12 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(TOKENS.into()),
             |transfer, log| {
                 log.write(
-                    &get_pending_key(&transfer),
+                    &get_pending_key(transfer),
                     transfer.try_to_vec().unwrap(),
                 )
                 .unwrap();
                 BTreeSet::from([
-                    get_pending_key(&transfer),
+                    get_pending_key(transfer),
                     get_signed_root_key(),
                 ])
             },
