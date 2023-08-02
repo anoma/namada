@@ -642,10 +642,8 @@ mod tests {
         update_epoch_parameter(wl_storage, &epoch_duration)
             .expect("Test failed");
         // set native ERC20 token
-        let native_erc20_key = bridge_storage::native_erc20_key();
-        let native_erc20 = EthAddress([0; 20]);
         wl_storage
-            .write_bytes(&native_erc20_key, encode(&native_erc20))
+            .write_bytes(&bridge_storage::native_erc20_key(), encode(&wnam()))
             .expect("Test failed");
     }
 
@@ -727,7 +725,7 @@ mod tests {
             .expect("Test failed");
 
         for transfer in pending_transfers {
-            if transfer.transfer.asset == EthAddress([0; 20]) {
+            if transfer.transfer.asset == wnam() {
                 // native ERC20
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
@@ -1026,6 +1024,10 @@ mod tests {
                 &BRIDGE_POOL_ADDRESS
             ))
         );
+        assert!(
+            changed_keys
+                .remove(&minted_balance_key(&wrapped_erc20s::token(&wnam())))
+        );
         assert!(changed_keys.remove(&minted_balance_key(&random_erc20_token)));
         assert!(
             changed_keys.remove(&minted_balance_key(&random_erc20_token_2))
@@ -1146,7 +1148,7 @@ mod tests {
 
         // Check the balances
         for transfer in pending_transfers {
-            if transfer.transfer.asset == EthAddress([0; 20]) {
+            if transfer.transfer.asset == wnam() {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
