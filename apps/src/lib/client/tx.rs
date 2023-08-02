@@ -29,7 +29,7 @@ use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::{InitValidator, TxType};
 
 use super::rpc;
-use crate::cli::context::WalletAddress;
+use crate::cli::context::{ChainContext, WalletAddress};
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::signing::find_pk;
@@ -42,7 +42,7 @@ use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    ctx: &mut Context,
+    ctx: &mut ChainContext,
     args: &args::Tx,
     addr: Option<Address>,
     pk: common::PublicKey,
@@ -80,11 +80,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_custom(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        tx::build_custom(client, &mut chain_ctx.wallet, args.clone()).await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -97,11 +99,14 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_update_vp(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        tx::build_update_vp(client, &mut chain_ctx.wallet, args.clone())
+            .await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -114,11 +119,14 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_init_account(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        tx::build_init_account(client, &mut chain_ctx.wallet, args.clone())
+            .await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -145,11 +153,12 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let tx_args = args::Tx {
         chain_id: tx_args
             .clone()
             .chain_id
-            .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+            .or_else(|| Some(chain_ctx.config.ledger.chain_id.clone())),
         ..tx_args.clone()
     };
     let alias = tx_args
@@ -166,7 +175,8 @@ where
         println!("Generating validator account key...");
         let password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        ctx.wallet
+        chain_ctx
+            .wallet
             .gen_key(
                 scheme,
                 Some(validator_key_alias.clone()),
@@ -192,7 +202,8 @@ where
             println!("Generating consensus key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            ctx.wallet
+            chain_ctx
+                .wallet
                 .gen_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
@@ -218,7 +229,8 @@ where
             println!("Generating Eth cold key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            ctx.wallet
+            chain_ctx
+                .wallet
                 .gen_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
@@ -245,7 +257,8 @@ where
             println!("Generating Eth hot key...");
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            ctx.wallet
+            chain_ctx
+                .wallet
                 .gen_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
@@ -265,7 +278,7 @@ where
     }
     // Generate the validator keys
     let validator_keys = gen_validator_keys(
-        &mut ctx.wallet,
+        &mut chain_ctx.wallet,
         Some(eth_hot_pk.clone()),
         protocol_key,
         scheme,
@@ -336,7 +349,7 @@ where
 
     let (mut tx, addr, pk) = tx::prepare_tx(
         client,
-        &mut ctx.wallet,
+        &mut chain_ctx.wallet,
         &tx_args,
         tx,
         TxSigningKey::WalletAddress(source),
@@ -344,10 +357,10 @@ where
         false,
     )
     .await?;
-    submit_reveal_aux(client, &mut ctx, &tx_args, addr, pk.clone(), &mut tx)
+    submit_reveal_aux(client, chain_ctx, &tx_args, addr, pk.clone(), &mut tx)
         .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk).await?;
-    let result = tx::process_tx(client, &mut ctx.wallet, &tx_args, tx)
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &tx_args, &pk).await?;
+    let result = tx::process_tx(client, &mut chain_ctx.wallet, &tx_args, tx)
         .await?
         .initialized_accounts();
 
@@ -355,7 +368,9 @@ where
         let (validator_address_alias, validator_address) = match &result[..] {
             // There should be 1 account for the validator itself
             [validator_address] => {
-                if let Some(alias) = ctx.wallet.find_alias(validator_address) {
+                if let Some(alias) =
+                    chain_ctx.wallet.find_alias(validator_address)
+                {
                     (alias.clone(), validator_address.clone())
                 } else {
                     eprintln!("Expected one account to be created");
@@ -368,22 +383,25 @@ where
             }
         };
         // add validator address and keys to the wallet
-        ctx.wallet
+        chain_ctx
+            .wallet
             .add_validator_data(validator_address, validator_keys);
-        crate::wallet::save(&ctx.wallet)
+        crate::wallet::save(&chain_ctx.wallet)
             .unwrap_or_else(|err| eprintln!("{}", err));
 
-        let tendermint_home = ctx.config.ledger.cometbft_dir();
+        let tendermint_home = chain_ctx.config.ledger.cometbft_dir();
         tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
         tendermint_node::write_validator_state(tendermint_home);
 
         // Write Namada config stuff or figure out how to do the above
         // tendermint_node things two epochs in the future!!!
-        ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
-        ctx.config
+        chain_ctx.config.ledger.shell.tendermint_mode =
+            TendermintMode::Validator;
+        chain_ctx
+            .config
             .write(
-                &ctx.config.ledger.shell.base_dir,
-                &ctx.config.ledger.chain_id,
+                &chain_ctx.config.ledger.shell.base_dir,
+                &chain_ctx.config.ledger.chain_id,
                 true,
             )
             .unwrap();
@@ -528,23 +546,28 @@ pub async fn submit_transfer<C: Client + Sync>(
     mut ctx: Context,
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     for _ in 0..2 {
         let arg = args.clone();
-        let (mut tx, addr, pk, tx_epoch, _isf) =
-            tx::build_transfer(client, &mut ctx.wallet, &mut ctx.shielded, arg)
-                .await?;
+        let (mut tx, addr, pk, tx_epoch, _isf) = tx::build_transfer(
+            client,
+            &mut chain_ctx.wallet,
+            &mut chain_ctx.shielded,
+            arg,
+        )
+        .await?;
         submit_reveal_aux(
             client,
-            &mut ctx,
+            chain_ctx,
             &args.tx,
             addr,
             pk.clone(),
             &mut tx,
         )
         .await?;
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
+        signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
         let result =
-            tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+            tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
         // Query the epoch in which the transaction was probably submitted
         let submission_epoch = rpc::query_and_print_epoch(client).await;
 
@@ -581,12 +604,14 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_ibc_transfer(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
+        tx::build_ibc_transfer(client, &mut chain_ctx.wallet, args.clone())
+            .await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -599,6 +624,7 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let file = File::open(&args.proposal_data).expect("File must exist.");
     let proposal: Proposal =
         serde_json::from_reader(file).expect("JSON was not well-formatted");
@@ -662,10 +688,10 @@ where
     }
 
     if args.offline {
-        let signer = ctx.get(&signer);
-        let key = find_pk(client, &mut ctx.wallet, &signer).await?;
+        let signer = chain_ctx.get(&signer);
+        let key = find_pk(client, &mut chain_ctx.wallet, &signer).await?;
         let signing_key =
-            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
+            signing::find_key_by_pk(&mut chain_ctx.wallet, &args.tx, &key)?;
         let offline_proposal =
             OfflineProposal::new(proposal, signer, &signing_key);
         let proposal_filename = args
@@ -688,7 +714,7 @@ where
         }
         Ok(())
     } else {
-        let signer = ctx.get(&signer);
+        let signer = chain_ctx.get(&signer);
         let tx_data = proposal.clone().try_into();
         let (mut init_proposal_data, init_proposal_content, init_proposal_code) =
             if let Ok(data) = tx_data {
@@ -698,9 +724,12 @@ where
                 safe_exit(1)
             };
 
-        let balance =
-            rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
-                .await;
+        let balance = rpc::get_token_balance(
+            client,
+            &chain_ctx.native_token,
+            &proposal.author,
+        )
+        .await;
         if balance
             < token::Amount::from_uint(
                 governance_parameters.min_proposal_fund,
@@ -726,7 +755,7 @@ where
         let tx_code_hash = query_wasm_code_hash(client, args::TX_INIT_PROPOSAL)
             .await
             .unwrap();
-        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
+        tx.header.chain_id = chain_ctx.config.ledger.chain_id.clone();
         tx.header.expiration = args.tx.expiration;
         // Put the content of this proposal into an extra section
         {
@@ -752,7 +781,7 @@ where
 
         let (mut tx, addr, pk) = tx::prepare_tx(
             client,
-            &mut ctx.wallet,
+            &mut chain_ctx.wallet,
             &args.tx,
             tx,
             TxSigningKey::WalletAddress(signer),
@@ -762,15 +791,15 @@ where
         .await?;
         submit_reveal_aux(
             client,
-            &mut ctx,
+            chain_ctx,
             &args.tx,
             addr,
             pk.clone(),
             &mut tx,
         )
         .await?;
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+        tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
         Ok(())
     }
 }
@@ -790,6 +819,7 @@ where
         eprintln!("Missing mandatory argument --signer.");
         safe_exit(1)
     };
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
     // Construct vote
     let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
@@ -869,9 +899,9 @@ where
             safe_exit(1)
         }
 
-        let key = find_pk(client, &mut ctx.wallet, signer).await?;
+        let key = find_pk(client, &mut chain_ctx.wallet, signer).await?;
         let signing_key =
-            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
+            signing::find_key_by_pk(&mut chain_ctx.wallet, &args.tx, &key)?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
@@ -1021,7 +1051,7 @@ where
 
                 let (mut tx, addr, pk) = tx::prepare_tx(
                     client,
-                    &mut ctx.wallet,
+                    &mut chain_ctx.wallet,
                     &args.tx,
                     tx,
                     TxSigningKey::WalletAddress(signer.clone()),
@@ -1031,16 +1061,17 @@ where
                 .await?;
                 submit_reveal_aux(
                     client,
-                    &mut ctx,
+                    chain_ctx,
                     &args.tx,
                     addr,
                     pk.clone(),
                     &mut tx,
                 )
                 .await?;
-                signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
+                signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk)
                     .await?;
-                tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+                tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx)
+                    .await?;
                 Ok(())
             }
             None => {
@@ -1063,11 +1094,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let reveal_tx =
-        tx::build_reveal_pk(client, &mut ctx.wallet, args.clone()).await?;
+        tx::build_reveal_pk(client, &mut chain_ctx.wallet, args.clone())
+            .await?;
     if let Some((mut tx, _, pk)) = reveal_tx {
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+        tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     }
     Ok(())
 }
@@ -1139,11 +1172,14 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_bond::<C, _>(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        tx::build_bond::<C, _>(client, &mut chain_ctx.wallet, args.clone())
+            .await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -1156,11 +1192,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk, latest_withdrawal_pre) =
-        tx::build_unbond(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, ctx, &args.tx, addr, pk.clone(), &mut tx).await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+        tx::build_unbond(client, &mut chain_ctx.wallet, args.clone()).await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
+        .await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     tx::query_unbonds(client, args.clone(), latest_withdrawal_pre).await?;
     Ok(())
 }
@@ -1174,12 +1212,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_withdraw(client, &mut ctx.wallet, args.clone()).await?;
-    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
+        tx::build_withdraw(client, &mut chain_ctx.wallet, args.clone()).await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -1192,14 +1231,18 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let arg = args.clone();
-    let (mut tx, addr, pk) =
-        tx::build_validator_commission_change(client, &mut ctx.wallet, arg)
-            .await?;
-    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
+    let (mut tx, addr, pk) = tx::build_validator_commission_change(
+        client,
+        &mut chain_ctx.wallet,
+        arg,
+    )
+    .await?;
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 
@@ -1214,13 +1257,14 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let chain_ctx = ctx.borrow_mut_chain_or_exit();
     let (mut tx, addr, pk) =
-        tx::build_unjail_validator(client, &mut ctx.wallet, args.clone())
+        tx::build_unjail_validator(client, &mut chain_ctx.wallet, args.clone())
             .await?;
-    submit_reveal_aux(client, &mut ctx, &args.tx, addr, pk.clone(), &mut tx)
+    submit_reveal_aux(client, chain_ctx, &args.tx, addr, pk.clone(), &mut tx)
         .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
+    tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
     Ok(())
 }
 

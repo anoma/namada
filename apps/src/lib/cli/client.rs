@@ -41,8 +41,10 @@ impl<IO> CliApi<IO> {
                         let dry_run = args.tx.dry_run;
                         tx::submit_custom(&client, &mut ctx, args).await?;
                         if !dry_run {
-                            crate::wallet::save(&ctx.wallet)
-                                .unwrap_or_else(|err| eprintln!("{}", err));
+                            crate::wallet::save(
+                                &ctx.borrow_chain_or_exit().wallet,
+                            )
+                            .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
                             println!(
                                 "Transaction dry run. No addresses have been \
@@ -104,7 +106,8 @@ impl<IO> CliApi<IO> {
                         tx::submit_init_account(&client, &mut ctx, args)
                             .await?;
                         if !dry_run {
-                            crate::wallet::save(&ctx.wallet)
+                            let chain_ctx = ctx.borrow_chain_or_exit();
+                            crate::wallet::save(&chain_ctx.wallet)
                                 .unwrap_or_else(|err| eprintln!("{}", err));
                         } else {
                             println!(
@@ -235,18 +238,19 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let tx_args = args.tx.clone();
                         let (mut tx, addr, pk) =
                             bridge_pool::build_bridge_pool_tx(
                                 &client,
-                                &mut ctx.wallet,
+                                &mut chain_ctx.wallet,
                                 args,
                             )
                             .await
                             .unwrap();
                         tx::submit_reveal_aux(
                             &client,
-                            &mut ctx,
+                            chain_ctx,
                             &tx_args,
                             addr,
                             pk.clone(),
@@ -254,7 +258,7 @@ impl<IO> CliApi<IO> {
                         )
                         .await?;
                         signing::sign_tx(
-                            &mut ctx.wallet,
+                            &mut chain_ctx.wallet,
                             &mut tx,
                             &tx_args,
                             &pk,
@@ -262,7 +266,7 @@ impl<IO> CliApi<IO> {
                         .await?;
                         sdk_tx::process_tx(
                             &client,
-                            &mut ctx.wallet,
+                            &mut chain_ctx.wallet,
                             &tx_args,
                             tx,
                         )
@@ -303,9 +307,10 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         rpc::query_and_print_validator_state(
                             &client,
-                            &mut ctx.wallet,
+                            &mut chain_ctx.wallet,
                             args,
                         )
                         .await;
@@ -321,10 +326,11 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         rpc::query_transfers(
                             &client,
-                            &mut ctx.wallet,
-                            &mut ctx.shielded,
+                            &mut chain_ctx.wallet,
+                            &mut chain_ctx.shielded,
                             args,
                         )
                         .await;
@@ -340,8 +346,13 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_conversions(&client, &mut ctx.wallet, args)
-                            .await;
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        rpc::query_conversions(
+                            &client,
+                            &mut chain_ctx.wallet,
+                            args,
+                        )
+                        .await;
                     }
                     Sub::QueryBlock(QueryBlock(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -364,10 +375,11 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         rpc::query_balance(
                             &client,
-                            &mut ctx.wallet,
-                            &mut ctx.shielded,
+                            &mut chain_ctx.wallet,
+                            &mut chain_ctx.shielded,
                             args,
                         )
                         .await;
@@ -383,7 +395,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_bonds(&client, &mut ctx.wallet, args)
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        rpc::query_bonds(&client, &mut chain_ctx.wallet, args)
                             .await
                             .expect("expected successful query of bonds");
                     }
@@ -411,9 +424,10 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         rpc::query_and_print_commission_rate(
                             &client,
-                            &mut ctx.wallet,
+                            &mut chain_ctx.wallet,
                             args,
                         )
                         .await;
@@ -429,8 +443,13 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_slashes(&client, &mut ctx.wallet, args)
-                            .await;
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        rpc::query_slashes(
+                            &client,
+                            &mut chain_ctx.wallet,
+                            args,
+                        )
+                        .await;
                     }
                     Sub::QueryDelegations(QueryDelegations(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -443,8 +462,13 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_delegations(&client, &mut ctx.wallet, args)
-                            .await;
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        rpc::query_delegations(
+                            &client,
+                            &mut chain_ctx.wallet,
+                            args,
+                        )
+                        .await;
                     }
                     Sub::QueryFindValidator(QueryFindValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {

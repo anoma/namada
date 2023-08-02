@@ -675,7 +675,7 @@ pub mod cmds {
 
     /// List all known payment addresses
     #[derive(Clone, Debug)]
-    pub struct MaspListPayAddrs;
+    pub struct MaspListPayAddrs(pub args::MaspListPayAddrs);
 
     impl SubCmd for MaspListPayAddrs {
         const CMD: &'static str = "list-addrs";
@@ -683,12 +683,13 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|_matches| MaspListPayAddrs)
+                .map(|matches| Self(args::MaspListPayAddrs::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Lists all payment addresses in the wallet")
+                .add_args::<args::MaspListPayAddrs>()
         }
     }
 
@@ -866,7 +867,7 @@ pub mod cmds {
 
     /// List known addresses
     #[derive(Clone, Debug)]
-    pub struct AddressList;
+    pub struct AddressList(pub args::AddressList);
 
     impl SubCmd for AddressList {
         const CMD: &'static str = "list";
@@ -874,11 +875,13 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|_matches| AddressList)
+                .map(|matches| Self(args::AddressList::parse(matches)))
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about("List all known addresses.")
+            App::new(Self::CMD)
+                .about("List all known addresses.")
+                .add_args::<args::AddressList>()
         }
     }
 
@@ -2303,6 +2306,7 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
+    use crate::client::utils::PRE_GENESIS_DIR;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -2440,6 +2444,7 @@ pub mod args {
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
+    pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
     pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
@@ -2695,15 +2700,17 @@ pub mod args {
 
     impl CliToSdk<EthereumBridgePool<SdkTypes>> for EthereumBridgePool<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> EthereumBridgePool<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             EthereumBridgePool::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
+                tx,
                 asset: self.asset,
                 recipient: self.recipient,
-                sender: ctx.get(&self.sender),
+                sender: chain_ctx.get(&self.sender),
                 amount: self.amount,
                 gas_amount: self.gas_amount,
-                gas_payer: ctx.get(&self.gas_payer),
-                code_path: ctx.read_wasm(self.code_path),
+                gas_payer: chain_ctx.get(&self.gas_payer),
+                code_path: chain_ctx.read_wasm(self.code_path),
             }
         }
     }
@@ -3109,7 +3116,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                code_path: ctx.read_wasm(self.code_path),
+                code_path: ctx.borrow_chain_or_exit().read_wasm(self.code_path),
                 data_path: self.data_path.map(|data_path| {
                     std::fs::read(data_path)
                         .expect("Expected a file at given data path")
@@ -3147,13 +3154,15 @@ pub mod args {
 
     impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxTransfer::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                source: ctx.get_cached(&self.source),
-                target: ctx.get(&self.target),
-                token: ctx.get(&self.token),
+                tx,
+                source: chain_ctx.get_cached(&self.source),
+                target: chain_ctx.get(&self.target),
+                token: chain_ctx.get(&self.token),
                 amount: self.amount,
-                native_token: ctx.native_token.clone(),
+                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3195,11 +3204,13 @@ pub mod args {
 
     impl CliToSdk<TxIbcTransfer<SdkTypes>> for TxIbcTransfer<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxIbcTransfer::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
+                tx,
+                source: chain_ctx.get(&self.source),
                 receiver: self.receiver,
-                token: ctx.get(&self.token),
+                token: chain_ctx.get(&self.token),
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -3260,12 +3271,14 @@ pub mod args {
 
     impl CliToSdk<TxInitAccount<SdkTypes>> for TxInitAccount<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxInitAccount::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
+                tx,
+                source: chain_ctx.get(&self.source),
                 vp_code_path: self.vp_code_path.to_path_buf(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
-                public_key: ctx.get_cached(&self.public_key),
+                public_key: chain_ctx.get_cached(&self.public_key),
             }
         }
     }
@@ -3307,15 +3320,23 @@ pub mod args {
 
     impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxInitValidator::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
+                tx,
+                source: chain_ctx.get(&self.source),
                 scheme: self.scheme,
-                account_key: self.account_key.map(|x| ctx.get_cached(&x)),
-                consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
-                eth_cold_key: self.eth_cold_key.map(|x| ctx.get_cached(&x)),
-                eth_hot_key: self.eth_hot_key.map(|x| ctx.get_cached(&x)),
-                protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
+                account_key: self.account_key.map(|x| chain_ctx.get_cached(&x)),
+                consensus_key: self
+                    .consensus_key
+                    .map(|x| chain_ctx.get_cached(&x)),
+                eth_cold_key: self
+                    .eth_cold_key
+                    .map(|x| chain_ctx.get_cached(&x)),
+                eth_hot_key: self.eth_hot_key.map(|x| chain_ctx.get_cached(&x)),
+                protocol_key: self
+                    .protocol_key
+                    .map(|x| chain_ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
                 validator_vp_code_path: self
@@ -3419,11 +3440,13 @@ pub mod args {
 
     impl CliToSdk<TxUpdateVp<SdkTypes>> for TxUpdateVp<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxUpdateVp::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
+                tx,
                 vp_code_path: self.vp_code_path,
                 tx_code_path: self.tx_code_path,
-                addr: ctx.get(&self.addr),
+                addr: chain_ctx.get(&self.addr),
             }
         }
     }
@@ -3458,12 +3481,14 @@ pub mod args {
 
     impl CliToSdk<Bond<SdkTypes>> for Bond<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             Bond::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                tx,
+                validator: chain_ctx.get(&self.validator),
                 amount: self.amount,
-                source: self.source.map(|x| ctx.get(&x)),
-                native_token: ctx.native_token.clone(),
+                source: self.source.map(|x| chain_ctx.get(&x)),
+                native_token: chain_ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3507,11 +3532,13 @@ pub mod args {
 
     impl CliToSdk<Unbond<SdkTypes>> for Unbond<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             Unbond::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                tx,
+                validator: chain_ctx.get(&self.validator),
                 amount: self.amount,
-                source: self.source.map(|x| ctx.get(&x)),
+                source: self.source.map(|x| chain_ctx.get(&x)),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3576,7 +3603,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: self.proposal_data,
                 offline: self.offline,
-                native_token: ctx.native_token.clone(),
+                native_token: ctx.borrow_chain_or_exit().native_token.clone(),
                 tx_code_path: self.tx_code_path,
             }
         }
@@ -3727,9 +3754,11 @@ pub mod args {
 
     impl CliToSdk<RevealPk<SdkTypes>> for RevealPk<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             RevealPk::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                public_key: ctx.get_cached(&self.public_key),
+                tx,
+                public_key: chain_ctx.get_cached(&self.public_key),
             }
         }
     }
@@ -3860,10 +3889,12 @@ pub mod args {
 
     impl CliToSdk<Withdraw<SdkTypes>> for Withdraw<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             Withdraw::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
-                source: self.source.map(|x| ctx.get(&x)),
+                tx,
+                validator: chain_ctx.get(&self.validator),
+                source: self.source.map(|x| chain_ctx.get(&x)),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3898,7 +3929,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
             QueryConversions::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                token: self.token.map(|x| ctx.get(&x)),
+                token: self.token.map(|x| ctx.borrow_chain_or_exit().get(&x)),
                 epoch: self.epoch,
             }
         }
@@ -3933,10 +3964,12 @@ pub mod args {
 
     impl CliToSdk<QueryBalance<SdkTypes>> for QueryBalance<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             QueryBalance::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
-                owner: self.owner.map(|x| ctx.get_cached(&x)),
-                token: self.token.map(|x| ctx.get(&x)),
+                query,
+                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
+                token: self.token.map(|x| chain_ctx.get(&x)),
                 no_conversions: self.no_conversions,
             }
         }
@@ -3978,10 +4011,12 @@ pub mod args {
 
     impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
             QueryTransfers::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
-                owner: self.owner.map(|x| ctx.get_cached(&x)),
-                token: self.token.map(|x| ctx.get(&x)),
+                query,
+                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
+                token: self.token.map(|x| chain_ctx.get(&x)),
             }
         }
     }
@@ -4011,10 +4046,12 @@ pub mod args {
 
     impl CliToSdk<QueryBonds<SdkTypes>> for QueryBonds<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             QueryBonds::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
-                owner: self.owner.map(|x| ctx.get(&x)),
-                validator: self.validator.map(|x| ctx.get(&x)),
+                query,
+                owner: self.owner.map(|x| chain_ctx.get(&x)),
+                validator: self.validator.map(|x| chain_ctx.get(&x)),
             }
         }
     }
@@ -4050,7 +4087,9 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
             QueryBondedStake::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                validator: self.validator.map(|x| ctx.get(&x)),
+                validator: self
+                    .validator
+                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
                 epoch: self.epoch,
             }
         }
@@ -4084,7 +4123,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryValidatorState<SdkTypes> {
             QueryValidatorState::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 epoch: self.epoch,
             }
         }
@@ -4122,7 +4161,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> CommissionRateChange<SdkTypes> {
             CommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 rate: self.rate,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4160,7 +4199,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
             TxUnjailValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -4191,7 +4230,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
             QueryCommissionRate::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 epoch: self.epoch,
             }
         }
@@ -4225,7 +4264,9 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
             QuerySlashes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                validator: self.validator.map(|x| ctx.get(&x)),
+                validator: self
+                    .validator
+                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
             }
         }
     }
@@ -4266,7 +4307,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryDelegations<SdkTypes> {
             QueryDelegations::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                owner: ctx.get(&self.owner),
+                owner: ctx.borrow_chain_or_exit().get(&self.owner),
             }
         }
     }
@@ -4338,6 +4379,7 @@ pub mod args {
 
     impl CliToSdk<Tx<SdkTypes>> for Tx<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+            let ctx = ctx.borrow_mut_chain_or_exit();
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
                 dump_tx: self.dump_tx,
@@ -4514,11 +4556,13 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let value = MASP_VALUE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
                 value,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -4537,6 +4581,10 @@ pub mod args {
                     .def()
                     .help("A spending key, viewing key, or payment address."),
             )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -4548,10 +4596,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
             }
         }
@@ -4565,6 +4615,10 @@ pub mod args {
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
@@ -4574,11 +4628,34 @@ pub mod args {
 
     impl CliToSdk<MaspPayAddrGen<SdkTypes>> for MaspPayAddrGen<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> MaspPayAddrGen<SdkTypes> {
+            use namada::ledger::wallet::Wallet;
+
+            use crate::wallet::CliWalletUtils;
+            let find_viewing_key = |w: &mut Wallet<CliWalletUtils>| {
+                w.find_viewing_key(&self.viewing_key.raw)
+                    .map(Clone::clone)
+                    .unwrap_or_else(|_| {
+                        eprintln!(
+                            "Unknown viewing key {}",
+                            self.viewing_key.raw
+                        );
+                        safe_exit(1)
+                    })
+            };
+            let viewing_key = if self.is_pre_genesis || ctx.chain.is_none() {
+                let wallet_path =
+                    ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
+                let mut wallet = crate::wallet::load_or_new(&wallet_path);
+                find_viewing_key(&mut wallet)
+            } else {
+                find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
+            };
             MaspPayAddrGen::<SdkTypes> {
                 alias: self.alias,
                 alias_force: self.alias_force,
-                viewing_key: ctx.get_cached(&self.viewing_key),
+                viewing_key,
                 pin: self.pin,
+                is_pre_genesis: self.is_pre_genesis,
             }
         }
     }
@@ -4589,11 +4666,13 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
             let pin = PIN.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 alias_force,
                 viewing_key,
                 pin,
+                is_pre_genesis,
             }
         }
 
@@ -4610,6 +4689,10 @@ pub mod args {
             .arg(PIN.def().help(
                 "Require that the single transaction to this address be \
                  pinned.",
+            ))
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
             ))
         }
     }
@@ -4665,12 +4748,14 @@ pub mod args {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
             Self {
                 scheme,
                 alias,
                 alias_force,
+                is_pre_genesis,
                 unsafe_dont_encrypt,
                 derivation_path,
             }
@@ -4688,6 +4773,10 @@ pub mod args {
             ))
             .arg(ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
+            ))
+            .arg(PRE_GENESIS.def().help(
+                "Generate a key for pre-genesis, instead of for the current \
+                 chain, if any.",
             ))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -4710,12 +4799,14 @@ pub mod args {
             let public_key = RAW_PUBLIC_KEY_OPT.parse(matches);
             let alias = ALIAS_OPT.parse(matches);
             let value = VALUE.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
 
             Self {
                 public_key,
                 alias,
                 value,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
@@ -4738,6 +4829,10 @@ pub mod args {
                     .def()
                     .help("A public key or alias associated with the keypair."),
             )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .arg(
                 UNSAFE_SHOW_SECRET
                     .def()
@@ -4750,9 +4845,11 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 unsafe_show_secret,
+                is_pre_genesis,
             }
         }
 
@@ -4763,21 +4860,31 @@ pub mod args {
                         .def()
                         .help("UNSAFE: Print the spending key values."),
                 )
+                .arg(PRE_GENESIS.def().help(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
         }
     }
 
     impl Args for MaspKeysList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
+                .arg(PRE_GENESIS.def().help(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -4786,18 +4893,38 @@ pub mod args {
         }
     }
 
+    impl Args for MaspListPayAddrs {
+        fn parse(matches: &ArgMatches) -> Self {
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self { is_pre_genesis }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+        }
+    }
+
     impl Args for KeyList {
         fn parse(matches: &ArgMatches) -> Self {
             let decrypt = DECRYPT.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             let unsafe_show_secret = UNSAFE_SHOW_SECRET.parse(matches);
             Self {
                 decrypt,
+                is_pre_genesis,
                 unsafe_show_secret,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(DECRYPT.def().help("Decrypt keys that are encrypted."))
+                .arg(PRE_GENESIS.def().help(
+                    "Use pre-genesis wallet, instead of for the current \
+                     chain, if any.",
+                ))
                 .arg(
                     UNSAFE_SHOW_SECRET
                         .def()
@@ -4809,14 +4936,21 @@ pub mod args {
     impl Args for KeyExport {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
-
-            Self { alias }
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                is_pre_genesis,
+            }
         }
 
         fn def(app: App) -> App {
             app.arg(
                 ALIAS.def().help("The alias of the key you wish to export."),
             )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
         }
     }
 
@@ -4824,7 +4958,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_OPT.parse(matches);
-            Self { alias, address }
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self {
+                alias,
+                address,
+                is_pre_genesis,
+            }
         }
 
         fn def(app: App) -> App {
@@ -4838,6 +4977,10 @@ pub mod args {
                     .def()
                     .help("The bech32m encoded address string."),
             )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
             .group(
                 ArgGroup::new("find_flags")
                     .args([ALIAS_OPT.name, RAW_ADDRESS_OPT.name])
@@ -4846,15 +4989,31 @@ pub mod args {
         }
     }
 
+    impl Args for AddressList {
+        fn parse(matches: &ArgMatches) -> Self {
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
+            Self { is_pre_genesis }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
+        }
+    }
+
     impl Args for AddressAdd {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let address = RAW_ADDRESS.parse(matches);
+            let is_pre_genesis = PRE_GENESIS.parse(matches);
             Self {
                 alias,
                 alias_force,
                 address,
+                is_pre_genesis,
             }
         }
 
@@ -4872,6 +5031,10 @@ pub mod args {
                     .def()
                     .help("The bech32m encoded address string."),
             )
+            .arg(PRE_GENESIS.def().help(
+                "Use pre-genesis wallet, instead of for the current chain, if \
+                 any.",
+            ))
         }
     }
 
