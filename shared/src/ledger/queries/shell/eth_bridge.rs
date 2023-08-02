@@ -5,7 +5,6 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{DBIter, StorageHasher, StoreType, DB};
 use namada_core::ledger::storage_api::{
@@ -134,26 +133,13 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let key = whitelist::Key {
-        asset,
-        suffix: whitelist::KeyType::Whitelisted,
-    }
-    .into();
-    let whitelisted = ctx.wl_storage.read(&key)?.unwrap_or(false);
+    let ethbridge_queries = ctx.wl_storage.ethbridge_queries();
 
-    let key = whitelist::Key {
-        asset,
-        suffix: whitelist::KeyType::WrappedSupply,
-    }
-    .into();
-    let supply = ctx.wl_storage.read(&key)?.unwrap_or_default();
-
-    let key = whitelist::Key {
-        asset,
-        suffix: whitelist::KeyType::Cap,
-    }
-    .into();
-    let cap = ctx.wl_storage.read(&key)?.unwrap_or_default();
+    let whitelisted = ethbridge_queries.is_token_whitelisted(&asset);
+    let supply = ethbridge_queries
+        .get_token_supply(&asset)
+        .unwrap_or_default();
+    let cap = ethbridge_queries.get_token_cap(&asset).unwrap_or_default();
 
     Ok(Erc20FlowControl {
         whitelisted,
@@ -597,6 +583,7 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::ledger::eth_bridge::storage::whitelist;
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::established_address_1;
