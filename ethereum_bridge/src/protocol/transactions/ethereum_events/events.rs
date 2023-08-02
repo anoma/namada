@@ -1193,27 +1193,30 @@ mod tests {
             &wl_storage.storage.native_token,
             &BRIDGE_ADDRESS,
         );
+        let bridge_pool_native_erc20_supply_key =
+            minted_balance_key(&wrapped_erc20s::token(&wnam()));
         StorageWrite::write(
             &mut wl_storage,
             &bridge_pool_native_token_balance_key,
             bridge_pool_initial_balance,
         )?;
+        StorageWrite::write(
+            &mut wl_storage,
+            &bridge_pool_native_erc20_supply_key,
+            amount,
+        )?;
         let receiver_native_token_balance_key =
             token::balance_key(&wl_storage.storage.native_token, &receiver);
 
-        let native_erc20 = read_native_erc20_address(&wl_storage)?;
-        let changed_keys = redeem_native_token(
-            &mut wl_storage,
-            &native_erc20,
-            &receiver,
-            &amount,
-        )?;
+        let changed_keys =
+            redeem_native_token(&mut wl_storage, &wnam(), &receiver, &amount)?;
 
         assert_eq!(
             changed_keys,
             BTreeSet::from([
                 bridge_pool_native_token_balance_key.clone(),
-                receiver_native_token_balance_key.clone()
+                receiver_native_token_balance_key.clone(),
+                bridge_pool_native_erc20_supply_key.clone(),
             ])
         );
         assert_eq!(
@@ -1226,6 +1229,13 @@ mod tests {
         assert_eq!(
             StorageRead::read(&wl_storage, &receiver_native_token_balance_key)?,
             Some(amount)
+        );
+        assert_eq!(
+            StorageRead::read(
+                &wl_storage,
+                &bridge_pool_native_erc20_supply_key
+            )?,
+            Some(Amount::zero())
         );
 
         Ok(())
