@@ -1188,6 +1188,16 @@ mod tests {
         let receiver = address::testing::established_address_1();
         let amount = Amount::from(100);
 
+        // pre wNAM balance - 0
+        let receiver_wnam_balance_key =
+            token::balance_key(&wrapped_erc20s::token(&wnam()), &receiver);
+        assert!(
+            wl_storage
+                .read_bytes(&receiver_wnam_balance_key)
+                .unwrap()
+                .is_none()
+        );
+
         let bridge_pool_initial_balance = Amount::from(100_000_000);
         let bridge_pool_native_token_balance_key = token::balance_key(
             &wl_storage.storage.native_token,
@@ -1236,6 +1246,16 @@ mod tests {
                 &bridge_pool_native_erc20_supply_key
             )?,
             Some(Amount::zero())
+        );
+
+        // post wNAM balance - 0
+        //
+        // wNAM is never minted, it's converted back to NAM
+        assert!(
+            wl_storage
+                .read_bytes(&receiver_wnam_balance_key)
+                .unwrap()
+                .is_none()
         );
 
         Ok(())
