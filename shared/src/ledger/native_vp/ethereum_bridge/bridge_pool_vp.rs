@@ -1639,4 +1639,48 @@ mod test_bridge_pool_vp {
     fn test_escrowing_nuts_happy_flow() {
         test_nut_aux(TransferToEthereumKind::Nut, Expect::True)
     }
+
+    /// Test that the Bridge pool VP rejects a wNAM NUT transfer.
+    #[test]
+    fn test_bridge_pool_vp_rejects_wnam_nut() {
+        assert_bridge_pool(
+            SignedAmount::Negative(GAS_FEE.into()),
+            SignedAmount::Positive(GAS_FEE.into()),
+            SignedAmount::Negative(TOKENS.into()),
+            SignedAmount::Positive(TOKENS.into()),
+            |transfer, log| {
+                transfer.transfer.kind = TransferToEthereumKind::Nut;
+                transfer.transfer.asset = wnam();
+                log.write(
+                    &get_pending_key(transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(transfer)])
+            },
+            Expect::False,
+        );
+    }
+
+    /// Test that the Bridge pool VP accepts a wNAM ERC20 transfer.
+    #[test]
+    fn test_bridge_pool_vp_accepts_wnam_erc20() {
+        assert_bridge_pool(
+            SignedAmount::Negative(GAS_FEE.into()),
+            SignedAmount::Positive(GAS_FEE.into()),
+            SignedAmount::Negative(TOKENS.into()),
+            SignedAmount::Positive(TOKENS.into()),
+            |transfer, log| {
+                transfer.transfer.kind = TransferToEthereumKind::Erc20;
+                transfer.transfer.asset = wnam();
+                log.write(
+                    &get_pending_key(transfer),
+                    transfer.try_to_vec().unwrap(),
+                )
+                .unwrap();
+                BTreeSet::from([get_pending_key(transfer)])
+            },
+            Expect::True,
+        );
+    }
 }
