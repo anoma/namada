@@ -7,8 +7,7 @@ use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_pending_key, is_pending_transfer_key,
-    BRIDGE_POOL_ADDRESS,
+    get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
 };
 use namada_core::ledger::eth_bridge::storage::{
     self as bridge_storage, wrapped_erc20s,
@@ -370,11 +369,14 @@ where
     for (event, is_valid) in
         transfers.iter().zip(valid_transfers.iter().copied())
     {
-        let pending_transfer = event.into();
-        let key = get_pending_key(&pending_transfer);
-        if hints::unlikely(!wl_storage.has_key(&key)?) {
+        let (pending_transfer, key) = if let Some((pending, key)) =
+            wl_storage.ethbridge_queries().lookup_transfer_to_eth(event)
+        {
+            (pending, key)
+        } else {
+            hints::cold();
             unreachable!("The transfer should exist in the bridge pool");
-        }
+        };
         if hints::likely(is_valid) {
             tracing::debug!(
                 ?pending_transfer,
@@ -612,6 +614,7 @@ mod tests {
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use eyre::Result;
+    use namada_core::ledger::eth_bridge::storage::bridge_pool::get_pending_key;
     use namada_core::ledger::parameters::{
         update_epoch_parameter, EpochDuration,
     };
@@ -982,19 +985,10 @@ mod tests {
         let pending_keys: HashSet<Key> =
             pending_transfers.iter().map(get_pending_key).collect();
         let relayer = gen_established_address("random");
-        let mut transfers = vec![];
-        for transfer in pending_transfers {
-            let transfer_to_eth = TransferToEthereum {
-                kind: transfer.transfer.kind,
-                amount: transfer.transfer.amount,
-                asset: transfer.transfer.asset,
-                receiver: transfer.transfer.recipient,
-                gas_amount: transfer.gas_fee.amount,
-                gas_payer: transfer.gas_fee.payer,
-                sender: transfer.transfer.sender,
-            };
-            transfers.push(transfer_to_eth);
-        }
+        let transfers: Vec<_> = pending_transfers
+            .iter()
+            .map(TransferToEthereum::from)
+            .collect();
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             valid_transfers_map: transfers.iter().map(|_| true).collect(),
@@ -1307,16 +1301,8 @@ mod tests {
         init_balance(&mut wl_storage, &pending_transfers);
         let (transfers, valid_transfers_map) = pending_transfers
             .into_iter()
-            .map(|transfer| {
-                let transfer_to_eth = TransferToEthereum {
-                    kind: transfer.transfer.kind,
-                    amount: transfer.transfer.amount,
-                    asset: transfer.transfer.asset,
-                    receiver: transfer.transfer.recipient,
-                    gas_amount: transfer.gas_fee.amount,
-                    gas_payer: transfer.gas_fee.payer,
-                    sender: transfer.transfer.sender,
-                };
+            .map(|ref transfer| {
+                let transfer_to_eth: TransferToEthereum = transfer.into();
                 (transfer_to_eth, true)
             })
             .unzip();
@@ -1353,16 +1339,18 @@ mod tests {
                 read_native_erc20_address(wl_storage).expect("Test failed");
             let deltas = transfers
                 .filter_map(
-                    |TransferToEthereum {
-                         kind,
-                         asset,
-                         amount,
-                         ..
-                     }| {
+                    |event @ TransferToEthereum { asset, amount, .. }| {
                         if asset == &native_erc20 {
                             return None;
                         }
-                        let erc20_token = match kind {
+                        let kind = {
+                            let (pending, _) = wl_storage
+                                .ethbridge_queries()
+                                .lookup_transfer_to_eth(event)
+                                .expect("Test failed");
+                            pending.transfer.kind
+                        };
+                        let erc20_token = match &kind {
                             eth_bridge_pool::TransferToEthereumKind::Erc20 => {
                                 wrapped_erc20s::token(asset)
                             }
@@ -1380,7 +1368,7 @@ mod tests {
                             .read(&minted_balance_key(&erc20_token))
                             .expect("Test failed");
                         Some(Delta {
-                            kind: *kind,
+                            kind,
                             asset: *asset,
                             sent_amount: *amount,
                             prev_balance,

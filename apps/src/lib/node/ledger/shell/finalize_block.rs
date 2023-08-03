@@ -1038,9 +1038,7 @@ mod test_finalize_block {
     };
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
-    use namada::types::ethereum_events::{
-        EthAddress, TransferToEthereum, TransferToEthereumKind, Uint as ethUint,
-    };
+    use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -1695,17 +1693,24 @@ mod test_finalize_block {
             }
             // write transfer to storage
             let transfer = {
-                use namada::core::types::eth_bridge_pool::PendingTransfer;
-                let transfer = TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
-                    amount: 10u64.into(),
-                    asset,
-                    receiver,
-                    gas_amount: 10u64.into(),
-                    sender: bertha.clone(),
-                    gas_payer: bertha.clone(),
+                use namada::core::types::eth_bridge_pool::{
+                    GasFee, PendingTransfer, TransferToEthereum,
+                    TransferToEthereumKind,
                 };
-                let pending = PendingTransfer::from(&transfer);
+                let pending = PendingTransfer {
+                    transfer: TransferToEthereum {
+                        kind: TransferToEthereumKind::Erc20,
+                        amount: 10u64.into(),
+                        asset,
+                        recipient: receiver,
+                        sender: bertha.clone(),
+                    },
+                    gas_fee: GasFee {
+                        amount: 10u64.into(),
+                        payer: bertha.clone(),
+                    },
+                };
+                let transfer = (&pending).into();
                 shell
                     .wl_storage
                     .write(&bridge_pool::get_pending_key(&pending), pending)
