@@ -442,6 +442,62 @@ impl StateMachineTest for ConcretePosState {
                 amount,
             } => {
                 let current_epoch = state.current_epoch();
+                let pipeline = current_epoch + params.pipeline_len;
+
+                // Read data prior to applying the transition
+                let native_token = state.s.get_native_token().unwrap();
+                let pos = address::POS;
+                let pos_balance_pre =
+                    token::read_balance(&state.s, &native_token, &pos).unwrap();
+                let slash_pool = address::POS_SLASH_POOL;
+                let slash_balance_pre =
+                    token::read_balance(&state.s, &native_token, &slash_pool)
+                        .unwrap();
+
+                // Read src validator stakes
+                let src_validator_stake_cur_pre = crate::read_validator_stake(
+                    &state.s,
+                    &params,
+                    &id.validator,
+                    current_epoch,
+                )
+                .unwrap()
+                .unwrap_or_default();
+                let src_validator_stake_pipeline_pre =
+                    crate::read_validator_stake(
+                        &state.s,
+                        &params,
+                        &id.validator,
+                        pipeline,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
+
+                // Read dest validator stakes
+                let dest_validator_stake_cur_pre = crate::read_validator_stake(
+                    &state.s,
+                    &params,
+                    &new_validator,
+                    current_epoch,
+                )
+                .unwrap()
+                .unwrap_or_default();
+                let dest_validator_stake_pipeline_pre =
+                    crate::read_validator_stake(
+                        &state.s,
+                        &params,
+                        &new_validator,
+                        pipeline,
+                    )
+                    .unwrap()
+                    .unwrap_or_default();
+
+                // Find delegations
+                let delegations_pre =
+                    crate::find_delegations(&state.s, &id.source, &pipeline)
+                        .unwrap();
+
+                // Apply redelegation
                 let result = redelegate_tokens(
                     &mut state.s,
                     &id.source,
@@ -463,9 +519,120 @@ impl StateMachineTest for ConcretePosState {
                     );
                 } else {
                     result.unwrap();
-                }
 
-                // TODO: Post-condition:
+                    // Post-condition: PoS balance is unchanged
+                    let pos_balance_post =
+                        token::read_balance(&state.s, &native_token, &pos)
+                            .unwrap();
+                    assert_eq!(pos_balance_pre, pos_balance_post);
+
+                    // Find slash pool balance difference
+                    let slash_balance_post = token::read_balance(
+                        &state.s,
+                        &native_token,
+                        &slash_pool,
+                    )
+                    .unwrap();
+                    let slashed = slash_balance_post - slash_balance_pre;
+
+                    // Post-condition: Source validator stake at current epoch
+                    // is unchanged
+                    let src_validator_stake_cur_post =
+                        crate::read_validator_stake(
+                            &state.s,
+                            &params,
+                            &id.validator,
+                            current_epoch,
+                        )
+                        .unwrap()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        src_validator_stake_cur_pre,
+                        src_validator_stake_cur_post
+                    );
+
+                    // Post-condition: Source validator stake at pipeline epoch
+                    // is reduced by the redelegation amount
+                    let src_validator_stake_pipeline_post =
+                        crate::read_validator_stake(
+                            &state.s,
+                            &params,
+                            &id.validator,
+                            pipeline,
+                        )
+                        .unwrap()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        src_validator_stake_pipeline_pre - amount,
+                        src_validator_stake_pipeline_post
+                    );
+
+                    // Post-condition: Destination validator stake at current
+                    // epoch is unchanged
+                    let dest_validator_stake_cur_post =
+                        crate::read_validator_stake(
+                            &state.s,
+                            &params,
+                            &new_validator,
+                            current_epoch,
+                        )
+                        .unwrap()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        dest_validator_stake_cur_pre,
+                        dest_validator_stake_cur_post
+                    );
+
+                    // Post-condition: Destination validator stake at pipeline
+                    // epoch is increased by the redelegation amount, less any
+                    // slashes
+                    let dest_validator_stake_pipeline_post =
+                        crate::read_validator_stake(
+                            &state.s,
+                            &params,
+                            &new_validator,
+                            pipeline,
+                        )
+                        .unwrap()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        dest_validator_stake_pipeline_pre + amount - slashed,
+                        dest_validator_stake_pipeline_post
+                    );
+
+                    // Post-condition: The delegator's delegations should be
+                    // updated with redelegation. For the source reduced by the
+                    // redelegation amount and for the destination increased by
+                    // the redelegation amount, less any slashes.
+                    let delegations_post = crate::find_delegations(
+                        &state.s, &id.source, &pipeline,
+                    )
+                    .unwrap();
+                    let src_delegation_pre = delegations_pre
+                        .get(&id.validator)
+                        .cloned()
+                        .unwrap_or_default();
+                    let src_delegation_post = delegations_post
+                        .get(&id.validator)
+                        .cloned()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        src_delegation_pre - src_delegation_post,
+                        amount
+                    );
+                    let dest_delegation_pre = delegations_pre
+                        .get(&new_validator)
+                        .cloned()
+                        .unwrap_or_default();
+                    let dest_delegation_post = delegations_post
+                        .get(&new_validator)
+                        .cloned()
+                        .unwrap_or_default();
+                    assert_eq!(
+                        dest_delegation_post - dest_delegation_pre,
+                        amount - slashed
+                    );
+                }
             }
             Transition::Misbehavior {
                 address,
