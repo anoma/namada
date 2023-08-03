@@ -61,7 +61,7 @@ use storage::{
     OutgoingRedelegations, Redelegation, ReverseOrdTokenAmount,
     RewardsAccumulator, SlashedAmount, TotalConsensusStakes,
     TotalRedelegatedBonded, TotalRedelegatedUnbonded, UnbondDetails,
-    ValidatorAddresses, ValidatorUnbondRecords,
+    ValidatorAddresses, ValidatorTotalUnbonded,
 };
 use thiserror::Error;
 use types::{
@@ -369,9 +369,9 @@ pub fn unbond_handle(source: &Address, validator: &Address) -> Unbonds {
 }
 
 /// Get the storage handle to a validator's total-unbonded map
-pub fn unbond_records_handle(validator: &Address) -> ValidatorUnbondRecords {
+pub fn total_unbonded_handle(validator: &Address) -> ValidatorTotalUnbonded {
     let key = storage::validator_total_unbonded_key(validator);
-    ValidatorUnbondRecords::open(key)
+    ValidatorTotalUnbonded::open(key)
 }
 
 /// Get the storage handle to a PoS validator's deltas
@@ -2029,11 +2029,11 @@ where
         // println!("Cur amnt after slashing = {}", &amount_after_slashing);
 
         // Update the unbond records
-        let cur_amnt = unbond_records_handle(validator)
+        let cur_amnt = total_unbonded_handle(validator)
             .at(&pipeline_epoch)
             .get(storage, &bond_epoch)?
             .unwrap_or_default();
-        unbond_records_handle(validator)
+        total_unbonded_handle(validator)
             .at(&pipeline_epoch)
             .insert(
                 storage,
@@ -2212,12 +2212,15 @@ where
                 "\n New redel entry for epoch {} -> amount {}",
                 bond_epoch, new_bond_amount
             );
+            let cur_bond_amount = bonds_handle
+                .get_delta_val(storage, bond_epoch)?
+                .unwrap_or_default();
             if redelegated_bonds.contains(storage, &bond_epoch)? {
                 compute_modified_redelegation(
                     storage,
                     &redelegated_bonds.at(&bond_epoch),
                     bond_epoch,
-                    new_bond_amount,
+                    cur_bond_amount - new_bond_amount,
                 )?
             } else {
                 ModifiedRedelegation::default()
@@ -2422,7 +2425,7 @@ where
 
     // `val updatedTotalUnbonded` with `updatedValidator.with("totalUnbonded",
     // ..)` update
-    let unbond_records = unbond_records_handle(validator).at(&pipeline_epoch);
+    let unbond_records = total_unbonded_handle(validator).at(&pipeline_epoch);
     for ((start_epoch, _withdrawable_epoch), change) in &new_unbonds_map {
         let current = unbond_records
             .get(storage, start_epoch)?
@@ -2680,7 +2683,12 @@ fn compute_modified_redelegation<S>(
 where
     S: StorageRead,
 {
-    println!("\nCOMPUTE MODIFIED REDELEGATION");
+    println!("\nCOMPUTE MODIFIED REDELEGATION\n");
+    dbg!(
+        &redelegated_bonds.collect_map(storage)?,
+        &start_epoch,
+        &amount
+    );
     let mut modified_redelegation = ModifiedRedelegation::default();
 
     let mut validators = HashSet::<Address>::new();
@@ -2727,10 +2735,13 @@ where
         if total_redelegated <= remaining {
             remaining -= total_src_val_amount;
         } else {
-            remaining = token::Change::default();
+            println!("TOTAL REDEL > REMAINING");
+            dbg!(&rbonds.collect_map(storage)?, &remaining);
             let bonds_to_remove =
                 find_bonds_to_remove(storage, &rbonds, remaining)?;
             dbg!(&bonds_to_remove);
+
+            remaining = token::Change::default();
 
             if let Some((bond_epoch, new_bond_amount)) =
                 bonds_to_remove.new_entry
@@ -5196,7 +5207,7 @@ where
         .get_sum(storage, infraction_epoch, params)?
         .unwrap_or_default();
 
-    let total_unbonded = unbond_records_handle(validator);
+    let total_unbonded = total_unbonded_handle(validator);
     let total_redelegated_unbonded =
         validator_total_redelegated_unbonded_handle(validator);
     let total_bonded = total_bonded_handle(validator);
@@ -5697,7 +5708,7 @@ where
         ) {
             tracing::debug!("Epoch {}", epoch);
             let mut recent_unbonds = token::Change::default();
-            let unbonds = unbond_records_handle(&validator).at(&epoch);
+            let unbonds = total_unbonded_handle(&validator).at(&epoch);
             for unbond in unbonds.iter(storage)? {
                 let (start, unbond_amount) = unbond?;
                 tracing::debug!(
@@ -5758,7 +5769,7 @@ where
             );
             let mut recent_unbonds = token::Change::default();
             let unbonds =
-                unbond_records_handle(&validator).at(&(current_epoch + offset));
+                total_unbonded_handle(&validator).at(&(current_epoch + offset));
 
             for unbond in unbonds.iter(storage)? {
                 let (start, unbond_amount) = unbond?;

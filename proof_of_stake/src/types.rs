@@ -186,7 +186,7 @@ pub type ConsensusKeys = LazySet<common::PublicKey>;
 /// (affects the deltas, pipeline after submission). The inner `Epoch`
 /// corresponds to the epoch from which the underlying bond became active
 /// (affected deltas).
-pub type ValidatorUnbondRecords =
+pub type ValidatorTotalUnbonded =
     NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
 /// A validator's incoming redelegations, where the key is the bond owner
