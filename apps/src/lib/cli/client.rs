@@ -38,19 +38,7 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
                         tx::submit_custom(&client, &mut ctx, args).await?;
-                        if !dry_run {
-                            crate::wallet::save(
-                                &ctx.borrow_chain_or_exit().wallet,
-                            )
-                            .unwrap_or_else(|err| eprintln!("{}", err));
-                        } else {
-                            println!(
-                                "Transaction dry run. No addresses have been \
-                                 saved."
-                            )
-                        }
                     }
                     Sub::TxTransfer(TxTransfer(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -102,19 +90,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
                         tx::submit_init_account(&client, &mut ctx, args)
                             .await?;
-                        if !dry_run {
-                            let chain_ctx = ctx.borrow_chain_or_exit();
-                            crate::wallet::save(&chain_ctx.wallet)
-                                .unwrap_or_else(|err| eprintln!("{}", err));
-                        } else {
-                            println!(
-                                "Transaction dry run. No addresses have been \
-                                 saved."
-                            )
-                        }
                     }
                     Sub::TxInitValidator(TxInitValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {

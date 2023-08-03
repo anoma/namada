@@ -87,6 +87,12 @@ where
         .await?;
     signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
+    if !args.tx.dry_run {
+        crate::wallet::save(&chain_ctx.wallet)
+            .unwrap_or_else(|err| eprintln!("{}", err));
+    } else {
+        println!("Transaction dry run. No addresses have been saved.")
+    }
     Ok(())
 }
 
@@ -127,6 +133,12 @@ where
         .await?;
     signing::sign_tx(&mut chain_ctx.wallet, &mut tx, &args.tx, &pk).await?;
     tx::process_tx(client, &mut chain_ctx.wallet, &args.tx, tx).await?;
+    if !args.tx.dry_run {
+        crate::wallet::save(&chain_ctx.wallet)
+            .unwrap_or_else(|err| eprintln!("{}", err));
+    } else {
+        println!("Transaction dry run. No addresses have been saved.")
+    }
     Ok(())
 }
 
