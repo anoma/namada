@@ -27,7 +27,7 @@ use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::Tx;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::Address;
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
@@ -324,9 +324,7 @@ where
                     },
                     token_check: EscrowDelta {
                         payer_account: &transfer.transfer.sender,
-                        escrow_account: &Address::Internal(
-                            InternalAddress::EthBridge,
-                        ),
+                        escrow_account: &BRIDGE_ADDRESS,
                         expected_debit: debit,
                         expected_credit: transfer.transfer.amount,
                     },
@@ -494,7 +492,7 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
     use crate::ledger::storage_api::StorageWrite;
-    use crate::types::address::{nam, wnam};
+    use crate::types::address::{nam, wnam, InternalAddress};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::types::hash::Hash;
@@ -642,6 +640,14 @@ mod test_bridge_pool_vp {
             SignedAmount::Positive(ESCROWED_AMOUNT.into()),
             SignedAmount::Positive(ESCROWED_NUTS.into()),
         );
+        // set up the initial balances of the ethereum bridge account
+        update_balances(
+            &mut writelog,
+            Balance::new(TransferToEthereumKind::Erc20, BRIDGE_ADDRESS),
+            SignedAmount::Positive(ESCROWED_AMOUNT.into()),
+            // we only care about escrowing NAM
+            SignedAmount::Positive(0.into()),
+        );
         writelog.commit_tx();
         writelog
     }
@@ -654,46 +660,79 @@ mod test_bridge_pool_vp {
         gas_delta: SignedAmount,
         token_delta: SignedAmount,
     ) -> BTreeSet<Key> {
-        // get the balance keys
-        let token_key = balance_key(
-            &match balance.kind {
-                TransferToEthereumKind::Erc20 => {
-                    wrapped_erc20s::token(&balance.asset)
-                }
-                TransferToEthereumKind::Nut => {
-                    wrapped_erc20s::nut(&balance.asset)
-                }
-            },
-            &balance.owner,
-        );
-        let account_key = balance_key(&nam(), &balance.owner);
+        // wnam is drawn from the same account
+        if balance.asset == wnam()
+            && !matches!(&balance.owner, Address::Internal(_))
+        {
+            use SignedAmount::*;
 
-        // update the balance of nam
-        let new_balance = match gas_delta {
-            SignedAmount::Positive(amount) => balance.gas + amount,
-            SignedAmount::Negative(amount) => balance.gas - amount,
+            // update the balance of nam
+            let original_balance = std::cmp::max(balance.token, balance.gas);
+            let updated_balance = match (gas_delta, token_delta) {
+                (Negative(x), Negative(y)) => original_balance - x - y,
+                (Negative(x), Positive(y)) => original_balance - x + y,
+                (Positive(x), Negative(y)) => original_balance + x - y,
+                (Positive(x), Positive(y)) => original_balance + x + y,
+            };
+
+            // write the changes to the log
+            let account_key = balance_key(&nam(), &balance.owner);
+            write_log
+                .write(
+                    &account_key,
+                    updated_balance.try_to_vec().expect("Test failed"),
+                )
+                .expect("Test failed");
+
+            // changed keys
+            [account_key].into()
+        } else {
+            // get the balance keys
+            let token_key = if balance.asset == wnam() {
+                // the match above guards against non-internal addresses,
+                // so the only logical owner here is the Ethereum bridge
+                // address, where we escrow NAM to, when minting wNAM on
+                // Ethereum
+                assert_eq!(balance.owner, BRIDGE_POOL_ADDRESS);
+                balance_key(&nam(), &BRIDGE_ADDRESS)
+            } else {
+                balance_key(
+                    &match balance.kind {
+                        TransferToEthereumKind::Erc20 => {
+                            wrapped_erc20s::token(&balance.asset)
+                        }
+                        TransferToEthereumKind::Nut => {
+                            wrapped_erc20s::nut(&balance.asset)
+                        }
+                    },
+                    &balance.owner,
+                )
+            };
+            let account_key = balance_key(&nam(), &balance.owner);
+
+            // update the balance of nam
+            let new_gas_balance = match gas_delta {
+                SignedAmount::Positive(amount) => balance.gas + amount,
+                SignedAmount::Negative(amount) => balance.gas - amount,
+            };
+
+            // update the balance of tokens
+            let new_token_balance = match token_delta {
+                SignedAmount::Positive(amount) => balance.token + amount,
+                SignedAmount::Negative(amount) => balance.token - amount,
+            };
+
+            // write the changes to the log
+            write_log
+                .write(&account_key, new_gas_balance.try_to_vec().unwrap())
+                .expect("Test failed");
+            write_log
+                .write(&token_key, new_token_balance.try_to_vec().unwrap())
+                .expect("Test failed");
+
+            // return the keys changed
+            [account_key, token_key].into()
         }
-        .try_to_vec()
-        .expect("Test failed");
-
-        // update the balance of tokens
-        let new_token_balance = match token_delta {
-            SignedAmount::Positive(amount) => balance.token + amount,
-            SignedAmount::Negative(amount) => balance.token - amount,
-        }
-        .try_to_vec()
-        .expect("Test failed");
-
-        // write the changes to the log
-        write_log
-            .write(&account_key, new_balance)
-            .expect("Test failed");
-        write_log
-            .write(&token_key, new_token_balance)
-            .expect("Test failed");
-
-        // return the keys changed
-        [account_key, token_key].into()
     }
 
     /// Initialize some dummy storage for testing
@@ -1312,7 +1351,9 @@ mod test_bridge_pool_vp {
             .write_log
             .write(
                 &eb_account_key,
-                Amount::from(100).try_to_vec().expect("Test failed"),
+                Amount::from(ESCROWED_AMOUNT + 100)
+                    .try_to_vec()
+                    .expect("Test failed"),
             )
             .expect("Test failed");
 
