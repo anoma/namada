@@ -4757,7 +4757,7 @@ fn test_simple_redelegation_aux(
     let redelegation_end = bond_start + params.pipeline_len + 1u64;
     let unbond_end =
         redelegation_end + params.withdrawable_epoch_offset() + 1u64;
-    let unbond_materialized = redelegation_end + params.pipeline_len;
+    let unbond_materialized = redelegation_end + params.pipeline_len + 1u64;
 
     // Checks
     let redelegated_remaining = delegator_redelegated_bonds_handle(&delegator)
@@ -4782,6 +4782,7 @@ fn test_simple_redelegation_aux(
         .unwrap();
     assert_eq!(redel_unbonded, amount_unbond.change());
 
+    dbg!(unbond_materialized, redelegation_end, bond_start);
     let total_redel_unbonded =
         validator_total_redelegated_unbonded_handle(&dest_validator)
             .at(&unbond_materialized)

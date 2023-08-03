@@ -2229,28 +2229,6 @@ where
         None => ModifiedRedelegation::default(),
     };
 
-    // `updatedRedelegatedBonded`
-    if let Some(epoch) = modified_redelegation.epoch {
-        println!("\nIs modified redelegation");
-        dbg!(&modified_redelegation);
-        // First remove redelegation entries corresponding the outer epoch key
-        for epoch_to_remove in &bonds_to_unbond.epochs {
-            redelegated_bonds.remove_all(storage, epoch_to_remove)?;
-        }
-        // Then updated the redelegated bonds at this epoch
-        let rbonds = redelegated_bonds.at(&epoch);
-        let pre = rbonds.collect_map(storage)?;
-        dbg!(&pre);
-        update_redelegated_bonds(storage, &rbonds, &modified_redelegation)?;
-        let post = rbonds.collect_map(storage)?;
-        dbg!(&post);
-    } else {
-        // Need to remove redelegation entries corresponding the outer epoch key
-        for epoch_to_remove in &bonds_to_unbond.epochs {
-            redelegated_bonds.remove_all(storage, epoch_to_remove)?;
-        }
-    }
-
     // `keysUnbonds`
     let unbond_keys = if let Some((start_epoch, _)) = bonds_to_unbond.new_entry
     {
@@ -2327,12 +2305,43 @@ where
     // already that's being unbonded or re-redelegated which is being updated
     // here.
     // `newRedelegatedUnbonds`
+    println!("\nDEBUGGING REDELEGATED UNBONDS\n");
+    dbg!(
+        &redelegated_bonds.collect_map(storage)?,
+        &bonds_to_unbond.epochs,
+        &modified_redelegation
+    );
     let new_redelegated_unbonds = compute_new_redelegated_unbonds(
         storage,
         &redelegated_bonds,
         &bonds_to_unbond.epochs,
         &modified_redelegation,
     )?;
+    dbg!(&new_redelegated_unbonds);
+
+    // `updatedRedelegatedBonded`
+    // NOTE: for now put this here after redelegated unbonds calc bc that one
+    // uses the pre-modified redelegated bonds from storage!
+    if let Some(epoch) = modified_redelegation.epoch {
+        println!("\nIs modified redelegation");
+        dbg!(&modified_redelegation);
+        // First remove redelegation entries corresponding the outer epoch key
+        for epoch_to_remove in &bonds_to_unbond.epochs {
+            redelegated_bonds.remove_all(storage, epoch_to_remove)?;
+        }
+        // Then updated the redelegated bonds at this epoch
+        let rbonds = redelegated_bonds.at(&epoch);
+        let pre = rbonds.collect_map(storage)?;
+        dbg!(&pre);
+        update_redelegated_bonds(storage, &rbonds, &modified_redelegation)?;
+        let post = rbonds.collect_map(storage)?;
+        dbg!(&post);
+    } else {
+        // Need to remove redelegation entries corresponding the outer epoch key
+        for epoch_to_remove in &bonds_to_unbond.epochs {
+            redelegated_bonds.remove_all(storage, epoch_to_remove)?;
+        }
+    }
 
     if !is_redelegation {
         // `val updatedRedelegatedUnbonded` with updates applied below
