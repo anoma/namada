@@ -254,6 +254,19 @@ pub async fn prepare_tx<
     updated_balance: Option<token::Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+    let a = if let TxSigningKey::WalletAddress(ref signer) = default_signer {
+        Some(
+            crate::ledger::signing::find_pk::<C, U>(
+                client,
+                wallet,
+                signer,
+                args.password.clone(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let (signer_addr, signer_pk) = tx_signer::<C, U>(
         client,
         wallet,
@@ -266,6 +279,7 @@ pub async fn prepare_tx<
         Ok((tx, None, signer_addr, signer_pk))
     } else {
         let epoch = rpc::query_epoch(client).await;
+        //FIXME: the signer must be the one of the wrapper!
         let (tx, unshielding_epoch) = wrap_tx(
             client,
             wallet,
@@ -1485,6 +1499,7 @@ pub async fn build_transfer<
 
     let masp_addr = masp();
     // Need a wrapper signer if the source is masp since fees cannot be paid inside the shielded pool
+    //FIXME: better to have a new cli argument
     let wrapper_signer = if source == masp_addr {
         Some(
             tx_signer(client, wallet, &args.tx, true, TxSigningKey::None)

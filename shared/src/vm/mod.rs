@@ -25,7 +25,7 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
     relaxed_simd: false,
     threads: false,
     tail_call: false,
-    floats: false,
+    floats: true,
     multi_memory: false,
     exceptions: false,
     memory64: false,

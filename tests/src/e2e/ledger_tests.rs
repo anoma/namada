@@ -476,12 +476,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--node",
             &validator_one_rpc,
         ],
@@ -2856,9 +2850,6 @@ fn test_genesis_validators() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        //NOTE: keep a fixed gas limit since it's important to assert the test
-        "--gas-limit",
-        "100000000",
         "--node",
         &validator_one_rpc,
     ];
@@ -2906,8 +2897,7 @@ fn test_genesis_validators() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        // The actual balance is also affected by the fees collected by the block proposer. Given the two validators, there's a chance that the balance will also include the NAMs coming from the transfer tx
-        client.exp_regex(r"nam: 1000000000[0-1]{1}10.1")?;
+        client.exp_string(r"nam: 1000000000010.1")?;
         client.assert_success();
     }
 
@@ -3177,12 +3167,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         "unjail-validator",
         "--validator",
         "validator-0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_one_rpc,
     ];
