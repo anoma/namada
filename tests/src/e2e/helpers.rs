@@ -1,6 +1,8 @@
 //! E2E test helpers
 
+use std::fs::File;
 use std::future::Future;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -26,6 +28,7 @@ use namada_apps::config::{Config, TendermintMode};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::wallet::fs::FsWalletUtils;
 use namada_sdk::wallet::Wallet;
+use toml::Value;
 
 use super::setup::{
     self, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
@@ -503,4 +506,109 @@ pub fn wait_for_wasm_pre_compile(ledger: &mut NamadaCmd) -> Result<()> {
 /// parameter.
 pub fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
     60 * 60 * 24 * 365 / min_duration
+}
+
+/// Make a Hermes config
+pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
+    let mut config = toml::map::Map::new();
+
+    let mut global = toml::map::Map::new();
+    global.insert("log_level".to_owned(), Value::String("debug".to_owned()));
+    config.insert("global".to_owned(), Value::Table(global));
+
+    let mut mode = toml::map::Map::new();
+    let mut clients = toml::map::Map::new();
+    clients.insert("enabled".to_owned(), Value::Boolean(true));
+    clients.insert("refresh".to_owned(), Value::Boolean(true));
+    clients.insert("misbehaviour".to_owned(), Value::Boolean(true));
+    mode.insert("clients".to_owned(), Value::Table(clients));
+
+    let mut connections = toml::map::Map::new();
+    connections.insert("enabled".to_owned(), Value::Boolean(false));
+    mode.insert("connections".to_owned(), Value::Table(connections));
+
+    let mut channels = toml::map::Map::new();
+    channels.insert("enabled".to_owned(), Value::Boolean(false));
+    mode.insert("channels".to_owned(), Value::Table(channels));
+
+    let mut packets = toml::map::Map::new();
+    packets.insert("enabled".to_owned(), Value::Boolean(true));
+    packets.insert("clear_interval".to_owned(), Value::Integer(10));
+    packets.insert("clear_on_start".to_owned(), Value::Boolean(false));
+    packets.insert("tx_confirmation".to_owned(), Value::Boolean(true));
+    mode.insert("packets".to_owned(), Value::Table(packets));
+
+    config.insert("mode".to_owned(), Value::Table(mode));
+
+    let mut telemetry = toml::map::Map::new();
+    telemetry.insert("enabled".to_owned(), Value::Boolean(false));
+    telemetry.insert("host".to_owned(), Value::String("127.0.0.1".to_owned()));
+    telemetry.insert("port".to_owned(), Value::Integer(3001));
+    config.insert("telemetry".to_owned(), Value::Table(telemetry));
+
+    let chains = vec![
+        make_hermes_chain_config(test_a),
+        make_hermes_chain_config(test_b),
+    ];
+
+    config.insert("chains".to_owned(), Value::Array(chains));
+
+    let toml_string = toml::to_string(&Value::Table(config)).unwrap();
+    let hermes_dir = test_a.test_dir.as_ref().join("hermes");
+    std::fs::create_dir_all(&hermes_dir).unwrap();
+    let config_path = hermes_dir.join("config.toml");
+    let mut file = File::create(config_path).unwrap();
+    file.write_all(toml_string.as_bytes()).map_err(|e| {
+        eyre!(format!("Writing a Hermes config failed: {}", e,))
+    })?;
+    // One Hermes config.toml is OK, but add one more config.toml to execute
+    // Hermes from test_b
+    let hermes_dir = test_b.test_dir.as_ref().join("hermes");
+    std::fs::create_dir_all(&hermes_dir).unwrap();
+    let config_path = hermes_dir.join("config.toml");
+    let mut file = File::create(config_path).unwrap();
+    file.write_all(toml_string.as_bytes()).map_err(|e| {
+        eyre!(format!("Writing a Hermes config failed: {}", e,))
+    })?;
+
+    Ok(())
+}
+
+fn make_hermes_chain_config(test: &Test) -> Value {
+    let chain_id = test.net.chain_id.as_str();
+    let rpc_addr = get_actor_rpc(test, &Who::Validator(0));
+
+    let mut table = toml::map::Map::new();
+    table.insert("mode".to_owned(), Value::String("push".to_owned()));
+    let url = format!("ws://{}/websocket", rpc_addr);
+    table.insert("url".to_owned(), Value::String(url));
+    table.insert("batch_delay".to_owned(), Value::String("500ms".to_owned()));
+    let event_source = Value::Table(table);
+
+    let mut chain = toml::map::Map::new();
+    chain.insert("id".to_owned(), Value::String(chain_id.to_owned()));
+    chain.insert("type".to_owned(), Value::String("Namada".to_owned()));
+    chain.insert(
+        "rpc_addr".to_owned(),
+        Value::String(format!("http://{rpc_addr}")),
+    );
+    // The grpc isn't used for Namada, but it's required
+    chain.insert(
+        "grpc_addr".to_owned(),
+        Value::String("http://127.0.0.1:9090".to_owned()),
+    );
+    chain.insert("event_source".to_owned(), event_source);
+    chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
+    chain.insert(
+        "key_name".to_owned(),
+        Value::String(setup::constants::CHRISTEL_KEY.to_owned()),
+    );
+    chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
+    let mut table = toml::map::Map::new();
+    table.insert("price".to_owned(), Value::Float(0.001));
+    let nam_addr = find_address(test, setup::constants::NAM).unwrap();
+    table.insert("denom".to_owned(), Value::String(nam_addr.to_string()));
+    chain.insert("gas_price".to_owned(), Value::Table(table));
+
+    Value::Table(chain)
 }
