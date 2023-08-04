@@ -63,12 +63,13 @@ fn validate_tx(
     let valid_sig = Lazy::new(|| {
         let pk = key::get(ctx, &addr);
         match pk {
-            Ok(Some(pk)) => ctx
-                .verify_tx_section_signature(
+            Ok(Some(pk)) => matches!(
+                ctx.verify_tx_section_signature(
                     &pk,
                     &vec![*tx_data.data_sechash(), *tx_data.code_sechash()],
-                )
-                .is_ok(),
+                ),
+                Ok(true)
+            ),
             _ => false,
         }
     });
