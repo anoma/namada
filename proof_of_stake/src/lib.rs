@@ -2434,12 +2434,12 @@ where
 
     // `val updatedTotalUnbonded` with `updatedValidator.with("totalUnbonded",
     // ..)` update
-    let unbond_records = total_unbonded_handle(validator).at(&pipeline_epoch);
+    let total_unbonded = total_unbonded_handle(validator).at(&pipeline_epoch);
     for ((start_epoch, _withdrawable_epoch), change) in &new_unbonds_map {
-        let current = unbond_records
+        let current = total_unbonded
             .get(storage, start_epoch)?
             .unwrap_or_default();
-        unbond_records.insert(
+        total_unbonded.insert(
             storage,
             *start_epoch,
             current + token::Amount::from_change(*change),
@@ -6058,8 +6058,7 @@ where
     // cannot be slashed anymore
     let is_not_chained = if let Some(end_epoch) = src_redel_end_epoch {
         // TODO: check bounds for correctness (> and presence of cubic offset)
-        end_epoch + params.unbonding_len + params.cubic_slashing_window_length
-            <= current_epoch
+        end_epoch + params.slash_processing_epoch_offset() <= current_epoch
     } else {
         true
     };

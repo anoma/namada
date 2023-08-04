@@ -179,6 +179,22 @@ proptest! {
     }
 }
 
+proptest! {
+    // Generate arb valid input for `test_simple_redelegation_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_chain_redelegations(
+
+    genesis_validators in arb_genesis_validators(3..4, Some(0.into())),
+
+    ) {
+        test_chain_redelegations_aux(genesis_validators)
+    }
+}
+
 fn arb_params_and_genesis_validators(
     num_max_validator_slots: Option<u64>,
     val_size: Range<usize>,
@@ -5253,4 +5269,349 @@ fn test_redelegation_with_slashing_aux(
         .unwrap()
         .unwrap_or_default();
     assert_eq!(delegator_balance, del_balance - amount_delegate);
+}
+
+fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
+    validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+
+    let src_validator = validators[0].address.clone();
+    let init_stake_src = validators[0].tokens;
+    let dest_validator = validators[1].address.clone();
+    let init_stake_dest = validators[1].tokens;
+    let dest_validator_2 = validators[2].address.clone();
+    let init_stake_dest_2 = validators[2].tokens;
+
+    let mut storage = TestWlStorage::default();
+    let params = PosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    // Genesis
+    let mut current_epoch = storage.storage.block.epoch;
+    init_genesis(
+        &mut storage,
+        &params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    // Get a delegator with some tokens
+    let staking_token = staking_token_address(&storage);
+    let delegator = address::testing::gen_implicit_address();
+    let del_balance = token::Amount::from_uint(1_000_000, 0).unwrap();
+    credit_tokens(&mut storage, &staking_token, &delegator, del_balance)
+        .unwrap();
+
+    // Delegate in epoch 0 to src_validator
+    let bond_amount: token::Amount = 100.into();
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &src_validator,
+        bond_amount,
+        current_epoch,
+    )
+    .unwrap();
+
+    let bond_start = current_epoch + params.pipeline_len;
+
+    // Advance one epoch
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Redelegate in epoch 1 to dest_validator
+    let redel_amount_1: token::Amount = 58.into();
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &src_validator,
+        &dest_validator,
+        current_epoch,
+        redel_amount_1,
+    )
+    .unwrap();
+
+    let redel_start = current_epoch;
+    let redel_end = current_epoch + params.pipeline_len;
+
+    // Checks ----------------
+
+    // Dest validator should have an incoming redelegation
+    let incoming_redelegation =
+        validator_incoming_redelegations_handle(&dest_validator)
+            .get(&storage, &delegator)
+            .unwrap();
+    assert_eq!(incoming_redelegation, Some(redel_end));
+
+    // Src validator should have an outoging redelegation
+    let outgoing_redelegation =
+        validator_outgoing_redelegations_handle(&src_validator)
+            .at(&dest_validator)
+            .at(&bond_start)
+            .get(&storage, &redel_start)
+            .unwrap();
+    assert_eq!(outgoing_redelegation, Some(redel_amount_1));
+
+    // Delegator should have redelegated bonds
+    let del_total_redelegated_bonded =
+        delegator_redelegated_bonds_handle(&delegator)
+            .at(&dest_validator)
+            .at(&redel_end)
+            .at(&src_validator)
+            .get(&storage, &bond_start)
+            .unwrap()
+            .unwrap_or_default();
+    assert_eq!(del_total_redelegated_bonded, redel_amount_1.change());
+
+    // There should be delegator bonds for both src and dest validators
+    let bonded_src = bond_handle(&delegator, &src_validator);
+    let bonded_dest = bond_handle(&delegator, &dest_validator);
+    assert_eq!(
+        bonded_src
+            .get_delta_val(&storage, bond_start)
+            .unwrap()
+            .unwrap_or_default(),
+        (bond_amount - redel_amount_1).change()
+    );
+    assert_eq!(
+        bonded_dest
+            .get_delta_val(&storage, redel_end)
+            .unwrap()
+            .unwrap_or_default(),
+        redel_amount_1.change()
+    );
+
+    // The dest validator should have total redelegated bonded tokens
+    let dest_total_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(&dest_validator)
+            .at(&redel_end)
+            .at(&src_validator)
+            .get(&storage, &bond_start)
+            .unwrap()
+            .unwrap_or_default();
+    assert_eq!(dest_total_redelegated_bonded, redel_amount_1.change());
+
+    // The dest validator's total bonded should not be updated by the
+    // redelegation (should only have an entry for its genesis bond)
+    let dest_total_bonded = total_bonded_handle(&dest_validator)
+        .get_data_handler()
+        .collect_map(&storage)
+        .unwrap();
+    assert!(
+        dest_total_bonded.len() == 1
+            && dest_total_bonded.contains_key(&Epoch::default())
+    );
+
+    // The src validator should have a total bonded entry for the original bond
+    assert_eq!(
+        total_bonded_handle(&src_validator)
+            .get_delta_val(&storage, bond_start)
+            .unwrap()
+            .unwrap_or_default(),
+        bond_amount.change()
+    );
+
+    // The src validator should have a total unbonded entry due to the
+    // redelegation
+    let src_total_unbonded = total_unbonded_handle(&src_validator)
+        .at(&redel_end)
+        .get(&storage, &bond_start)
+        .unwrap()
+        .unwrap_or_default();
+    assert_eq!(src_total_unbonded, redel_amount_1);
+
+    // Attempt to redelegate in epoch 3 to dest_validator
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    let redel_amount_2: token::Amount = 23.into();
+    let redel_att = super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &dest_validator,
+        &dest_validator_2,
+        current_epoch,
+        redel_amount_2,
+    );
+    assert!(redel_att.is_err());
+
+    // Advance to right before the redelegation can be redelegated again
+    assert_eq!(redel_end, current_epoch);
+    let epoch_can_redel = redel_end + params.slash_processing_epoch_offset();
+    loop {
+        current_epoch = advance_epoch(&mut storage, &params);
+        super::process_slashes(&mut storage, current_epoch).unwrap();
+        if current_epoch == epoch_can_redel.prev() {
+            break;
+        }
+    }
+
+    // Attempt to redelegate in epoch before we actually are able to
+    let redel_att = super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &dest_validator,
+        &dest_validator_2,
+        current_epoch,
+        redel_amount_2,
+    );
+    assert!(redel_att.is_err());
+
+    // Advance one more epoch
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Redelegate from dest_validator to dest_validator_2 now
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &dest_validator,
+        &dest_validator_2,
+        current_epoch,
+        redel_amount_2,
+    )
+    .unwrap();
+
+    let redel_2_start = current_epoch;
+    let redel_2_end = current_epoch + params.pipeline_len;
+
+    // Checks -----------------------------------
+
+    // Both the dest validator and dest validator 2 should have incoming
+    // redelegations
+    let incoming_redelegation_1 =
+        validator_incoming_redelegations_handle(&dest_validator)
+            .get(&storage, &delegator)
+            .unwrap();
+    assert_eq!(incoming_redelegation_1, Some(redel_end));
+    let incoming_redelegation_2 =
+        validator_incoming_redelegations_handle(&dest_validator_2)
+            .get(&storage, &delegator)
+            .unwrap();
+    assert_eq!(incoming_redelegation_2, Some(redel_2_end));
+
+    // Both the src validator and dest validator should have outgoing
+    // redelegations
+    let outgoing_redelegation_1 =
+        validator_outgoing_redelegations_handle(&src_validator)
+            .at(&dest_validator)
+            .at(&bond_start)
+            .get(&storage, &redel_start)
+            .unwrap();
+    assert_eq!(outgoing_redelegation_1, Some(redel_amount_1));
+
+    let outgoing_redelegation_2 =
+        validator_outgoing_redelegations_handle(&dest_validator)
+            .at(&dest_validator_2)
+            .at(&redel_end)
+            .get(&storage, &redel_2_start)
+            .unwrap();
+    assert_eq!(outgoing_redelegation_2, Some(redel_amount_2));
+
+    // All three validators should have bonds
+    let bonded_dest2 = bond_handle(&delegator, &dest_validator_2);
+    assert_eq!(
+        bonded_src
+            .get_delta_val(&storage, bond_start)
+            .unwrap()
+            .unwrap_or_default(),
+        (bond_amount - redel_amount_1).change()
+    );
+    assert_eq!(
+        bonded_dest
+            .get_delta_val(&storage, redel_end)
+            .unwrap()
+            .unwrap_or_default(),
+        (redel_amount_1 - redel_amount_2).change()
+    );
+    assert_eq!(
+        bonded_dest2
+            .get_delta_val(&storage, redel_2_end)
+            .unwrap()
+            .unwrap_or_default(),
+        redel_amount_2.change()
+    );
+
+    // There should be no unbond entries
+    let unbond_src = unbond_handle(&delegator, &src_validator);
+    let unbond_dest = unbond_handle(&delegator, &dest_validator);
+    assert!(unbond_src.is_empty(&storage).unwrap());
+    assert!(unbond_dest.is_empty(&storage).unwrap());
+
+    // The dest validator should have some total unbonded due to the second
+    // redelegation
+    let dest_total_unbonded = total_unbonded_handle(&dest_validator)
+        .at(&redel_2_end)
+        .get(&storage, &redel_end)
+        .unwrap();
+    assert_eq!(dest_total_unbonded, Some(redel_amount_2));
+
+    // Delegator should have redelegated bonds due to both redelegations
+    let del_redelegated_bonds = delegator_redelegated_bonds_handle(&delegator);
+    assert_eq!(
+        Some((redel_amount_1 - redel_amount_2).change()),
+        del_redelegated_bonds
+            .at(&dest_validator)
+            .at(&redel_end)
+            .at(&src_validator)
+            .get(&storage, &bond_start)
+            .unwrap()
+    );
+    assert_eq!(
+        Some(redel_amount_2.change()),
+        del_redelegated_bonds
+            .at(&dest_validator_2)
+            .at(&redel_2_end)
+            .at(&dest_validator)
+            .get(&storage, &redel_end)
+            .unwrap()
+    );
+
+    // Delegator redelegated unbonds should be empty
+    assert!(
+        delegator_redelegated_unbonds_handle(&delegator)
+            .is_empty(&storage)
+            .unwrap()
+    );
+
+    // Both the dest validator and dest validator 2 should have total
+    // redelegated bonds
+    let dest_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(&dest_validator)
+            .at(&redel_end)
+            .at(&src_validator)
+            .get(&storage, &bond_start)
+            .unwrap()
+            .unwrap_or_default();
+    let dest2_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(&dest_validator_2)
+            .at(&redel_2_end)
+            .at(&dest_validator)
+            .get(&storage, &redel_end)
+            .unwrap()
+            .unwrap_or_default();
+    assert_eq!(dest_redelegated_bonded, redel_amount_1.change());
+    assert_eq!(dest2_redelegated_bonded, redel_amount_2.change());
+
+    // Total redelegated unbonded should be empty for all validator
+    assert!(
+        validator_total_redelegated_unbonded_handle(&dest_validator)
+            .is_empty(&storage)
+            .unwrap()
+    );
+    assert!(
+        validator_total_redelegated_unbonded_handle(&dest_validator_2)
+            .is_empty(&storage)
+            .unwrap()
+    );
+    assert!(
+        validator_total_redelegated_unbonded_handle(&src_validator)
+            .is_empty(&storage)
+            .unwrap()
+    );
 }
