@@ -33,6 +33,8 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
 /// The cost of accessing the WASM memory, per byte
 pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
+/// The cost for requesting one more page in wasm (64KB)
+pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -40,7 +42,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Decimal scale of Gas units
 const SCALE: u64 = 1_000_000;
 
-/// Representation of gas in micro units. This effectively decouples gas metering from fee apyment, allowing higher resolution when accounting for gas while, at the same time, providing a ontained gas value when paying fees.
+/// Representation of gas in micro units. This effectively decouples gas metering from fee payment, allowing higher resolution when accounting for gas while, at the same time, providing a contained gas value when paying fees.
 #[derive(
     Clone,
     Copy,

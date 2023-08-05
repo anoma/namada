@@ -4,7 +4,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{self, GasMetering, TxGasMeter};
+use namada_core::ledger::gas::{
+    self, GasMetering, TxGasMeter, VM_MEMORY_ACCESS_GAS_PER_BYTE,
+    WASM_MEMORY_PAGE_GAS_COST,
+};
 use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
 use thiserror::Error;
@@ -606,9 +609,9 @@ where
 
 /// Get the gas rules used to meter wasm operations
 fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
-    let instruction_cost = 1;
-    let memory_grow_cost = 1;
-    let call_per_local_cost = 1;
+    let instruction_cost = 0;
+    let memory_grow_cost = WASM_MEMORY_PAGE_GAS_COST;
+    let call_per_local_cost = 0;
     wasm_instrument::gas_metering::ConstantCostRules::new(
         instruction_cost,
         memory_grow_cost,
