@@ -182,22 +182,22 @@ where
                 alloc.try_alloc(BlockResources::new(&tx_bytes[..], tx_gas.to_owned()))
                     .map_or_else(
                         |status| match status {
-                            AllocFailure::Rejected { bin_resource_left: bin_space_left } => {
-                                tracing::debug!(
+                            AllocFailure::Rejected { bin_resource_left} => {
+                                tracing::debug!( 
                                     ?tx_bytes,
-                                    bin_space_left,
+                                    bin_resource_left,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
                             }
-                            AllocFailure::OverflowsBin { bin_resource: bin_size } => {
+                            AllocFailure::OverflowsBin { bin_resource} => {
                                 // TODO: handle tx whose size is greater
                                 // than bin size
                                 tracing::warn!(
                                     ?tx_bytes,
-                                    bin_size,
+                                    bin_resource,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
@@ -245,7 +245,7 @@ where
 
         tx.validate_tx().map_err(|_| ())?;
         if let TxType::Wrapper(wrapper) = tx.header().tx_type {
-            // Check tx gas limit for tx size
+                        // Check tx gas limit for tx size
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.clone().into());
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
