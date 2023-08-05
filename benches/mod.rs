@@ -460,7 +460,10 @@ pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
             has_valid_pow: true,
         },
     ));
-    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(WASM_DIR, wasm_code_path)));
+    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
+        WASM_DIR,
+        wasm_code_path,
+    )));
 
     let mut data = vec![];
     prost::Message::encode(&msg.to_any(), &mut data).unwrap();
@@ -758,6 +761,7 @@ impl BenchShieldedCtx {
             tx_reveal_code_path: TX_REVEAL_PK_WASM.into(),
             verification_key: None,
             password: None,
+            wrapper_fee_payer: None,
         };
 
         let args = TxTransfer {

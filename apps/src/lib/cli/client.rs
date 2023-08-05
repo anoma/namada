@@ -237,7 +237,7 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
-                        let (mut tx, epoch, addr, pk) =
+                        let (mut tx, epoch, addr, pk, wrapper_pk) =
                             bridge_pool::build_bridge_pool_tx(
                                 &client,
                                 &mut ctx.wallet,
@@ -260,7 +260,7 @@ impl<IO> CliApi<IO> {
                             &mut tx,
                             &tx_args,
                             &pk,
-                            None,
+                            wrapper_pk.as_ref(),
                         )
                         .await?;
                         sdk_tx::process_tx(

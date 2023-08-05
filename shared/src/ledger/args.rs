@@ -475,6 +475,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+    /// The optional signing key of the wrapper's signer
+    pub wrapper_fee_payer: Option<C::Keypair>,
 }
 
 /// MASP add key or address arguments

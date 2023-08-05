@@ -35,28 +35,30 @@ where
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
+///
+/// It also return a second, optional key for the wrapper's signer if it differs from the inner tx's one.
 pub async fn tx_signer<C, U, V>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
-    is_wrapper_tx: bool,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::PublicKey), tx::Error>
+) -> Result<
+    (
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    tx::Error,
+>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
     V: ShieldedUtils,
 {
-    namada::ledger::signing::tx_signer::<C, U>(
-        client,
-        wallet,
-        args,
-        is_wrapper_tx,
-        default,
-    )
-    .await
+    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
+        .await
 }
 
 /// Sign a transaction with a given signing key or public key of a given signer.

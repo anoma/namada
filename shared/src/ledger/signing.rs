@@ -160,6 +160,8 @@ pub enum TxSigningKey {
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
+///
+/// Also return the optional signer of the wrapper tx if differs from the inner's one.
 pub async fn tx_signer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -167,19 +169,31 @@ pub async fn tx_signer<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    is_wrapper_tx: bool,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::PublicKey), Error> {
-    let signer = if (args.dry_run && !is_wrapper_tx)
-        || (args.dry_run_wrapper && is_wrapper_tx)
-    {
+) -> Result<
+    (
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
+    let wrapper_signer = if let Some(signing_key) = &args.wrapper_fee_payer {
+        Some(signing_key.ref_to())
+    } else if args.disposable_signing_key {
+        Some(generate_disposable_signing_key(wallet).ref_to())
+    } else {
+        None
+    };
+
+    let signer = if args.dry_run {
         // We cannot override the signer if we're doing a dry run
         default
     } else if let Some(signing_key) = &args.signing_key {
         // Otherwise use the signing key override provided by user
-        return Ok((None, signing_key.ref_to()));
+        return Ok((None, signing_key.ref_to(), wrapper_signer));
     } else if let Some(verification_key) = &args.verification_key {
-        return Ok((None, verification_key.clone()));
+        return Ok((None, verification_key.clone(), wrapper_signer));
     } else if let Some(signer) = &args.signer {
         // Otherwise use the signer address provided by user
         TxSigningKey::WalletAddress(signer.clone())
@@ -187,15 +201,21 @@ pub async fn tx_signer<
         // Otherwise use the signer determined by the caller
         default
     };
+
     // Now actually fetch the signing key and apply it
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok((None, masp_tx_key().ref_to()))
+            if wrapper_signer.is_none() {
+                other_err("Wrapper transaction cannot be signed by masp; please specify the key from which to look up the signing key.".to_string())
+            } else {
+                Ok((None, masp_tx_key().ref_to(), wrapper_signer))
+            }
         }
         TxSigningKey::WalletAddress(signer) => Ok((
             Some(signer.clone()),
             find_pk::<C, U>(client, wallet, &signer, args.password.clone())
                 .await?,
+            wrapper_signer,
         )),
         TxSigningKey::None => other_err(
             "All transactions must be signed; please either specify the key \
@@ -209,7 +229,7 @@ pub async fn tx_signer<
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
 ///
-/// It takes also an optional keypair to sign the wrapper header separately (this is useful for masp transactions in which the inner transactions is signed by masp itself but the wrapper must be signed by a valid account).
+/// It also takes a second, optional keypair to sign the wrapper header separately.
 ///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
@@ -660,25 +680,7 @@ pub async fn sign_wrapper<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> (TxBroadcastData, Option<Epoch>) {
     if args.disposable_signing_key {
-        // Create the alias
-        let alias_prefix = "disposable_";
-        let mut ctr = 1;
-        let mut alias = format!("{alias_prefix}_{ctr}");
-
-        while wallet.store().contains_alias(&Alias::from(&alias)) {
-            ctr += 1;
-            alias = format!("{alias_prefix}_{ctr}");
-        }
-        // Generate a disposable keypair to sign the wrapper if requested
-        // NOTE: this key must be stored in the wallet in case there was the need to resubmit the transaction
-        // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
-        let (alias, disposable_keypair) = wallet
-            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
-            .expect("Failed to initialize disposable keypair")
-            .expect("Missing alias and secret key");
-
-        tracing::info!("Created disposable keypair with alias {alias}");
-        keypair = Cow::Owned(disposable_keypair);
+        keypair = Cow::Owned(generate_disposable_signing_key(wallet));
         updated_balance = Some(Amount::default());
     }
 
@@ -755,6 +757,32 @@ pub async fn sign_wrapper<
     };
 
     (to_broadcast, unshielding_epoch)
+}
+
+fn generate_disposable_signing_key<U>(
+    wallet: &mut Wallet<U>,
+) -> common::SecretKey
+where
+    U: WalletUtils,
+{
+    // Create the alias
+    let alias_prefix = "disposable_";
+    let mut ctr = 1;
+    let mut alias = format!("{alias_prefix}_{ctr}");
+
+    while wallet.store().contains_alias(&Alias::from(&alias)) {
+        ctr += 1;
+        alias = format!("{alias_prefix}_{ctr}");
+    }
+    // Generate a disposable keypair to sign the wrapper if requested
+    // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
+    let (alias, disposable_keypair) = wallet
+        .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
+        .expect("Failed to initialize disposable keypair")
+        .expect("Missing alias and secret key");
+
+    tracing::info!("Created disposable keypair with alias {alias}");
+    disposable_keypair
 }
 
 #[allow(clippy::result_large_err)]

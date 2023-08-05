@@ -49,7 +49,16 @@ pub async fn build_bridge_pool_tx<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::EthereumBridgePool,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let args::EthereumBridgePool {
         ref tx,
         asset,

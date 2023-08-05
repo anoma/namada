@@ -2484,6 +2484,8 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const WRAPPER_FEE_PAYER_OPT: ArgOpt<WalletKeypair> =
+        arg_opt("wrapper-fee-payer");
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -4358,6 +4360,9 @@ pub mod args {
                 chain_id: self
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+                wrapper_fee_payer: self
+                    .wrapper_fee_payer
+                    .map(|x| ctx.get_cached(&x)),
             }
         }
     }
@@ -4447,6 +4452,7 @@ pub mod args {
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
+            .arg(WRAPPER_FEE_PAYER_OPT.def().help("Sign the wrapper transaction (fee payer) with the key of the given public key, public key hash or alias from your wallet.").conflicts_with(DISPOSABLE_SIGNING_KEY.name))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -4471,6 +4477,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let wrapper_fee_payer = WRAPPER_FEE_PAYER_OPT.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -4492,6 +4499,7 @@ pub mod args {
                 tx_reveal_code_path,
                 password,
                 chain_id,
+                wrapper_fee_payer,
             }
         }
     }

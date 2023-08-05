@@ -251,35 +251,31 @@ pub async fn prepare_tx<
     args: &args::Tx,
     tx: Tx,
     default_signer: TxSigningKey,
-    updated_balance: Option<token::Amount>,
+    mut updated_balance: Option<token::Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
-    let a = if let TxSigningKey::WalletAddress(ref signer) = default_signer {
-        Some(
-            crate::ledger::signing::find_pk::<C, U>(
-                client,
-                wallet,
-                signer,
-                args.password.clone(),
-            )
-            .await?,
-        )
-    } else {
-        None
-    };
-    let (signer_addr, signer_pk) = tx_signer::<C, U>(
-        client,
-        wallet,
-        args,
-        tx.header.wrapper().is_some(),
-        default_signer.clone(),
-    )
-    .await?;
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
+    let (signer_addr, signer_pk, wrapper_signer) =
+        tx_signer::<C, U>(client, wallet, args, default_signer.clone()).await?;
     if args.dry_run {
-        Ok((tx, None, signer_addr, signer_pk))
+        Ok((tx, None, signer_addr, signer_pk, None))
     } else {
+        if let Some(wrapper_pk) = &wrapper_signer {
+            if wrapper_pk != &signer_pk {
+                // Unset updated balance if fees are paid by a different entity
+                updated_balance = None;
+            }
+        }
+
         let epoch = rpc::query_epoch(client).await;
-        //FIXME: the signer must be the one of the wrapper!
         let (tx, unshielding_epoch) = wrap_tx(
             client,
             wallet,
@@ -288,12 +284,18 @@ pub async fn prepare_tx<
             args,
             updated_balance,
             epoch,
-            &signer_pk,
+            wrapper_signer.as_ref().unwrap_or(&signer_pk),
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
         )
         .await;
-        Ok((tx, unshielding_epoch, signer_addr, signer_pk))
+        Ok((
+            tx,
+            unshielding_epoch,
+            signer_addr,
+            signer_pk,
+            wrapper_signer,
+        ))
     }
 }
 
@@ -372,7 +374,13 @@ pub async fn build_reveal_pk<
     shielded: &mut ShieldedContext<V>,
     args: args::RevealPk,
 ) -> Result<
-    Option<(Tx, Option<Epoch>, Option<Address>, common::PublicKey)>,
+    Option<(
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    )>,
     Error,
 > {
     let args::RevealPk {
@@ -438,7 +446,16 @@ pub async fn build_reveal_pk_aux<
     shielded: &mut ShieldedContext<V>,
     public_key: &common::PublicKey,
     args: &args::Tx,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let addr: Address = public_key.into();
     println!("Submitting a tx to reveal the public key for address {addr}...");
     let tx_data = public_key.try_to_vec().map_err(Error::EncodeKeyFailure)?;
@@ -672,7 +689,16 @@ pub async fn build_validator_commission_change<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::CommissionRateChange,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let epoch = rpc::query_epoch(client).await;
 
     let tx_code_hash =
@@ -766,7 +792,16 @@ pub async fn build_unjail_validator<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxUnjailValidator,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     if !rpc::is_validator(client, &args.validator).await {
         eprintln!("The given address {} is not a validator.", &args.validator);
         if !args.tx.force {
@@ -910,7 +945,16 @@ pub async fn build_withdraw<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::Withdraw,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let epoch = rpc::query_epoch(client).await;
 
     let validator =
@@ -991,6 +1035,7 @@ pub async fn build_unbond<
         Option<Epoch>,
         Option<Address>,
         common::PublicKey,
+        Option<common::PublicKey>,
         Option<(Epoch, token::Amount)>,
     ),
     Error,
@@ -1059,7 +1104,7 @@ pub async fn build_unbond<
     tx.set_code(Code::from_hash(tx_code_hash));
 
     let default_signer = args.source.unwrap_or_else(|| args.validator.clone());
-    let (tx, unshield_epoch, signer_addr, default_signer) =
+    let (tx, unshield_epoch, signer_addr, default_signer, wrapper_signer) =
         prepare_tx::<C, U, V>(
             client,
             wallet,
@@ -1078,6 +1123,7 @@ pub async fn build_unbond<
         unshield_epoch,
         signer_addr,
         default_signer,
+        wrapper_signer,
         latest_withdrawal_pre,
     ))
 }
@@ -1154,7 +1200,16 @@ pub async fn build_bond<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::Bond,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let validator =
         known_validator_or_err(args.validator.clone(), args.tx.force, client)
             .await?;
@@ -1264,7 +1319,16 @@ pub async fn build_ibc_transfer<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxIbcTransfer,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(args.source.clone(), args.tx.force, client)
@@ -1498,17 +1562,6 @@ pub async fn build_transfer<
     };
 
     let masp_addr = masp();
-    // Need a wrapper signer if the source is masp since fees cannot be paid inside the shielded pool
-    //FIXME: better to have a new cli argument
-    let wrapper_signer = if source == masp_addr {
-        Some(
-            tx_signer(client, wallet, &args.tx, true, TxSigningKey::None)
-                .await?
-                .1,
-        )
-    } else {
-        None
-    };
 
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -1602,18 +1655,19 @@ pub async fn build_transfer<
     tx.set_code(Code::from_hash(tx_code_hash));
 
     // Dry-run/broadcast/submit the transaction
-    let (tx, unshielding_epoch, signer_addr, def_key) = prepare_tx::<C, U, V>(
-        client,
-        wallet,
-        shielded,
-        &args.tx,
-        tx,
-        default_signer.clone(),
-        updated_balance,
-        #[cfg(not(feature = "mainnet"))]
-        is_source_faucet,
-    )
-    .await?;
+    let (tx, unshielding_epoch, signer_addr, def_key, wrapper_signer) =
+        prepare_tx::<C, U, V>(
+            client,
+            wallet,
+            shielded,
+            &args.tx,
+            tx,
+            default_signer.clone(),
+            updated_balance,
+            #[cfg(not(feature = "mainnet"))]
+            is_source_faucet,
+        )
+        .await?;
     // Manage the two masp epochs
     let masp_epoch = match (unshielding_epoch, shielded_tx_epoch) {
         (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
@@ -1648,7 +1702,16 @@ pub async fn build_init_account<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxInitAccount,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let public_key = args.public_key;
 
     let vp_code_hash =
@@ -1698,7 +1761,16 @@ pub async fn build_update_vp<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxUpdateVp,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let addr = args.addr.clone();
 
     // Check that the address is established and exists on chain
@@ -1788,7 +1860,16 @@ pub async fn build_custom<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxCustom,
-) -> Result<(Tx, Option<Epoch>, Option<Address>, common::PublicKey), Error> {
+) -> Result<
+    (
+        Tx,
+        Option<Epoch>,
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    Error,
+> {
     let mut tx = Tx::new(TxType::Raw);
     tx.header.chain_id = args.tx.chain_id.clone().unwrap();
     tx.header.expiration = args.tx.expiration;
