@@ -7,17 +7,11 @@ use derivative::Derivative;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
-#[cfg(feature = "dev")]
-use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
-#[cfg(feature = "dev")]
-use namada::types::address::wnam;
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
-#[cfg(feature = "dev")]
-use namada::types::ethereum_events::EthAddress;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -923,9 +917,11 @@ pub fn genesis(
 }
 #[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
+    use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
     use namada::types::address::{
-        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel,
+        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel, wnam,
     };
+    use namada::types::ethereum_events::EthAddress;
 
     use crate::wallet;
 

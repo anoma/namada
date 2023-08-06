@@ -9,7 +9,7 @@ use namada_core::ledger::eth_bridge::storage::{
 };
 use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::{eth_bridge, storage as ledger_storage};
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_core::types::token::{balance_key, Amount, Change};
 
@@ -108,8 +108,6 @@ where
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
-
-    const ADDR: InternalAddress = eth_bridge::INTERNAL_ADDRESS;
 
     /// Validate that a wasm transaction is permitted to change keys under this
     /// account.

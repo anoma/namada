@@ -613,4 +613,11 @@ mod test_dec {
                 .unwrap()
         );
     }
+
+    #[test]
+    fn test_ordering() {
+        let smaller = Dec::from_str("6483947304.195066085701").unwrap();
+        let larger = Dec::from_str("32418116583.390243854642").unwrap();
+        assert!(smaller < larger);
+    }
 }

@@ -14,7 +14,7 @@ use namada_core::ledger::ibc::{
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::proto::Tx;
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
@@ -64,8 +64,6 @@ where
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
-
-    const ADDR: InternalAddress = InternalAddress::Ibc;
 
     fn validate_tx(
         &self,
@@ -309,8 +307,8 @@ mod tests {
     };
     use super::{get_dummy_header, *};
     use crate::core::ledger::storage::testing::TestWlStorage;
-    use crate::core::types::address::nam;
     use crate::core::types::address::testing::established_address_1;
+    use crate::core::types::address::{nam, InternalAddress};
     use crate::core::types::storage::Epoch;
     use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
     use crate::ibc::applications::transfer::coin::PrefixedCoin;

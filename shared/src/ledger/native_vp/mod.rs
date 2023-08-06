@@ -23,7 +23,7 @@ use crate::ledger::storage;
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
-use crate::types::address::{Address, InternalAddress};
+use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
@@ -38,9 +38,6 @@ pub type Error = storage_api::Error;
 
 /// A native VP module should implement its validation logic using this trait.
 pub trait NativeVp {
-    /// The address of this VP
-    const ADDR: InternalAddress;
-
     /// Error type for the methods' results.
     type Error: std::error::Error;
 

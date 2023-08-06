@@ -45,8 +45,6 @@ where
 {
     type Error = Error;
 
-    const ADDR: InternalAddress = InternalAddress::Multitoken;
-
     fn validate_tx(
         &self,
         _tx: &Tx,

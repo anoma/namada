@@ -637,11 +637,10 @@ pub fn init_network(
         })
     }
 
-    config.token.iter_mut().for_each(|(name, config)| {
+    config.token.iter_mut().for_each(|(_name, config)| {
         if config.address.is_none() {
             let address = address::gen_established_address("token");
             config.address = Some(address.to_string());
-            wallet.add_address(name.clone(), address, true);
         }
         if config.vp.is_none() {
             config.vp = Some("vp_token".to_string());
