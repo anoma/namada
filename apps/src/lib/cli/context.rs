@@ -1,7 +1,6 @@
 //! CLI input types can be used for command arguments
 
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
