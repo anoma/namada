@@ -3611,26 +3611,6 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Proposal id
-        pub proposal_id: Option<u64>,
-        /// The vote
-        pub vote: String,
-        /// PGF proposal
-        pub proposal_pgf: Option<String>,
-        /// ETH proposal
-        pub proposal_eth: Option<String>,
-        /// Flag if proposal vote should be run offline
-        pub offline: bool,
-        /// The proposal file path
-        pub proposal_data: Option<PathBuf>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: PathBuf,
-    }
-
     impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
             VoteProposal::<SdkTypes> {

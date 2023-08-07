@@ -69,6 +69,9 @@ router! {POS,
     ( "delegations" / [owner: Address] )
         -> HashSet<Address> = delegation_validators,
 
+    ( "delegations_by_epoch" / [owner: Address] / [epoch: opt Epoch] )
+        -> HashMap<Address, token::Amount> = delegations,
+
     ( "bond_deltas" / [source: Address] / [validator: Address] )
         -> HashMap<Epoch, token::Change> = bond_deltas,
 

@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use borsh::BorshSerialize;
+use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
@@ -17,7 +18,11 @@ use masp_primitives::transaction::components::transparent::fees::{
 use masp_primitives::transaction::components::Amount;
 use namada_core::types::address::{masp, masp_tx_key, Address};
 use namada_core::types::dec::Dec;
+use namada_core::types::governance::{ProposalVote, VoteType};
 use namada_core::types::token::MaspDenom;
+use namada_core::types::transaction::governance::{
+    ProposalType, VoteProposalData,
+};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
@@ -46,7 +51,7 @@ use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
-use crate::types::storage::Epoch;
+use crate::types::storage::{Epoch, Key};
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::{pos, InitAccount, TxType, UpdateVp};
 use crate::types::{storage, token};
@@ -1149,6 +1154,256 @@ pub async fn build_bond<
         false,
     )
     .await
+}
+
+/// Constructs and returns vote proposal or None if the vote is invalid
+///
+/// # Arguments
+///
+/// * `args` - vote proposal arguments
+pub fn construct_proposal_vote(
+    args: args::VoteProposal,
+) -> Option<ProposalVote> {
+    match args.vote.to_ascii_lowercase().as_str() {
+        "yay" => {
+            if let Some(pgf) = args.proposal_pgf {
+                let splits = pgf.trim().split_ascii_whitespace();
+                let address_iter = splits.clone().step_by(2);
+                let cap_iter = splits.into_iter().skip(1).step_by(2);
+                let mut set = HashSet::new();
+                for (address, cap) in
+                    address_iter.zip(cap_iter).map(|(addr, cap)| {
+                        (
+                            addr.parse()
+                                .expect("Failed to parse pgf council address"),
+                            cap.parse::<u64>()
+                                .expect("Failed to parse pgf spending cap"),
+                        )
+                    })
+                {
+                    set.insert((
+                        address,
+                        token::Amount::from_uint(cap, 0).unwrap(),
+                    ));
+                }
+
+                Some(ProposalVote::Yay(VoteType::PGFCouncil(set)))
+            } else if let Some(eth) = args.proposal_eth {
+                let mut splits = eth.trim().split_ascii_whitespace();
+                // Sign the message
+                let sigkey = splits
+                    .next()
+                    .expect("Expected signing key")
+                    .parse::<common::SecretKey>()
+                    .expect("Signing key parsing failed.");
+
+                let msg = splits.next().expect("Missing message to sign");
+
+                if splits.next().is_some() {
+                    eprintln!("Unexpected argument after message");
+                    None
+                } else {
+                    Some(ProposalVote::Yay(VoteType::ETHBridge(
+                        common::SigScheme::sign(
+                            &sigkey,
+                            HEXLOWER_PERMISSIVE
+                                .decode(msg.as_bytes())
+                                .expect("Error while decoding message"),
+                        ),
+                    )))
+                }
+            } else {
+                Some(ProposalVote::Yay(VoteType::Default))
+            }
+        }
+        "nay" => Some(ProposalVote::Nay),
+        _ => None,
+    }
+}
+
+/// Removes validators whose vote corresponds to that of the delegator (needless
+/// vote)
+async fn filter_delegations<C>(
+    client: &C,
+    delegations: HashSet<Address>,
+    proposal_id: u64,
+    delegator_vote: &ProposalVote,
+) -> HashSet<Address>
+where
+    C: crate::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    // Filter delegations by their validator's vote concurrently
+    let delegations = futures::future::join_all(
+        delegations
+            .into_iter()
+            // we cannot use `filter/filter_map` directly because we want to
+            // return a future
+            .map(|validator_address| async {
+                let vote_key = gov_storage::get_vote_proposal_key(
+                    proposal_id,
+                    validator_address.to_owned(),
+                    validator_address.to_owned(),
+                );
+
+                if let Some(validator_vote) =
+                    rpc::query_storage_value::<C, ProposalVote>(
+                        client, &vote_key,
+                    )
+                    .await
+                {
+                    if &validator_vote == delegator_vote {
+                        return None;
+                    }
+                }
+                Some(validator_address)
+            }),
+    )
+    .await;
+    // Take out the `None`s
+    delegations.into_iter().flatten().collect()
+}
+
+/// Builds a vote proposal transaction
+pub async fn build_vote_proposal<C, V>(
+    client: &C,
+    wallet: &mut Wallet<V>,
+    proposal_vote: ProposalVote,
+    signer: Address,
+    args: args::VoteProposal,
+) -> Result<(Tx, Option<Address>, common::PublicKey), Error>
+where
+    C: crate::ledger::queries::Client + Sync,
+    V: WalletUtils,
+{
+    let current_epoch = rpc::query_epoch(client).await;
+
+    let proposal_id = args.proposal_id.unwrap();
+    let proposal_start_epoch_key =
+        gov_storage::get_voting_start_epoch_key(proposal_id);
+    let proposal_start_epoch =
+        rpc::query_storage_value::<C, Epoch>(client, &proposal_start_epoch_key)
+            .await;
+
+    // Check vote type and memo
+    let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
+    let proposal_type: ProposalType =
+        rpc::query_storage_value::<C, ProposalType>(client, &proposal_type_key)
+            .await
+            .unwrap_or_else(|| {
+                panic!(
+                    "Didn't find type of proposal id {} in storage",
+                    proposal_id
+                )
+            });
+
+    if let ProposalVote::Yay(ref vote_type) = proposal_vote {
+        if &proposal_type != vote_type {
+            Err(Error::Other("Invalid vote type".to_string()))?;
+            // safe_exit(1);
+        } else if let VoteType::PGFCouncil(set) = vote_type {
+            // Check that addresses proposed as council are established and
+            // are present in storage
+            for (address, _) in set {
+                match address {
+                    Address::Established(_) => {
+                        let vp_key = Key::validity_predicate(address);
+                        if !rpc::query_has_storage_key::<C>(client, &vp_key)
+                            .await
+                        {
+                            Err(Error::Other(format!(
+                                "Proposed PGF council {} cannot be found \
+                                                     in storage",
+                                address
+                            )))?;
+                        }
+                    }
+                    _ => {
+                        Err(Error::Other(format!(
+                            "PGF council vote contains a non-established \
+                                 address: {}",
+                            address
+                        )))?;
+                    }
+                }
+            }
+        }
+    }
+
+    let epoch = proposal_start_epoch
+        .ok_or(format!(
+            "Proposal start epoch for proposal id {} is not definied.",
+            proposal_id
+        ))
+        .map_err(|e| Error::Other(e))?;
+
+    if current_epoch < epoch {
+        if !args.tx.force {
+            Err(Error::Other(format!(
+                "Current epoch {} is not greater than proposal start \
+                             epoch {}",
+                current_epoch, epoch
+            )))?;
+        }
+    }
+
+    let voter_address = signer.clone();
+    let mut delegations =
+        rpc::get_delegators_delegation(client, &voter_address).await;
+
+    // Optimize by quering if a vote from a validator
+    // is equal to ours. If so, we can avoid voting, but ONLY if we
+    // are  voting in the last third of the voting
+    // window, otherwise there's  the risk of the
+    // validator changing his vote and, effectively, invalidating
+    // the delgator's vote
+    if !args.tx.force
+        && is_safe_voting_window(client, proposal_id, epoch).await?
+    {
+        delegations = filter_delegations(
+            client,
+            delegations,
+            proposal_id,
+            &proposal_vote,
+        )
+        .await;
+    }
+
+    let tx_data = VoteProposalData {
+        id: proposal_id,
+        vote: proposal_vote,
+        voter: voter_address,
+        delegations: delegations.into_iter().collect(),
+    };
+
+    let chain_id = args.tx.chain_id.clone().unwrap();
+    let expiration = args.tx.expiration;
+    let data = tx_data
+        .try_to_vec()
+        .expect("Encoding proposal data shouldn't fail");
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+    let mut tx = Tx::new(TxType::Raw);
+    tx.header.chain_id = chain_id;
+    tx.header.expiration = expiration;
+    tx.set_data(Data::new(data));
+    tx.set_code(Code::from_hash(tx_code_hash));
+
+    let (tx, addr, pk) = prepare_tx(
+        client,
+        wallet,
+        &args.tx,
+        tx,
+        TxSigningKey::WalletAddress(signer.clone()),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await?;
+
+    Ok((tx, addr, pk))
 }
 
 /// Check if current epoch is in the last third of the voting period of the
