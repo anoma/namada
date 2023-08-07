@@ -244,8 +244,6 @@ impl Encode<6> for PendingTransfer {
     }
 }
 
-// TODO: test that encode for `PendingTransfer` and
-// `TransferToEthereumEvent` yield the same keccak hash
 impl Encode<6> for TransferToEthereumEvent {
     fn tokenize(&self) -> [Token; 6] {
         // TODO: This version should be looked up from storage
@@ -291,4 +289,31 @@ pub struct GasFee {
     pub amount: Amount,
     /// The account of fee payer.
     pub payer: Address,
+}
+
+#[cfg(test)]
+mod test_eth_bridge_pool_types {
+    use super::*;
+    use crate::types::address::testing::established_address_1;
+
+    /// Test that [`PendingTransfer`] and [`TransferToEthereum`]
+    /// have the same keccak hash, after being ABI encoded.
+    #[test]
+    fn test_same_keccak_hash() {
+        let pending = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                amount: 10u64.into(),
+                asset: EthAddress([0xaa; 20]),
+                recipient: EthAddress([0xbb; 20]),
+                sender: established_address_1(),
+            },
+            gas_fee: GasFee {
+                amount: 10u64.into(),
+                payer: established_address_1(),
+            },
+        };
+        let event: TransferToEthereumEvent = (&pending).into();
+        assert_eq!(pending.keccak256(), event.keccak256());
+    }
 }
