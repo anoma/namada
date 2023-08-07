@@ -15,7 +15,8 @@ use crate::e2e::helpers::epoch_sleep;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
+    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, CHRISTEL_KEY,
+    ETH, MASP, NAM,
 };
 use crate::e2e::setup::Who;
 use crate::integration::utils::CapturedOutput;
@@ -925,9 +926,10 @@ fn masp_pinned_txs() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Uncomment for better debugging
-    // let _log_guard =
-    // namada_apps::logging::init_from_env_or(tracing::level_filters::LevelFilter::INFO)?
-    // ; This address doesn't matter for tests. But an argument is required.
+    // let _log_guard = namada_apps::logging::init_from_env_or(
+    //     tracing::level_filters::LevelFilter::INFO,
+    // )?;
+    //This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
@@ -952,6 +954,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
+                "--wrapper-fee-payer",
+                CHRISTEL,
                 "--node",
                 validator_one_rpc,
             ],
@@ -969,7 +973,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1005,7 +1009,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 ETH,
                 "--amount",
                 "10",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1024,7 +1028,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1043,7 +1047,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1062,7 +1066,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1081,7 +1085,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "6",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1137,7 +1141,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-                "--signer",
+                "--wrapper-fee-payer",
                 CHRISTEL,
                 "--node",
                 validator_one_rpc,
@@ -1316,12 +1320,12 @@ fn wrapper_fee_unshielding() {
     );
 }
 
-#[test]
-#[should_panic(expected = "No faucet account found")]
 /// Test the optional disposable keypair for wrapper signing
 ///
 /// 1. Test that a tx requesting a disposable signer with a correct unshielding operation is succesful
 /// 2. Test that a tx requesting a disposable signer providing an insufficient unshielding is rejected
+#[test]
+#[should_panic(expected = "No faucet account found")]
 fn wrapper_disposable_signer() {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
