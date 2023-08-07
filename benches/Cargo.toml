@@ -14,7 +14,7 @@ version.workspace = true
 
 [lib]
 name = "namada_benches"
-path = "mod.rs"
+path = "lib.rs"
 
 [[bench]]
 name = "whitelisted_txs"
