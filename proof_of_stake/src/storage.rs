@@ -3,6 +3,7 @@
 use namada_core::ledger::storage_api::collections::{lazy_map, lazy_vec};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
+use namada_core::types::token;
 
 use super::ADDRESS;
 use crate::epoched::LAZY_MAP_SUB_KEY;
@@ -576,13 +577,66 @@ pub fn below_capacity_validator_set_key() -> Key {
 }
 
 /// Is storage key for the consensus validator set?
-pub fn is_consensus_validator_set_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == CONSENSUS_VALIDATOR_SET_STORAGE_KEY && lazy_map == LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
+pub fn is_consensus_validator_set_key(
+    key: &Key,
+) -> Option<(Epoch, token::Amount, Position)> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set_type),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(stake),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(position),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SETS_STORAGE_PREFIX
+            && set_type == CONSENSUS_VALIDATOR_SET_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
+        {
+            let epoch = Epoch::parse(epoch.clone()).ok()?;
+            let stake = token::Amount::parse(stake.clone()).ok()?;
+            let position = Position::parse(position.clone()).ok()?;
+            Some((epoch, stake, position))
+        }
+        _ => None,
+    }
 }
 
 /// Is storage key for the below-capacity validator set?
-pub fn is_below_capacity_validator_set_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(set_type), DbKeySeg::StringSeg(lazy_map), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(_epoch), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_amount), DbKeySeg::StringSeg(_), DbKeySeg::StringSeg(_position)] if addr == &ADDRESS && key == VALIDATOR_SETS_STORAGE_PREFIX && set_type == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY && lazy_map == LAZY_MAP_SUB_KEY && data == lazy_map::DATA_SUBKEY)
+pub fn is_below_capacity_validator_set_key(
+    key: &Key,
+) -> Option<(Epoch, token::Amount, Position)> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(set_type),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(stake),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(position),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SETS_STORAGE_PREFIX
+            && set_type == BELOW_CAPACITY_VALIDATOR_SET_STORAGE_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
+        {
+            let epoch = Epoch::parse(epoch.clone()).ok()?;
+            let ReverseOrdTokenAmount(stake) =
+                ReverseOrdTokenAmount::parse(stake.clone()).ok()?;
+            let position = Position::parse(position.clone()).ok()?;
+            Some((epoch, stake, position))
+        }
+        _ => None,
+    }
 }
 
 /// Storage key for total consensus stake
@@ -671,6 +725,30 @@ pub fn validator_set_positions_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&VALIDATOR_SET_POSITIONS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for validator set positions?
+pub fn is_validator_set_positions_key(key: &Key) -> Option<(Epoch, Address)> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(lazy_map),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::StringSeg(epoch),
+            DbKeySeg::StringSeg(_),
+            DbKeySeg::StringSeg(address),
+        ] if addr == &ADDRESS
+            && key == VALIDATOR_SET_POSITIONS_KEY
+            && lazy_map == LAZY_MAP_SUB_KEY
+            && data == lazy_map::DATA_SUBKEY =>
+        {
+            let epoch = Epoch::parse(epoch.clone()).ok()?;
+            let address = Address::parse(address.clone()).ok()?;
+            Some((epoch, address))
+        }
+        _ => None,
+    }
 }
 
 /// Storage key for consensus keys set.

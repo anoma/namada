@@ -1766,6 +1766,7 @@ pub mod cmds {
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
+        PrettyDump(PrettyDump),
     }
 
     impl SubCmd for Utils {
@@ -1785,6 +1786,7 @@ pub mod cmds {
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
+                let pretty_dump = SubCmd::parse(matches).map(Self::PrettyDump);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
@@ -1792,6 +1794,7 @@ pub mod cmds {
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
                     .or(epoch_sleep)
+                    .or(pretty_dump)
             })
         }
 
@@ -1805,6 +1808,7 @@ pub mod cmds {
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
+                .subcommand(PrettyDump::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2275,6 +2279,28 @@ pub mod cmds {
                      base directory.",
                 )
                 .add_args::<args::DefaultBaseDir>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PrettyDump(pub args::PrettyDump);
+
+    impl SubCmd for PrettyDump {
+        const CMD: &'static str = "pretty-dump";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PrettyDump::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Parse and pretty-print a DB dump produced from `ledger \
+                     dump-db`.",
+                )
+                .add_args::<args::PrettyDump>()
         }
     }
 }
@@ -4937,6 +4963,22 @@ pub mod args {
 
         fn def(app: App) -> App {
             app
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PrettyDump {
+        pub data_path: PathBuf,
+    }
+
+    impl Args for PrettyDump {
+        fn parse(matches: &ArgMatches) -> Self {
+            let data_path = DATA_PATH.parse(matches);
+            Self { data_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DATA_PATH.def().help("A path to the TOML DB dump file."))
         }
     }
 

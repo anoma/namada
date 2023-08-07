@@ -1,3 +1,5 @@
+mod db;
+
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -1203,4 +1205,8 @@ pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
             port: 0,
         },
     )
+}
+
+pub fn pretty_dump(args::PrettyDump { data_path }: args::PrettyDump) {
+    self::db::pretty_dump(data_path)
 }

@@ -562,6 +562,7 @@ impl<IO> CliApi<IO> {
                     let args = args.to_sdk(&mut ctx);
                     rpc::epoch_sleep(&client, args).await;
                 }
+                Utils::PrettyDump(PrettyDump(args)) => utils::pretty_dump(args),
             },
         }
         Ok(())
