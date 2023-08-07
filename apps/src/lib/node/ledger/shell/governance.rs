@@ -22,7 +22,7 @@ use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::{
     bond_amount, read_total_stake, read_validator_stake,
 };
-use namada::proto::{Data, Code};
+use namada::proto::{Code, Data};
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
 
@@ -68,11 +68,8 @@ where
             id,
             proposal_end_epoch,
         )?;
-        let proposal_result = compute_proposal_result(
-            votes,
-            total_voting_power.into(),
-            tally_type,
-        );
+        let proposal_result =
+            compute_proposal_result(votes, total_voting_power, tally_type);
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
@@ -228,7 +225,7 @@ where
             let vote_data = vote.data.clone();
 
             let validator_stake =
-                get_validator_stake_at(storage, params, &validator, epoch);
+                read_total_stake(storage, params, epoch).unwrap_or_default();
 
             validators_vote.insert(validator.clone(), vote_data.into());
             validator_voting_power.insert(validator, validator_stake.into());
@@ -237,9 +234,12 @@ where
             let delegator = vote.delegator.clone();
             let vote_data = vote.data.clone();
 
-            let delegator_stake = get_delegator_bond_at(
-                storage, params, &validator, &delegator, epoch,
-            );
+            let bond_id = BondId {
+                source: delegator.clone(),
+                validator: validator.clone(),
+            };
+            let (_, delegator_stake) =
+                bond_amount(storage, &bond_id, epoch).unwrap_or_default();
 
             delegators_vote.insert(delegator.clone(), vote_data.into());
             delegator_voting_power
@@ -255,40 +255,6 @@ where
         delegators_vote,
         delegator_voting_power,
     })
-}
-
-fn get_validator_stake_at<S>(
-    storage: &S,
-    pos_params: &PosParams,
-    validator: &Address,
-    epoch: Epoch,
-) -> token::Amount
-where
-    S: StorageRead,
-{
-    match read_validator_stake(storage, pos_params, validator, epoch) {
-        Ok(stake) => stake.unwrap_or_default(),
-        Err(_) => token::Amount::default(),
-    }
-}
-
-fn get_delegator_bond_at<S>(
-    storage: &S,
-    pos_params: &PosParams,
-    validator: &Address,
-    delegator: &Address,
-    epoch: Epoch,
-) -> token::Amount
-where
-    S: StorageRead,
-{
-    let bond_id = BondId {
-        source: delegator.clone(),
-        validator: validator.clone(),
-    };
-    let (_, bound_amount) = bond_amount(storage, &bond_id, epoch).unwrap_or_default();
-
-    bound_amount
 }
 
 fn execute_default_proposal<D, H>(
@@ -413,8 +379,4 @@ where
     let write_result =
         storage.write(&continous_payments_key, continous_payments);
     Ok(write_result.is_ok())
-}
-
-fn execute_eth_proposal(_id: u64) -> Result<bool> {
-    Ok(false)
 }

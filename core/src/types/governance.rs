@@ -15,10 +15,11 @@ use crate::types::storage::Epoch;
 use crate::types::token::{
     Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
 };
-use crate::types::uint::Uint;
+
+use super::token;
 
 /// Type alias for vote power
-pub type VotePower = Uint;
+pub type VotePower = token::Amount;
 
 /// A PGF cocuncil composed of the address and spending cap
 pub type Council = (Address, Amount);
@@ -146,7 +147,7 @@ impl Display for ProposalResult {
         let percentage = DenominatedAmount {
             amount: Amount::from_uint(
                 self.total_yay_power
-                    .fixed_precision_div(&self.total_voting_power, 4)
+                    .checked_div(self.total_voting_power)
                     .unwrap_or_default(),
                 0,
             )

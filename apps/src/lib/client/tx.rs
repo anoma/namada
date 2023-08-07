@@ -9,8 +9,12 @@ use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
-use namada::core::ledger::governance::cli::onchain::{PgfFundingProposal, PgfStewardProposal, DefaultProposal};
+use namada::core::ledger::governance::cli::offline::{OfflineSignedProposal, OfflineVote};
+use namada::core::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
+};
 use namada::core::ledger::governance::storage::keys as governance_storage;
+use namada::core::ledger::governance::storage::vote::StorageProposalVote;
 use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::find_pk;
@@ -21,12 +25,14 @@ use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
+    OfflineProposal, Proposal, ProposalVote, VoteType,
 };
 use namada::types::key::{self, *};
 use namada::types::storage::{Epoch, Key};
 use namada::types::token;
-use namada::types::transaction::governance::{VoteProposalData, InitProposalData};
+use namada::types::transaction::governance::{
+    InitProposalData, VoteProposalData,
+};
 use namada::types::transaction::pos::InitValidator;
 use namada::types::tx::TxBuilder;
 
@@ -751,7 +757,7 @@ where
     C::Error: std::fmt::Display,
 {
     let current_epoch = rpc::query_and_print_epoch(client).await;
-    let governance_parameters = rpc::get_governance_parameters(client).await;
+    let governance_parameters = rpc::query_governance_parameters(client).await;
 
     let (tx_builder, signing_data) = if args.is_offline {
         let proposal = namada::core::ledger::governance::cli::offline::OfflineProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?.validate(current_epoch)
@@ -768,17 +774,27 @@ where
         )
         .await?;
 
-        let signed_offline_proposal = proposal.sign(args.tx.signing_keys, &signing_data.account_public_keys_map);
-        let output_file_path = signed_offline_proposal.serialize().map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?;
-        
+        let signed_offline_proposal = proposal
+            .sign(args.tx.signing_keys, &signing_data.account_public_keys_map);
+        let output_file_path =
+            signed_offline_proposal.serialize().map_err(|e| {
+                tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+            })?;
+
         println!("Proposal serialized to: {}", output_file_path);
-        return Ok(())
+        return Ok(());
     } else if args.is_pgf_funding {
-        let proposal = PgfFundingProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?.validate(&governance_parameters, current_epoch)
-        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let proposal =
+            PgfFundingProposal::try_from(args.proposal_data.as_ref())
+                .map_err(|e| {
+                    tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+                })?
+                .validate(&governance_parameters, current_epoch)
+                .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
-        let default_signer =
-            signing::signer_from_address(Some(proposal.proposal.author.clone()));
+        let default_signer = signing::signer_from_address(Some(
+            proposal.proposal.author.clone(),
+        ));
         let signing_data = signing::aux_signing_data(
             client,
             &mut ctx.wallet,
@@ -788,17 +804,44 @@ where
         )
         .await?;
 
-        submit_reveal_aux(client, &mut ctx, args.tx.clone(), &proposal.proposal.author).await?;
+        submit_reveal_aux(
+            client,
+            &mut ctx,
+            args.tx.clone(),
+            &proposal.proposal.author,
+        )
+        .await?;
 
-        (tx::build_pgf_funding_proposal(client, args.clone(), proposal, &signing_data.gas_payer).await?, signing_data)
+        (
+            tx::build_pgf_funding_proposal(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
     } else if args.is_pgf_stewards {
-        let proposal = PgfStewardProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?;
-        let author_balane = rpc::get_token_balance(client, &ctx.native_token,
-            &proposal.proposal.author).await;
-        let proposal  = proposal.validate(&governance_parameters, current_epoch, author_balane).map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
-        
-        let default_signer =
-            signing::signer_from_address(Some(proposal.proposal.author.clone()));
+        let proposal = PgfStewardProposal::try_from(
+            args.proposal_data.as_ref(),
+        )
+        .map_err(|e| {
+            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+        })?;
+        let author_balane = rpc::get_token_balance(
+            client,
+            &ctx.native_token,
+            &proposal.proposal.author,
+        )
+        .await;
+        let proposal = proposal
+            .validate(&governance_parameters, current_epoch, author_balane)
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+
+        let default_signer = signing::signer_from_address(Some(
+            proposal.proposal.author.clone(),
+        ));
         let signing_data = signing::aux_signing_data(
             client,
             &mut ctx.wallet,
@@ -808,17 +851,42 @@ where
         )
         .await?;
 
-        submit_reveal_aux(client, &mut ctx, args.tx.clone(), &proposal.proposal.author).await?;
+        submit_reveal_aux(
+            client,
+            &mut ctx,
+            args.tx.clone(),
+            &proposal.proposal.author,
+        )
+        .await?;
 
-        (tx::build_pgf_stewards_proposal(client, args.clone(), proposal, &signing_data.gas_payer).await?, signing_data)
+        (
+            tx::build_pgf_stewards_proposal(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
     } else {
-        let proposal = DefaultProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?;
-        let author_balane = rpc::get_token_balance(client, &ctx.native_token,
-            &proposal.proposal.author).await;
-        let proposal  = proposal.validate(&governance_parameters, current_epoch, author_balane).map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
+            .map_err(|e| {
+            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+        })?;
+        let author_balane = rpc::get_token_balance(
+            client,
+            &ctx.native_token,
+            &proposal.proposal.author,
+        )
+        .await;
+        let proposal = proposal
+            .validate(&governance_parameters, current_epoch, author_balane)
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
-        let default_signer =
-            signing::signer_from_address(Some(proposal.proposal.author.clone()));
+        let default_signer = signing::signer_from_address(Some(
+            proposal.proposal.author.clone(),
+        ));
         let signing_data = signing::aux_signing_data(
             client,
             &mut ctx.wallet,
@@ -828,9 +896,24 @@ where
         )
         .await?;
 
-        submit_reveal_aux(client, &mut ctx, args.tx.clone(), &proposal.proposal.author).await?;
+        submit_reveal_aux(
+            client,
+            &mut ctx,
+            args.tx.clone(),
+            &proposal.proposal.author,
+        )
+        .await?;
 
-        (tx::build_default_proposal(client, args.clone(), proposal, &signing_data.gas_payer).await?, signing_data)
+        (
+            tx::build_default_proposal(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
     };
 
     if args.tx.dump_tx {
@@ -847,201 +930,6 @@ where
     }
 
     Ok(())
-
-    // let file = File::open(&args.proposal_data).expect("File must exist.");
-    // let proposal: Proposal =
-    //     serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    // let signer = WalletAddress::new(proposal.clone().author.to_string());
-    // let current_epoch = rpc::query_and_print_epoch(client).await;
-
-    // let governance_parameters = rpc::get_governance_parameters(client).await;
-    // if proposal.voting_start_epoch <= current_epoch
-    //     || proposal.voting_start_epoch.0
-    //         % governance_parameters.min_proposal_period
-    //         != 0
-    // {
-    //     println!("{}", proposal.voting_start_epoch <= current_epoch);
-    //     println!(
-    //         "{}",
-    //         proposal.voting_start_epoch.0
-    //             % governance_parameters.min_proposal_period
-    //             == 0
-    //     );
-    //     eprintln!(
-    //         "Invalid proposal start epoch: {} must be greater than current \
-    //          epoch {} and a multiple of {}",
-    //         proposal.voting_start_epoch,
-    //         current_epoch,
-    //         governance_parameters.min_proposal_period
-    //     );
-    //     if !args.tx.force {
-    //         safe_exit(1)
-    //     }
-    // } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-    //     || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-    //         < governance_parameters.min_proposal_period
-    //     || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-    //         > governance_parameters.max_proposal_period
-    //     || proposal.voting_end_epoch.0 % 3 != 0
-    // {
-    //     eprintln!(
-    //         "Invalid proposal end epoch: difference between proposal start \
-    //          and end epoch must be at least {} and at max {} and end epoch \
-    //          must be a multiple of {}",
-    //         governance_parameters.min_proposal_period,
-    //         governance_parameters.max_proposal_period,
-    //         governance_parameters.min_proposal_period
-    //     );
-    //     if !args.tx.force {
-    //         safe_exit(1)
-    //     }
-    // } else if proposal.grace_epoch <= proposal.voting_end_epoch
-    //     || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-    //         < governance_parameters.min_proposal_grace_epochs
-    // {
-    //     eprintln!(
-    //         "Invalid proposal grace epoch: difference between proposal grace
-    // \          and end epoch must be at least {}",
-    //         governance_parameters.min_proposal_grace_epochs
-    //     );
-    //     if !args.tx.force {
-    //         safe_exit(1)
-    //     }
-    // }
-
-    // if args.offline {
-    //     let signer = ctx.get(&signer);
-    //     let key = find_pk(client, &mut ctx.wallet, &signer, None).await?;
-    //     let signing_key =
-    //         signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
-    //     let offline_proposal =
-    //         OfflineProposal::new(proposal, signer, &signing_key);
-    //     let proposal_filename = args
-    //         .proposal_data
-    //         .parent()
-    //         .expect("No parent found")
-    //         .join("proposal");
-    //     let out = File::create(&proposal_filename).unwrap();
-    //     match serde_json::to_writer_pretty(out, &offline_proposal) {
-    //         Ok(_) => {
-    //             println!(
-    //                 "Proposal created: {}.",
-    //                 proposal_filename.to_string_lossy()
-    //             );
-    //         }
-    //         Err(e) => {
-    //             eprintln!("Error while creating proposal file: {}.", e);
-    //             safe_exit(1)
-    //         }
-    //     }
-    //     Ok(())
-    // } else {
-    //     let signer = ctx.get(&signer);
-    //     let tx_data = proposal.clone().try_into();
-    //     let (mut init_proposal_data, init_proposal_content,
-    // init_proposal_code) =         if let Ok(data) = tx_data {
-    //             data
-    //         } else {
-    //             eprintln!("Invalid data for init proposal transaction.");
-    //             safe_exit(1)
-    //         };
-
-    //     let balance =
-    //         rpc::get_token_balance(client, &ctx.native_token,
-    // &proposal.author)             .await;
-    //     if balance
-    //         < token::Amount::from_uint(
-    //             governance_parameters.min_proposal_fund,
-    //             0,
-    //         )
-    //         .unwrap()
-    //     {
-    //         eprintln!(
-    //             "Address {} doesn't have enough funds.",
-    //             &proposal.author
-    //         );
-    //         safe_exit(1);
-    //     }
-
-    //     if init_proposal_content.len()
-    //         > governance_parameters.max_proposal_content_size as usize
-    //     {
-    //         eprintln!("Proposal content size too big.",);
-    //         safe_exit(1);
-    //     }
-
-    //     let tx_code_hash = query_wasm_code_hash(client,
-    // args::TX_INIT_PROPOSAL)         .await
-    //         .unwrap();
-
-    //     let default_signer =
-    // signing::signer_from_address(Some(signer.clone()));
-    //     let signing_data = signing::aux_signing_data(
-    //         client,
-    //         &mut ctx.wallet,
-    //         &args.tx,
-    //         &signer,
-    //         default_signer,
-    //     )
-    //     .await?;
-
-    //     let chain_id = args.tx.chain_id.clone().unwrap();
-    //     let tx_builder = TxBuilder::new(chain_id, args.tx.expiration);
-
-    //     // Put any proposal content into an extra section
-    //     let (tx_builder, extra_section_hash) =
-    //         tx_builder.add_extra_section(init_proposal_content);
-    //     init_proposal_data.content = extra_section_hash;
-
-    //     // Put any proposal code into an extra section
-    //     let tx_builder = if let Some(init_proposal_code) = init_proposal_code
-    // {         let (tx_builder, extra_section_hash) =
-    //             tx_builder.add_extra_section(init_proposal_code);
-    //         init_proposal_data.r#type =
-    //             ProposalType::Default(Some(extra_section_hash));
-    //         tx_builder
-    //     } else {
-    //         tx_builder
-    //     };
-
-    //     let tx_builder = tx_builder
-    //         .add_code_from_hash(tx_code_hash)
-    //         .add_data(init_proposal_data);
-
-    //     submit_reveal_aux(client, &mut ctx, args.tx.clone(), &signer).await?;
-
-    //     let tx_builder = tx::prepare_tx(
-    //         client,
-    //         &args.tx,
-    //         tx_builder,
-    //         signing_data.gas_payer.clone(),
-    //         #[cfg(not(feature = "mainnet"))]
-    //         false,
-    //     )
-    //     .await?;
-
-    //     if args.tx.dump_tx {
-    //         tx::dump_tx(&args.tx, tx_builder);
-    //     } else {
-    //         let tx_builder = signing::sign_tx(
-    //             &mut ctx.wallet,
-    //             &args.tx,
-    //             tx_builder,
-    //             signing_data,
-    //         )?;
-
-    //         tx::process_tx(
-    //             client,
-    //             &mut ctx.wallet,
-    //             &args.tx,
-    //             tx_builder.build(),
-    //         )
-    //         .await?;
-    //     }
-
-    //     Ok(())
-    // }
 }
 
 pub async fn submit_vote_proposal<C>(
@@ -1053,6 +941,64 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
+    let current_epoch = rpc::query_and_print_epoch(client).await;
+
+    let default_signer = signing::signer_from_address(Some(args.voter.clone()));
+    let signing_data = signing::aux_signing_data(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        &args.voter,
+        default_signer.clone(),
+    )
+    .await?;
+
+    let tx_builder = if args.is_offline {
+        let proposal_vote = namada::core::ledger::governance::cli::onchain::ProposalVote::try_from(args.vote)
+            .map_err(|_| tx::Error::InvalidProposalVote)?;
+
+        let proposal = OfflineSignedProposal::try_from(args.proposal_data.unwrap().as_ref())
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?
+            .validate(
+                &signing_data.account_public_keys_map,
+                signing_data.threshold,
+            ).map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let delegations = rpc::get_delegators_delegation_at(
+            client,
+            &args.voter,
+            proposal.proposal.tally_epoch,
+        )
+        .await.keys().cloned().collect::<Vec<Address>>();
+
+        let offline_vote = OfflineVote::new(
+            &proposal,
+            proposal_vote,
+            args.voter.clone(),
+            delegations
+        );
+
+        let offline_signed_vote = offline_vote.sign(args.tx.signing_keys, &signing_data.account_public_keys_map);
+        let output_file_path = offline_signed_vote.serialize().expect("Should be able to serialize the offline proposal");
+
+        println!("Proposal vote serialized to: {}", output_file_path);
+        return Ok(())
+    } else {
+        tx::build_vote_proposal(client, args.clone(), current_epoch, &signing_data.gas_payer).await?
+    };
+
+    if args.tx.dump_tx {
+        tx::dump_tx(&args.tx, tx_builder);
+    } else {
+        let tx_builder = signing::sign_tx(
+            &mut ctx.wallet,
+            &args.tx,
+            tx_builder,
+            signing_data,
+        )?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
+            .await?;
+    }
+
     Ok(())
 }
 

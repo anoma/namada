@@ -9,6 +9,8 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::governance::parameters::GovernanceParameters;
+use namada_core::ledger::governance::storage::proposal::StorageProposal;
+use namada_core::ledger::governance::utils::Vote;
 use namada_core::ledger::storage::LastBlock;
 #[cfg(not(feature = "mainnet"))]
 use namada_core::ledger::testnet_pow;
@@ -36,7 +38,6 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
-use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
@@ -700,6 +701,31 @@ pub async fn get_delegators_delegation<
     )
 }
 
+/// Get the delegator's delegation at some epoh
+pub async fn get_delegators_delegation_at<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    address: &Address,
+    epoch: Epoch
+) -> HashMap<Address, token::Amount> {
+    unwrap_client_response::<C, _>(
+        RPC.vp().pos().delegations(client, address, &Some(epoch)).await,
+    )
+}
+
+/// Query proposal by Id
+pub async fn query_proposal_by_id<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    proposal_id: u64,
+) -> Option<StorageProposal> {
+    unwrap_client_response::<C, _>(
+        RPC.vp().gov().proposal_id(client, &proposal_id).await,
+    )
+}
+
 /// Query and return validator's commission rate and max commission rate change
 /// per epoch
 pub async fn query_commission_rate<C: crate::ledger::queries::Client + Sync>(
@@ -836,7 +862,7 @@ pub async fn query_unbond_with_slashing<
 }
 
 /// Get the givernance parameters
-pub async fn get_governance_parameters<
+pub async fn query_governance_parameters<
     C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
@@ -881,6 +907,18 @@ pub async fn get_governance_parameters<
     }
 }
 
+/// Get the givernance parameters
+pub async fn query_proposal_votes<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    proposal_id: u64
+) -> Vec<Vote> {
+    unwrap_client_response::<C, Vec<Vote>>(
+        RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
+    )
+}
+
 /// Get the bond amount at the given epoch
 pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -911,7 +949,6 @@ pub async fn bonds_and_unbonds<C: crate::ledger::queries::Client + Sync>(
             .await,
     )
 }
-
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs, enriched with extra information calculated from
 /// the data.

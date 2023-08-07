@@ -3769,40 +3769,19 @@ pub mod args {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
-        /// Common tx arguments
-        pub tx: Tx<C>,
-        /// Proposal id
-        pub proposal_id: Option<u64>,
-        /// The vote
-        pub vote: String,
-        /// The address of the voter
-        pub voter_address: C::Address,
-        /// PGF proposal
-        pub proposal_pgf: Option<String>,
-        /// ETH proposal
-        pub proposal_eth: Option<String>,
-        /// Flag if proposal vote should be run offline
-        pub offline: bool,
-        /// The proposal file path
-        pub proposal_data: Option<PathBuf>,
-        /// Path to the TX WASM code file
-        pub tx_code_path: PathBuf,
-    }
-
     impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
             VoteProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
-                voter_address: ctx.get(&self.voter_address),
-                offline: self.offline,
-                proposal_data: self.proposal_data,
+                voter: ctx.get(&self.voter),
+                is_offline: self.is_offline,
+                proposal_data: self.proposal_data.map(|path| {
+                    std::fs::read(path)
+                        .expect("Should be able to read the file.")
+                }),
                 tx_code_path: self.tx_code_path.to_path_buf(),
-                proposal_pgf: self.proposal_pgf,
-                proposal_eth: self.proposal_eth,
             }
         }
     }
@@ -3814,8 +3793,8 @@ pub mod args {
             let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
             let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
-            let voter_address = ADDRESS.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
+            let voter = ADDRESS.parse(matches);
+            let is_offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
@@ -3823,10 +3802,8 @@ pub mod args {
                 tx,
                 proposal_id,
                 vote,
-                proposal_pgf,
-                proposal_eth,
-                offline,
-                voter_address,
+                is_offline,
+                voter,
                 proposal_data,
                 tx_code_path,
             }
@@ -3846,29 +3823,7 @@ pub mod args {
                 .arg(
                     PROPOSAL_VOTE
                         .def()
-                        .help("The vote for the proposal. Either yay or nay"),
-                )
-                .arg(
-                    PROPOSAL_VOTE_PGF_OPT
-                        .def()
-                        .help(
-                            "The list of proposed councils and spending \
-                             caps:\n$council1 $cap1 $council2 $cap2 ... \
-                             (council is bech32m encoded address, cap is \
-                             expressed in microNAM",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_ETH_OPT.name),
-                )
-                .arg(
-                    PROPOSAL_VOTE_ETH_OPT
-                        .def()
-                        .help(
-                            "The signing key and message bytes (hex encoded) \
-                             to be signed: $signing_key $message",
-                        )
-                        .requires(PROPOSAL_ID.name)
-                        .conflicts_with(PROPOSAL_VOTE_PGF_OPT.name),
+                        .help("The vote for the proposal. Either yay or nay."),
                 )
                 .arg(
                     PROPOSAL_OFFLINE
@@ -3883,6 +3838,7 @@ pub mod args {
                             "The data path file (json) that describes the \
                              proposal.",
                         )
+                        .requires(PROPOSAL_OFFLINE.name)
                         .conflicts_with(PROPOSAL_ID.name),
                 )
                 .arg(ADDRESS.def().help("The address of the voter."))
@@ -3975,7 +3931,15 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
+                .arg(
+                    PROPOSAL_ID_OPT
+                        .def()
+                        .help("The proposal identifier.")
+                        .conflicts_with_all([
+                            PROPOSAL_OFFLINE.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
                 .arg(
                     PROPOSAL_OFFLINE
                         .def()
@@ -3983,16 +3947,18 @@ pub mod args {
                             "Flag if the proposal result should run on \
                              offline data.",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .conflicts_with(PROPOSAL_ID.name)
+                        .requires(DATA_PATH_OPT.name),
                 )
                 .arg(
                     DATA_PATH_OPT
                         .def()
                         .help(
                             "The path to the folder containing the proposal \
-                             json and votes",
+                             and votes files in json format.",
                         )
-                        .conflicts_with(PROPOSAL_ID.name),
+                        .conflicts_with(PROPOSAL_ID.name)
+                        .requires(PROPOSAL_OFFLINE.name),
                 )
         }
     }
@@ -4113,9 +4079,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>().arg(
-                BALANCE_OWNER
+                OWNER
                     .def()
-                    .help("The substorage space address to query."),
+                    .help("The substorage space address to query.")
+                    .required(true),
             )
         }
     }

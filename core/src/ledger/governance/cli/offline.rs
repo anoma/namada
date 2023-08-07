@@ -83,13 +83,22 @@ impl TryFrom<&[u8]> for OfflineProposal {
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-/// The offline proposal structure
+/// The signed offline proposal structure
 pub struct OfflineSignedProposal {
     /// The proposal content
     pub proposal: OfflineProposal,
     /// The signatures over proposal data
     pub signatures: BTreeSet<SignatureIndex>,
 }
+
+impl TryFrom<&[u8]> for OfflineSignedProposal {
+    type Error = serde_json::Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        serde_json::from_slice(value)
+    }
+}
+
 
 impl OfflineSignedProposal {
     /// Serialize the proposal to file. Returns the filename if successful.
@@ -107,7 +116,7 @@ impl OfflineSignedProposal {
     fn check_signature(
         &self,
         account_public_keys_map: &AccountPublicKeysMap,
-        threshold: u64,
+        threshold: u8,
     ) -> bool {
         let proposal_hash = self.proposal.hash();
         if self.signatures.len() < threshold as usize {
@@ -125,16 +134,16 @@ impl OfflineSignedProposal {
 
     /// Validate an offline proposal
     pub fn validate(
-        &self,
+        self,
         account_public_keys_map: &AccountPublicKeysMap,
-        threshold: u64,
-    ) -> Result<(), ProposalValidation> {
+        threshold: u8,
+    ) -> Result<Self, ProposalValidation> {
         let valid_signature =
             self.check_signature(account_public_keys_map, threshold);
         if !valid_signature {
             Err(ProposalValidation::OkNoSignature)
         } else {
-            Ok(())
+            Ok(self)
         }
     }
 }
@@ -163,33 +172,35 @@ impl OfflineVote {
         vote: ProposalVote,
         address: Address,
         delegations: Vec<Address>,
-        signing_key: Vec<common::SecretKey>,
-        account_public_keys_map: &AccountPublicKeysMap
     ) -> Self {
         let proposal_hash = proposal.proposal.hash();
-        let proposal_hash_data = proposal_hash
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-        let proposal_vote_data = vote
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = delegations
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-
-        let vote_hash = Hash::sha256(
-            [proposal_hash_data, proposal_vote_data, delegations_hash].concat(),
-        );
-
-        let signatures_index =
-            compute_signatures_index(&signing_key, account_public_keys_map, &vote_hash);
 
         Self {
             proposal_hash,
             vote,
             delegations,
-            signatures: signatures_index,
+            signatures: BTreeSet::default(),
             address,
+        }
+    }
+
+    /// Sign the offline vote
+    pub fn sign(self, keypairs: Vec<common::SecretKey>, account_public_keys_map: &AccountPublicKeysMap) -> Self {
+        let proposal_vote_data = self.vote.try_to_vec().expect("Conversion to bytes shouldn't fail.");
+        let delegations_hash = self.delegations
+            .try_to_vec()
+            .expect("Conversion to bytes shouldn't fail.");
+
+        let vote_hash = Hash::sha256(
+            [self.proposal_hash.to_vec(), proposal_vote_data, delegations_hash].concat(),
+        );
+
+        let signatures =
+            compute_signatures_index(&keypairs, account_public_keys_map, &vote_hash);
+
+        Self {
+            signatures,
+            ..self
         }
     }
 
@@ -223,7 +234,7 @@ impl OfflineVote {
     pub fn check_signature(
         &self,
         account_public_keys_map: &AccountPublicKeysMap,
-        threshold: u64,
+        threshold: u8,
     ) -> bool {
         if self.signatures.len() < threshold as usize {
             return false;
@@ -240,16 +251,13 @@ impl OfflineVote {
     }
 
     /// Serialize the proposal to file. Returns the filename if successful.
-    pub fn serialize(&self, path: &Path) -> Option<String> {
-        let vote_filename = format!("offline_vote_{}.json", self.proposal_hash);
-        let proposal_file_path =
-            path.parent().expect("No parent found").join(vote_filename);
+    pub fn serialize(&self) -> Result<String, serde_json::Error> {
+        let vote_filename = format!("offline_vote_{}_{}.json", self.proposal_hash, self.address);
 
-        let out = File::create(&proposal_file_path).unwrap();
-        match serde_json::to_writer_pretty(out, self) {
-            Ok(_) => Some(proposal_file_path.to_string_lossy().into_owned()),
-            Err(_) => None,
-        }
+        let out = File::create(&vote_filename).unwrap();
+        serde_json::to_writer_pretty(out ,self)?;
+
+        Ok(vote_filename)
     }
 }
 
@@ -279,8 +287,8 @@ fn compute_total_valid_signatures(
     signatures: &BTreeSet<SignatureIndex>,
     account_public_keys_map: &AccountPublicKeysMap,
     hashed_data: &Hash,
-) -> u64 {
-    signatures.iter().fold(0_u64, |acc, signature_index| {
+) -> u8 {
+    signatures.iter().fold(0_u8, |acc, signature_index| {
         let public_key = account_public_keys_map
             .get_public_key_from_index(signature_index.index);
         if let Some(pk) = public_key {

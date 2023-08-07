@@ -10,10 +10,9 @@ use crate::ledger::governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
 };
 
+use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
-use crate::types::governance::{
-    self, Proposal, ProposalError, ProposalVote, VoteType,
-};
+use crate::types::governance::ProposalError;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
 
@@ -58,7 +57,7 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: ProposalVote,
+    pub vote: StorageProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addreses
@@ -91,7 +90,7 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
             .cloned()
             .map(|steward| AddRemove::<Address>::try_from(steward).unwrap())
             .collect::<HashSet<AddRemove<Address>>>();
-        
+
         Ok(InitProposalData {
             id: value.proposal.id,
             content: Hash::default(),

@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::File;
+use std::fs::{File, read_dir};
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::path::PathBuf;
@@ -15,9 +15,14 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::ledger::events::Event;
+use namada::core::ledger::governance::cli::offline::{read_offline_files, find_offline_proposal};
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::governance::storage::keys as governance_storage;
+use namada::core::ledger::governance::storage::proposal::StorageProposal;
+use namada::core::ledger::governance::utils::{
+    compute_proposal_result, ProposalVotes, TallyVote, Vote,
+};
+use namada::ledger::events::Event;
 use namada::ledger::masp::{
     Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext,
     ShieldedUtils,
@@ -570,7 +575,43 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     args: args::QueryProposal,
 ) {
-    
+    let current_epoch = query_and_print_epoch(client).await;
+
+    if let Some(id) = args.proposal_id {
+        let proposal = query_proposal_by_id(client, id).await;
+        if let Some(proposal) = proposal {
+            println!("{}", proposal.to_string_with_status(current_epoch));
+        } else {
+            eprintln!("No proposal found with id: {}", id);
+        }
+    } else {
+        let last_proposal_id_key = governance_storage::get_counter_key();
+        let last_proposal_id =
+            query_storage_value::<C, u64>(client, &last_proposal_id_key)
+                .await
+                .unwrap();
+
+        let from_id = if last_proposal_id > 10 {
+            last_proposal_id - 10
+        } else {
+            0
+        };
+
+        for id in from_id..last_proposal_id {
+            let proposal = query_proposal_by_id(client, id)
+                .await
+                .expect("Proposal should be written to storage.");
+            println!("{}", proposal);
+        }
+    }
+}
+
+/// Query proposal by Id
+pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    proposal_id: u64,
+) -> Option<StorageProposal> {
+    namada::ledger::rpc::query_proposal_by_id(client, proposal_id).await
 }
 
 /// Query token shielded balance(s)
@@ -851,7 +892,49 @@ pub async fn query_proposal_result<
     client: &C,
     args: args::QueryProposalResult,
 ) {
-    
+    if args.proposal_id.is_some() {
+        let proposal_id =
+            args.proposal_id.expect("Proposal id should be defined.");
+        let proposal = if let Some(proposal) =
+            query_proposal_by_id(client, proposal_id).await
+        {
+            proposal
+        } else {
+            eprintln!("Proposal {} not found.", proposal_id);
+            return;
+        };
+
+        let tally_type = proposal.get_tally_type();
+        let total_voting_power =
+            get_total_staked_tokens(client, proposal.voting_end_epoch).await;
+
+        let votes = compute_proposal_votes(
+            client,
+            proposal_id,
+            proposal.voting_end_epoch,
+        )
+        .await;
+
+        let proposal_result =
+            compute_proposal_result(votes, total_voting_power, tally_type);
+
+        println!("Proposal Id: {} ", proposal_id);
+        println!("{:4}{}", "", proposal_result);
+    } else {
+        let proposal_folder = args.proposal_folder.expect(
+            "The argument --proposal-folder is required with --offline.",
+        );
+        let data_directory = read_dir(&proposal_folder)
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Should be able to read {} directory.",
+                    proposal_folder.to_string_lossy()
+                )
+            });
+        let files = read_offline_files(data_directory);
+        let proposal_path = find_offline_proposal(&files);
+
+    }
 }
 
 pub async fn query_account<C: namada::ledger::queries::Client + Sync>(
@@ -877,8 +960,8 @@ pub async fn query_protocol_parameters<
     client: &C,
     _args: args::QueryProtocolParameters,
 ) {
-    let gov_parameters = get_governance_parameters(client).await;
-    println!("Governance Parameters\n {:4}", gov_parameters);
+    let governance_parameters = query_governance_parameters(client).await;
+    println!("Governance Parameters\n {:4}", governance_parameters);
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
@@ -913,10 +996,7 @@ pub async fn query_protocol_parameters<
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
     println!("PoS parameters");
-    let key = pos::params_key();
-    let pos_params = query_storage_value::<C, PosParams>(client, &key)
-        .await
-        .expect("Parameter should be defined.");
+    let pos_params = query_pos_parameters(client).await;
     println!(
         "{:4}Block proposer reward: {}",
         "", pos_params.block_proposer_reward
@@ -964,6 +1044,19 @@ pub async fn query_unbond_with_slashing<
         RPC.vp()
             .pos()
             .unbond_with_slashing(client, source, validator)
+            .await,
+    )
+}
+
+pub async fn query_pos_parameters<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+) -> PosParams {
+    unwrap_client_response::<C, PosParams>(
+        RPC.vp()
+            .pos()
+            .pos_params(client)
             .await,
     )
 }
@@ -1816,12 +1909,23 @@ pub async fn get_delegators_delegation<
     namada::ledger::rpc::get_delegators_delegation(client, address).await
 }
 
-pub async fn get_governance_parameters<
+pub async fn get_delegators_delegation_at<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    address: &Address,
+    epoch: Epoch,
+) -> HashMap<Address, token::Amount> {
+    namada::ledger::rpc::get_delegators_delegation_at(client, address, epoch)
+        .await
+}
+
+pub async fn query_governance_parameters<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
 ) -> GovernanceParameters {
-    namada::ledger::rpc::get_governance_parameters(client).await
+    namada::ledger::rpc::query_governance_parameters(client).await
 }
 
 /// Try to find an alias for a given address from the wallet. If not found,
@@ -1841,4 +1945,58 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
         eprintln!("Error in the query");
         cli::safe_exit(1)
     })
+}
+
+pub async fn compute_proposal_votes<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    proposal_id: u64,
+    epoch: Epoch,
+) -> ProposalVotes {
+    let votes = namada::ledger::rpc::query_proposal_votes(client, proposal_id).await;
+
+    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validator_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegator_voting_power: HashMap<
+        Address,
+        HashMap<Address, VotePower>,
+    > = HashMap::default();
+
+    for vote in votes {
+        if vote.is_validator() {
+            let validator_stake =
+                get_validator_stake(client, epoch, &vote.validator.clone())
+                    .await
+                    .unwrap_or_default();
+
+            validators_vote.insert(vote.validator.clone(), vote.data.into());
+            validator_voting_power
+                .insert(vote.validator, validator_stake.into());
+        } else {
+            let delegator_stake = get_bond_amount_at(
+                client,
+                &vote.delegator,
+                &vote.validator,
+                epoch,
+            )
+            .await
+            .unwrap_or_default();
+
+            delegators_vote.insert(vote.delegator.clone(), vote.data.into());
+            delegator_voting_power
+                .entry(vote.delegator.clone())
+                .or_default()
+                .insert(vote.validator, delegator_stake.into());
+        }
+    }
+
+    ProposalVotes {
+        validators_vote,
+        validator_voting_power,
+        delegators_vote,
+        delegator_voting_power,
+    }
 }

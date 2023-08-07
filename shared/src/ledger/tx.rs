@@ -16,12 +16,13 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::Amount;
-use namada_core::ledger::governance::cli::onchain::{DefaultProposal, PgfFundingProposal, PgfStewardProposal};
-use namada_core::ledger::governance::storage::proposal::ProposalType;
+use namada_core::ledger::governance::cli::onchain::{DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote};
+use namada_core::ledger::governance::storage::proposal::{ProposalType, StorageProposal};
+use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
-use namada_core::types::transaction::governance::InitProposalData;
+use namada_core::types::transaction::governance::{InitProposalData, VoteProposalData};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
@@ -209,6 +210,15 @@ pub enum Error {
     /// The proposal data are invalid
     #[error("Proposal data are invalid: {0}")]
     InvalidProposal(String),
+    /// The proposal vote is not valid
+    #[error("Proposal vote is invalid")]
+    InvalidProposalVote,
+    /// The proposal can't be voted
+    #[error("Proposal {0} can't be voted")]
+    InvalidProposalVotingPeriod(u64),
+    /// The proposal can't be found
+    #[error("Proposal {0} can't be found")]
+    ProposalDoesNotExist(u64),
     /// Encoding public key failure
     #[error("Encoding a public key, {0}, shouldn't fail")]
     EncodeKeyFailure(std::io::Error),
@@ -1150,6 +1160,71 @@ pub async fn build_default_proposal<
         false,
     )
     .await
+}
+
+/// Build a proposal vote 
+pub async fn build_vote_proposal<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args::VoteProposal {
+        tx,
+        proposal_id,
+        vote,
+        voter,
+        is_offline,
+        proposal_data,
+        tx_code_path,
+    }: args::VoteProposal,
+    epoch: Epoch,
+    gas_payer: &common::PublicKey,
+) -> Result<TxBuilder, Error> {
+    let proposal_vote = ProposalVote::try_from(vote)
+            .map_err(|_| Error::InvalidProposalVote)?;
+        
+    let proposal_id = proposal_id.expect("Proposal id must be defined.");
+    let proposal = if let Some(proposal) = rpc::query_proposal_by_id(client, proposal_id).await {
+        proposal
+    } else {
+        return Err(Error::ProposalDoesNotExist(proposal_id));
+    };
+
+    let storage_vote = StorageProposalVote::build(
+        &proposal_vote,
+        &proposal.r#type
+    ).expect("Should be able to build the proposal vote");
+
+    let is_validator = rpc::is_validator(client, &voter).await;
+
+    if !proposal.can_be_voted(epoch, is_validator) {
+        return Err(Error::InvalidProposalVotingPeriod(proposal_id));
+    }
+
+    let delegations = rpc::get_delegators_delegation_at(
+        client,
+        &voter,
+        proposal.voting_start_epoch,
+    )
+    .await.keys().cloned().collect::<Vec<Address>>();
+
+    let data = VoteProposalData {
+        id: proposal_id,
+        vote: storage_vote,
+        voter: voter.clone(),
+        delegations,
+    };
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let chain_id = tx.chain_id.clone().unwrap();
+
+    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+
+    Ok(tx_builder)
 }
 
 /// Build a pgf funding proposal governance

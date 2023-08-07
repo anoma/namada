@@ -181,6 +181,24 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Proposal id
+    pub proposal_id: Option<u64>,
+    /// The vote
+    pub vote: String,
+    /// The address of the voter
+    pub voter: C::Address,
+    /// Flag if proposal vote should be run offline
+    pub is_offline: bool,
+    /// The proposal file path
+    pub proposal_data: Option<C::Data>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {

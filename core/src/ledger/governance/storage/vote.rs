@@ -1,14 +1,13 @@
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Serialize, Deserialize};
 
 use super::super::cli::onchain::ProposalVote;
 use super::proposal::ProposalType;
-use crate::types::key::common::{self, Signature};
-use crate::types::key::SigScheme;
 
 /// The type of a governance vote with the optional associated Memo
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq, Serialize, Deserialize)]
 pub enum VoteType {
     /// A default vote without Memo
     Default,
@@ -18,7 +17,7 @@ pub enum VoteType {
     PGFPayment
 }
 
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq, Serialize, Deserialize)]
 /// The vote for a proposal
 pub enum StorageProposalVote {
     /// Yes
@@ -52,9 +51,8 @@ impl StorageProposalVote {
 
     /// Create a new vote
     pub fn build(
-        proposal_vote: ProposalVote,
-        proposal_type: ProposalType,
-        secret_key: Option<common::SecretKey>,
+        proposal_vote: &ProposalVote,
+        proposal_type: &ProposalType,
     ) -> Option<Self> {
         match (proposal_vote, proposal_type) {
             (ProposalVote::Yay, ProposalType::Default(_)) => {

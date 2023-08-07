@@ -290,22 +290,19 @@ pub enum ProposalVote {
     Invalid,
 }
 
-impl From<String> for ProposalVote {
-    fn from(vote: String) -> Self {
-        match vote.trim().to_lowercase().as_str() {
-            "yay" => ProposalVote::Yay,
-            "nay" => ProposalVote::Nay,
-            _ => ProposalVote::Invalid,
+impl TryFrom<String> for ProposalVote {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.trim().to_lowercase().as_str() {
+            "yay" => Ok(ProposalVote::Yay),
+            "nay" => Ok(ProposalVote::Nay),
+            _ => Err("invalid vote".to_string()),
         }
     }
 }
 
 impl ProposalVote {
-    /// Check if a proposal vote is valid
-    pub fn is_valid(&self) -> bool {
-        !self.eq(&ProposalVote::Invalid)
-    }
-
     /// Check if the proposal type is yay
     pub fn is_yay(&self) -> bool {
         matches!(self, ProposalVote::Yay)
