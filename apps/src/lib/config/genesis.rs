@@ -1009,7 +1009,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         max_proposal_bytes: Default::default(),
-        max_block_gas: 200_000,
+        max_block_gas: 20_000_000,
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
@@ -1022,7 +1022,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_inflation_amount: token::Amount::zero(),
         gas_cost: [(nam(), token::Amount::from(1))].into_iter().collect(),
         gas_table: BTreeMap::default(),
-        fee_unshielding_gas_limit: 200,
+        fee_unshielding_gas_limit: 20_000,
         fee_unshielding_descriptions_limit: 15,
     };
     let albert = EstablishedAccount {

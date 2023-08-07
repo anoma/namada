@@ -752,7 +752,7 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -842,7 +842,7 @@ mod tests {
         )));
 
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -982,7 +982,7 @@ mod tests {
         )));
 
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1090,7 +1090,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1188,7 +1188,7 @@ mod tests {
         )));
 
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1317,7 +1317,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1426,7 +1426,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1512,7 +1512,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1634,7 +1634,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1757,7 +1757,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1864,7 +1864,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1969,7 +1969,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2107,7 +2107,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2283,7 +2283,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2428,7 +2428,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2578,7 +2578,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2728,7 +2728,7 @@ mod tests {
             &keypair_1(),
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();

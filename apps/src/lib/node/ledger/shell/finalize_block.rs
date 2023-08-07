@@ -349,7 +349,7 @@ where
                                 .update_header(TxType::Raw)
                                 .header_hash(),
                         ),
-                        TxGasMeter::new_from_micro_limit(tx_in_queue.gas),
+                        TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
                         #[cfg(not(feature = "mainnet"))]
                         false,
                         None,
@@ -369,7 +369,7 @@ where
                     | ProtocolTxType::ValidatorSetUpdate => (
                         Event::new_tx_event(&tx, height.0),
                         None,
-                        TxGasMeter::new_from_micro_limit(0.into()),
+                        TxGasMeter::new_from_sub_limit(0.into()),
                         #[cfg(not(feature = "mainnet"))]
                         false,
                         None,
@@ -395,7 +395,7 @@ where
                         (
                             Event::new_tx_event(&tx, height.0),
                             None,
-                            TxGasMeter::new_from_micro_limit(0.into()),
+                            TxGasMeter::new_from_sub_limit(0.into()),
                             #[cfg(not(feature = "mainnet"))]
                             false,
                             None,
@@ -424,7 +424,7 @@ where
                         (
                             Event::new_tx_event(&tx, height.0),
                             None,
-                            TxGasMeter::new_from_micro_limit(0.into()),
+                            TxGasMeter::new_from_sub_limit(0.into()),
                             #[cfg(not(feature = "mainnet"))]
                             false,
                             None,
@@ -3744,7 +3744,7 @@ mod test_finalize_block {
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();

@@ -158,7 +158,7 @@ fn vp_user(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_micro_limit(u64::MAX.into())
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                     ),
                     &BTreeMap::default(),
                     &keys_changed,
@@ -304,7 +304,7 @@ fn vp_implicit(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_micro_limit(u64::MAX.into())
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                     ),
                     &BTreeMap::default(),
                     &keys_changed,
@@ -452,7 +452,7 @@ fn vp_validator(c: &mut Criterion) {
                     &shell.wl_storage.storage,
                     &shell.wl_storage.write_log,
                     &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_micro_limit(u64::MAX.into())
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                     ),
                     &BTreeMap::default(),
                     &keys_changed,
@@ -542,7 +542,7 @@ fn vp_masp(c: &mut Criterion) {
                     &shielded_ctx.shell.wl_storage.storage,
                     &shielded_ctx.shell.wl_storage.write_log,
                     &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_micro_limit(u64::MAX.into())
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                     ),
                     &BTreeMap::default(),
                     &keys_changed,

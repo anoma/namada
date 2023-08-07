@@ -540,7 +540,7 @@ mod test_bridge_pool_vp {
             write_log,
             tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_micro_limit(
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
                 u64::MAX.into(),
             )),
             keys_changed,

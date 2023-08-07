@@ -172,7 +172,7 @@ where
                 tx,
                 &TxIndex::default(),
                 ShellParams::new(
-                    &mut TxGasMeter::new_from_micro_limit(u64::MAX.into()), // No gas limit for governance proposal
+                    &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), // No gas limit for governance proposal
                     gas_table,
                     &mut shell.wl_storage,
                     &mut shell.vp_wasm_cache,

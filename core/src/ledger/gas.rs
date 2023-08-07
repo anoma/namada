@@ -40,9 +40,9 @@ pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-const SCALE: u64 = 1_000_000;
+const SCALE: u64 = 10_000;
 
-/// Representation of gas in micro units. This effectively decouples gas metering from fee payment, allowing higher resolution when accounting for gas while, at the same time, providing a contained gas value when paying fees.
+/// Representation of gas in sub-units. This effectively decouples gas metering from fee payment, allowing higher resolution when accounting for gas while, at the same time, providing a contained gas value when paying fees.
 #[derive(
     Clone,
     Copy,
@@ -55,28 +55,24 @@ const SCALE: u64 = 1_000_000;
     BorshSchema,
 )]
 pub struct Gas {
-    micro: u64,
+    sub: u64,
 }
 
 impl Gas {
     /// Checked add of `Gas`. Returns `None` on overflow
     pub fn checked_add(&self, rhs: Self) -> Option<Self> {
-        self.micro
-            .checked_add(rhs.micro)
-            .map(|micro| Self { micro })
+        self.sub.checked_add(rhs.sub).map(|sub| Self { sub })
     }
 
     /// Checked sub of `Gas`. Returns `None` on underflow
     pub fn checked_sub(&self, rhs: Self) -> Option<Self> {
-        self.micro
-            .checked_sub(rhs.micro)
-            .map(|micro| Self { micro })
+        self.sub.checked_sub(rhs.sub).map(|sub| Self { sub })
     }
 
-    /// Converts the micro gas units to whole ones. If the micro units are not a multiple of the `SCALE` than ceil the quotient
+    /// Converts the sub gas units to whole ones. If the sub units are not a multiple of the `SCALE` than ceil the quotient
     fn get_whole_gas_units(&self) -> u64 {
-        let quotient = self.micro / SCALE;
-        if self.micro % SCALE == 0 {
+        let quotient = self.sub / SCALE;
+        if self.sub % SCALE == 0 {
             quotient
         } else {
             quotient + 1
@@ -85,9 +81,7 @@ impl Gas {
 
     /// Generates a `Gas` instance from a whole amount
     pub fn from_whole_units(whole: u64) -> Self {
-        Self {
-            micro: whole * SCALE,
-        }
+        Self { sub: whole * SCALE }
     }
 }
 
@@ -96,20 +90,20 @@ impl Div<u64> for Gas {
 
     fn div(self, rhs: u64) -> Self::Output {
         Self {
-            micro: self.micro / rhs,
+            sub: self.sub / rhs,
         }
     }
 }
 
 impl From<u64> for Gas {
-    fn from(micro: u64) -> Self {
-        Self { micro }
+    fn from(sub: u64) -> Self {
+        Self { sub }
     }
 }
 
 impl From<Gas> for u64 {
     fn from(gas: Gas) -> Self {
-        gas.micro
+        gas.sub
     }
 }
 
@@ -121,10 +115,10 @@ impl Display for Gas {
 }
 
 impl From<GasLimit> for Gas {
-    // Derive a Gas instance with a micro amount which is exaclty a whole amount since the limit represents gas in whole units
+    // Derive a Gas instance with a sub amount which is exaclty a whole amount since the limit represents gas in whole units
     fn from(value: GasLimit) -> Self {
         Self {
-            micro: u64::from(value) * SCALE,
+            sub: u64::from(value) * SCALE,
         }
     }
 }
@@ -222,8 +216,8 @@ impl TxGasMeter {
         }
     }
 
-    /// Initialize a new gas meter. Requires the gas limit expressed in micro units
-    pub fn new_from_micro_limit(tx_gas_limit: Gas) -> Self {
+    /// Initialize a new gas meter. Requires the gas limit expressed in sub  units
+    pub fn new_from_sub_limit(tx_gas_limit: Gas) -> Self {
         Self {
             tx_gas_limit,
             transaction_gas: Gas::default(),
@@ -405,8 +399,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_overflow() {
-        let mut meter =
-            TxGasMeter::new_from_micro_limit(BLOCK_GAS_LIMIT.into());
+        let mut meter = TxGasMeter::new_from_sub_limit(BLOCK_GAS_LIMIT.into());
         meter.consume(1).expect("cannot add the gas");
         assert_matches!(
             meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
@@ -416,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_limit() {
-        let mut meter = TxGasMeter::new_from_micro_limit(TX_GAS_LIMIT.into());
+        let mut meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
         assert_matches!(
             meter
                 .consume(TX_GAS_LIMIT + 1)

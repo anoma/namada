@@ -208,7 +208,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
@@ -264,7 +264,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
@@ -323,7 +323,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
@@ -382,7 +382,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
@@ -436,7 +436,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
@@ -495,7 +495,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
@@ -536,7 +536,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
@@ -580,7 +580,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
         let gas_meter = VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_micro_limit(u64::MAX.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();

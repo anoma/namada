@@ -161,7 +161,7 @@ mod testing {
                 .write(
                     &max_block_gas_key,
                     namada_core::ledger::storage::types::encode(
-                        &10_000_000_u64,
+                        &20_000_000_u64,
                     ),
                 )
                 .expect(

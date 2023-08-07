@@ -153,7 +153,7 @@ where
                     // that we got a valid PoW
                 has_valid_pow: true },
             ));
-            TxGasMeter::new_from_micro_limit(tx_gas_meter.get_available_gas())
+            TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
         }
         TxType::Protocol(_) | TxType::Decrypted(_) => {
             // If dry run only the inner tx, use the max block gas as the gas limit

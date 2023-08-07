@@ -819,7 +819,7 @@ where
                                             * non-whitelisted tx */
                             };
                             let mut tx_gas_meter =
-                                TxGasMeter::new_from_micro_limit(wrapper.gas);
+                                TxGasMeter::new_from_sub_limit(wrapper.gas);
                             if let Err(e) = tx_gas_meter.consume(tx_gas) {
                                 return TxResult {
                                     code: ErrorCodes::DecryptedTxGasLimit

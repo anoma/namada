@@ -849,7 +849,8 @@ pub mod testing {
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
-                env.gas_meter = TxGasMeter::new_from_micro_limit(env.gas_meter.tx_gas_limit);
+                env.gas_meter =
+                    TxGasMeter::new_from_sub_limit(env.gas_meter.tx_gas_limit);
                 env.wl_storage.storage.block.epoch
             });
             println!("Current epoch {}", current_epoch);
@@ -1526,31 +1527,29 @@ pub mod testing {
         let arb_delta =
             prop_oneof![(-(u32::MAX as i128)..0), (1..=u32::MAX as i128),];
 
-        prop_oneof![
-            (
-                arb_address_or_validator.clone(),
-                arb_address_or_validator,
-                arb_offset,
-                arb_delta,
-            )
-                .prop_map(|(validator, owner, offset, delta)| {
-                    vec![
-                        // We have to ensure that the addresses exists
-                        PosStorageChange::SpawnAccount {
-                            address: validator.clone(),
-                        },
-                        PosStorageChange::SpawnAccount {
-                            address: owner.clone(),
-                        },
-                        PosStorageChange::Bond {
-                            owner,
-                            validator,
-                            delta: delta.into(),
-                            offset,
-                        },
-                    ]
-                })
-        ]
+        prop_oneof![(
+            arb_address_or_validator.clone(),
+            arb_address_or_validator,
+            arb_offset,
+            arb_delta,
+        )
+            .prop_map(|(validator, owner, offset, delta)| {
+                vec![
+                    // We have to ensure that the addresses exists
+                    PosStorageChange::SpawnAccount {
+                        address: validator.clone(),
+                    },
+                    PosStorageChange::SpawnAccount {
+                        address: owner.clone(),
+                    },
+                    PosStorageChange::Bond {
+                        owner,
+                        validator,
+                        delta: delta.into(),
+                        offset,
+                    },
+                ]
+            })]
     }
 
     impl InvalidPosAction {
