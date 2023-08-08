@@ -1372,7 +1372,7 @@ mod test_bridge_pool_vp {
     /// Test that we can escrow Nam if we
     /// want to mint wNam on Ethereum.
     #[test]
-    fn test_mint_wnam() {
+    fn test_minting_wnam() {
         // setup
         let mut wl_storage = setup_storage();
         let eb_account_key =
@@ -1396,7 +1396,7 @@ mod test_bridge_pool_vp {
         };
 
         // add transfer to pool
-        let keys_changed = {
+        let mut keys_changed = {
             wl_storage
                 .write_log
                 .write(
@@ -1418,6 +1418,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
+        assert!(keys_changed.insert(account_key));
         let bp_account_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
         wl_storage
             .write_log
@@ -1428,6 +1429,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
+        assert!(keys_changed.insert(bp_account_key));
         wl_storage
             .write_log
             .write(
@@ -1437,6 +1439,7 @@ mod test_bridge_pool_vp {
                     .expect("Test failed"),
             )
             .expect("Test failed");
+        assert!(keys_changed.insert(eb_account_key));
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
