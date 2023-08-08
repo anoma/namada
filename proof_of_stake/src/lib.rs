@@ -5126,10 +5126,7 @@ where
                 }
             });
 
-    for epoch in Epoch::iter_bounds_inclusive(
-        current_epoch.next(),
-        current_epoch + params.pipeline_len,
-    ) {
+    for epoch in Epoch::iter_range(current_epoch, params.pipeline_len) {
         let updated_total_unbonded = if has_redelegation(
             storage,
             &total_redelegated_unbonded.at(&epoch),

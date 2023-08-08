@@ -3017,11 +3017,7 @@ impl AbstractPosState {
                 // destination validator's stake
                 for (start_epoch, redelegations) in self.redelegations.clone() {
                     // If the redelegations are still slashable
-                    if start_epoch
-                        + self.params.unbonding_len
-                        + self.params.cubic_slashing_window_length
-                        < self.epoch
-                    {
+                    if start_epoch + self.params.unbonding_len > self.epoch {
                         for (delegator, redelegations) in redelegations {
                             for redelegation in redelegations {
                                 // If the source is this validator
@@ -3220,11 +3216,16 @@ impl AbstractPosState {
                 );
             }
             tracing::debug!(
-                "total unbonded {}",
-                total_unbonded.to_string_native()
+                "slashable stake {}, total unbonded {}",
+                slashable_stake.to_string_native(),
+                total_unbonded.to_string_native(),
             );
-            let this_slash =
-                total_rate * (slashable_stake - total_unbonded.change());
+            let amount_to_slash = if slashable_stake > total_unbonded.change() {
+                slashable_stake - total_unbonded.change()
+            } else {
+                token::Change::default()
+            };
+            let this_slash = total_rate * amount_to_slash;
             let diff_slashed_amount = last_slash - this_slash;
             tracing::debug!(
                 "Offset {} diff_slashed_amount {}",
@@ -3626,9 +3627,7 @@ impl AbstractPosState {
         // `src_validator` in a slashable epoch range
         redelegations.iter().any(|(start, redelegations)| {
             if *start <= pipeline_epoch
-                && *start
-                    + params.unbonding_len
-                    + params.cubic_slashing_window_length
+                && *start + params.slash_processing_epoch_offset()
                     > current_epoch
             {
                 if let Some(redelegations) = redelegations.get(delegator) {
