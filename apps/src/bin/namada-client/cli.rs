@@ -217,8 +217,7 @@ pub async fn main() -> Result<()> {
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
 
-                    let default_signer =
-                        signing::signer_from_address(Some(args.sender.clone()));
+                    let default_signer = Some(args.sender.clone());
                     let signing_data = signing::aux_signing_data(
                         &client,
                         &mut ctx.wallet,

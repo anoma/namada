@@ -2206,7 +2206,7 @@ mod test_mempool_validate {
         let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
         let tx = tx_builder
             .add_code("wasm_code".as_bytes().to_owned())
-            .build();
+            .signed_build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2340,7 +2340,7 @@ mod test_mempool_validate {
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .add_gas_payer(keypair)
-            .build();
+            .signed_build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2372,7 +2372,7 @@ mod test_mempool_validate {
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .add_gas_payer(keypair)
-            .build();
+            .signed_build();
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),

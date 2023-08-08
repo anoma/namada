@@ -623,7 +623,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(input)
-            .build();
+            .signed_build();
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
@@ -631,7 +631,8 @@ mod tests {
         };
 
         let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+        let outer_tx =
+            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
@@ -657,7 +658,7 @@ mod tests {
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
         let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let tx = tx_builder.add_code(vec![]).add_data(input).build();
+        let tx = tx_builder.add_code(vec![]).add_data(input).signed_build();
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
@@ -665,7 +666,8 @@ mod tests {
         };
 
         let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+        let outer_tx =
+            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
 
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
@@ -1030,7 +1032,7 @@ mod tests {
         let tx = tx_builder
             .add_code(vec![])
             .add_serialized_data(input)
-            .build();
+            .signed_build();
 
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
@@ -1038,7 +1040,8 @@ mod tests {
         };
 
         let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx = tx_builder.add_code(vec![]).add_data(eval_vp).build();
+        let outer_tx =
+            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(

@@ -3518,7 +3518,7 @@ mod test_finalize_block {
         let tx = tx_builder
             .add_code_from_hash(Hash::default())
             .add_data(0u64)
-            .build();
+            .signed_build();
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

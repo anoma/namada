@@ -114,7 +114,7 @@ mod test_bridge_pool_vp {
             .add_code(wasm_code)
             .add_serialized_data(data)
             .add_gas_payer(keypair.clone())
-            .build()
+            .signed_build()
     }
 
     #[test]

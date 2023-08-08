@@ -626,7 +626,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match expect {
@@ -965,7 +965,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
@@ -1028,7 +1028,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1115,7 +1115,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1203,7 +1203,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1318,7 +1318,7 @@ mod test_bridge_pool_vp {
 
         let tx_builder =
             TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
-        let tx = tx_builder.add_data(transfer).build();
+        let tx = tx_builder.add_data(transfer).signed_build();
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
