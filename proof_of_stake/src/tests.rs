@@ -2,7 +2,7 @@
 
 mod state_machine;
 
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::Range;
 
@@ -4448,15 +4448,17 @@ fn arb_redelegation_amounts(
 ) -> impl Strategy<Value = (token::Amount, token::Amount, token::Amount)> {
     let arb_delegation = arb_amount_non_zero_ceiled(max_delegation);
     let amounts = arb_delegation.prop_flat_map(move |amount_delegate| {
-        let amount_redelegate = arb_amount_non_zero_ceiled(
+        let amount_redelegate = arb_amount_non_zero_ceiled(max(
+            1,
             u64::try_from(amount_delegate.raw_amount()).unwrap() - 1,
-        );
+        ));
         (Just(amount_delegate), amount_redelegate)
     });
     amounts.prop_flat_map(move |(amount_delegate, amount_redelegate)| {
-        let amount_unbond = arb_amount_non_zero_ceiled(
+        let amount_unbond = arb_amount_non_zero_ceiled(max(
+            1,
             u64::try_from(amount_redelegate.raw_amount()).unwrap() - 1,
-        );
+        ));
         (
             Just(amount_delegate),
             Just(amount_redelegate),
@@ -4875,6 +4877,8 @@ fn test_redelegation_with_slashing_aux(
     let mut storage = TestWlStorage::default();
     let params = PosParams {
         unbonding_len: 4,
+        // Avoid empty consensus set by removing the threshold
+        validator_stake_threshold: token::Amount::default(),
         ..Default::default()
     };
 
@@ -5212,7 +5216,7 @@ fn test_redelegation_with_slashing_aux(
         .at(&src_validator)
         .get(&storage, &bond_start)
         .unwrap()
-        .unwrap();
+        .unwrap_or_default();
     assert_eq!(
         redelegated_remaining,
         amount_redelegate.change() - amount_unbond.change()
