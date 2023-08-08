@@ -1257,7 +1257,6 @@ mod tests {
                 fee_unshielding_gas_limit: 1000000,
                 fee_unshielding_descriptions_limit: 15,
                 gas_cost: BTreeMap::default(),
-                gas_table: BTreeMap::default()
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 

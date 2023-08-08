@@ -138,21 +138,7 @@ mod testing {
             // Initialize the `TestClient`
             let mut wl_storage = TestWlStorage::default();
 
-            // Initialize mock gas table and gas limit
-            let gas_table: BTreeMap<String, u64> = BTreeMap::default();
-            let gas_table_key =
-                namada_core::ledger::parameters::storage::get_gas_table_storage_key();
-            wl_storage
-                .storage
-                .write(
-                    &gas_table_key,
-                    namada_core::ledger::storage::types::encode(&gas_table),
-                )
-                .expect(
-                    "Gas table parameter must be initialized in the genesis \
-                     block",
-                );
-
+            // Initialize mock gas limit
             let max_block_gas_key =
                 namada_core::ledger::parameters::storage::get_max_block_gas_key(
                 );

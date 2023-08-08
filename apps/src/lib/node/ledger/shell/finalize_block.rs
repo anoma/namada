@@ -80,11 +80,6 @@ where
             "Block height: {height}, epoch: {current_epoch}, is new epoch: \
              {new_epoch}."
         );
-        let gas_table: BTreeMap<String, u64> = self
-            .wl_storage
-            .read(&parameters::storage::get_gas_table_storage_key())
-            .expect("Error while reading from storage")
-            .expect("Missing gas table in storage");
         tracing::debug!(
             "New epoch block delay for updating the Tendermint validator set: \
              {:?}",
@@ -97,7 +92,7 @@ where
             )?;
 
             let _proposals_result =
-                execute_governance_proposals(self, &mut response, &gas_table)?;
+                execute_governance_proposals(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
@@ -255,7 +250,6 @@ where
                             wrapper,
                             masp_transaction,
                             &processed_tx.tx,
-                            &gas_table,
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
                             Some(&native_block_proposer_address),
@@ -451,7 +445,6 @@ where
                         .expect("transaction index out of bounds"),
                 ),
                 &mut tx_gas_meter,
-                &gas_table,
                 &mut self.wl_storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,

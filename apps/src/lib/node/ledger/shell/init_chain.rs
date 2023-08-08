@@ -96,7 +96,6 @@ where
             staked_ratio,
             pos_inflation_amount,
             gas_cost,
-            gas_table,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         } = genesis.parameters;
@@ -120,18 +119,16 @@ where
 
         // Store wasm codes into storage
         let checksums = wasm_loader::Checksums::read_checksums(&self.wasm_dir);
-        for (name, info) in checksums.0.iter() {
+        for (name, full_name) in checksums.0.iter() {
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
             let code_len = u64::try_from(code.len())
                 .map_err(|e| Error::LoadingWasm(e.to_string()))?;
 
-            let checksum = info.get("hash").ok_or_else(|| {
-                Error::LoadingWasm(format!(
-                    "Missing wasm hash for tx: {}",
-                    name
-                ))
+            let elements = full_name.split('.').collect::<Vec<&str>>();
+            let checksum = elements.get(1).ok_or_else(|| {
+                Error::LoadingWasm(format!("invalid full name: {}", full_name))
             })?;
             assert_eq!(
                 code_hash.to_string(),
@@ -152,13 +149,10 @@ where
                 }
 
                 let code_key = Key::wasm_code(&code_hash);
-                let code_name_key = Key::wasm_code_name(name.clone());
                 let code_len_key = Key::wasm_code_len(&code_hash);
                 let hash_key = Key::wasm_hash(name);
 
                 self.wl_storage.write_bytes(&code_key, code)?;
-                self.wl_storage
-                    .write_bytes(&code_name_key, code_hash.clone())?;
                 self.wl_storage.write(&code_len_key, code_len)?;
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
             } else {
@@ -203,7 +197,6 @@ where
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             gas_cost,
-            gas_table,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         };

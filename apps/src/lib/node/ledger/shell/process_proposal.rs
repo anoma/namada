@@ -313,11 +313,6 @@ where
         let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
         let mut metadata = ValidationMeta::from(&self.wl_storage);
-        let gas_table: BTreeMap<String, u64> = self
-            .wl_storage
-            .read(&parameters::storage::get_gas_table_storage_key())
-            .expect("Error while reading from storage")
-            .expect("Missing gas table in storage");
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
@@ -330,7 +325,6 @@ where
                     &mut metadata,
                     &mut temp_wl_storage,
                     block_time,
-                    &gas_table,
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
                     block_proposer,
@@ -461,7 +455,6 @@ where
         metadata: &mut ValidationMeta,
         temp_wl_storage: &mut TempWlStorage<D, H>,
         block_time: DateTimeUtc,
-        gas_table: &BTreeMap<String, u64>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: &Address,
@@ -784,54 +777,6 @@ where
                                 }
                             }
 
-                            // Tx gas (partial check)
-                            let tx_hash = match tx
-                                .get_section(tx.code_sechash())
-                                .and_then(|hash| Section::code_sec(&hash))
-                            {
-                                Some(code) => match code.code {
-                                    Commitment::Hash(hash) => hash,
-                                    Commitment::Id(code) => {
-                                        hash::Hash::sha256(&code)
-                                    }
-                                },
-                                #[cfg(not(test))]
-                                None => {
-                                    return TxResult {
-                                        code: ErrorCodes::DecryptedTxGasLimit
-                                            .into(),
-                                        info: "Missing transaction code"
-                                            .to_string(),
-                                    }
-                                }
-                                #[cfg(test)]
-                                None => Hash::zero(),
-                            };
-
-                            let tx_gas = match gas_table
-                                .get(&tx_hash.to_string().to_ascii_lowercase())
-                            {
-                                Some(gas) => gas.to_owned(),
-                                #[cfg(test)]
-                                None => 1_000,
-                                #[cfg(not(test))]
-                                None => 0, /* VPs will rejected the
-                                            * non-whitelisted tx */
-                            };
-                            let mut tx_gas_meter =
-                                TxGasMeter::new_from_sub_limit(wrapper.gas);
-                            if let Err(e) = tx_gas_meter.consume(tx_gas) {
-                                return TxResult {
-                                    code: ErrorCodes::DecryptedTxGasLimit
-                                        .into(),
-                                    info: format!(
-                                        "Decrypted transaction gas error: \
-                                             {}",
-                                        e
-                                    ),
-                                };
-                            }
-
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -970,7 +915,6 @@ where
                         &wrapper,
                         fee_unshield,
                         temp_wl_storage,
-                        Some(Cow::Borrowed(gas_table)),
                         vp_wasm_cache,
                         tx_wasm_cache,
                         Some(block_proposer),
@@ -2674,61 +2618,6 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.code,
                     u32::from(ErrorCodes::ExpiredDecryptedTx)
-                );
-            }
-            Err(_) => panic!("Test failed"),
-        }
-    }
-
-    /// Test that a decrypted transaction requiring more gas than the limit
-    /// imposed by its wrapper is rejected.
-    #[test]
-    fn test_decrypted_gas_limit() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
-
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 1.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-
-        let mut decrypted_tx = wrapper.clone();
-        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
-        decrypted_tx.add_section(Section::Signature(Signature::new(
-            decrypted_tx.sechashes(),
-            &keypair,
-        )));
-
-        let wrapper_in_queue = TxInQueue {
-            tx: wrapper,
-            gas: Gas::default(),
-            has_valid_pow: false,
-        };
-        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
-
-        // Run validation
-        let request = ProcessProposal {
-            txs: vec![decrypted_tx.to_bytes()],
-        };
-        match shell.process_proposal(request) {
-            Ok(response) => {
-                assert_eq!(
-                    response[0].result.code,
-                    u32::from(ErrorCodes::DecryptedTxGasLimit)
                 );
             }
             Err(_) => panic!("Test failed"),

@@ -3,7 +3,7 @@
 use namada_tx_prelude::transaction::pos::CommissionChange;
 use namada_tx_prelude::*;
 
-#[transaction]
+#[transaction(gas = 220000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
@@ -228,8 +228,8 @@ mod tests {
             })
     }
 
-    fn arb_commission_info()
-    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
+    fn arb_commission_info(
+    ) -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
     {
         let min = Dec::zero();
         let max = Dec::one();

@@ -47,7 +47,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     }
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 40000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,

@@ -375,4 +375,5 @@ mod native_vp_host_env {
     native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
     native_host_fn!(vp_verify_tx_section_signature(pk_ptr: u64, pk_len: u64, hash_list_ptr: u64, hash_list_len: u64) -> i64);
+    native_host_fn!(vp_charge_gas(used_gas: u64));
 }

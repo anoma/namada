@@ -9,7 +9,7 @@
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
-#[validity_predicate]
+#[validity_predicate(gas = 0)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,

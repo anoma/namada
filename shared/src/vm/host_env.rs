@@ -467,27 +467,8 @@ where
     }
 }
 
-/// Called from tx wasm to request to use the given gas amount
-pub fn tx_charge_gas<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    used_gas: i64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    tx_add_gas(
-        env,
-        used_gas
-            .try_into()
-            .map_err(TxRuntimeError::NumConversionError)?,
-    )
-}
-
 /// Add a gas cost incured in a transaction
-pub fn tx_add_gas<MEM, DB, H, CA>(
+pub fn tx_charge_gas<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     used_gas: u64,
 ) -> TxResult<()>
@@ -514,7 +495,7 @@ where
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    used_gas: i64,
+    used_gas: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
@@ -524,12 +505,7 @@ where
     CA: WasmCacheAccess,
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(
-        gas_meter,
-        used_gas
-            .try_into()
-            .map_err(vp_host_fns::RuntimeError::NumConversionError)?,
-    )
+    vp_host_fns::add_gas(gas_meter, used_gas)
 }
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
@@ -549,7 +525,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_has_key {}, key {}", key, key_ptr,);
 
@@ -558,7 +534,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(match log_val {
         Some(&write_log::StorageModification::Write { .. }) => {
             HostEnvResult::Success.to_i64()
@@ -579,7 +555,7 @@ where
             let (present, gas) = storage
                 .has_key(&key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
     })
@@ -605,7 +581,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
@@ -614,7 +590,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
             let len: i64 = value
@@ -655,7 +631,7 @@ where
             let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) =
                 storage.read(&key).map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             match value {
                 Some(value) => {
                     let len: i64 = value
@@ -696,7 +672,7 @@ where
         .memory
         .write_bytes(result_ptr, value)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
@@ -717,7 +693,7 @@ where
         .memory
         .read_string(prefix_ptr, prefix_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_iter_prefix {}", prefix);
 
@@ -727,7 +703,7 @@ where
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
@@ -759,7 +735,7 @@ where
             &Key::parse(key.clone())
                 .map_err(TxRuntimeError::StorageDataError)?,
         );
-        tx_add_gas(env, iter_gas + log_gas)?;
+        tx_charge_gas(env, iter_gas + log_gas)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
@@ -835,12 +811,12 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_update {}, {:?}", key, value);
 
@@ -855,7 +831,7 @@ where
     let (gas, _size_diff) = write_log
         .write(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Temporary storage write function exposed to the wasm VM Tx environment. The
@@ -878,12 +854,12 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_write_temp {}, {:?}", key, value);
 
@@ -895,7 +871,7 @@ where
     let (gas, _size_diff) = write_log
         .write_temp(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 fn check_address_existence<MEM, DB, H, CA>(
@@ -928,14 +904,14 @@ where
         }
         let vp_key = Key::validity_predicate(&addr);
         let (vp, gas) = write_log.read(&vp_key);
-        tx_add_gas(env, gas)?;
+        tx_charge_gas(env, gas)?;
         // just check the existence because the write log should not have the
         // delete log of the VP
         if vp.is_none() {
             let (is_present, gas) = storage
                 .has_key(&vp_key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             if !is_present {
                 tracing::info!(
                     "Trying to write into storage with a key containing an \
@@ -968,7 +944,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_delete {}", key);
 
@@ -981,7 +957,7 @@ where
     let (gas, _size_diff) = write_log
         .delete(&key)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Emitting an IBC event function exposed to the wasm VM Tx environment.
@@ -1001,12 +977,12 @@ where
         .memory
         .read_bytes(event_ptr, event_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
     let gas = write_log.emit_ibc_event(event);
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -1373,7 +1349,7 @@ where
         .memory
         .read_string(addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
@@ -1382,7 +1358,7 @@ where
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
     // This is not a storage write, use the same multiplier used for a storage read
-    tx_add_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
+    tx_charge_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
@@ -1403,7 +1379,7 @@ where
         .memory
         .read_string(addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
@@ -1413,7 +1389,7 @@ where
         .memory
         .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1421,7 +1397,7 @@ where
     let (gas, _size_diff) = write_log
         .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Initialize a new account established address.
@@ -1441,7 +1417,7 @@ where
         .memory
         .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1454,12 +1430,12 @@ where
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, addr_bytes)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
@@ -1475,12 +1451,12 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_string(result_ptr, chain_id)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block height function exposed to the wasm VM Tx
@@ -1497,7 +1473,7 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (height, gas) = storage.get_block_height();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(height.0)
 }
 
@@ -1514,7 +1490,7 @@ where
     CA: WasmCacheAccess,
 {
     let tx_index = unsafe { env.ctx.tx_index.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE)?;
+    tx_charge_gas(env, crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(tx_index.0)
 }
 
@@ -1551,12 +1527,12 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (hash, gas) = storage.get_block_hash();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, hash.0)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block epoch function exposed to the wasm VM Tx
@@ -1573,7 +1549,7 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (epoch, gas) = storage.get_current_epoch();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(epoch.0)
 }
 
@@ -1589,14 +1565,14 @@ where
     CA: WasmCacheAccess,
 {
     let storage = unsafe { env.ctx.storage.get() };
-    tx_add_gas(env, STORAGE_ACCESS_GAS_PER_BYTE)?;
+    tx_charge_gas(env, STORAGE_ACCESS_GAS_PER_BYTE)?;
     let native_token = storage.native_token.clone();
     let native_token_string = native_token.encode();
     let gas = env
         .memory
         .write_string(result_ptr, native_token_string)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block header function exposed to the wasm VM Tx environment.
@@ -1624,7 +1600,7 @@ where
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -1811,7 +1787,7 @@ where
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
 
     vp_host_fns::add_gas(gas_meter, gas)?;
-    let hash_vec = Vec::<Hash>::try_from_slice(&hash_list)
+    let hash_vec = <[Hash; 2]>::try_from_slice(&hash_list)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
@@ -1894,13 +1870,13 @@ where
     let key = Key::wasm_code(&hash);
     let write_log = unsafe { env.ctx.write_log.get() };
     let (result, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     if result.is_none() {
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
             .has_key(&key)
             .map_err(TxRuntimeError::StorageError)?;
-        tx_add_gas(env, gas)?;
+        tx_charge_gas(env, gas)?;
         if !is_present {
             return Err(TxRuntimeError::InvalidVpCodeHash(
                 "The corresponding VP code doesn't exist".to_string(),

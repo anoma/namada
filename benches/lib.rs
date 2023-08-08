@@ -248,7 +248,6 @@ impl BenchShell {
             &self.inner.wl_storage.storage,
             &mut self.inner.wl_storage.write_log,
             &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-            &BTreeMap::default(),
             &TxIndex(0),
             tx,
             &mut self.inner.vp_wasm_cache,

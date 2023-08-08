@@ -19,8 +19,7 @@ use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use toml::value::Table;
 
 use crate::e2e::setup::{
-    copy_wasm_to_chain_dir, get_all_wasms_gas, get_all_wasms_hashes,
-    SINGLE_NODE_NET_GENESIS,
+    copy_wasm_to_chain_dir, get_all_wasms_hashes, SINGLE_NODE_NET_GENESIS,
 };
 
 /// Env. var for keeping temporary files created by the integration tests
@@ -51,7 +50,6 @@ pub fn initialize_genesis(
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
     genesis.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
-    genesis.parameters.gas_table = Some(get_all_wasms_gas(&working_dir));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);

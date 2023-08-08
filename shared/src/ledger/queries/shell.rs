@@ -107,12 +107,6 @@ where
     use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
     use crate::types::transaction::{AffineCurve, EllipticCurve, TxType};
 
-    let gas_table: BTreeMap<String, u64> = ctx
-        .wl_storage
-        .read(&parameters::storage::get_gas_table_storage_key())
-        .expect("Error while reading storage")
-        .expect("Missing gas table in storage");
-
     let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
     tx.validate_tx().into_storage_result()?;
 
@@ -130,7 +124,6 @@ where
                 &request.data,
                 ShellParams::new(
                     &mut tx_gas_meter,
-                    &gas_table,
                     &mut temp_wl_storage,
                     &mut ctx.vp_wasm_cache,
                     &mut ctx.tx_wasm_cache,
@@ -186,7 +179,6 @@ where
         &TxIndex(0),
         ShellParams::new(
             &mut tx_gas_meter,
-            &gas_table,
             &mut temp_wl_storage,
             &mut ctx.vp_wasm_cache,
             &mut ctx.tx_wasm_cache,

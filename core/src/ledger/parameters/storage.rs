@@ -45,7 +45,6 @@ struct Keys {
     max_block_gas: &'static str,
     faucet_account: &'static str,
     gas_cost: &'static str,
-    gas_table: &'static str,
     fee_unshielding_gas_limit: &'static str,
     fee_unshielding_descriptions_limit: &'static str,
 }
@@ -136,11 +135,6 @@ pub fn get_vp_whitelist_storage_key() -> Key {
 /// Storage key used for tx whitelist parameter.
 pub fn get_tx_whitelist_storage_key() -> Key {
     get_tx_whitelist_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for gas cost.
-pub fn get_gas_table_storage_key() -> Key {
-    get_gas_table_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the fee unshielding gas limit

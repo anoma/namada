@@ -10,9 +10,11 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, ItemFn, ItemStruct};
+use syn::{parse_macro_input, ExprAssign, FnArg, ItemFn, ItemStruct, Pat};
 
 /// Generate WASM binding for a transaction main entrypoint function.
+///
+/// It expects an attribute in the form: `gas = u64`, so that a call to the gas meter can be injected as the first instruction of the transaction to account for the whitelisted gas amount.
 ///
 /// This macro expects a function with signature:
 ///
@@ -23,15 +25,38 @@ use syn::{parse_macro_input, ItemFn, ItemStruct};
 /// ) -> TxResult
 /// ```
 #[proc_macro_attribute]
-pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
-    let ident = &ast.sig.ident;
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block,
+    } = ast;
+    let stmts = &block.stmts;
+    let ident = &sig.ident;
+    let attr_ast = parse_macro_input!(attr as ExprAssign);
+    let gas = attr_ast.right;
+    let ctx = match sig.inputs.first() {
+        Some(FnArg::Typed(pat_type)) => {
+            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                &pat_ident.ident
+            } else {
+                panic!("Unexpected token, expected ctx ident")
+            }
+        }
+        _ => panic!("Unexpected token, expected ctx ident"),
+    };
     let gen = quote! {
         // Use `wee_alloc` as the global allocator.
         #[global_allocator]
         static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-        #ast
+        #(#attrs)* #vis #sig {
+            // Consume the whitelisted gas
+            #ctx.charge_gas(#gas)?;
+            #(#stmts)*
+        }
 
         // The module entrypoint callable by wasm runtime
         #[no_mangle]
@@ -63,6 +88,8 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Generate WASM binding for validity predicate main entrypoint function.
 ///
+/// It expects an attribute in the form: `gas = u64`, so that a call to the gas meter can be injected as the first instruction of the validity predicate to account for the whitelisted gas amount.
+///
 /// This macro expects a function with signature:
 ///
 /// ```compiler_fail
@@ -76,17 +103,40 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn validity_predicate(
-    _attr: TokenStream,
+    attr: TokenStream,
     input: TokenStream,
 ) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
-    let ident = &ast.sig.ident;
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block,
+    } = ast;
+    let stmts = &block.stmts;
+    let ident = &sig.ident;
+    let attr_ast = parse_macro_input!(attr as ExprAssign);
+    let gas = attr_ast.right;
+    let ctx = match sig.inputs.first() {
+        Some(FnArg::Typed(pat_type)) => {
+            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                &pat_ident.ident
+            } else {
+                panic!("Unexpected token, expected ctx ident")
+            }
+        }
+        _ => panic!("Unexpected token, expected ctx ident"),
+    };
     let gen = quote! {
         // Use `wee_alloc` as the global allocator.
         #[global_allocator]
         static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-        #ast
+        #(#attrs)* #vis #sig {
+            // Consume the whitelisted gas
+            #ctx.charge_gas(#gas)?;
+            #(#stmts)*
+        }
 
         // The module entrypoint callable by wasm runtime
         #[no_mangle]

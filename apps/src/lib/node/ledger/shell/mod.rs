@@ -1288,7 +1288,6 @@ where
                     &wrapper,
                     fee_unshield,
                     &mut TempWlStorage::new(&self.wl_storage.storage),
-                    None,
                     &mut self.vp_wasm_cache.clone(),
                     &mut self.tx_wasm_cache.clone(),
                     None,
@@ -1408,7 +1407,6 @@ where
         wrapper: &WrapperTx,
         masp_transaction: Option<Transaction>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
-        gas_table: Option<Cow<BTreeMap<String, u64>>>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: Option<&Address>,
@@ -1459,13 +1457,6 @@ where
                     Error::TxApply(protocol::Error::FeeUnshieldingError(e))
                 })?;
 
-            let gas_table = gas_table.unwrap_or_else(|| {
-                temp_wl_storage
-                    .read(&parameters::storage::get_gas_table_storage_key())
-                    .expect("Error reading from storage")
-                    .expect("Missing gas table in storage")
-            });
-
             let fee_unshielding_gas_limit = temp_wl_storage
                 .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
                 .expect("Error reading from storage")
@@ -1484,7 +1475,6 @@ where
                 &TxIndex::default(),
                 ShellParams::new(
                     &mut TxGasMeter::new(fee_unshielding_gas_limit),
-                    &gas_table,
                     temp_wl_storage,
                     vp_wasm_cache,
                     tx_wasm_cache,

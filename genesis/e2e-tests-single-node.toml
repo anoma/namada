@@ -166,8 +166,6 @@ max_block_gas = 20000000
 fee_unshielding_gas_limit = 20000
 # Fee unshielding descriptions limit
 fee_unshielding_descriptions_limit = 15
-# Gas table
-gas_table = {}
 # vp whitelist
 vp_whitelist = []
 # tx whitelist

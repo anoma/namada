@@ -72,7 +72,7 @@ fn convert_amount(
     (asset_type, amount)
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 8030000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,

@@ -151,14 +151,6 @@ where
         }
     }
 
-    /// Add a gas cost incured in a validity predicate
-    pub fn add_gas(
-        &self,
-        used_gas: u64,
-    ) -> Result<(), vp_host_fns::RuntimeError> {
-        vp_host_fns::add_gas(&mut self.gas_meter.borrow_mut(), used_gas)
-    }
-
     /// Read access to the prior storage (state before tx execution)
     /// via [`trait@StorageRead`].
     pub fn pre<'view>(&'view self) -> CtxPreStorageRead<'view, 'a, DB, H, CA> {
@@ -544,6 +536,12 @@ where
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
+    }
+
+    // TODO: change to unimplemented if native vps don't charge whitelisted gas
+    fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error> {
+        vp_host_fns::add_gas(&mut self.gas_meter.borrow_mut(), used_gas)
+            .into_storage_result()
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {

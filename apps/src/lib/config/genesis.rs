@@ -273,8 +273,6 @@ pub mod genesis_config {
         pub fee_unshielding_descriptions_limit: u64,
         /// Map of the cost per gas unit for every token allowed for fee payment
         pub gas_cost: BTreeMap<Address, token::Amount>,
-        /// Gas table
-        pub gas_table: Option<BTreeMap<String, u64>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -623,27 +621,10 @@ pub mod genesis_config {
             staked_ratio: Dec::zero(),
             pos_inflation_amount: token::Amount::zero(),
             gas_cost: parameters.gas_cost,
-            gas_table: parameters.gas_table.unwrap_or_default(),
             fee_unshielding_gas_limit: parameters.fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit: parameters
                 .fee_unshielding_descriptions_limit,
         };
-
-        // Check validity of gas table
-        if parameters.gas_table.len()
-            != parameters.tx_whitelist.len() + parameters.vp_whitelist.len()
-        {
-            panic!("Mismatching length of gas table and txs/vps whitelists");
-        }
-        for hash in parameters
-            .tx_whitelist
-            .iter()
-            .chain(parameters.vp_whitelist.iter())
-        {
-            if !parameters.gas_table.contains_key(&hash.to_lowercase()) {
-                panic!("Missing gas cost for hash {}", hash);
-            }
-        }
 
         let GovernanceParamsConfig {
             min_proposal_fund,
@@ -901,8 +882,6 @@ pub struct Parameters {
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub gas_cost: BTreeMap<Address, token::Amount>,
-    /// Gas table
-    pub gas_table: BTreeMap<String, u64>,
 }
 
 #[cfg(not(any(test, feature = "dev")))]
@@ -1021,7 +1000,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
         gas_cost: [(nam(), token::Amount::from(1))].into_iter().collect(),
-        gas_table: BTreeMap::default(),
         fee_unshielding_gas_limit: 20_000,
         fee_unshielding_descriptions_limit: 15,
     };

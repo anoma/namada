@@ -331,6 +331,9 @@ impl<'view> VpEnv<'view> for Ctx {
             unsafe { namada_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
         Ok(HostEnvResult::is_success(valid))
     }
+
+    fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
+        Ok(unsafe { namada_vp_charge_gas(used_gas) })}
 }
 
 impl StorageRead for CtxPreStorageRead<'_> {

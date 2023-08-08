@@ -5,7 +5,7 @@ use eth_bridge::storage::{bridge_pool, native_erc20_key, wrapped_erc20s};
 use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 use namada_tx_prelude::*;
 
-#[transaction]
+#[transaction(gas = 100000)]
 fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     let data = signed.data().ok_or_err_msg("Missing data")?;
     let transfer = PendingTransfer::try_from_slice(&data[..])

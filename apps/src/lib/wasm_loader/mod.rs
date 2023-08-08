@@ -31,7 +31,7 @@ pub enum Error {
 /// including SHA256 hash
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Checksums(pub HashMap<String, HashMap<String, String>>);
+pub struct Checksums(pub HashMap<String, String>);
 
 const S3_URL: &str = "https://namada-wasm-master.s3.eu-west-1.amazonaws.com";
 
@@ -132,10 +132,8 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums_async(&wasm_directory).await;
 
-    join_all(checksums.0.into_iter().map(|(name, map)| {
+    join_all(checksums.0.into_iter().map(|(name, full_name)| {
         let wasm_directory = wasm_directory.as_ref().to_owned();
-        let full_name =
-            name.replace('.', &format!(".{}.", map.get("hash").unwrap()));
 
         // Async check and download (if needed) each file
         tokio::spawn(async move {
@@ -269,15 +267,9 @@ pub fn read_wasm(
     if let Some(os_name) = file_path.as_ref().file_name() {
         if let Some(name) = os_name.to_str() {
             let wasm_path = match checksums.0.get(name) {
-                Some(map) => wasm_directory.as_ref().join(name.replace(
-                    '.',
-                    &format!(
-                        ".{}.",
-                        map.get("hash").ok_or_else(|| eyre!(
-                            "Missing hash field in checksum"
-                        ))?
-                    ),
-                )),
+                Some(wasm_filename) => {
+                    wasm_directory.as_ref().join(wasm_filename)
+                }
                 None => {
                     if !file_path.as_ref().is_absolute() {
                         wasm_directory.as_ref().join(file_path.as_ref())

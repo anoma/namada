@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
@@ -166,7 +166,6 @@ pub fn network(
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
     genesis.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
-    genesis.parameters.gas_table = Some(get_all_wasms_gas(&working_dir));
 
     // Run the provided function on it
     let genesis = update_genesis(genesis);
@@ -951,39 +950,21 @@ pub fn get_all_wasms_hashes(
 ) -> Vec<String> {
     let checksums_path = working_dir.join("wasm/checksums.json");
     let checksums_content = fs::read_to_string(checksums_path).unwrap();
-    let checksums: HashMap<String, HashMap<String, String>> =
+    let checksums: HashMap<String, String> =
         serde_json::from_str(&checksums_content).unwrap();
     let filter_prefix = filter.unwrap_or_default();
-
     checksums
-        .iter()
-        .filter_map(|(name, info)| {
-            if name.contains(filter_prefix) {
+        .values()
+        .filter_map(|wasm| {
+            if wasm.contains(filter_prefix) {
                 Some(
-                    info.get("hash")
-                        .expect("Missing hash in checksum")
-                        .to_owned(),
+                    wasm.split('.').collect::<Vec<&str>>()[1]
+                        .to_owned()
+                        .to_lowercase(),
                 )
             } else {
                 None
             }
-        })
-        .collect()
-}
-
-pub fn get_all_wasms_gas(working_dir: &Path) -> BTreeMap<String, u64> {
-    let checksums_path = working_dir.join("wasm/checksums.json");
-    let checksums: HashMap<String, HashMap<String, String>> =
-        serde_json::from_reader(fs::File::open(checksums_path).unwrap())
-            .unwrap();
-
-    checksums
-        .values()
-        .map(|map| {
-            (
-                map.get("hash").unwrap().to_lowercase(),
-                map.get("gas").unwrap().parse::<u64>().unwrap(),
-            )
         })
         .collect()
 }

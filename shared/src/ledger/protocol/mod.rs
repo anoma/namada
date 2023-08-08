@@ -102,7 +102,6 @@ where
     WLS: WriteLogAndStorage + StorageRead,
 {
         tx_gas_meter: &'a mut TxGasMeter,
-        gas_table: &'a BTreeMap<String, u64>,
         wl_storage: &'a mut WLS,
         vp_wasm_cache: &'a mut VpCache<CA>,
         tx_wasm_cache: &'a mut TxCache<CA>,
@@ -115,10 +114,9 @@ where
     WLS: WriteLogAndStorage + StorageRead,
  {
     /// Create a new instance of `ShellParams`
-    pub fn new(tx_gas_meter: &'a mut TxGasMeter, gas_table: &'a BTreeMap<String, u64>, wl_storage: &'a mut WLS, vp_wasm_cache: &'a mut VpCache<CA>, tx_wasm_cache: &'a mut TxCache<CA>) -> Self {
+    pub fn new(tx_gas_meter: &'a mut TxGasMeter,  wl_storage: &'a mut WLS, vp_wasm_cache: &'a mut VpCache<CA>, tx_wasm_cache: &'a mut TxCache<CA>) -> Self {
         Self {
             tx_gas_meter,
-            gas_table,
             wl_storage,
             vp_wasm_cache,
             tx_wasm_cache
@@ -142,7 +140,6 @@ pub fn dispatch_tx<'a, D, H, CA>(
     tx_bytes: &'a[u8],
     tx_index: TxIndex,
     tx_gas_meter: &'a mut TxGasMeter,
-    gas_table: &'a BTreeMap<String, u64>,
     wl_storage: &'a mut WlStorage<D, H>, 
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
@@ -164,7 +161,6 @@ where
             &tx_index,
             ShellParams{
                 tx_gas_meter ,
-                gas_table,
                 wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -182,7 +178,7 @@ where
                 wrapper,
                 masp_transaction,
                 tx_bytes,
-                ShellParams { tx_gas_meter, gas_table, wl_storage, vp_wasm_cache, tx_wasm_cache },
+                ShellParams { tx_gas_meter, wl_storage, vp_wasm_cache, tx_wasm_cache },
                 block_proposer,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow,
@@ -285,9 +281,8 @@ where
     H: 'static + StorageHasher + Sync,
     WLS: WriteLogAndStorage<D = D, H = H> 
 {
-    let ( gas_table, wl_storage, vp_wasm_cache, tx_wasm_cache) = match shell_params {
-     ShellParams {tx_gas_meter: _, gas_table, wl_storage, vp_wasm_cache, tx_wasm_cache} => (
-            gas_table,
+    let (  wl_storage, vp_wasm_cache, tx_wasm_cache) = match shell_params {
+     ShellParams {tx_gas_meter: _,  wl_storage, vp_wasm_cache, tx_wasm_cache} => (
             wl_storage,
             vp_wasm_cache,
             tx_wasm_cache
@@ -333,7 +328,7 @@ where
                 match apply_wasm_tx(
                         fee_unshielding_tx,
                     &TxIndex::default(),
-                        ShellParams { tx_gas_meter: &mut tx_gas_meter, gas_table , wl_storage: *wl_storage , vp_wasm_cache , tx_wasm_cache  },
+                        ShellParams { tx_gas_meter: &mut tx_gas_meter,  wl_storage: *wl_storage , vp_wasm_cache , tx_wasm_cache  },
     #[cfg(not(feature = "mainnet"))] false,
                     
                 ) {
@@ -565,11 +560,10 @@ where
     H: 'static + StorageHasher + Sync,
     WLS: WriteLogAndStorage<D = D, H = H>
 {
-    let (tx_gas_meter, gas_table, storage, write_log, vp_wasm_cache, tx_wasm_cache) =
+    let (tx_gas_meter,  storage, write_log, vp_wasm_cache, tx_wasm_cache) =
         match shell_params {
             ShellParams{
                 tx_gas_meter ,
-                gas_table,
                 wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -577,7 +571,6 @@ where
                 let (write_log, storage) = wl_storage.split_borrow();
                 (
                 tx_gas_meter,
-                gas_table,
 storage,write_log,                vp_wasm_cache,
                 tx_wasm_cache,
             )
@@ -589,7 +582,6 @@ storage,write_log,                vp_wasm_cache,
         tx_index,
         storage,
         tx_gas_meter,
-        gas_table,
         write_log,
         vp_wasm_cache,
         tx_wasm_cache,
@@ -600,7 +592,6 @@ storage,write_log,                vp_wasm_cache,
         tx_index,
         storage,
         tx_gas_meter,
-        gas_table,
         write_log,
         verifiers_from_tx: &verifiers,
         vp_wasm_cache,
@@ -705,7 +696,6 @@ fn execute_tx<D, H, CA>(
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     tx_gas_meter: &mut TxGasMeter,
-    gas_table: &BTreeMap<String, u64>,
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
@@ -719,7 +709,6 @@ where
         storage,
         write_log,
         tx_gas_meter,
-        gas_table,
         tx_index,
         tx,
         vp_wasm_cache,
@@ -745,7 +734,6 @@ where
     tx_index: &'a TxIndex,
     storage: &'a Storage<D, H>,
     tx_gas_meter: &'a mut TxGasMeter,
-    gas_table: &'a BTreeMap<String, u64>,
     write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
     vp_wasm_cache: &'a mut VpCache<CA>,
@@ -760,7 +748,6 @@ fn check_vps<D, H, CA>(
         tx_index,
         storage,
         tx_gas_meter,
-        gas_table,
         write_log,
         verifiers_from_tx,
         vp_wasm_cache,
@@ -784,7 +771,6 @@ where
         storage,
         write_log,
         tx_gas_meter,
-        gas_table,
         vp_wasm_cache,
         has_valid_pow,
     )?;
@@ -805,7 +791,6 @@ fn execute_vps<D, H, CA>(
     storage: &Storage<D, H>,
     write_log: &WriteLog,
     tx_gas_meter: &TxGasMeter,
-    gas_table: &BTreeMap<String, u64>,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
     // This is true when the wrapper of this tx contained a valid
@@ -843,7 +828,6 @@ where
                         storage,
                         write_log,
                         &mut gas_meter,
-                        gas_table,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),

@@ -156,18 +156,13 @@ where
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
         let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
-        let gas_table: BTreeMap<String, u64> = self
-            .wl_storage
-            .read(&parameters::storage::get_gas_table_storage_key())
-            .expect("Error while reading from storage")
-            .expect("Missing gas table in storage");
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                match self.validate_wrapper_bytes(tx_bytes,  block_time, &mut temp_wl_storage, &gas_table, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
+                match self.validate_wrapper_bytes(tx_bytes,  block_time, &mut temp_wl_storage,  &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
                     Ok(gas) => {
                         temp_wl_storage.write_log.commit_tx();
                         Some((tx_bytes.to_owned(), gas)) 
@@ -222,7 +217,6 @@ where
         tx_bytes: &[u8],
         block_time: Option<DateTimeUtc>,
         temp_wl_storage: &mut TempWlStorage<D, H>,
-        gas_table: &BTreeMap<String, u64>,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: &Address,
@@ -259,7 +253,6 @@ where
                 &wrapper,
                 fee_unshield,
                 temp_wl_storage,
-                Some(Cow::Borrowed(gas_table)),
                 vp_wasm_cache,
                 tx_wasm_cache,
                 Some(block_proposer),

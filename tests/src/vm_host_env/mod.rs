@@ -133,13 +133,11 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(
-            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-                .err()
-                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-                .unwrap()
-                .contains("CannotDeleteVp")
-        );
+        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("CannotDeleteVp"));
     }
 
     #[test]
@@ -470,30 +468,26 @@ mod tests {
                 env.tx.clone()
             });
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
-            assert!(
-                signed_tx_data
-                    .verify_signature(
-                        &pk,
-                        &[
-                            *signed_tx_data.data_sechash(),
-                            *signed_tx_data.code_sechash(),
-                        ],
-                    )
-                    .is_ok()
-            );
+            assert!(signed_tx_data
+                .verify_signature(
+                    &pk,
+                    &[
+                        *signed_tx_data.data_sechash(),
+                        *signed_tx_data.code_sechash(),
+                    ],
+                )
+                .is_ok());
 
             let other_keypair = key::testing::keypair_2();
-            assert!(
-                signed_tx_data
-                    .verify_signature(
-                        &other_keypair.ref_to(),
-                        &[
-                            *signed_tx_data.data_sechash(),
-                            *signed_tx_data.code_sechash(),
-                        ],
-                    )
-                    .is_err()
-            );
+            assert!(signed_tx_data
+                .verify_signature(
+                    &other_keypair.ref_to(),
+                    &[
+                        *signed_tx_data.data_sechash(),
+                        *signed_tx_data.code_sechash(),
+                    ],
+                )
+                .is_err());
         }
     }
 
@@ -555,7 +549,6 @@ mod tests {
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
-        let gas_table: BTreeMap<String, u64> = BTreeMap::default();
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
         let code_len = (code.len() as u64).try_to_vec().unwrap();
@@ -568,7 +561,6 @@ mod tests {
                 .storage
                 .write(&len_key, code_len.clone())
                 .unwrap();
-            env.wl_storage.storage.write(&namada::ledger::parameters::storage::get_gas_table_storage_key(), gas_table.clone().try_to_vec().unwrap()).unwrap();
         });
         let input_data = vec![];
         let mut tx = Tx::new(TxType::Raw);
@@ -595,7 +587,6 @@ mod tests {
                 .storage
                 .write(&len_key, code_len.clone())
                 .unwrap();
-            env.wl_storage.storage.write(&namada::ledger::parameters::storage::get_gas_table_storage_key(), gas_table.clone().try_to_vec().unwrap()).unwrap();
         });
         let input_data = vec![];
         let mut tx = Tx::new(TxType::Raw);

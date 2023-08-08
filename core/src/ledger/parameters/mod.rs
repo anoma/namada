@@ -68,8 +68,6 @@ pub struct Parameters {
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub gas_cost: BTreeMap<Address, token::Amount>,
-    /// Gas table
-    pub gas_table: BTreeMap<String, u64>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -135,7 +133,6 @@ impl Parameters {
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
             gas_cost,
-            gas_table,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         } = self;
@@ -151,14 +148,6 @@ impl Parameters {
         // write epoch parameters
         let epoch_key = storage::get_epoch_duration_storage_key();
         storage.write(&epoch_key, epoch_duration)?;
-
-        // write gas table
-        let gas_table_key = storage::get_gas_table_storage_key();
-        let gas_table = gas_table
-            .iter()
-            .map(|(k, v)| (k.to_lowercase(), *v))
-            .collect::<BTreeMap<String, u64>>();
-        storage.write(&gas_table_key, gas_table)?;
 
         // write fee unshielding gas limit
         let fee_unshielding_gas_limit_key =
@@ -474,13 +463,6 @@ where
     let implicit_vp_code_hash =
         Hash::try_from(&value[..]).into_storage_result()?;
 
-    // read gas table
-    let gas_table_key = storage::get_gas_table_storage_key();
-    let value = storage.read(&gas_table_key)?;
-    let gas_table: BTreeMap<String, u64> = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     // read fee unshielding gas limit
     let fee_unshielding_gas_limit_key =
         storage::get_fee_unshielding_gas_limit_key();
@@ -559,7 +541,6 @@ where
         #[cfg(not(feature = "mainnet"))]
         faucet_account,
         gas_cost,
-        gas_table,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,
     })

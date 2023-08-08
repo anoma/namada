@@ -30,7 +30,6 @@ pub struct ProposalsResult {
 pub fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     response: &mut shim::response::FinalizeBlock,
-    gas_table: &BTreeMap<String, u64>,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -81,9 +80,7 @@ where
         let transfer_address = match tally_result {
             TallyResult::Passed(tally) => {
                 let (successful_execution, proposal_event) = match tally {
-                    Tally::Default => {
-                        execute_default_proposal(shell, id, gas_table)
-                    }
+                    Tally::Default => execute_default_proposal(shell, id),
                     Tally::PGFCouncil(council) => {
                         execute_pgf_proposal(id, council)
                     }
@@ -145,7 +142,6 @@ where
 fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
-    gas_table: &BTreeMap<String, u64>,
 ) -> (bool, Event)
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -173,7 +169,6 @@ where
                 &TxIndex::default(),
                 ShellParams::new(
                     &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), // No gas limit for governance proposal
-                    gas_table,
                     &mut shell.wl_storage,
                     &mut shell.vp_wasm_cache,
                     &mut shell.tx_wasm_cache,

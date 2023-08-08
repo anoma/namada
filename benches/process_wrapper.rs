@@ -57,7 +57,6 @@ fn process_tx(c: &mut Criterion) {
     let wrapper = tx.to_bytes();
 
     let datetime = DateTimeUtc::now();
-    let gas_table = BTreeMap::default();
 
     c.bench_function("wrapper_tx_validation", |b| {
         b.iter_batched(
@@ -89,7 +88,6 @@ fn process_tx(c: &mut Criterion) {
                             &mut validation_meta,
                             &mut temp_wl_storage,
                             datetime,
-                            &gas_table,
                             &mut vp_wasm_cache,
                             &mut tx_wasm_cache,
                             &block_proposer
