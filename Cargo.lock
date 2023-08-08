@@ -3215,7 +3215,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.41.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=9db6892da825a8e928d3f175aa43903d19af7806#9db6892da825a8e928d3f175aa43903d19af7806"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=38a827d3901e590b2935ee5b6b81b4d67c399560#38a827d3901e590b2935ee5b6b81b4d67c399560"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",

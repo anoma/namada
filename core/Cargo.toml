@@ -72,7 +72,7 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "9db6892da825a8e928d3f175aa43903d19af7806", features = ["serde"], optional = true}
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "38a827d3901e590b2935ee5b6b81b4d67c399560", features = ["serde"], optional = true}
 ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "31892ee743b2af017d5629b2af419ee20b6100c7", default-features = false, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
