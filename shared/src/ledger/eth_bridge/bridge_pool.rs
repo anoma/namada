@@ -54,6 +54,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     }: args::EthereumBridgePool,
     gas_payer: common::PublicKey,
 ) -> Result<Tx, Error> {
+    let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
             .await
