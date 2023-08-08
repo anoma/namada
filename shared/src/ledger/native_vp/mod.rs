@@ -537,7 +537,7 @@ where
     fn verify_tx_section_signature(
         &self,
         pk: &PublicKey,
-        section_hash: &Vec<Hash>,
+        hash_list: [Hash; 2],
     ) -> Result<bool, storage_api::Error> {
         unimplemented!("Native VPs don't validate tx singature")
     }

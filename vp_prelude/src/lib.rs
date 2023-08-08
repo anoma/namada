@@ -292,16 +292,16 @@ impl<'view> VpEnv<'view> for Ctx {
     fn verify_tx_section_signature(
         &self,
         pk: &crate::key::common::PublicKey,
-        section_hash: &Vec<Hash>,
+        hash_list: [Hash; 2],
     ) -> Result<bool, Error> {
         let pk = pk.try_to_vec().unwrap();
-        let hash = section_hash.try_to_vec().unwrap();
+        let hash_list= hash_list.try_to_vec().unwrap();
         let valid = unsafe {
             namada_vp_verify_tx_section_signature(
                 pk.as_ptr() as _,
                 pk.len() as _,
-                hash.as_ptr() as _,
-                hash.len() as _,
+                hash_list.as_ptr() as _,
+                hash_list.len() as _,
             )
         };
 
