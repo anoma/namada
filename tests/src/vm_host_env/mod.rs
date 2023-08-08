@@ -467,7 +467,7 @@ mod tests {
                     .add_serialized_data(data.to_vec())
                     .add_gas_payer(keypair.clone())
                     .add_signing_keys(keypairs.clone(), pks_map.clone())
-                    .build();
+                    .signed_build();
 
                 env.tx = tx;
                 env.tx.clone()
@@ -565,7 +565,7 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
 
@@ -583,7 +583,7 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
 
@@ -602,7 +602,7 @@ mod tests {
             .add_serialized_data(input_data)
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
     }
@@ -629,7 +629,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
 
         // create a client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -665,7 +665,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -710,7 +710,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -745,7 +745,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -791,7 +791,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -826,7 +826,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -874,7 +874,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -909,7 +909,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -957,7 +957,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -993,7 +993,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1044,7 +1044,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
@@ -1103,7 +1103,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1159,7 +1159,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair.clone())
             .add_signing_keys(keypairs.clone(), pks_map.clone())
-            .build();
+            .signed_build();
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1208,7 +1208,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1295,7 +1295,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1370,7 +1370,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1467,7 +1467,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1568,7 +1568,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1670,7 +1670,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1761,7 +1761,7 @@ mod tests {
             .add_serialized_data(tx_data.clone())
             .add_gas_payer(keypair)
             .add_signing_keys(keypairs, pks_map)
-            .build();
+            .signed_build();
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())

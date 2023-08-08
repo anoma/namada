@@ -130,7 +130,7 @@ impl TxBuilder {
     }
 
     /// Generate the corresponding tx
-    pub fn build(self) -> Tx {
+    pub fn unsigned_build(self) -> Tx {
         let mut tx = Tx::new(TxType::Raw);
         tx.header.chain_id = self.chain_id;
         tx.header.expiration = self.expiration;
@@ -138,8 +138,6 @@ impl TxBuilder {
         for section in self.sections.clone() {
             tx.add_section(section);
         }
-
-        tx.protocol_filter();
 
         for section in self.sections {
             match section {
@@ -152,7 +150,19 @@ impl TxBuilder {
             tx.update_header(TxType::Wrapper(Box::new(wrapper)));
         }
 
-        if let Some(account_public_keys_map) = self.account_public_keys_map {
+        tx
+    }
+
+    /// Generate the corresponding tx
+    pub fn signed_build(self) -> Tx {
+        let account_public_keys_map = self.account_public_keys_map.clone();
+        let gas_payer = self.gas_payer.clone();
+        let signing_keys = self.signing_keys.clone();
+        let mut tx = self.unsigned_build();
+
+        tx.protocol_filter();
+
+        if let Some(account_public_keys_map) = account_public_keys_map {
             let hashes = tx
                 .sections
                 .iter()
@@ -165,12 +175,12 @@ impl TxBuilder {
                 .collect();
             tx.add_section(Section::SectionSignature(MultiSignature::new(
                 hashes,
-                &self.signing_keys,
+                &signing_keys,
                 &account_public_keys_map,
             )));
         }
 
-        if let Some(keypair) = self.gas_payer {
+        if let Some(keypair) = gas_payer {
             let mut sections_hashes = tx
                 .sections
                 .iter()

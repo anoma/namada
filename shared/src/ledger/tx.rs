@@ -263,8 +263,7 @@ impl ProcessTxResponse {
 }
 
 /// Build and dump a transaction either to file or to screen
-pub fn dump_tx(args: &args::Tx, tx_builder: TxBuilder) {
-    let tx = tx_builder.build();
+pub fn dump_tx(args: &args::Tx, tx: Tx) {
     let tx_id = tx.header_hash();
     let serialized_tx = tx.serialize();
     match args.output_folder.to_owned() {
@@ -325,11 +324,6 @@ pub async fn process_tx<
     // use tendermint_rpc::Request;
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
-
-    #[cfg(feature = "std")]
-    {
-        super::signing::generate_test_vector(client, wallet, &tx).await;
-    }
 
     if args.dry_run {
         expect_dry_broadcast(TxBroadcastData::DryRun(tx), client).await

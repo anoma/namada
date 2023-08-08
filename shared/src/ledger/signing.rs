@@ -64,18 +64,9 @@ pub struct SigningTxData {
     /// The threshold associated to an account
     pub threshold: u8,
     /// The public keys to index map associated to an account
-    pub account_public_keys_map: AccountPublicKeysMap,
+    pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public keys of the fee payer
     pub gas_payer: common::PublicKey,
-}
-
-/// Generate a signing key from an address. Default to None if address is empty.
-pub fn signer_from_address(address: Option<Address>) -> TxSigningKey {
-    if let Some(address) = address {
-        TxSigningKey::WalletAddress(address)
-    } else {
-        TxSigningKey::None
-    }
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -147,16 +138,6 @@ pub fn find_key_by_pk<U: WalletUtils>(
     }
 }
 
-/// Carries types that can be directly/indirectly used to sign a transaction.
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
-pub enum TxSigningKey {
-    /// Do not sign any transaction
-    None,
-    /// Obtain the keypair corresponding to given address from wallet and sign
-    WalletAddress(Address),
-}
-
 /// Given CLI arguments and some defaults, determine the rightful transaction
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
@@ -168,7 +149,7 @@ pub async fn tx_signers<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    default: TxSigningKey,
+    default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
     let signer = if !&args.signing_keys.is_empty() {
         let public_keys =
@@ -183,14 +164,12 @@ pub async fn tx_signers<
 
     // Now actually fetch the signing key and apply it
     match signer {
-        TxSigningKey::WalletAddress(signer) if signer == masp() => {
-            Ok(vec![masp_tx_key().ref_to()])
-        }
-        TxSigningKey::WalletAddress(signer) => Ok(vec![
+        Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
+        Some(signer) => Ok(vec![
             find_pk::<C, U>(client, wallet, &signer, args.password.clone())
                 .await?,
         ]),
-        TxSigningKey::None => other_err(
+        None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
                 .to_string(),
@@ -209,30 +188,48 @@ pub async fn tx_signers<
 pub fn sign_tx<U: WalletUtils>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    tx_builder: TxBuilder,
+    tx: &mut Tx,
     signing_data: SigningTxData,
-) -> Result<TxBuilder, Error> {
-    let signing_tx_keypairs = signing_data
-        .public_keys
-        .iter()
-        .filter_map(|public_key| {
-            match find_key_by_pk(wallet, args, public_key) {
-                Ok(secret_key) => Some(secret_key),
-                Err(_) => None,
-            }
-        })
-        .collect::<Vec<common::SecretKey>>();
+) {
+    tx.protocol_filter();
+
+    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
+    {
+        let signing_tx_keypairs = signing_data
+            .public_keys
+            .iter()
+            .filter_map(|public_key| {
+                match find_key_by_pk(wallet, args, public_key) {
+                    Ok(secret_key) => Some(secret_key),
+                    Err(_) => None,
+                }
+            })
+            .collect::<Vec<common::SecretKey>>();
+
+        let hashes = tx
+            .sections
+            .iter()
+            .filter_map(|section| match section {
+                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
+                _ => None,
+            })
+            .collect();
+        tx.add_section(Section::SectionSignature(
+            crate::proto::MultiSignature::new(
+                hashes,
+                &signing_tx_keypairs,
+                &account_public_keys_map,
+            ),
+        ));
+    }
 
     let gas_payer_keypair =
         find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
 
-    let tx_builder = tx_builder.add_signing_keys(
-        signing_tx_keypairs,
-        signing_data.account_public_keys_map,
-    );
-    let tx_builder = tx_builder.add_gas_payer(gas_payer_keypair);
-
-    Ok(tx_builder)
+    tx.add_section(Section::Signature(crate::proto::Signature::new(
+        tx.sechashes(),
+        &gas_payer_keypair,
+    )));
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -244,39 +241,37 @@ pub async fn aux_signing_data<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    owner: &Address,
-    default_signer: TxSigningKey,
+    owner: &Option<Address>,
+    default_signer: Option<Address>,
 ) -> Result<SigningTxData, Error> {
-    let public_keys =
-        tx_signers::<C, U>(client, wallet, args, default_signer.clone())
-            .await?;
+    let public_keys = if owner.is_some() || args.gas_payer.is_none() {
+        tx_signers::<C, U>(client, wallet, args, default_signer.clone()).await?
+    } else {
+        vec![]
+    };
 
     let (account_public_keys_map, threshold) = match owner {
-        Address::Established(_) => {
+        Some(owner @ Address::Established(_)) => {
             let account = rpc::get_account_info::<C>(client, owner).await;
             if let Some(account) = account {
-                (account.public_keys_map, account.threshold)
+                (Some(account.public_keys_map), account.threshold)
             } else {
                 return Err(Error::InvalidAccount(owner.encode()));
             }
         }
-        Address::Implicit(_) => {
-            (AccountPublicKeysMap::from_iter(public_keys.clone()), 1u8)
-        }
-        Address::Internal(_) => {
+        Some(Address::Implicit(_)) => (
+            Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
+            1u8,
+        ),
+        Some(owner @ Address::Internal(_)) => {
             return Err(Error::InvalidAccount(owner.encode()));
         }
+        None => (None, 0u8),
     };
 
     let gas_payer = match &args.gas_payer {
         Some(keypair) => keypair.ref_to(),
-        None => {
-            if let Some(public_key) = public_keys.get(0) {
-                public_key.clone()
-            } else {
-                return Err(Error::InvalidFeePayer);
-            }
-        }
+        None => public_keys.get(0).ok_or(Error::InvalidFeePayer)?.clone(),
     };
 
     Ok(SigningTxData {

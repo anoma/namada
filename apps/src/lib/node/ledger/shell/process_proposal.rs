@@ -2035,7 +2035,7 @@ mod test_process_proposal {
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .add_gas_payer(keypair)
-            .build();
+            .signed_build();
 
         let response = {
             let request = ProcessProposal {

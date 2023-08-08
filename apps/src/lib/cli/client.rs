@@ -239,27 +239,33 @@ impl<IO> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
 
-                        let default_signer = signing::signer_from_address(
-                            Some(args.sender.clone()),
-                        );
+                        let default_signer = Some(args.sender.clone());
                         let signing_data = signing::aux_signing_data(
                             &client,
                             &mut ctx.wallet,
                             &args.tx,
-                            &args.sender,
+                            &Some(args.sender.clone()),
                             default_signer,
                         )
                         .await?;
 
-                        let tx_builder = bridge_pool::build_bridge_pool_tx(
+                        let mut tx = bridge_pool::build_bridge_pool_tx(
                             &client,
                             args.clone(),
                             signing_data.gas_payer.clone(),
                         )
-                        .await?;
+                        .await?
+                        .unsigned_build();
+
+                        signing::generate_test_vector(
+                            &client,
+                            &mut ctx.wallet,
+                            &tx,
+                        )
+                        .await;
 
                         if args.tx.dump_tx {
-                            dump_tx(&args.tx, tx_builder);
+                            dump_tx(&args.tx, tx);
                         } else {
                             tx::submit_reveal_aux(
                                 &client,
@@ -269,18 +275,18 @@ impl<IO> CliApi<IO> {
                             )
                             .await?;
 
-                            let tx_builder = signing::sign_tx(
+                            signing::sign_tx(
                                 &mut ctx.wallet,
                                 &tx_args,
-                                tx_builder,
+                                &mut tx,
                                 signing_data,
-                            )?;
+                            );
 
                             sdk_tx::process_tx(
                                 &client,
                                 &mut ctx.wallet,
                                 &tx_args,
-                                tx_builder.build(),
+                                tx,
                             )
                             .await?;
                         }

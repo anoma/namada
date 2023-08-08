@@ -836,7 +836,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -973,7 +973,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1176,7 +1176,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1304,7 +1304,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1951,7 +1951,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -2089,7 +2089,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -2265,7 +2265,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -2410,7 +2410,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -2560,7 +2560,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -2710,7 +2710,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(keypair_1())
-            .build();
+            .signed_build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =

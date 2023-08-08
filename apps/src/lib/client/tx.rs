@@ -57,27 +57,30 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
         let public_key = key.ref_to();
 
         if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
-            let gas_payer = if let Some(gas_payer) =
-                args.clone().gas_payer.or(args.signing_keys.get(0).cloned())
-            {
-                gas_payer
-            } else {
-                return Err(tx::Error::InvalidFeePayer);
-            };
+            let signing_data = signing::aux_signing_data(
+                client,
+                &mut ctx.wallet,
+                &args,
+                &None,
+                None,
+            )
+            .await?;
 
-            let tx_builder = tx::build_reveal_pk::<C>(
+            let mut tx = tx::build_reveal_pk::<C>(
                 client,
                 &args,
                 address,
                 &public_key,
-                &gas_payer.ref_to(),
+                &signing_data.gas_payer,
             )
-            .await?;
+            .await?
+            .unsigned_build();
 
-            let tx_builder = tx_builder.add_gas_payer(gas_payer);
+            signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
-            tx::process_tx(client, &mut ctx.wallet, &args, tx_builder.build())
-                .await?;
+            signing::sign_tx(&mut ctx.wallet, &args, &mut tx, signing_data);
+
+            tx::process_tx(client, &mut ctx.wallet, &args, tx).await?;
         }
     }
 
@@ -93,32 +96,30 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = signing::signer_from_address(Some(args.owner.clone()));
+    let default_signer = Some(args.owner.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &args.owner,
+        &Some(args.owner.clone()),
         default_signer,
     )
     .await?;
 
     submit_reveal_aux(client, ctx, args.tx.clone(), &args.owner).await?;
 
-    let tx_builder =
-        tx::build_custom(client, args.clone(), &signing_data.gas_payer).await?;
+    let mut tx =
+        tx::build_custom(client, args.clone(), &signing_data.gas_payer)
+            .await?
+            .unsigned_build();
+
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -133,31 +134,28 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = signing::signer_from_address(Some(args.addr.clone()));
+    let default_signer = Some(args.addr.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &args.addr,
+        &Some(args.addr.clone()),
         default_signer,
     )
     .await?;
 
-    let tx_builder =
+    let mut tx =
         tx::build_update_account(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+            .await?
+            .unsigned_build();
+
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -172,27 +170,27 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let gas_payer = if let Some(gas_payer) = args.tx.gas_payer.clone().or(args
-        .tx
-        .signing_keys
-        .get(0)
-        .cloned())
-    {
-        gas_payer
-    } else {
-        return Err(tx::Error::InvalidFeePayer);
-    };
+    let signing_data = signing::aux_signing_data(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        &None,
+        None,
+    )
+    .await?;
 
-    let tx_builder =
-        tx::build_init_account(client, args.clone(), &gas_payer.ref_to())
-            .await?;
+    let mut tx =
+        tx::build_init_account(client, args.clone(), &signing_data.gas_payer)
+            .await?
+            .unsigned_build();
+
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = tx_builder.add_gas_payer(gas_payer);
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -404,39 +402,36 @@ where
 
     let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let gas_payer = if let Some(gas_payer) = tx_args
-        .gas_payer
-        .clone()
-        .or(tx_args.signing_keys.get(0).cloned())
-    {
-        gas_payer
-    } else {
-        return Err(tx::Error::InvalidFeePayer);
-    };
-
-    let tx_builder = tx::prepare_tx(
+    let signing_data = signing::aux_signing_data(
         client,
+        &mut ctx.wallet,
         &tx_args,
-        tx_builder,
-        gas_payer.ref_to(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        &None,
+        None,
     )
     .await?;
 
-    if tx_args.dump_tx {
-        tx::dump_tx(&tx_args, tx_builder);
-    } else {
-        let tx_builder = tx_builder.add_gas_payer(gas_payer);
+    let mut tx = tx::prepare_tx(
+        client,
+        &tx_args,
+        tx_builder,
+        signing_data.gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await?
+    .unsigned_build();
 
-        let result = tx::process_tx(
-            client,
-            &mut ctx.wallet,
-            &tx_args,
-            tx_builder.build(),
-        )
-        .await?
-        .initialized_accounts();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+
+    if tx_args.dump_tx {
+        tx::dump_tx(&tx_args, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &tx_args, &mut tx, signing_data);
+
+        let result = tx::process_tx(client, &mut ctx.wallet, &tx_args, tx)
+            .await?
+            .initialized_accounts();
 
         if !tx_args.dry_run {
             let (validator_address_alias, validator_address) = match &result[..]
@@ -624,13 +619,12 @@ pub async fn submit_transfer<C: Client + Sync>(
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
     for _ in 0..2 {
-        let default_signer =
-            signing::signer_from_address(Some(args.source.effective_address()));
+        let default_signer = Some(args.source.effective_address());
         let signing_data = signing::aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
-            &args.source.effective_address(),
+            &Some(args.source.effective_address()),
             default_signer,
         )
         .await?;
@@ -651,23 +645,15 @@ pub async fn submit_transfer<C: Client + Sync>(
             &signing_data.gas_payer,
         )
         .await?;
+        let mut tx = tx_builder.unsigned_build();
+        signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
-            tx::dump_tx(&args.tx, tx_builder);
+            tx::dump_tx(&args.tx, tx);
         } else {
-            let tx_builder = signing::sign_tx(
-                &mut ctx.wallet,
-                &args.tx,
-                tx_builder,
-                signing_data,
-            )?;
-            let result = tx::process_tx(
-                client,
-                &mut ctx.wallet,
-                &args.tx,
-                tx_builder.build(),
-            )
-            .await?;
+            signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+            let result =
+                tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
 
             let submission_epoch = rpc::query_and_print_epoch(client).await;
 
@@ -706,34 +692,29 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer =
-        signing::signer_from_address(Some(args.source.clone()));
+    let default_signer = Some(args.source.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &args.source,
+        &Some(args.source.clone()),
         default_signer,
     )
     .await?;
 
     submit_reveal_aux(client, &mut ctx, args.tx.clone(), &args.source).await?;
 
-    let tx_builder =
+    let mut tx =
         tx::build_ibc_transfer(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+            .await?
+            .unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -875,12 +856,12 @@ where
             .await
             .unwrap();
 
-        let default_signer = signing::signer_from_address(Some(signer.clone()));
+        let default_signer = Some(signer.clone());
         let signing_data = signing::aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
-            &signer,
+            &Some(signer.clone()),
             default_signer,
         )
         .await?;
@@ -910,7 +891,7 @@ where
 
         submit_reveal_aux(client, &mut ctx, args.tx.clone(), &signer).await?;
 
-        let tx_builder = tx::prepare_tx(
+        let mut tx = tx::prepare_tx(
             client,
             &args.tx,
             tx_builder,
@@ -918,25 +899,16 @@ where
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-        .await?;
+        .await?
+        .unsigned_build();
+        signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
-            tx::dump_tx(&args.tx, tx_builder);
+            tx::dump_tx(&args.tx, tx);
         } else {
-            let tx_builder = signing::sign_tx(
-                &mut ctx.wallet,
-                &args.tx,
-                tx_builder,
-                signing_data,
-            )?;
+            signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-            tx::process_tx(
-                client,
-                &mut ctx.wallet,
-                &args.tx,
-                tx_builder.build(),
-            )
-            .await?;
+            tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
         }
 
         Ok(())
@@ -1174,14 +1146,12 @@ where
                 .await
                 .unwrap();
 
-                let default_signer = signing::signer_from_address(Some(
-                    args.voter_address.clone(),
-                ));
+                let default_signer = Some(args.voter_address.clone());
                 let signing_data = signing::aux_signing_data(
                     client,
                     &mut ctx.wallet,
                     &args.tx,
-                    &args.voter_address,
+                    &Some(args.voter_address.clone()),
                     default_signer,
                 )
                 .await?;
@@ -1193,7 +1163,7 @@ where
                     .add_code_from_hash(tx_code_hash)
                     .add_data(tx_data);
 
-                let tx_builder = tx::prepare_tx(
+                let mut tx = tx::prepare_tx(
                     client,
                     &args.tx,
                     tx_builder,
@@ -1201,27 +1171,25 @@ where
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
-                .await?;
+                .await?
+                .unsigned_build();
+                signing::generate_test_vector(client, &mut ctx.wallet, &tx)
+                    .await;
 
                 if args.tx.dump_tx {
-                    tx::dump_tx(&args.tx, tx_builder);
+                    tx::dump_tx(&args.tx, tx);
                 } else {
                     // no need to releal pk since people who an vote on
                     // governane proposal must be enstablished addresses
 
-                    let tx_builder = signing::sign_tx(
+                    signing::sign_tx(
                         &mut ctx.wallet,
                         &args.tx,
-                        tx_builder,
+                        &mut tx,
                         signing_data,
-                    )?;
-                    tx::process_tx(
-                        client,
-                        &mut ctx.wallet,
-                        &args.tx,
-                        tx_builder.build(),
-                    )
-                    .await?;
+                    );
+                    tx::process_tx(client, &mut ctx.wallet, &args.tx, tx)
+                        .await?;
                 }
                 Ok(())
             }
@@ -1318,35 +1286,30 @@ where
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer =
-        signing::signer_from_address(Some(default_address.clone()));
+    let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &default_address,
+        &Some(default_address.clone()),
         default_signer,
     )
     .await?;
 
     submit_reveal_aux(client, ctx, args.tx.clone(), &default_address).await?;
 
-    let tx_builder =
+    let mut tx =
         tx::build_bond::<C>(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+            .await?
+            .unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -1362,13 +1325,12 @@ where
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer =
-        signing::signer_from_address(Some(default_address.clone()));
+    let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &default_address,
+        &Some(default_address),
         default_signer,
     )
     .await?;
@@ -1380,19 +1342,15 @@ where
         &signing_data.gas_payer,
     )
     .await?;
+    let mut tx = tx_builder.unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
 
         tx::query_unbonds(client, args.clone(), latest_withdrawal_pre).await?;
     }
@@ -1410,33 +1368,28 @@ where
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer =
-        signing::signer_from_address(Some(default_address.clone()));
+    let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &default_address,
+        &Some(default_address),
         default_signer,
     )
     .await?;
 
-    let tx_builder =
+    let mut tx =
         tx::build_withdraw(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+            .await?
+            .unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -1451,36 +1404,31 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer =
-        signing::signer_from_address(Some(args.validator.clone()));
+    let default_signer = Some(args.validator.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &args.validator,
+        &Some(args.validator.clone()),
         default_signer,
     )
     .await?;
 
-    let tx_builder = tx::build_validator_commission_change(
+    let mut tx = tx::build_validator_commission_change(
         client,
         args.clone(),
         &signing_data.gas_payer,
     )
-    .await?;
+    .await?
+    .unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -1497,36 +1445,31 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer =
-        signing::signer_from_address(Some(args.validator.clone()));
+    let default_signer = Some(args.validator.clone());
     let signing_data = signing::aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
-        &args.validator,
+        &Some(args.validator.clone()),
         default_signer,
     )
     .await?;
 
-    let tx_builder = tx::build_unjail_validator(
+    let mut tx = tx::build_unjail_validator(
         client,
         args.clone(),
         &signing_data.gas_payer,
     )
-    .await?;
+    .await?
+    .unsigned_build();
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
-        tx::dump_tx(&args.tx, tx_builder);
+        tx::dump_tx(&args.tx, tx);
     } else {
-        let tx_builder = signing::sign_tx(
-            &mut ctx.wallet,
-            &args.tx,
-            tx_builder,
-            signing_data,
-        )?;
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
-        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder.build())
-            .await?;
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())

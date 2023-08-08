@@ -176,7 +176,7 @@ mod tests {
             .add_code(tx_code)
             .add_serialized_data(tx_data)
             .add_gas_payer(key)
-            .build();
+            .signed_build();
         let signed_tx = tx;
 
         // Read data before we apply tx:
