@@ -11,9 +11,9 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::{eth_bridge, storage as ledger_storage};
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
-use namada_core::types::token::{balance_key, Amount, Change};
+use namada_core::types::token::{balance_key, Amount};
 
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader, VpEnv};
+use crate::ledger::native_vp::{Ctx, NativeVp, VpEnv};
 use crate::proto::Tx;
 use crate::vm::WasmCacheAccess;
 
@@ -222,108 +222,6 @@ fn determine_check_type(
         return Ok(None);
     }
     Ok(Some(CheckType::Erc20Transfer))
-}
-
-/// Checks that the balances at both `sender` and `receiver` have changed by
-/// some amount, and that the changes balance each other out. If the balance
-/// changes are invalid, the reason is logged and a `None` is returned.
-/// Otherwise, return the `Amount` of the transfer i.e. by how much the sender's
-/// balance decreased, or equivalently by how much the receiver's balance
-/// increased
-pub(super) fn check_balance_changes(
-    reader: impl StorageReader,
-    sender: &Key,
-    receiver: &Key,
-) -> Result<Option<Amount>> {
-    let sender_balance_pre = reader
-        .read_pre_value::<Amount>(sender)?
-        .unwrap_or_default()
-        .change();
-    let sender_balance_post = match reader.read_post_value::<Amount>(sender)? {
-        Some(value) => value,
-        None => {
-            return Err(eyre!(
-                "Rejecting transaction as could not read_post balance key {}",
-                sender,
-            ));
-        }
-    }
-    .change();
-    let receiver_balance_pre = reader
-        .read_pre_value::<Amount>(receiver)?
-        .unwrap_or_default()
-        .change();
-    let receiver_balance_post = match reader
-        .read_post_value::<Amount>(receiver)?
-    {
-        Some(value) => value,
-        None => {
-            return Err(eyre!(
-                "Rejecting transaction as could not read_post balance key {}",
-                receiver,
-            ));
-        }
-    }
-    .change();
-
-    let sender_balance_delta =
-        calculate_delta(sender_balance_pre, sender_balance_post)?;
-    let receiver_balance_delta =
-        calculate_delta(receiver_balance_pre, receiver_balance_post)?;
-    if receiver_balance_delta != -sender_balance_delta {
-        tracing::debug!(
-            ?sender_balance_pre,
-            ?receiver_balance_pre,
-            ?sender_balance_post,
-            ?receiver_balance_post,
-            ?sender_balance_delta,
-            ?receiver_balance_delta,
-            "Rejecting transaction as balance changes do not match"
-        );
-        return Ok(None);
-    }
-    if sender_balance_delta.is_zero() || sender_balance_delta > Change::zero() {
-        assert!(
-            receiver_balance_delta.is_zero()
-                || receiver_balance_delta < Change::zero()
-        );
-        tracing::debug!(
-            "Rejecting transaction as no balance change or invalid change"
-        );
-        return Ok(None);
-    }
-    if sender_balance_post < Change::zero() {
-        tracing::debug!(
-            ?sender_balance_post,
-            "Rejecting transaction as balance is negative"
-        );
-        return Ok(None);
-    }
-    if receiver_balance_post < Change::zero() {
-        tracing::debug!(
-            ?receiver_balance_post,
-            "Rejecting transaction as balance is negative"
-        );
-        return Ok(None);
-    }
-
-    Ok(Some(Amount::from_change(receiver_balance_delta)))
-}
-
-/// Return the delta between `balance_pre` and `balance_post`, erroring if there
-/// is an underflow
-fn calculate_delta(
-    balance_pre: Change,
-    balance_post: Change,
-) -> Result<Change> {
-    match balance_post.checked_sub(&balance_pre) {
-        Some(result) => Ok(result),
-        None => Err(eyre!(
-            "Underflow while calculating delta: {} - {}",
-            balance_post,
-            balance_pre
-        )),
-    }
 }
 
 #[cfg(test)]

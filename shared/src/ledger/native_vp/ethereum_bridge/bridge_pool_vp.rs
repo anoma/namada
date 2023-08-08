@@ -22,7 +22,6 @@ use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
 
-use crate::ledger::native_vp::ethereum_bridge::vp::check_balance_changes;
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
@@ -31,7 +30,7 @@ use crate::types::address::Address;
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
-use crate::types::token::{balance_key, Amount};
+use crate::types::token::{balance_key, Amount, Change};
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
@@ -470,6 +469,108 @@ where
             }
             ok
         })
+    }
+}
+
+/// Checks that the balances at both `sender` and `receiver` have changed by
+/// some amount, and that the changes balance each other out. If the balance
+/// changes are invalid, the reason is logged and a `None` is returned.
+/// Otherwise, return the `Amount` of the transfer i.e. by how much the sender's
+/// balance decreased, or equivalently by how much the receiver's balance
+/// increased
+fn check_balance_changes(
+    reader: impl StorageReader,
+    sender: &Key,
+    receiver: &Key,
+) -> Result<Option<Amount>, Error> {
+    let sender_balance_pre = reader
+        .read_pre_value::<Amount>(sender)?
+        .unwrap_or_default()
+        .change();
+    let sender_balance_post = match reader.read_post_value::<Amount>(sender)? {
+        Some(value) => value,
+        None => {
+            return Err(Error(eyre!(
+                "Rejecting transaction as could not read_post balance key {}",
+                sender,
+            )));
+        }
+    }
+    .change();
+    let receiver_balance_pre = reader
+        .read_pre_value::<Amount>(receiver)?
+        .unwrap_or_default()
+        .change();
+    let receiver_balance_post = match reader
+        .read_post_value::<Amount>(receiver)?
+    {
+        Some(value) => value,
+        None => {
+            return Err(Error(eyre!(
+                "Rejecting transaction as could not read_post balance key {}",
+                receiver,
+            )));
+        }
+    }
+    .change();
+
+    let sender_balance_delta =
+        calculate_delta(sender_balance_pre, sender_balance_post)?;
+    let receiver_balance_delta =
+        calculate_delta(receiver_balance_pre, receiver_balance_post)?;
+    if receiver_balance_delta != -sender_balance_delta {
+        tracing::debug!(
+            ?sender_balance_pre,
+            ?receiver_balance_pre,
+            ?sender_balance_post,
+            ?receiver_balance_post,
+            ?sender_balance_delta,
+            ?receiver_balance_delta,
+            "Rejecting transaction as balance changes do not match"
+        );
+        return Ok(None);
+    }
+    if sender_balance_delta.is_zero() || sender_balance_delta > Change::zero() {
+        assert!(
+            receiver_balance_delta.is_zero()
+                || receiver_balance_delta < Change::zero()
+        );
+        tracing::debug!(
+            "Rejecting transaction as no balance change or invalid change"
+        );
+        return Ok(None);
+    }
+    if sender_balance_post < Change::zero() {
+        tracing::debug!(
+            ?sender_balance_post,
+            "Rejecting transaction as balance is negative"
+        );
+        return Ok(None);
+    }
+    if receiver_balance_post < Change::zero() {
+        tracing::debug!(
+            ?receiver_balance_post,
+            "Rejecting transaction as balance is negative"
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(Amount::from_change(receiver_balance_delta)))
+}
+
+/// Return the delta between `balance_pre` and `balance_post`, erroring if there
+/// is an underflow
+fn calculate_delta(
+    balance_pre: Change,
+    balance_post: Change,
+) -> Result<Change, Error> {
+    match balance_post.checked_sub(&balance_pre) {
+        Some(result) => Ok(result),
+        None => Err(Error(eyre!(
+            "Underflow while calculating delta: {} - {}",
+            balance_post,
+            balance_pre
+        ))),
     }
 }
 
