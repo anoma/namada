@@ -297,6 +297,7 @@ pub struct GasFee {
 #[cfg(test)]
 mod test_eth_bridge_pool_types {
     use super::*;
+    use crate::types::address::nam;
     use crate::types::address::testing::established_address_1;
 
     /// Test that [`PendingTransfer`] and [`TransferToEthereum`]
@@ -312,6 +313,7 @@ mod test_eth_bridge_pool_types {
                 sender: established_address_1(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 10u64.into(),
                 payer: established_address_1(),
             },

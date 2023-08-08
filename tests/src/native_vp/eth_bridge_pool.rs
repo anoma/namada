@@ -139,6 +139,7 @@ mod test_bridge_pool_vp {
                 amount: Amount::from(TOKENS),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(GAS_FEE),
                 payer: bertha_address(),
             },
@@ -157,6 +158,7 @@ mod test_bridge_pool_vp {
                 amount: Amount::from(TOKENS),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(GAS_FEE),
                 payer: bertha_address(),
             },
@@ -175,6 +177,7 @@ mod test_bridge_pool_vp {
                 amount: Amount::from(TOKEN_CAP + 1),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(GAS_FEE),
                 payer: bertha_address(),
             },
@@ -193,6 +196,7 @@ mod test_bridge_pool_vp {
                 amount: Amount::from(TOKENS),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(GAS_FEE),
                 payer: albert_address(),
             },

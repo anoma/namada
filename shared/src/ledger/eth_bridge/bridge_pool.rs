@@ -62,7 +62,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         transfer: TransferToEthereum {
             asset,
             recipient,
-            sender: sender.clone(),
+            sender,
             amount,
             kind: if nut {
                 TransferToEthereumKind::Nut
@@ -699,6 +699,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
+                    token: namada_core::types::address::nam(),
                     amount: gas_amount.into(),
                     payer: bertha_address(),
                 },

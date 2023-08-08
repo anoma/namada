@@ -680,6 +680,7 @@ mod test_bridge_pool_vp {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -925,6 +926,7 @@ mod test_bridge_pool_vp {
                 amount: TOKENS.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: GAS_FEE.into(),
                 payer: bertha_address(),
             },
@@ -1186,6 +1188,7 @@ mod test_bridge_pool_vp {
                         amount: 100.into(),
                     },
                     gas_fee: GasFee {
+                        token: nam(),
                         amount: GAS_FEE.into(),
                         payer: bertha_address(),
                     },
@@ -1217,6 +1220,7 @@ mod test_bridge_pool_vp {
                         amount: 100.into(),
                     },
                     gas_fee: GasFee {
+                        token: nam(),
                         amount: GAS_FEE.into(),
                         payer: bertha_address(),
                     },
@@ -1343,6 +1347,7 @@ mod test_bridge_pool_vp {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1410,6 +1415,7 @@ mod test_bridge_pool_vp {
                 amount: 100.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 100.into(),
                 payer: bertha_address(),
             },
@@ -1500,6 +1506,7 @@ mod test_bridge_pool_vp {
                 amount: 100.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 100.into(),
                 payer: bertha_address(),
             },
@@ -1607,6 +1614,7 @@ mod test_bridge_pool_vp {
                 amount: 100.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 100.into(),
                 payer: established_address_1(),
             },
@@ -1698,6 +1706,7 @@ mod test_bridge_pool_vp {
                 amount: TOKENS.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: GAS_FEE.into(),
                 payer: daewon_address(),
             },

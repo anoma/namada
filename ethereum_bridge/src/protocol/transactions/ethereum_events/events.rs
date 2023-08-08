@@ -676,6 +676,7 @@ mod tests {
                     kind,
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: Amount::from(1),
                     payer: payer.clone(),
                 },
@@ -1087,6 +1088,7 @@ mod tests {
                 kind: eth_bridge_pool::TransferToEthereumKind::Erc20,
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(1),
                 payer: address::testing::established_address_1(),
             },
@@ -1499,6 +1501,7 @@ mod tests {
                 kind: eth_bridge_pool::TransferToEthereumKind::Nut,
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: Amount::from(1),
                 payer: address::testing::established_address_1(),
             },

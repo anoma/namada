@@ -12,13 +12,16 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     log_string("Received transfer to add to pool.");
     // pay the gas fees
-    let GasFee { amount, ref payer } = transfer.gas_fee;
-    let nam_addr = ctx.get_native_token().unwrap();
+    let GasFee {
+        token: ref fee_token_addr,
+        amount,
+        ref payer,
+    } = transfer.gas_fee;
     token::transfer(
         ctx,
         payer,
         &bridge_pool::BRIDGE_POOL_ADDRESS,
-        &nam_addr,
+        fee_token_addr,
         amount.native_denominated(),
         &None,
         &None,
@@ -33,6 +36,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     } = transfer.transfer;
     // if minting wNam, escrow the correct amount
     if asset == native_erc20_address(ctx)? {
+        let nam_addr = ctx.get_native_token()?;
         token::transfer(
             ctx,
             sender,
