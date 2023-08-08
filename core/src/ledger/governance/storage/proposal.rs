@@ -11,8 +11,8 @@ use crate::ledger::governance::cli::onchain::{
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
 use crate::ledger::storage_api::token::Amount;
 use crate::types::address::Address;
-use crate::types::storage::Epoch;
 use crate::types::hash::Hash;
+use crate::types::storage::Epoch;
 
 #[allow(missing_docs)]
 #[derive(Debug, Error)]

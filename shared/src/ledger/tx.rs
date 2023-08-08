@@ -16,13 +16,17 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::Amount;
-use namada_core::ledger::governance::cli::onchain::{DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote};
-use namada_core::ledger::governance::storage::proposal::{ProposalType, StorageProposal};
+use namada_core::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+};
+use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
-use namada_core::types::transaction::governance::{InitProposalData, VoteProposalData};
+use namada_core::types::transaction::governance::{
+    InitProposalData, VoteProposalData,
+};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
@@ -30,7 +34,6 @@ use thiserror::Error;
 
 use super::rpc::query_wasm_code_hash;
 use super::signing;
-use crate::core::ledger::governance::storage::keys as governance_storage;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::signer::Signer;
@@ -1112,17 +1115,18 @@ pub async fn build_default_proposal<
     args::InitProposal {
         tx,
         proposal_data,
-        native_token,
-        is_offline,
-        is_pgf_stewards,
-        is_pgf_funding,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
         tx_code_path,
     }: args::InitProposal,
     proposal: DefaultProposal,
     gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
-    let mut init_proposal_data = InitProposalData::try_from(proposal.clone())
-        .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+    let mut init_proposal_data =
+        InitProposalData::try_from(proposal.clone())
+            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
@@ -1138,8 +1142,8 @@ pub async fn build_default_proposal<
     init_proposal_data.content = extra_section_hash;
 
     let tx_builder = if let Some(init_proposal_code) = proposal.data {
-        let (tx_builder, extra_section_hash) =
-            tx_builder.add_extra_section(init_proposal_code.try_to_vec().unwrap());
+        let (tx_builder, extra_section_hash) = tx_builder
+            .add_extra_section(init_proposal_code.try_to_vec().unwrap());
         init_proposal_data.r#type =
             ProposalType::Default(Some(extra_section_hash));
         tx_builder
@@ -1162,37 +1166,36 @@ pub async fn build_default_proposal<
     .await
 }
 
-/// Build a proposal vote 
-pub async fn build_vote_proposal<
-    C: crate::ledger::queries::Client + Sync,
->(
+/// Build a proposal vote
+pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args::VoteProposal {
         tx,
         proposal_id,
         vote,
         voter,
-        is_offline,
-        proposal_data,
+        is_offline: _,
+        proposal_data: _,
         tx_code_path,
     }: args::VoteProposal,
     epoch: Epoch,
     gas_payer: &common::PublicKey,
 ) -> Result<TxBuilder, Error> {
-    let proposal_vote = ProposalVote::try_from(vote)
-            .map_err(|_| Error::InvalidProposalVote)?;
-        
+    let proposal_vote =
+        ProposalVote::try_from(vote).map_err(|_| Error::InvalidProposalVote)?;
+
     let proposal_id = proposal_id.expect("Proposal id must be defined.");
-    let proposal = if let Some(proposal) = rpc::query_proposal_by_id(client, proposal_id).await {
+    let proposal = if let Some(proposal) =
+        rpc::query_proposal_by_id(client, proposal_id).await
+    {
         proposal
     } else {
         return Err(Error::ProposalDoesNotExist(proposal_id));
     };
 
-    let storage_vote = StorageProposalVote::build(
-        &proposal_vote,
-        &proposal.r#type
-    ).expect("Should be able to build the proposal vote");
+    let storage_vote =
+        StorageProposalVote::build(&proposal_vote, &proposal.r#type)
+            .expect("Should be able to build the proposal vote");
 
     let is_validator = rpc::is_validator(client, &voter).await;
 
@@ -1205,7 +1208,10 @@ pub async fn build_vote_proposal<
         &voter,
         proposal.voting_start_epoch,
     )
-    .await.keys().cloned().collect::<Vec<Address>>();
+    .await
+    .keys()
+    .cloned()
+    .collect::<Vec<Address>>();
 
     let data = VoteProposalData {
         id: proposal_id,
@@ -1224,7 +1230,15 @@ pub async fn build_vote_proposal<
     let tx_builder = TxBuilder::new(chain_id, tx.expiration);
     let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
-    Ok(tx_builder)
+    prepare_tx::<C>(
+        client,
+        &tx,
+        tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
 }
 
 /// Build a pgf funding proposal governance
@@ -1234,11 +1248,11 @@ pub async fn build_pgf_funding_proposal<
     client: &C,
     args::InitProposal {
         tx,
-        proposal_data,
-        native_token,
-        is_offline,
-        is_pgf_stewards,
-        is_pgf_funding,
+        proposal_data: _,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
         tx_code_path,
     }: args::InitProposal,
     proposal: PgfFundingProposal,
@@ -1277,11 +1291,11 @@ pub async fn build_pgf_stewards_proposal<
     client: &C,
     args::InitProposal {
         tx,
-        proposal_data,
-        native_token,
-        is_offline,
-        is_pgf_stewards,
-        is_pgf_funding,
+        proposal_data: _,
+        native_token: _,
+        is_offline: _,
+        is_pgf_stewards: _,
+        is_pgf_funding: _,
         tx_code_path,
     }: args::InitProposal,
     proposal: PgfStewardProposal,

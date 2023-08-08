@@ -57,11 +57,10 @@ where
                 return false;
             };
             match key_type {
-                KeyType::PARAMETER => governance::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    &data,
-                )
-                .unwrap_or(false),
+                KeyType::PARAMETER => {
+                    governance::is_proposal_accepted(&self.ctx.pre(), &data)
+                        .unwrap_or(false)
+                }
                 KeyType::UNKNOWN_PARAMETER => false,
                 KeyType::UNKNOWN => true,
             }

@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, ReadDir};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,7 @@ impl OfflineProposal {
 
         Ok(self)
     }
+
     /// Hash an offline proposal
     pub fn hash(&self) -> Hash {
         let content_serialized = serde_json::to_vec(&self.content)
@@ -62,8 +63,11 @@ impl OfflineProposal {
     ) -> OfflineSignedProposal {
         let proposal_hash = self.hash();
 
-        let signatures_index =
-            compute_signatures_index(&signing_keys, &account_public_keys_map, &proposal_hash);
+        let signatures_index = compute_signatures_index(
+            &signing_keys,
+            account_public_keys_map,
+            &proposal_hash,
+        );
 
         OfflineSignedProposal {
             proposal: self,
@@ -99,14 +103,14 @@ impl TryFrom<&[u8]> for OfflineSignedProposal {
     }
 }
 
-
 impl OfflineSignedProposal {
     /// Serialize the proposal to file. Returns the filename if successful.
     pub fn serialize(&self) -> Result<String, serde_json::Error> {
         let proposal_filename =
             format!("offline_proposal_{}.json", self.proposal.hash());
 
-        let out = File::create(&proposal_filename).expect("Should be able to create a file.");
+        let out = File::create(&proposal_filename)
+            .expect("Should be able to create a file.");
         serde_json::to_writer_pretty(out, self)?;
 
         Ok(proposal_filename)
@@ -125,7 +129,7 @@ impl OfflineSignedProposal {
 
         let valid_signatures = compute_total_valid_signatures(
             &self.signatures,
-            &account_public_keys_map,
+            account_public_keys_map,
             &proposal_hash,
         );
 
@@ -185,23 +189,36 @@ impl OfflineVote {
     }
 
     /// Sign the offline vote
-    pub fn sign(self, keypairs: Vec<common::SecretKey>, account_public_keys_map: &AccountPublicKeysMap) -> Self {
-        let proposal_vote_data = self.vote.try_to_vec().expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = self.delegations
+    pub fn sign(
+        self,
+        keypairs: Vec<common::SecretKey>,
+        account_public_keys_map: &AccountPublicKeysMap,
+    ) -> Self {
+        let proposal_vote_data = self
+            .vote
+            .try_to_vec()
+            .expect("Conversion to bytes shouldn't fail.");
+        let delegations_hash = self
+            .delegations
             .try_to_vec()
             .expect("Conversion to bytes shouldn't fail.");
 
         let vote_hash = Hash::sha256(
-            [self.proposal_hash.to_vec(), proposal_vote_data, delegations_hash].concat(),
+            [
+                self.proposal_hash.to_vec(),
+                proposal_vote_data,
+                delegations_hash,
+            ]
+            .concat(),
         );
 
-        let signatures =
-            compute_signatures_index(&keypairs, account_public_keys_map, &vote_hash);
+        let signatures = compute_signatures_index(
+            &keypairs,
+            account_public_keys_map,
+            &vote_hash,
+        );
 
-        Self {
-            signatures,
-            ..self
-        }
+        Self { signatures, ..self }
     }
 
     /// Check if the vote is yay
@@ -243,7 +260,7 @@ impl OfflineVote {
 
         let valid_signatures = compute_total_valid_signatures(
             &self.signatures,
-            &account_public_keys_map,
+            account_public_keys_map,
             &vote_data_hash,
         );
 
@@ -252,10 +269,13 @@ impl OfflineVote {
 
     /// Serialize the proposal to file. Returns the filename if successful.
     pub fn serialize(&self) -> Result<String, serde_json::Error> {
-        let vote_filename = format!("offline_vote_{}_{}.json", self.proposal_hash, self.address);
+        let vote_filename = format!(
+            "offline_vote_{}_{}.json",
+            self.proposal_hash, self.address
+        );
 
         let out = File::create(&vote_filename).unwrap();
-        serde_json::to_writer_pretty(out ,self)?;
+        serde_json::to_writer_pretty(out, self)?;
 
         Ok(vote_filename)
     }
@@ -270,7 +290,8 @@ fn compute_signatures_index(
     keys.iter()
         .filter_map(|signing_key| {
             let public_key = signing_key.ref_to();
-            let public_key_index = account_public_keys_map.get_index_from_public_key(&public_key);
+            let public_key_index =
+                account_public_keys_map.get_index_from_public_key(&public_key);
             if public_key_index.is_some() {
                 let signature =
                     common::SigScheme::sign(signing_key, hashed_data);

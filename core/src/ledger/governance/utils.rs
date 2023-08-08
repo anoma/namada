@@ -66,7 +66,7 @@ impl From<ProposalType> for TallyType {
     fn from(proposal_type: ProposalType) -> Self {
         match proposal_type {
             ProposalType::Default(_) => TallyType::TwoThird,
-            ProposalType::PGFSteward(_) => TallyType::OneThird,
+            ProposalType::PGFSteward(_) => TallyType::TwoThird,
             ProposalType::PGFPayment(_) => TallyType::LessOneThirdNay,
         }
     }
@@ -99,19 +99,27 @@ impl TallyResult {
     ) -> Self {
         let passed = match tally_type {
             TallyType::TwoThird => {
-                yay_voting_power >= (total_voting_power / 3) * 2
+                let at_least_two_third_voted = yay_voting_power
+                    + nay_voting_power
+                    >= total_voting_power / 3 * 2;
+                let at_last_half_voted_yay =
+                    yay_voting_power > nay_voting_power;
+                at_least_two_third_voted && at_last_half_voted_yay
             }
-            TallyType::OneThird => yay_voting_power >= total_voting_power / 3,
+            TallyType::OneThird => {
+                let at_least_two_third_voted = yay_voting_power
+                    + nay_voting_power
+                    >= total_voting_power / 3;
+                let at_last_half_voted_yay =
+                    yay_voting_power > nay_voting_power;
+                at_least_two_third_voted && at_last_half_voted_yay
+            }
             TallyType::LessOneThirdNay => {
                 nay_voting_power <= total_voting_power / 3
             }
         };
 
-        if passed {
-            Self::Passed
-        } else {
-            Self::Rejected
-        }
+        if passed { Self::Passed } else { Self::Rejected }
     }
 }
 
@@ -140,7 +148,10 @@ impl Display for ProposalResult {
             self.result,
             self.total_yay_power.to_string_native(),
             self.total_nay_power.to_string_native(),
-            percentage.checked_mul(token::Amount::from_u64(100)).unwrap_or_default().to_string_native()
+            percentage
+                .checked_mul(token::Amount::from_u64(100))
+                .unwrap_or_default()
+                .to_string_native()
         )
     }
 }

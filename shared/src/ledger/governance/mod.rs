@@ -255,7 +255,6 @@ where
             )
             .unwrap_or(false);
         Ok(is_delegator)
-    
     }
 
     /// Validate a content key
@@ -538,10 +537,8 @@ where
     /// Validate a governance parameter
     pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
         match tx.data() {
-            Some(data) => {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error::NativeVpError)
-            },
+            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                .map_err(Error::NativeVpError),
             None => Ok(true),
         }
     }
@@ -549,7 +546,7 @@ where
     /// Check if a vote is from a validator
     pub fn is_validator(
         &self,
-        epoch: Epoch,
+        _epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
         delegation_address: &Address,
@@ -562,7 +559,7 @@ where
         if !address.eq(delegation_address) {
             return Ok(false);
         }
-    
+
         let is_validator = is_validator(&self.ctx.pre(), address)?;
 
         Ok(is_validator && verifiers.contains(address))

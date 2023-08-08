@@ -8,15 +8,15 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
-use crate::ledger::governance::GovernanceVp;
-use crate::ledger::pgf::PgfVp;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::{self, NativeVp};
+use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};

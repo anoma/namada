@@ -1,17 +1,16 @@
 //! Queries router and handlers for validity predicates
 
 // Re-export to show in rustdoc!
+pub use governance::Gov;
+use governance::GOV;
 pub use pos::Pos;
 use pos::POS;
 pub use token::Token;
 use token::TOKEN;
-pub use governance::Gov;
-use governance::GOV;
 mod governance;
 pub use pgf::Pgf;
 use pgf::PGF;
 mod pgf;
-
 
 pub mod pos;
 mod token;

@@ -26,9 +26,9 @@ use namada_proof_of_stake::types::{
 };
 use serde::Serialize;
 
+use crate::core::ledger::governance::storage::keys as gov_storage;
 use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
-use crate::core::ledger::governance::storage::keys as gov_storage;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
@@ -707,17 +707,18 @@ pub async fn get_delegators_delegation_at<
 >(
     client: &C,
     address: &Address,
-    epoch: Epoch
+    epoch: Epoch,
 ) -> HashMap<Address, token::Amount> {
     unwrap_client_response::<C, _>(
-        RPC.vp().pos().delegations(client, address, &Some(epoch)).await,
+        RPC.vp()
+            .pos()
+            .delegations(client, address, &Some(epoch))
+            .await,
     )
 }
 
 /// Query proposal by Id
-pub async fn query_proposal_by_id<
-    C: crate::ledger::queries::Client + Sync,
->(
+pub async fn query_proposal_by_id<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Option<StorageProposal> {
@@ -908,11 +909,9 @@ pub async fn query_governance_parameters<
 }
 
 /// Get the givernance parameters
-pub async fn query_proposal_votes<
-    C: crate::ledger::queries::Client + Sync,
->(
+pub async fn query_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    proposal_id: u64
+    proposal_id: u64,
 ) -> Vec<Vote> {
     unwrap_client_response::<C, Vec<Vote>>(
         RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,

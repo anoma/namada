@@ -85,10 +85,8 @@ where
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(&self, tx: &Tx) -> Result<bool> {
         match tx.data() {
-            Some(data) => {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error::NativeVpError)
-            },
+            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                .map_err(Error::NativeVpError),
             None => Ok(true),
         }
     }

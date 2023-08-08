@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -7,37 +6,26 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
-use namada::core::ledger::governance::cli::offline::{OfflineSignedProposal, OfflineVote};
+use namada::core::ledger::governance::cli::offline::{
+    OfflineSignedProposal, OfflineVote,
+};
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
-use namada::core::ledger::governance::storage::keys as governance_storage;
-use namada::core::ledger::governance::storage::vote::StorageProposalVote;
 use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use namada::ledger::signing::find_pk;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
-use namada::types::governance::{
-    OfflineProposal, Proposal, ProposalVote, VoteType,
-};
 use namada::types::key::{self, *};
-use namada::types::storage::{Epoch, Key};
-use namada::types::token;
-use namada::types::transaction::governance::{
-    InitProposalData, VoteProposalData,
-};
 use namada::types::transaction::pos::InitValidator;
 use namada::types::tx::TxBuilder;
 
 use super::rpc;
-use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
 use crate::client::tx::tx::ProcessTxResponse;
@@ -957,33 +945,48 @@ where
         let proposal_vote = namada::core::ledger::governance::cli::onchain::ProposalVote::try_from(args.vote)
             .map_err(|_| tx::Error::InvalidProposalVote)?;
 
-        let proposal = OfflineSignedProposal::try_from(args.proposal_data.unwrap().as_ref())
-            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?
-            .validate(
-                &signing_data.account_public_keys_map,
-                signing_data.threshold,
-            ).map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let proposal = OfflineSignedProposal::try_from(
+            args.proposal_data.unwrap().as_ref(),
+        )
+        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?
+        .validate(
+            &signing_data.account_public_keys_map,
+            signing_data.threshold,
+        )
+        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
         let delegations = rpc::get_delegators_delegation_at(
             client,
             &args.voter,
             proposal.proposal.tally_epoch,
         )
-        .await.keys().cloned().collect::<Vec<Address>>();
+        .await
+        .keys()
+        .cloned()
+        .collect::<Vec<Address>>();
 
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
             args.voter.clone(),
-            delegations
+            delegations,
         );
 
-        let offline_signed_vote = offline_vote.sign(args.tx.signing_keys, &signing_data.account_public_keys_map);
-        let output_file_path = offline_signed_vote.serialize().expect("Should be able to serialize the offline proposal");
+        let offline_signed_vote = offline_vote
+            .sign(args.tx.signing_keys, &signing_data.account_public_keys_map);
+        let output_file_path = offline_signed_vote
+            .serialize()
+            .expect("Should be able to serialize the offline proposal");
 
         println!("Proposal vote serialized to: {}", output_file_path);
-        return Ok(())
+        return Ok(());
     } else {
-        tx::build_vote_proposal(client, args.clone(), current_epoch, &signing_data.gas_payer).await?
+        tx::build_vote_proposal(
+            client,
+            args.clone(),
+            current_epoch,
+            &signing_data.gas_payer,
+        )
+        .await?
     };
 
     if args.tx.dump_tx {
@@ -1368,11 +1371,10 @@ where
 #[cfg(test)]
 mod test_tx {
     use masp_primitives::transaction::components::Amount;
+    use namada::core::types::storage::Epoch;
     use namada::ledger::masp::{make_asset_type, MaspAmount};
     use namada::types::address::testing::gen_established_address;
     use namada::types::token::MaspDenom;
-
-    use super::*;
 
     #[test]
     fn test_masp_add_amount() {

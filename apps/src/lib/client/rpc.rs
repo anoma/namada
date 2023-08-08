@@ -2,10 +2,9 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::{File, read_dir};
+use std::fs::{self, read_dir};
 use std::io::{self, Write};
 use std::iter::Iterator;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -15,12 +14,15 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::ledger::governance::cli::offline::{read_offline_files, find_offline_proposal};
+use namada::core::ledger::governance::cli::offline::{
+    find_offline_proposal, find_offline_votes, read_offline_files,
+    OfflineSignedProposal, OfflineVote,
+};
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::core::ledger::governance::storage::proposal::StorageProposal;
 use namada::core::ledger::governance::utils::{
-    compute_proposal_result, ProposalVotes, TallyVote, Vote,
+    compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
 use namada::ledger::events::Event;
 use namada::ledger::masp::{
@@ -28,9 +30,7 @@ use namada::ledger::masp::{
     ShieldedUtils,
 };
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{
-    self, BondId, BondsAndUnbondsDetail, CommissionPair, PosParams, Slash,
-};
+use namada::ledger::pos::{CommissionPair, PosParams, Slash};
 use namada::ledger::queries::RPC;
 use namada::ledger::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
@@ -41,9 +41,6 @@ use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
-use namada::types::governance::{
-    OfflineProposal, OfflineVote, ProposalVote, VotePower, VoteType,
-};
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -924,16 +921,69 @@ pub async fn query_proposal_result<
         let proposal_folder = args.proposal_folder.expect(
             "The argument --proposal-folder is required with --offline.",
         );
-        let data_directory = read_dir(&proposal_folder)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Should be able to read {} directory.",
-                    proposal_folder.to_string_lossy()
-                )
-            });
+        let data_directory = read_dir(&proposal_folder).unwrap_or_else(|_| {
+            panic!(
+                "Should be able to read {} directory.",
+                proposal_folder.to_string_lossy()
+            )
+        });
         let files = read_offline_files(data_directory);
         let proposal_path = find_offline_proposal(&files);
 
+        let proposal = if let Some(path) = proposal_path {
+            let proposal_file =
+                fs::File::open(path).expect("file should open read only");
+            let proposal: OfflineSignedProposal =
+                serde_json::from_reader(proposal_file)
+                    .expect("file should be proper JSON");
+
+            let author_account =
+                rpc::get_account_info(client, &proposal.proposal.author)
+                    .await
+                    .expect("Account should exist.");
+
+            let proposal = proposal.validate(
+                &author_account.public_keys_map,
+                author_account.threshold,
+            );
+
+            if proposal.is_ok() {
+                proposal.unwrap()
+            } else {
+                eprintln!("The offline proposal is not valid.");
+                return;
+            }
+        } else {
+            eprintln!("Couldn't find a file name offline_proposal_*.json.");
+            return;
+        };
+
+        let votes = find_offline_votes(&files)
+            .iter()
+            .map(|path| {
+                let vote_file = fs::File::open(path).expect("");
+                let vote: OfflineVote =
+                    serde_json::from_reader(vote_file).expect("");
+                vote
+            })
+            .collect::<Vec<OfflineVote>>();
+
+        let proposal_votes =
+            compute_offline_proposal_votes(client, &proposal, votes.clone())
+                .await;
+        let total_voting_power =
+            get_total_staked_tokens(client, proposal.proposal.tally_epoch)
+                .await;
+
+        let proposal_result = compute_proposal_result(
+            proposal_votes,
+            total_voting_power,
+            TallyType::TwoThird,
+        );
+
+        println!("Proposal offline: {}", proposal.proposal.hash());
+        println!("Parsed {} votes.", votes.len());
+        println!("{:4}{}", "", proposal_result);
     }
 }
 
@@ -1048,16 +1098,11 @@ pub async fn query_unbond_with_slashing<
     )
 }
 
-pub async fn query_pos_parameters<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
     client: &C,
 ) -> PosParams {
     unwrap_client_response::<C, PosParams>(
-        RPC.vp()
-            .pos()
-            .pos_params(client)
-            .await,
+        RPC.vp().pos().pos_params(client).await,
     )
 }
 
@@ -1947,6 +1992,70 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     })
 }
 
+pub async fn compute_offline_proposal_votes<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    proposal: &OfflineSignedProposal,
+    votes: Vec<OfflineVote>,
+) -> ProposalVotes {
+    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validator_voting_power: HashMap<Address, VotePower> =
+        HashMap::default();
+    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegator_voting_power: HashMap<
+        Address,
+        HashMap<Address, VotePower>,
+    > = HashMap::default();
+    for vote in votes {
+        let is_validator = is_validator(client, &vote.address).await;
+        let is_delegator = is_delegator(client, &vote.address).await;
+        if is_validator {
+            let validator_stake = get_validator_stake(
+                client,
+                proposal.proposal.tally_epoch,
+                &vote.address,
+            )
+            .await
+            .unwrap_or_default();
+            validators_vote.insert(vote.address.clone(), vote.clone().into());
+            validator_voting_power
+                .insert(vote.address.clone(), validator_stake);
+        } else if is_delegator {
+            let validators = get_delegators_delegation_at(
+                client,
+                &vote.address.clone(),
+                proposal.proposal.tally_epoch,
+            )
+            .await;
+
+            for validator in vote.delegations.clone() {
+                let delegator_stake =
+                    validators.get(&validator).cloned().unwrap_or_default();
+
+                delegators_vote
+                    .insert(vote.address.clone(), vote.clone().into());
+                delegator_voting_power
+                    .entry(vote.address.clone())
+                    .or_default()
+                    .insert(validator, delegator_stake);
+            }
+        } else {
+            println!(
+                "Skipping vote, not a validator/delegator at epoch {}.",
+                proposal.proposal.tally_epoch
+            );
+        }
+    }
+
+    ProposalVotes {
+        validators_vote,
+        validator_voting_power,
+        delegators_vote,
+        delegator_voting_power,
+    }
+}
+
 pub async fn compute_proposal_votes<
     C: namada::ledger::queries::Client + Sync,
 >(
@@ -1954,7 +2063,8 @@ pub async fn compute_proposal_votes<
     proposal_id: u64,
     epoch: Epoch,
 ) -> ProposalVotes {
-    let votes = namada::ledger::rpc::query_proposal_votes(client, proposal_id).await;
+    let votes =
+        namada::ledger::rpc::query_proposal_votes(client, proposal_id).await;
 
     let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
     let mut validator_voting_power: HashMap<Address, VotePower> =
@@ -1973,8 +2083,7 @@ pub async fn compute_proposal_votes<
                     .unwrap_or_default();
 
             validators_vote.insert(vote.validator.clone(), vote.data.into());
-            validator_voting_power
-                .insert(vote.validator, validator_stake.into());
+            validator_voting_power.insert(vote.validator, validator_stake);
         } else {
             let delegator_stake = get_bond_amount_at(
                 client,
@@ -1989,7 +2098,7 @@ pub async fn compute_proposal_votes<
             delegator_voting_power
                 .entry(vote.delegator.clone())
                 .or_default()
-                .insert(vote.validator, delegator_stake.into());
+                .insert(vote.validator, delegator_stake);
         }
     }
 

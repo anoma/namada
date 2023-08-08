@@ -115,11 +115,8 @@ where
                 } else {
                     return Ok(false);
                 };
-                if !governance::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    &data,
-                )
-                .map_err(Error::NativeVpError)?
+                if !governance::is_proposal_accepted(&self.ctx.pre(), &data)
+                    .map_err(Error::NativeVpError)?
                 {
                     return Ok(false);
                 }

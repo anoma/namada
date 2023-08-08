@@ -163,6 +163,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+/// Transaction to initialize create a new proposal
 #[derive(Clone, Debug)]
 pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
@@ -181,6 +182,7 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+/// Transaction to vote on a proposal
 #[derive(Clone, Debug)]
 pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments

@@ -1,7 +1,7 @@
 use namada_macros::StorageKeys;
-use crate::types::address::Address;
 
 use crate::ledger::pgf::ADDRESS;
+use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
 /// Storage keys for pgf internal address.

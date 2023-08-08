@@ -75,8 +75,6 @@ mod internal {
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
-    pub const SLASH_FUND: &str =
-        "ano::Slash Fund                              ";
     pub const IBC: &str =
         "ibc::Inter-Blockchain Communication          ";
     pub const ETH_BRIDGE: &str =
@@ -242,9 +240,7 @@ impl Address {
                     InternalAddress::Multitoken => {
                         internal::MULTITOKEN.to_string()
                     }
-                    InternalAddress::Pgf => {
-                        internal::PGF.to_string()
-                    }
+                    InternalAddress::Pgf => internal::PGF.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -318,9 +314,7 @@ impl Address {
                 internal::MULTITOKEN => {
                     Ok(Address::Internal(InternalAddress::Multitoken))
                 }
-                internal::PGF => {
-                    Ok(Address::Internal(InternalAddress::Pgf))
-                }
+                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
                 _ => Err(Error::new(
                     ErrorKind::InvalidData,
                     "Invalid internal address",
@@ -554,7 +548,7 @@ pub enum InternalAddress {
     /// Multitoken
     Multitoken,
     /// Pgf
-    Pgf
+    Pgf,
 }
 
 impl Display for InternalAddress {

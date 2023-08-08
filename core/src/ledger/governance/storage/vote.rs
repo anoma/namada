@@ -1,23 +1,41 @@
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::super::cli::onchain::ProposalVote;
 use super::proposal::ProposalType;
 
 /// The type of a governance vote with the optional associated Memo
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 pub enum VoteType {
     /// A default vote without Memo
     Default,
     /// A vote for the PGF stewards
     PGFSteward,
     /// A vote for a PGF payment proposal
-    PGFPayment
+    PGFPayment,
 }
 
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 /// The vote for a proposal
 pub enum StorageProposalVote {
     /// Yes

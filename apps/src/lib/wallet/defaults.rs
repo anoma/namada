@@ -8,7 +8,7 @@ pub use dev::{
     validator_keys,
 };
 use namada::ledger::wallet::alias::Alias;
-use namada::ledger::{eth_bridge, governance, pos, pgf};
+use namada::ledger::{eth_bridge, governance, pgf, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
 
@@ -76,7 +76,7 @@ mod dev {
 
     use borsh::BorshDeserialize;
     use namada::ledger::wallet::alias::Alias;
-    use namada::ledger::{governance, pos, pgf};
+    use namada::ledger::{governance, pgf, pos};
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };

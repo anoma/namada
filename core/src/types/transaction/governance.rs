@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
@@ -9,12 +10,17 @@ use crate::ledger::governance::cli::onchain::{
 use crate::ledger::governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
 };
-
 use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
-use crate::types::governance::ProposalError;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
+
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum ProposalError {
+    #[error("Invalid proposal data.")]
+    InvalidProposalData,
+}
 
 /// A tx data type to hold proposal data
 #[derive(
@@ -41,6 +47,16 @@ pub struct InitProposalData {
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
     pub grace_epoch: Epoch,
+}
+
+impl InitProposalData {
+    /// Get the hash of the corresponding extra data section
+    pub fn get_section_code_hash(&self) -> Option<Hash> {
+        match self.r#type {
+            ProposalType::Default(hash) => hash,
+            _ => None,
+        }
+    }
 }
 
 /// A tx data type to hold vote proposal data

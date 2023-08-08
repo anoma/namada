@@ -3737,7 +3737,7 @@ pub mod args {
                     PROPOSAL_ETH
                         .def()
                         .help("Flag if the proposal is of type eth.")
-                        .conflicts_with_all(&[
+                        .conflicts_with_all([
                             PROPOSAL_PGF_FUNDING.name,
                             PROPOSAL_PGF_STEWARD.name,
                         ]),
@@ -3749,7 +3749,7 @@ pub mod args {
                             "Flag if the proposal is of type pgf-stewards. \
                              Used to elect/remove stewards.",
                         )
-                        .conflicts_with_all(&[
+                        .conflicts_with_all([
                             PROPOSAL_ETH.name,
                             PROPOSAL_PGF_FUNDING.name,
                         ]),
@@ -3761,7 +3761,7 @@ pub mod args {
                             "Flag if the proposal is of type pgf-funding. \
                              Used to control continous/retro pgf fundings.",
                         )
-                        .conflicts_with_all(&[
+                        .conflicts_with_all([
                             PROPOSAL_ETH.name,
                             PROPOSAL_PGF_STEWARD.name,
                         ]),
@@ -3790,8 +3790,6 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
-            let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
             let voter = ADDRESS.parse(matches);
             let is_offline = PROPOSAL_OFFLINE.parse(matches);

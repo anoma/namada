@@ -19,9 +19,7 @@ use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
 use namada::ledger::storage_api::{token, StorageWrite};
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::{
-    bond_amount, read_total_stake, read_validator_stake,
-};
+use namada::proof_of_stake::{bond_amount, read_total_stake};
 use namada::proto::{Code, Data};
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
@@ -228,7 +226,7 @@ where
                 read_total_stake(storage, params, epoch).unwrap_or_default();
 
             validators_vote.insert(validator.clone(), vote_data.into());
-            validator_voting_power.insert(validator, validator_stake.into());
+            validator_voting_power.insert(validator, validator_stake);
         } else {
             let validator = vote.validator.clone();
             let delegator = vote.delegator.clone();
@@ -245,7 +243,7 @@ where
             delegator_voting_power
                 .entry(delegator)
                 .or_default()
-                .insert(validator, delegator_stake.into());
+                .insert(validator, delegator_stake);
         }
     }
 

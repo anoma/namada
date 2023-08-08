@@ -78,7 +78,8 @@ impl GovernanceParameters {
             min_proposal_grace_epochs,
         } = self;
 
-        let min_proposal_fund_key = goverance_storage::get_min_proposal_fund_key();
+        let min_proposal_fund_key =
+            goverance_storage::get_min_proposal_fund_key();
         storage.write(&min_proposal_fund_key, min_proposal_fund)?;
 
         let max_proposal_code_size_key =

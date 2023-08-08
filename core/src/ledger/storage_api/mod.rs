@@ -6,9 +6,9 @@ pub mod collections;
 mod error;
 pub mod governance;
 pub mod key;
+pub mod pgf;
 pub mod token;
 pub mod validation;
-pub mod pgf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};

@@ -14,8 +14,8 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
-use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::core::ledger::governance::storage::keys as governance_storage;
+use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};

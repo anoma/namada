@@ -4,12 +4,12 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::ledger::governance::parameters::GovernanceParameters;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
 #[cfg(feature = "dev")]
 use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 #[cfg(feature = "dev")]
@@ -35,9 +35,9 @@ pub mod genesis_config {
 
     use data_encoding::HEXLOWER;
     use eyre::Context;
+    use namada::core::ledger::governance::parameters::GovernanceParameters;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
-    use namada::core::ledger::governance::parameters::GovernanceParameters;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
