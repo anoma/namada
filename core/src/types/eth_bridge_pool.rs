@@ -75,8 +75,8 @@ pub struct PendingTransferAppendix<'transfer> {
     pub kind: Cow<'transfer, TransferToEthereumKind>,
     /// The sender of the transfer.
     pub sender: Cow<'transfer, Address>,
-    /// The amount of gas fees (in NAM)
-    /// paid by the user sending this transfer
+    /// The amount of gas fees paid by the user
+    /// sending this transfer.
     pub gas_fee: Cow<'transfer, GasFee>,
 }
 
@@ -158,10 +158,10 @@ pub struct TransferToEthereum {
     BorshSchema,
 )]
 pub struct PendingTransfer {
-    /// The message to send to Ethereum to
+    /// Transfer to Ethereum data.
     pub transfer: TransferToEthereum,
-    /// The amount of gas fees (in NAM)
-    /// paid by the user sending this transfer
+    /// Amount of gas fees paid by the user
+    /// sending the transfer.
     pub gas_fee: GasFee,
 }
 
@@ -267,9 +267,9 @@ impl From<&PendingTransfer> for Key {
     }
 }
 
-/// The amount of NAM to be payed to the relayer of
-/// a transfer across the Ethereum Bridge to compensate
-/// for Ethereum gas fees.
+/// The amount of fees to be payed, in Namada, to the relayer
+/// of a transfer across the Ethereum Bridge, compensating
+/// for Ethereum gas costs.
 #[derive(
     Debug,
     Clone,
@@ -285,10 +285,13 @@ impl From<&PendingTransfer> for Key {
     BorshSchema,
 )]
 pub struct GasFee {
-    /// The amount of fees (in NAM)
+    /// The amount of fees.
     pub amount: Amount,
     /// The account of fee payer.
     pub payer: Address,
+    /// The address of the fungible token to draw
+    /// gas fees from.
+    pub token: Address,
 }
 
 #[cfg(test)]
