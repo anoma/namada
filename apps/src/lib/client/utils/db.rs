@@ -28,8 +28,8 @@ pub fn pretty_dump(data_path: PathBuf) {
             {
                 let val = Address::try_from_slice(&val_bytes).unwrap();
                 println!(
-                    "Consensus set at epoch {epoch}, stake {}, {position:?}: \
-                     {val}",
+                    "PoS: Consensus set at epoch {epoch}, stake {}, \
+                     {position:?}: {val}",
                     stake.to_string_native()
                 );
                 continue;
@@ -38,7 +38,7 @@ pub fn pretty_dump(data_path: PathBuf) {
             {
                 let val = Address::try_from_slice(&val_bytes).unwrap();
                 println!(
-                    "Below-capacity set at epoch {epoch}, stake {}, \
+                    "PoS: Below-capacity set at epoch {epoch}, stake {}, \
                      {position:?}: {val}",
                     stake.to_string_native()
                 );
@@ -50,7 +50,7 @@ pub fn pretty_dump(data_path: PathBuf) {
                     proof_of_stake::types::Position::try_from_slice(&val_bytes)
                         .unwrap();
                 println!(
-                    "Validator {address} position at epoch {epoch}: {}",
+                    "PoS: Validator {address} position at epoch {epoch}: {}",
                     val.0
                 );
                 continue;

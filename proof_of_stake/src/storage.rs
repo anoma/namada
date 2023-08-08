@@ -737,15 +737,14 @@ pub fn is_validator_set_positions_key(key: &Key) -> Option<(Epoch, Address)> {
             DbKeySeg::StringSeg(data),
             DbKeySeg::StringSeg(epoch),
             DbKeySeg::StringSeg(_),
-            DbKeySeg::StringSeg(address),
+            DbKeySeg::AddressSeg(address),
         ] if addr == &ADDRESS
             && key == VALIDATOR_SET_POSITIONS_KEY
             && lazy_map == LAZY_MAP_SUB_KEY
             && data == lazy_map::DATA_SUBKEY =>
         {
             let epoch = Epoch::parse(epoch.clone()).ok()?;
-            let address = Address::parse(address.clone()).ok()?;
-            Some((epoch, address))
+            Some((epoch, address.clone()))
         }
         _ => None,
     }
