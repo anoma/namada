@@ -361,10 +361,6 @@ where
         })
         .filter(is_pending_transfer_key)
         .collect();
-    let pool_balance_key =
-        balance_key(&wl_storage.storage.native_token, &BRIDGE_POOL_ADDRESS);
-    let relayer_rewards_key =
-        balance_key(&wl_storage.storage.native_token, relayer);
     // Remove the completed transfers from the bridge pool
     for (event, is_valid) in
         transfers.iter().zip(valid_transfers.iter().copied())
@@ -398,6 +394,10 @@ where
                 &pending_transfer,
             )?);
         }
+        let pool_balance_key =
+            balance_key(&pending_transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
+        let relayer_rewards_key =
+            balance_key(&pending_transfer.gas_fee.token, relayer);
         // give the relayer the gas fee for this transfer.
         update::amount(wl_storage, &relayer_rewards_key, |balance| {
             balance.receive(&pending_transfer.gas_fee.amount);
@@ -409,10 +409,8 @@ where
         wl_storage.delete(&key)?;
         _ = pending_keys.remove(&key);
         _ = changed_keys.insert(key);
-    }
-    if !transfers.is_empty() {
-        changed_keys.insert(relayer_rewards_key);
-        changed_keys.insert(pool_balance_key);
+        _ = changed_keys.insert(pool_balance_key);
+        _ = changed_keys.insert(relayer_rewards_key);
     }
 
     if pending_keys.is_empty() {
@@ -494,9 +492,9 @@ where
     let mut changed_keys = BTreeSet::default();
 
     let payer_balance_key =
-        balance_key(&wl_storage.storage.native_token, &transfer.gas_fee.payer);
+        balance_key(&transfer.gas_fee.token, &transfer.gas_fee.payer);
     let pool_balance_key =
-        balance_key(&wl_storage.storage.native_token, &BRIDGE_POOL_ADDRESS);
+        balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &payer_balance_key, |balance| {
         balance.receive(&transfer.gas_fee.amount);
     })?;
