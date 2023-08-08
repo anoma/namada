@@ -3502,8 +3502,8 @@ fn test_slash_redelegation() {
     let slashes = validator_slashes_handle(&alice);
 
     let mut slashed_amounts_map = BTreeMap::from_iter([
+        (Epoch(14), token::Change::zero()),
         (Epoch(15), token::Change::zero()),
-        (Epoch(16), token::Change::zero()),
     ]);
     let empty_slash_amounts = slashed_amounts_map.clone();
 
@@ -3525,8 +3525,8 @@ fn test_slash_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
+            (Epoch(14), token::Change::from(5)),
             (Epoch(15), token::Change::from(5)),
-            (Epoch(16), token::Change::from(5)),
         ])
     );
 
@@ -3549,15 +3549,15 @@ fn test_slash_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
+            (Epoch(14), token::Change::from(7)),
             (Epoch(15), token::Change::from(7)),
-            (Epoch(16), token::Change::from(7)),
         ])
     );
 
     // Test case 3
     slashed_amounts_map = BTreeMap::from_iter([
-        (Epoch(15), token::Change::from(2)),
-        (Epoch(16), token::Change::from(3)),
+        (Epoch(14), token::Change::from(2)),
+        (Epoch(15), token::Change::from(3)),
     ]);
     slash_redelegation(
         &storage,
@@ -3576,8 +3576,8 @@ fn test_slash_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
-            (Epoch(15), token::Change::from(7)),
-            (Epoch(16), token::Change::from(8)),
+            (Epoch(14), token::Change::from(7)),
+            (Epoch(15), token::Change::from(8)),
         ])
     );
 
@@ -3694,8 +3694,8 @@ fn test_slash_validator_redelegation() {
     let slashes = validator_slashes_handle(&alice);
 
     let mut slashed_amounts_map = BTreeMap::from_iter([
+        (Epoch(14), token::Change::zero()),
         (Epoch(15), token::Change::zero()),
-        (Epoch(16), token::Change::zero()),
     ]);
     let empty_slash_amounts = slashed_amounts_map.clone();
 
@@ -3758,8 +3758,8 @@ fn test_slash_validator_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
+            (Epoch(14), token::Change::from(7)),
             (Epoch(15), token::Change::from(7)),
-            (Epoch(16), token::Change::from(7)),
         ])
     );
 
@@ -3787,15 +3787,15 @@ fn test_slash_validator_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
+            (Epoch(14), token::Change::from(5)),
             (Epoch(15), token::Change::from(5)),
-            (Epoch(16), token::Change::from(5)),
         ])
     );
 
     // Test case 5
     slashed_amounts_map = BTreeMap::from_iter([
-        (Epoch(15), token::Change::from(2)),
-        (Epoch(16), token::Change::from(3)),
+        (Epoch(14), token::Change::from(2)),
+        (Epoch(15), token::Change::from(3)),
     ]);
     slash_validator_redelegation(
         &storage,
@@ -3812,8 +3812,8 @@ fn test_slash_validator_redelegation() {
     assert_eq!(
         slashed_amounts_map,
         BTreeMap::from_iter([
-            (Epoch(15), token::Change::from(7)),
-            (Epoch(16), token::Change::from(8)),
+            (Epoch(14), token::Change::from(7)),
+            (Epoch(15), token::Change::from(8)),
         ])
     );
 
