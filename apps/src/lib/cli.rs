@@ -2435,6 +2435,7 @@ pub mod args {
             "pool-gas-token",
             DefaultFn(|| "NAM".parse().unwrap()),
         );
+    pub const BRIDGE_POOL_TARGET: Arg<EthAddress> = arg("target");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -2464,7 +2465,7 @@ pub mod args {
     pub const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     pub const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     pub const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
-    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = arg_opt("ethereum-address");
+    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = ETH_ADDRESS.opt();
     pub const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
         "eth-rpc-endpoint",
         DefaultFn(|| "http://localhost:8545".into()),
@@ -2812,8 +2813,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let asset = ERC20.parse(matches);
-            let recipient = ETH_ADDRESS.parse(matches);
-            let sender = ADDRESS.parse(matches);
+            let recipient = BRIDGE_POOL_TARGET.parse(matches);
+            let sender = SOURCE.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let fee_amount = BRIDGE_POOL_GAS_AMOUNT.parse(matches).amount;
             let fee_payer = BRIDGE_POOL_GAS_PAYER.parse(matches);
@@ -2842,14 +2843,12 @@ pub mod args {
                         .help("The Ethereum address of the ERC20 token."),
                 )
                 .arg(
-                    ETH_ADDRESS
+                    BRIDGE_POOL_TARGET
                         .def()
                         .help("The Ethereum address receiving the tokens."),
                 )
                 .arg(
-                    ADDRESS
-                        .def()
-                        .help("The Namada address sending the tokens."),
+                    SOURCE.def().help("The Namada address sending the tokens."),
                 )
                 .arg(
                     AMOUNT.def().help(
