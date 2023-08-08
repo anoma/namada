@@ -49,6 +49,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         amount,
         fee_amount,
         fee_payer,
+        fee_token,
         code_path,
     }: args::EthereumBridgePool,
     gas_payer: common::PublicKey,
@@ -71,6 +72,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
             },
         },
         gas_fee: GasFee {
+            token: fee_token,
             amount: fee_amount,
             payer: fee_payer,
         },

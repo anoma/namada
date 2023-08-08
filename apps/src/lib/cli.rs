@@ -2421,6 +2421,20 @@ pub mod args {
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     // pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
+        arg_default(
+            "pool-gas-amount",
+            DefaultFn(|| token::DenominatedAmount {
+                amount: token::Amount::default(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            }),
+        );
+    pub const BRIDGE_POOL_GAS_PAYER: Arg<WalletAddress> = arg("pool-gas-payer");
+    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx(
+            "pool-gas-token",
+            DefaultFn(|| "NAM".parse().unwrap()),
+        );
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -2475,14 +2489,6 @@ pub mod args {
     );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2796,6 +2802,7 @@ pub mod args {
                 amount: self.amount,
                 fee_amount: self.fee_amount,
                 fee_payer: ctx.get(&self.fee_payer),
+                fee_token: ctx.get(&self.fee_token),
                 code_path: self.code_path,
             }
         }
@@ -2808,8 +2815,9 @@ pub mod args {
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let fee_amount = FEE_AMOUNT.parse(matches).amount;
-            let fee_payer = FEE_PAYER.parse(matches);
+            let fee_amount = BRIDGE_POOL_GAS_AMOUNT.parse(matches).amount;
+            let fee_payer = BRIDGE_POOL_GAS_PAYER.parse(matches);
+            let fee_token = BRIDGE_POOL_GAS_TOKEN.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             let nut = NUT.parse(matches);
             Self {
@@ -2820,6 +2828,7 @@ pub mod args {
                 amount,
                 fee_amount,
                 fee_payer,
+                fee_token,
                 code_path,
                 nut,
             }
@@ -2847,15 +2856,19 @@ pub mod args {
                         "The amount of tokens being sent across the bridge.",
                     ),
                 )
-                .arg(FEE_AMOUNT.def().help(
-                    "The amount of NAM you wish to pay to have this transfer \
+                .arg(BRIDGE_POOL_GAS_AMOUNT.def().help(
+                    "The amount of gas you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
                 .arg(
-                    FEE_PAYER.def().help(
-                        "The Namada address of the account paying the fee.",
+                    BRIDGE_POOL_GAS_PAYER.def().help(
+                        "The Namada address of the account paying the gas.",
                     ),
                 )
+                .arg(BRIDGE_POOL_GAS_TOKEN.def().help(
+                    "The token for paying the Bridge pool gas fees. Defaults \
+                     to NAM.",
+                ))
                 .arg(NUT.def().help(
                     "Add Non Usable Tokens (NUTs) to the Bridge pool. These \
                      are usually obtained from invalid transfers to Namada.",
