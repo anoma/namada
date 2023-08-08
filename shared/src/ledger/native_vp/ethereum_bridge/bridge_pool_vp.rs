@@ -10,7 +10,10 @@
 //! correctly. This means that the appropriate data is
 //! added to the pool and gas fees are submitted appropriately
 //! and that tokens to be transferred are escrowed.
+
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
@@ -21,16 +24,17 @@ use namada_core::ledger::eth_bridge::storage::bridge_pool::{
 use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_ethereum_bridge::parameters::read_native_erc20_address;
+use namada_ethereum_bridge::storage::wrapped_erc20s;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::{DBIter, DB};
 use crate::proto::Tx;
-use crate::types::address::Address;
+use crate::types::address::{Address, InternalAddress};
 use crate::types::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::types::ethereum_events::EthAddress;
 use crate::types::storage::Key;
-use crate::types::token::{balance_key, Amount, Change};
+use crate::types::token::{balance_key, Amount};
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
@@ -84,8 +88,12 @@ where
 {
     /// Get the change in the balance of an account
     /// associated with an address
-    fn account_balance_delta(&self, address: &Address) -> Option<AmountDelta> {
-        let account_key = balance_key(&self.ctx.storage.native_token, address);
+    fn account_balance_delta(
+        &self,
+        token: &Address,
+        address: &Address,
+    ) -> Option<AmountDelta> {
+        let account_key = balance_key(token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .map_err(|error| {
@@ -113,62 +121,34 @@ where
         })
     }
 
-    /// Check that the correct amount of erc20 assets were
-    /// sent from the correct account into escrow.
-    fn check_erc20s_escrowed(
-        &self,
-        keys_changed: &BTreeSet<Key>,
-        transfer: &PendingTransfer,
-    ) -> Result<bool, Error> {
-        // check that the assets to be transferred were escrowed
-        let token = transfer.token_address();
-        let owner_key = balance_key(&token, &transfer.transfer.sender);
-        let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
-        if keys_changed.contains(&owner_key)
-            && keys_changed.contains(&escrow_key)
-        {
-            match check_balance_changes(&self.ctx, &owner_key, &escrow_key)? {
-                Some(amount) if amount == transfer.transfer.amount => Ok(true),
-                _ => {
-                    tracing::debug!(
-                        "The assets of the transfer were not properly \
-                         escrowed into the Ethereum bridge pool"
-                    );
-                    Ok(false)
-                }
-            }
-        } else {
-            tracing::debug!(
-                "The assets of the transfer were not properly escrowed into \
-                 the Ethereum bridge pool."
-            );
-            Ok(false)
-        }
-    }
-
-    /// Check that the correct amount of Nam was sent
-    /// from the correct account into escrow
+    /// Check that the correct amount of tokens were sent
+    /// from the correct account into escrow.
     #[inline]
-    fn check_nam_escrowed(&self, delta: EscrowDelta) -> Result<bool, Error> {
-        self.check_nam_escrowed_balance(delta)
+    fn check_escrowed_toks<K>(
+        &self,
+        delta: EscrowDelta<K>,
+    ) -> Result<bool, Error> {
+        self.check_escrowed_toks_balance(delta)
             .map(|balance| balance.is_some())
     }
 
-    /// Check that the correct amount of Nam was sent
+    /// Check that the correct amount of tokens were sent
     /// from the correct account into escrow, and return
     /// the updated escrow balance.
-    fn check_nam_escrowed_balance(
+    fn check_escrowed_toks_balance<K>(
         &self,
-        delta: EscrowDelta,
+        delta: EscrowDelta<K>,
     ) -> Result<Option<AmountDelta>, Error> {
         let EscrowDelta {
+            token,
             payer_account,
             escrow_account,
             expected_debit,
             expected_credit,
+            ..
         } = delta;
-        let debit = self.account_balance_delta(payer_account);
-        let credit = self.account_balance_delta(escrow_account);
+        let debit = self.account_balance_delta(&token, payer_account);
+        let credit = self.account_balance_delta(&token, escrow_account);
 
         match (debit, credit) {
             // success case
@@ -223,12 +203,51 @@ where
         }
     }
 
+    /// Check that the gas was correctly escrow.
+    fn check_gas_escrow(
+        &self,
+        wnam_address: &EthAddress,
+        transfer: &PendingTransfer,
+        gas_check: EscrowDelta<'_, GasCheck>,
+    ) -> Result<bool, Error> {
+        if hints::unlikely(
+            *gas_check.token == wrapped_erc20s::token(wnam_address),
+        ) {
+            // NB: this should never be possible: protocol tx state updates
+            // never result in wNAM ERC20s being minted
+            tracing::error!(
+                ?transfer,
+                "Attempted to pay Bridge pool fees with wrapped NAM."
+            );
+            return Ok(false);
+        }
+        if matches!(
+            &*gas_check.token,
+            Address::Internal(InternalAddress::Nut(_))
+        ) {
+            tracing::debug!(
+                ?transfer,
+                "The gas fees of the transfer cannot be paid in NUTs."
+            );
+            return Ok(false);
+        }
+        if !self.check_escrowed_toks(gas_check)? {
+            tracing::debug!(
+                ?transfer,
+                "The gas fees of the transfer were not properly escrowed into \
+                 the Ethereum bridge pool."
+            );
+            return Ok(false);
+        }
+        Ok(true)
+    }
+
     /// Validate a wrapped NAM transfer to Ethereum.
-    fn check_wnam_preconditions<'trans>(
+    fn check_wnam_escrow(
         &self,
         &wnam_address: &EthAddress,
-        transfer: &'trans PendingTransfer,
-        escrow_checks: EscrowCheck<'trans>,
+        transfer: &PendingTransfer,
+        token_check: EscrowDelta<'_, TokenCheck>,
     ) -> Result<bool, Error> {
         if hints::unlikely(matches!(
             &transfer.transfer.kind,
@@ -239,6 +258,7 @@ where
             // that users should never hold wNAM NUTs. doesn't hurt to add
             // the extra check to the vp, though
             tracing::error!(
+                ?transfer,
                 "Attempted to add a wNAM NUT transfer to the Bridge pool"
             );
             return Ok(false);
@@ -264,7 +284,7 @@ where
         // amount of Nam must be escrowed in the Ethereum bridge VP's
         // storage.
         let escrowed_balance =
-            match self.check_nam_escrowed_balance(escrow_checks.token_check)? {
+            match self.check_escrowed_toks_balance(token_check)? {
                 Some(balance) => balance.resolve(),
                 None => return Ok(false),
             };
@@ -292,18 +312,28 @@ where
     }
 
     /// Deteremine the debit and credit amounts that should be checked.
-    fn escrow_check<'trans>(
-        &self,
+    fn determine_escrow_checks<'trans, 'this: 'trans>(
+        &'this self,
         wnam_address: &EthAddress,
         transfer: &'trans PendingTransfer,
     ) -> Result<EscrowCheck<'trans>, Error> {
-        let is_native_asset = &transfer.transfer.asset == wnam_address;
-        // there is a corner case where the gas fees and escrowed Nam
-        // are debited from the same address when mint wNam.
-        Ok(
-            if transfer.gas_fee.payer == transfer.transfer.sender
-                && is_native_asset
-            {
+        let tok_is_native_asset = &transfer.transfer.asset == wnam_address;
+        let gas_is_native_asset =
+            transfer.gas_fee.token == self.ctx.storage.native_token;
+
+        let (expected_gas_debit, expected_token_debit) = {
+            let same_sender_and_fee_payer =
+                transfer.gas_fee.payer == transfer.transfer.sender;
+            let same_tokens_and_gas_asset = (tok_is_native_asset
+                && gas_is_native_asset)
+                || transfer.token_address() == transfer.gas_fee.token;
+
+            // there is a corner case where the gas fees and escrowed tokens
+            // are debited from the same address
+            let same_debited_address =
+                same_sender_and_fee_payer && same_tokens_and_gas_asset;
+
+            if same_debited_address {
                 let debit = transfer
                     .gas_fee
                     .amount
@@ -314,62 +344,91 @@ where
                              amount."
                         ))
                     })?;
-                EscrowCheck {
-                    gas_check: EscrowDelta {
-                        payer_account: &transfer.gas_fee.payer,
-                        escrow_account: &BRIDGE_POOL_ADDRESS,
-                        expected_debit: debit,
-                        expected_credit: transfer.gas_fee.amount,
-                    },
-                    token_check: EscrowDelta {
-                        payer_account: &transfer.transfer.sender,
-                        escrow_account: &BRIDGE_ADDRESS,
-                        expected_debit: debit,
-                        expected_credit: transfer.transfer.amount,
-                    },
-                }
+                (debit, debit)
             } else {
-                EscrowCheck {
-                    gas_check: EscrowDelta {
-                        payer_account: &transfer.gas_fee.payer,
-                        escrow_account: &BRIDGE_POOL_ADDRESS,
-                        expected_debit: transfer.gas_fee.amount,
-                        expected_credit: transfer.gas_fee.amount,
-                    },
-                    token_check: EscrowDelta {
-                        payer_account: &transfer.transfer.sender,
-                        escrow_account: if is_native_asset {
-                            &BRIDGE_ADDRESS
-                        } else {
-                            &BRIDGE_POOL_ADDRESS
-                        },
-                        expected_debit: transfer.transfer.amount,
-                        expected_credit: transfer.transfer.amount,
-                    },
-                }
+                (transfer.gas_fee.amount, transfer.transfer.amount)
+            }
+        };
+        Ok(EscrowCheck {
+            gas_check: EscrowDelta {
+                token: if gas_is_native_asset {
+                    Cow::Borrowed(&self.ctx.storage.native_token)
+                } else {
+                    Cow::Borrowed(&transfer.gas_fee.token)
+                },
+                payer_account: &transfer.gas_fee.payer,
+                escrow_account: &BRIDGE_POOL_ADDRESS,
+                expected_debit: expected_gas_debit,
+                expected_credit: transfer.gas_fee.amount,
+                _kind: PhantomData,
             },
-        )
+            token_check: EscrowDelta {
+                token: if tok_is_native_asset {
+                    Cow::Borrowed(&self.ctx.storage.native_token)
+                } else {
+                    Cow::Owned(transfer.token_address())
+                },
+                payer_account: &transfer.transfer.sender,
+                escrow_account: if tok_is_native_asset {
+                    &BRIDGE_ADDRESS
+                } else {
+                    &BRIDGE_POOL_ADDRESS
+                },
+                expected_debit: expected_token_debit,
+                expected_credit: transfer.transfer.amount,
+                _kind: PhantomData,
+            },
+        })
     }
 }
 
 /// Helper struct for handling the different escrow
 /// checking scenarios.
-#[derive(Copy, Clone)]
-struct EscrowDelta<'a> {
+struct EscrowDelta<'a, KIND> {
+    token: Cow<'a, Address>,
     payer_account: &'a Address,
     escrow_account: &'a Address,
     expected_debit: Amount,
     expected_credit: Amount,
+    _kind: PhantomData<*const KIND>,
+}
+
+impl<KIND> EscrowDelta<'_, KIND> {
+    fn validate_changed_keys(&self, changed_keys: &BTreeSet<Key>) -> bool {
+        let EscrowDelta {
+            token,
+            payer_account,
+            escrow_account,
+            ..
+        } = self;
+        let owner_key = balance_key(token, payer_account);
+        let escrow_key = balance_key(token, escrow_account);
+        changed_keys.contains(&owner_key) && changed_keys.contains(&escrow_key)
+    }
 }
 
 /// There are two checks we must do when minting wNam.
+///
 /// 1. Check that gas fees were escrowed.
 /// 2. Check that the Nam to back wNam was escrowed.
-#[derive(Copy, Clone)]
 struct EscrowCheck<'a> {
-    gas_check: EscrowDelta<'a>,
-    token_check: EscrowDelta<'a>,
+    gas_check: EscrowDelta<'a, GasCheck>,
+    token_check: EscrowDelta<'a, TokenCheck>,
 }
+
+impl EscrowCheck<'_> {
+    #[inline]
+    fn validate_changed_keys(&self, changed_keys: &BTreeSet<Key>) -> bool {
+        self.gas_check.validate_changed_keys(changed_keys)
+            && self.token_check.validate_changed_keys(changed_keys)
+    }
+}
+
+/// Perform a gas check.
+enum GasCheck {}
+
+/// Perform a token check.
+enum TokenCheck {}
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
 where
@@ -445,20 +504,32 @@ where
         }
         // The deltas in the escrowed amounts we must check.
         let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
-        let escrow_checks = self.escrow_check(&wnam_address, &transfer)?;
+        let escrow_checks =
+            self.determine_escrow_checks(&wnam_address, &transfer)?;
+        if !escrow_checks.validate_changed_keys(keys_changed) {
+            tracing::debug!(
+                ?transfer,
+                "Missing storage modifications in the Bridge pool"
+            );
+            return Ok(false);
+        }
         // check that gas was correctly escrowed.
-        if !self.check_nam_escrowed(escrow_checks.gas_check)? {
+        if !self.check_gas_escrow(
+            &wnam_address,
+            &transfer,
+            escrow_checks.gas_check,
+        )? {
             return Ok(false);
         }
         // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
-            self.check_wnam_preconditions(
+            self.check_wnam_escrow(
                 &wnam_address,
                 &transfer,
-                escrow_checks,
+                escrow_checks.token_check,
             )
         } else {
-            self.check_erc20s_escrowed(keys_changed, &transfer)
+            self.check_escrowed_toks(escrow_checks.token_check)
         }
         .map(|ok| {
             if ok {
@@ -466,111 +537,15 @@ where
                     "The Ethereum bridge pool VP accepted the transfer {:?}.",
                     transfer
                 );
+            } else {
+                tracing::debug!(
+                    ?transfer,
+                    "The assets of the transfer were not properly escrowed \
+                     into the Ethereum bridge pool."
+                );
             }
             ok
         })
-    }
-}
-
-/// Checks that the balances at both `sender` and `receiver` have changed by
-/// some amount, and that the changes balance each other out. If the balance
-/// changes are invalid, the reason is logged and a `None` is returned.
-/// Otherwise, return the `Amount` of the transfer i.e. by how much the sender's
-/// balance decreased, or equivalently by how much the receiver's balance
-/// increased
-fn check_balance_changes(
-    reader: impl StorageReader,
-    sender: &Key,
-    receiver: &Key,
-) -> Result<Option<Amount>, Error> {
-    let sender_balance_pre = reader
-        .read_pre_value::<Amount>(sender)?
-        .unwrap_or_default()
-        .change();
-    let sender_balance_post = match reader.read_post_value::<Amount>(sender)? {
-        Some(value) => value,
-        None => {
-            return Err(Error(eyre!(
-                "Rejecting transaction as could not read_post balance key {}",
-                sender,
-            )));
-        }
-    }
-    .change();
-    let receiver_balance_pre = reader
-        .read_pre_value::<Amount>(receiver)?
-        .unwrap_or_default()
-        .change();
-    let receiver_balance_post = match reader
-        .read_post_value::<Amount>(receiver)?
-    {
-        Some(value) => value,
-        None => {
-            return Err(Error(eyre!(
-                "Rejecting transaction as could not read_post balance key {}",
-                receiver,
-            )));
-        }
-    }
-    .change();
-
-    let sender_balance_delta =
-        calculate_delta(sender_balance_pre, sender_balance_post)?;
-    let receiver_balance_delta =
-        calculate_delta(receiver_balance_pre, receiver_balance_post)?;
-    if receiver_balance_delta != -sender_balance_delta {
-        tracing::debug!(
-            ?sender_balance_pre,
-            ?receiver_balance_pre,
-            ?sender_balance_post,
-            ?receiver_balance_post,
-            ?sender_balance_delta,
-            ?receiver_balance_delta,
-            "Rejecting transaction as balance changes do not match"
-        );
-        return Ok(None);
-    }
-    if sender_balance_delta.is_zero() || sender_balance_delta > Change::zero() {
-        assert!(
-            receiver_balance_delta.is_zero()
-                || receiver_balance_delta < Change::zero()
-        );
-        tracing::debug!(
-            "Rejecting transaction as no balance change or invalid change"
-        );
-        return Ok(None);
-    }
-    if sender_balance_post < Change::zero() {
-        tracing::debug!(
-            ?sender_balance_post,
-            "Rejecting transaction as balance is negative"
-        );
-        return Ok(None);
-    }
-    if receiver_balance_post < Change::zero() {
-        tracing::debug!(
-            ?receiver_balance_post,
-            "Rejecting transaction as balance is negative"
-        );
-        return Ok(None);
-    }
-
-    Ok(Some(Amount::from_change(receiver_balance_delta)))
-}
-
-/// Return the delta between `balance_pre` and `balance_post`, erroring if there
-/// is an underflow
-fn calculate_delta(
-    balance_pre: Change,
-    balance_post: Change,
-) -> Result<Change, Error> {
-    match balance_post.checked_sub(&balance_pre) {
-        Some(result) => Ok(result),
-        None => Err(Error(eyre!(
-            "Underflow while calculating delta: {} - {}",
-            balance_post,
-            balance_pre
-        ))),
     }
 }
 
@@ -584,7 +559,6 @@ mod test_bridge_pool_vp {
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
-    use namada_ethereum_bridge::storage::wrapped_erc20s;
 
     use super::*;
     use crate::ledger::gas::VpGasMeter;
