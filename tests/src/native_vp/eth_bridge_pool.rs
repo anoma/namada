@@ -30,6 +30,7 @@ mod test_bridge_pool_vp {
     const BERTHA_TOKENS: u64 = 10_000;
     const GAS_FEE: u64 = 100;
     const TOKENS: u64 = 10;
+    const TOKEN_CAP: u64 = TOKENS;
 
     /// A signing keypair for good old Bertha.
     fn bertha_keypair() -> common::SecretKey {
@@ -66,7 +67,7 @@ mod test_bridge_pool_vp {
         let config = EthereumBridgeConfig {
             erc20_whitelist: vec![Erc20WhitelistEntry {
                 token_address: wnam(),
-                token_cap: Amount::max().native_denominated(),
+                token_cap: Amount::from_u64(TOKEN_CAP).native_denominated(),
             }],
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
@@ -96,16 +97,23 @@ mod test_bridge_pool_vp {
         env
     }
 
-    fn validate_tx(tx: Tx) {
+    fn run_vp(tx: Tx) -> bool {
         let env = setup_env(tx);
         tx_host_env::set(env);
         let mut tx_env = tx_host_env::take();
         tx_env.execute_tx().expect("Test failed.");
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, BRIDGE_POOL_ADDRESS);
-        let result = vp_env
+        vp_env
             .validate_tx(|ctx| BridgePoolVp { ctx })
-            .expect("Test failed");
-        assert!(result);
+            .expect("Test failed")
+    }
+
+    fn validate_tx(tx: Tx) {
+        assert!(run_vp(tx));
+    }
+
+    fn invalidate_tx(tx: Tx) {
+        assert!(!run_vp(tx));
     }
 
     fn create_tx(transfer: PendingTransfer, keypair: &common::SecretKey) -> Tx {
@@ -154,6 +162,24 @@ mod test_bridge_pool_vp {
             },
         };
         validate_tx(create_tx(transfer, &bertha_keypair()));
+    }
+
+    #[test]
+    fn invalidate_wnam_over_cap_tx() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: Amount::from(TOKEN_CAP + 1),
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(GAS_FEE),
+                payer: bertha_address(),
+            },
+        };
+        invalidate_tx(create_tx(transfer, &bertha_keypair()));
     }
 
     #[test]
