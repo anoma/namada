@@ -13,6 +13,7 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
+    use crate::ledger::testnet_pow;
     use crate::types::address::Address;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -240,7 +241,7 @@ pub mod wrapper_tx {
             epoch: Epoch,
             gas_limit: GasLimit,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
-                crate::ledger::testnet_pow::Solution,
+                testnet_pow::Solution,
             >,
         ) -> WrapperTx {
             Self {
@@ -255,7 +256,7 @@ pub mod wrapper_tx {
 
         /// Get the address of the implicit account associated
         /// with the public key
-        pub fn fee_payer(&self) -> Address {
+        pub fn gas_payer(&self) -> Address {
             Address::from(&self.pk)
         }
 

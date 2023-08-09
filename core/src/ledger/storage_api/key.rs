@@ -4,23 +4,17 @@ use super::*;
 use crate::types::address::Address;
 use crate::types::key::*;
 
-/// Get the public key associated with the given address. Returns `Ok(None)` if
-/// not found.
-pub fn get<S>(storage: &S, owner: &Address) -> Result<Option<common::PublicKey>>
-where
-    S: StorageRead,
-{
-    let key = pk_key(owner);
-    storage.read(&key)
-}
-
 /// Reveal a PK of an implicit account - the PK is written into the storage
 /// of the address derived from the PK.
-pub fn reveal_pk<S>(storage: &mut S, pk: &common::PublicKey) -> Result<()>
+pub fn reveal_pk<S>(
+    storage: &mut S,
+    public_key: &common::PublicKey,
+) -> Result<()>
 where
-    S: StorageWrite,
+    S: StorageWrite + StorageRead,
 {
-    let addr: Address = pk.into();
-    let key = pk_key(&addr);
-    storage.write(&key, pk)
+    let owner: Address = public_key.into();
+    pks_handle(&owner).insert(storage, 0, public_key.clone())?;
+
+    Ok(())
 }

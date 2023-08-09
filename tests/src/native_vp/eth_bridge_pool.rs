@@ -8,7 +8,7 @@ mod test_bridge_pool_vp {
         wrapped_erc20s, Contracts, EthereumBridgeConfig, UpgradeableContract,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-    use namada::proto::{Code, Data, Section, Signature, Tx};
+    use namada::proto::Tx;
     use namada::types::address::{nam, wnam};
     use namada::types::chain::ChainId;
     use namada::types::eth_bridge_pool::{
@@ -17,7 +17,7 @@ mod test_bridge_pool_vp {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::{common, ed25519, SecretKey};
     use namada::types::token::Amount;
-    use namada::types::transaction::TxType;
+    use namada::types::tx::TxBuilder;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
 
@@ -108,15 +108,13 @@ mod test_bridge_pool_vp {
         let data = transfer.try_to_vec().expect("Test failed");
         let wasm_code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = ChainId::default();
-        tx.set_data(Data::new(data));
-        tx.set_code(Code::new(wasm_code));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash(), *tx.code_sechash()],
-            keypair,
-        )));
-        tx
+
+        let tx_builder = TxBuilder::new(ChainId::default(), None);
+        tx_builder
+            .add_code(wasm_code)
+            .add_serialized_data(data)
+            .add_gas_payer(keypair.clone())
+            .build()
     }
 
     #[test]

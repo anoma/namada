@@ -247,15 +247,15 @@ where
                         self.invalidate_pow_solution_if_valid(wrapper);
 
                     // Charge fee
-                    let fee_payer =
+                    let gas_payer =
                         if wrapper.pk != address::masp_tx_key().ref_to() {
-                            wrapper.fee_payer()
+                            wrapper.gas_payer()
                         } else {
                             address::masp()
                         };
 
                     let balance_key =
-                        token::balance_key(&wrapper.fee.token, &fee_payer);
+                        token::balance_key(&wrapper.fee.token, &gas_payer);
                     let balance: token::Amount = self
                         .wl_storage
                         .read(&balance_key)
@@ -985,6 +985,7 @@ mod test_finalize_block {
     };
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE_AMOUNT};
+    use namada::types::tx::TxBuilder;
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
     use namada_test_utils::TestWasms;
@@ -3513,8 +3514,11 @@ mod test_finalize_block {
             .wl_storage
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(0u64.try_to_vec().expect("Test failed")));
+        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code_from_hash(Hash::default())
+            .add_data(0u64)
+            .build();
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

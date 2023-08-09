@@ -57,7 +57,7 @@ pub mod cmds {
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
@@ -74,7 +74,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateVp::def())
+                .subcommand(TxUpdateAccount::def())
                 .subcommand(TxInitProposal::def())
                 .subcommand(TxVoteProposal::def())
                 .subcommand(TxRevealPk::def())
@@ -92,7 +92,8 @@ pub mod cmds {
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
-            let tx_update_vp = SubCmd::parse(matches).map(Self::TxUpdateVp);
+            let tx_update_account =
+                SubCmd::parse(matches).map(Self::TxUpdateAccount);
             let tx_init_proposal =
                 SubCmd::parse(matches).map(Self::TxInitProposal);
             let tx_vote_proposal =
@@ -106,7 +107,7 @@ pub mod cmds {
                 .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
@@ -213,7 +214,7 @@ pub mod cmds {
                 .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
-                .subcommand(TxUpdateVp::def().display_order(1))
+                .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
                 // Proposal transactions
@@ -230,6 +231,7 @@ pub mod cmds {
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // Queries
                 .subcommand(QueryEpoch::def().display_order(4))
+                .subcommand(QueryAccount::def().display_order(4))
                 .subcommand(QueryTransfers::def().display_order(4))
                 .subcommand(QueryConversions::def().display_order(4))
                 .subcommand(QueryBlock::def().display_order(4))
@@ -245,8 +247,10 @@ pub mod cmds {
                 .subcommand(QueryProposalResult::def().display_order(4))
                 .subcommand(QueryProtocolParameters::def().display_order(4))
                 .subcommand(QueryValidatorState::def().display_order(4))
+                // Actions
+                .subcommand(SignTx::def().display_order(5))
                 // Utils
-                .subcommand(Utils::def().display_order(5))
+                .subcommand(Utils::def().display_order(6))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -254,7 +258,8 @@ pub mod cmds {
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_update_vp = Self::parse_with_ctx(matches, TxUpdateVp);
+            let tx_update_account =
+                Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
             let tx_init_validator =
                 Self::parse_with_ctx(matches, TxInitValidator);
@@ -271,6 +276,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
+            let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
@@ -295,11 +301,12 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryValidatorState);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
+            let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
-                .or(tx_update_vp)
+                .or(tx_update_account)
                 .or(tx_init_account)
                 .or(tx_reveal_pk)
                 .or(tx_init_proposal)
@@ -327,6 +334,8 @@ pub mod cmds {
                 .or(query_proposal_result)
                 .or(query_protocol_parameters)
                 .or(query_validator_state)
+                .or(query_account)
+                .or(sign_tx)
                 .or(utils)
         }
     }
@@ -368,7 +377,7 @@ pub mod cmds {
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
-        TxUpdateVp(TxUpdateVp),
+        TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
@@ -381,6 +390,7 @@ pub mod cmds {
         Withdraw(Withdraw),
         AddToEthBridgePool(AddToEthBridgePool),
         QueryEpoch(QueryEpoch),
+        QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
         QueryBlock(QueryBlock),
@@ -396,6 +406,7 @@ pub mod cmds {
         QueryProposalResult(QueryProposalResult),
         QueryProtocolParameters(QueryProtocolParameters),
         QueryValidatorState(QueryValidatorState),
+        SignTx(SignTx),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1232,15 +1243,15 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxUpdateVp(pub args::TxUpdateVp<args::CliTypes>);
+    pub struct TxUpdateAccount(pub args::TxUpdateAccount<args::CliTypes>);
 
-    impl SubCmd for TxUpdateVp {
-        const CMD: &'static str = "update";
+    impl SubCmd for TxUpdateAccount {
+        const CMD: &'static str = "update-account";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxUpdateVp(args::TxUpdateVp::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateAccount(args::TxUpdateAccount::parse(matches))
+            })
         }
 
         fn def() -> App {
@@ -1249,7 +1260,7 @@ pub mod cmds {
                     "Send a signed transaction to update account's validity \
                      predicate.",
                 )
-                .add_args::<args::TxUpdateVp<args::CliTypes>>()
+                .add_args::<args::TxUpdateAccount<args::CliTypes>>()
         }
     }
 
@@ -1395,6 +1406,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryAccount(pub args::QueryAccount<args::CliTypes>);
+
+    impl SubCmd for QueryAccount {
+        const CMD: &'static str = "query-account";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| QueryAccount(args::QueryAccount::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the substorage space of a specific enstablished \
+                     address.",
+                )
+                .add_args::<args::QueryAccount<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryConversions(pub args::QueryConversions<args::CliTypes>);
 
     impl SubCmd for QueryConversions {
@@ -1486,6 +1519,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query PoS bonded stake.")
                 .add_args::<args::QueryBondedStake<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignTx(pub args::SignTx<args::CliTypes>);
+
+    impl SubCmd for SignTx {
+        const CMD: &'static str = "sign-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| SignTx(args::SignTx::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query PoS bonded stake.")
+                .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
 
@@ -2316,6 +2368,7 @@ pub mod args {
     pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
     pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
     pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
+    pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
@@ -2378,15 +2431,8 @@ pub mod args {
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FORCE: ArgFlag = flag("force");
+    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("gas-payer").opt();
     pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "gas-amount",
         DefaultFn(|| token::DenominatedAmount {
@@ -2403,6 +2449,14 @@ pub mod args {
     );
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
+    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "fee-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2433,6 +2487,8 @@ pub mod args {
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
+    pub const OUTPUT_FOLDER_PATH: ArgOpt<PathBuf> =
+        arg_opt("output-folder-path");
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PIN: ArgFlag = flag("pin");
@@ -2444,6 +2500,7 @@ pub mod args {
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
+    pub const PUBLIC_KEYS: ArgMulti<WalletPublicKey> = arg_multi("public-keys");
     pub const PROPOSAL_ID: Arg<u64> = arg("proposal-id");
     pub const PROPOSAL_ID_OPT: ArgOpt<u64> = arg_opt("proposal-id");
     pub const PROPOSAL_VOTE_PGF_OPT: ArgOpt<String> = arg_opt("pgf");
@@ -2459,9 +2516,8 @@ pub mod args {
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
-    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
-    pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
+    pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
+    pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
@@ -2474,16 +2530,19 @@ pub mod args {
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
+    pub const THRESOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
-    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
-        arg_opt("validator-code-path");
+    pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey> =
+        arg_multi("account-keys");
     pub const VALIDATOR_CONSENSUS_KEY: ArgOpt<WalletKeypair> =
         arg_opt("consensus-key");
+    pub const VALIDATOR_CODE_PATH: ArgOpt<PathBuf> =
+        arg_opt("validator-code-path");
     pub const VALIDATOR_ETH_COLD_KEY: ArgOpt<WalletKeypair> =
         arg_opt("eth-cold-key");
     pub const VALIDATOR_ETH_HOT_KEY: ArgOpt<WalletKeypair> =
@@ -2495,6 +2554,8 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
+    pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -2701,9 +2762,9 @@ pub mod args {
                 recipient: self.recipient,
                 sender: ctx.get(&self.sender),
                 amount: self.amount,
-                gas_amount: self.gas_amount,
-                gas_payer: ctx.get(&self.gas_payer),
-                code_path: ctx.read_wasm(self.code_path),
+                fee_amount: self.fee_amount,
+                fee_payer: ctx.get(&self.fee_payer),
+                code_path: self.code_path,
             }
         }
     }
@@ -2715,8 +2776,8 @@ pub mod args {
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let gas_amount = FEE_AMOUNT.parse(matches).amount;
-            let gas_payer = FEE_PAYER.parse(matches);
+            let fee_amount = FEE_AMOUNT.parse(matches).amount;
+            let fee_payer = FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
@@ -2724,8 +2785,8 @@ pub mod args {
                 recipient,
                 sender,
                 amount,
-                gas_amount,
-                gas_payer,
+                fee_amount,
+                fee_payer,
                 code_path,
             }
         }
@@ -3109,11 +3170,15 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                code_path: ctx.read_wasm(self.code_path),
+                code_path: self.code_path,
                 data_path: self.data_path.map(|data_path| {
                     std::fs::read(data_path)
-                        .expect("Expected a file at given data path")
+                        .expect("Expected a file at given path")
                 }),
+                serialized_tx: self.serialized_tx.map(|path| {
+                    std::fs::read(path).expect("Expected a file at given path")
+                }),
+                owner: ctx.get(&self.owner),
             }
         }
     }
@@ -3121,26 +3186,50 @@ pub mod args {
     impl Args for TxCustom<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let code_path = CODE_PATH.parse(matches);
+            let code_path = CODE_PATH_OPT.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
+            let serialized_tx = TX_PATH_OPT.parse(matches);
+            let owner = OWNER.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
+                serialized_tx,
+                owner,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(
-                    CODE_PATH
+                    CODE_PATH_OPT
                         .def()
-                        .help("The path to the transaction's WASM code."),
+                        .help("The path to the transaction's WASM code.")
+                        .conflicts_with(TX_PATH_OPT.name),
                 )
-                .arg(DATA_PATH_OPT.def().help(
-                    "The data file at this path containing arbitrary bytes \
-                     will be passed to the transaction code when it's \
-                     executed.",
+                .arg(
+                    DATA_PATH_OPT
+                        .def()
+                        .help(
+                            "The data file at this path containing arbitrary \
+                             bytes will be passed to the transaction code \
+                             when it's executed.",
+                        )
+                        .requires(CODE_PATH_OPT.name)
+                        .conflicts_with(TX_PATH_OPT.name),
+                )
+                .arg(
+                    TX_PATH_OPT
+                        .def()
+                        .help("The path to a serialized transaction.")
+                        .conflicts_with_all([
+                            CODE_PATH_OPT.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
+                .arg(OWNER.def().help(
+                    "The address corresponding to the signatures or signing \
+                     keys.",
                 ))
         }
     }
@@ -3262,10 +3351,14 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             TxInitAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
-                vp_code_path: self.vp_code_path.to_path_buf(),
-                tx_code_path: self.tx_code_path.to_path_buf(),
-                public_key: ctx.get_cached(&self.public_key),
+                vp_code_path: self.vp_code_path,
+                tx_code_path: self.tx_code_path,
+                public_keys: self
+                    .public_keys
+                    .iter()
+                    .map(|pk| ctx.get_cached(pk))
+                    .collect(),
+                threshold: self.threshold,
             }
         }
     }
@@ -3273,34 +3366,36 @@ pub mod args {
     impl Args for TxInitAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
             let vp_code_path = CODE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
-            let public_key = PUBLIC_KEY.parse(matches);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
-                source,
                 vp_code_path,
-                public_key,
+                public_keys,
+                threshold,
                 tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().help(
-                    "The source account's address that signs the transaction.",
-                ))
                 .arg(CODE_PATH_OPT.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the new account. Uses the default user VP if none \
                      specified.",
                 ))
-                .arg(PUBLIC_KEY.def().help(
-                    "A public key to be used for the new account in \
-                     hexadecimal encoding.",
+                .arg(PUBLIC_KEYS.def().help(
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding.",
+                ))
+                .arg(THRESOLD.def().help(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
                 ))
         }
     }
@@ -3309,9 +3404,13 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             TxInitValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                source: ctx.get(&self.source),
                 scheme: self.scheme,
-                account_key: self.account_key.map(|x| ctx.get_cached(&x)),
+                account_keys: self
+                    .account_keys
+                    .iter()
+                    .map(|x| ctx.get_cached(x))
+                    .collect(),
+                threshold: self.threshold,
                 consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
                 eth_cold_key: self.eth_cold_key.map(|x| ctx.get_cached(&x)),
                 eth_hot_key: self.eth_hot_key.map(|x| ctx.get_cached(&x)),
@@ -3330,9 +3429,8 @@ pub mod args {
     impl Args for TxInitValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = SOURCE.parse(matches);
             let scheme = SCHEME.parse(matches);
-            let account_key = VALIDATOR_ACCOUNT_KEY.parse(matches);
+            let account_keys = VALIDATOR_ACCOUNT_KEYS.parse(matches);
             let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
             let eth_cold_key = VALIDATOR_ETH_COLD_KEY.parse(matches);
             let eth_hot_key = VALIDATOR_ETH_HOT_KEY.parse(matches);
@@ -3345,11 +3443,12 @@ pub mod args {
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_VALIDATOR_WASM);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
-                source,
                 scheme,
-                account_key,
+                account_keys,
+                threshold,
                 consensus_key,
                 eth_cold_key,
                 eth_hot_key,
@@ -3364,16 +3463,14 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(SOURCE.def().help(
-                    "The source account's address that signs the transaction.",
-                ))
                 .arg(SCHEME.def().help(
                     "The key scheme/type used for the validator keys. \
                      Currently supports ed25519 and secp256k1.",
                 ))
-                .arg(VALIDATOR_ACCOUNT_KEY.def().help(
-                    "A public key for the validator account. A new one will \
-                     be generated if none given.",
+                .arg(VALIDATOR_ACCOUNT_KEYS.def().help(
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding. A new one will be generated if \
+                     none given.",
                 ))
                 .arg(VALIDATOR_CONSENSUS_KEY.def().help(
                     "A consensus key for the validator account. A new one \
@@ -3414,44 +3511,68 @@ pub mod args {
                     "UNSAFE: Do not encrypt the generated keypairs. Do not \
                      use this for keys used in a live network.",
                 ))
+                .arg(THRESOLD.def().help(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
+                ))
         }
     }
 
-    impl CliToSdk<TxUpdateVp<SdkTypes>> for TxUpdateVp<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxUpdateVp<SdkTypes> {
-            TxUpdateVp::<SdkTypes> {
+    impl CliToSdk<TxUpdateAccount<SdkTypes>> for TxUpdateAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxUpdateAccount<SdkTypes> {
+            TxUpdateAccount::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 vp_code_path: self.vp_code_path,
                 tx_code_path: self.tx_code_path,
                 addr: ctx.get(&self.addr),
+                public_keys: self
+                    .public_keys
+                    .iter()
+                    .map(|pk| ctx.get_cached(pk))
+                    .collect(),
+                threshold: self.threshold,
             }
         }
     }
 
-    impl Args for TxUpdateVp<CliTypes> {
+    impl Args for TxUpdateAccount<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let vp_code_path = CODE_PATH.parse(matches);
+            let vp_code_path = CODE_PATH_OPT.parse(matches);
             let addr = ADDRESS.parse(matches);
-            let tx_code_path = PathBuf::from(TX_UPDATE_VP_WASM);
+            let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
+            let public_keys = PUBLIC_KEYS.parse(matches);
+            let threshold = THRESOLD.parse(matches);
             Self {
                 tx,
                 vp_code_path,
                 addr,
                 tx_code_path,
+                public_keys,
+                threshold,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(
-                    CODE_PATH.def().help(
+                    CODE_PATH_OPT.def().help(
                         "The path to the new validity predicate WASM code.",
                     ),
                 )
                 .arg(ADDRESS.def().help(
                     "The account's address. It's key is used to produce the \
                      signature.",
+                ))
+                .arg(PUBLIC_KEYS.def().help(
+                    "A list public keys to be associated with the new account \
+                     in hexadecimal encoding.",
+                ))
+                .arg(THRESOLD.def().help(
+                    "The minimum number of signature to be provided for \
+                     authorization. Must be less then the maximum number of \
+                     public keys provided.",
                 ))
         }
     }
@@ -3619,6 +3740,8 @@ pub mod args {
         pub proposal_id: Option<u64>,
         /// The vote
         pub vote: String,
+        /// The address of the voter
+        pub voter_address: C::Address,
         /// PGF proposal
         pub proposal_pgf: Option<String>,
         /// ETH proposal
@@ -3637,6 +3760,7 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
+                voter_address: ctx.get(&self.voter_address),
                 offline: self.offline,
                 proposal_data: self.proposal_data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -3653,6 +3777,7 @@ pub mod args {
             let proposal_pgf = PROPOSAL_VOTE_PGF_OPT.parse(matches);
             let proposal_eth = PROPOSAL_VOTE_ETH_OPT.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
+            let voter_address = ADDRESS.parse(matches);
             let offline = PROPOSAL_OFFLINE.parse(matches);
             let proposal_data = DATA_PATH_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
@@ -3664,6 +3789,7 @@ pub mod args {
                 proposal_pgf,
                 proposal_eth,
                 offline,
+                voter_address,
                 proposal_data,
                 tx_code_path,
             }
@@ -3722,6 +3848,7 @@ pub mod args {
                         )
                         .conflicts_with(PROPOSAL_ID.name),
                 )
+                .arg(ADDRESS.def().help("The address of the voter."))
         }
     }
 
@@ -3928,6 +4055,31 @@ pub mod args {
                         "The token address for which to query conversions.",
                     ),
                 )
+        }
+    }
+
+    impl CliToSdk<QueryAccount<SdkTypes>> for QueryAccount<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryAccount<SdkTypes> {
+            QueryAccount::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                owner: ctx.get(&self.owner),
+            }
+        }
+    }
+
+    impl Args for QueryAccount<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = OWNER.parse(matches);
+            Self { query, owner }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                BALANCE_OWNER
+                    .def()
+                    .help("The substorage space address to query."),
+            )
         }
     }
 
@@ -4187,6 +4339,39 @@ pub mod args {
         }
     }
 
+    impl CliToSdk<SignTx<SdkTypes>> for SignTx<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> SignTx<SdkTypes> {
+            SignTx::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                tx_data: std::fs::read(self.tx_data).expect(""),
+                owner: ctx.get(&self.owner),
+            }
+        }
+    }
+
+    impl Args for SignTx<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let tx_path = TX_PATH.parse(matches);
+            let owner = OWNER.parse(matches);
+            Self {
+                tx,
+                tx_data: tx_path,
+                owner,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(
+                    TX_PATH.def().help(
+                        "The path to the tx file with the serialized tx.",
+                    ),
+                )
+                .arg(OWNER.def().help("The address of the account owner"))
+        }
+    }
+
     impl CliToSdk<QueryCommissionRate<SdkTypes>> for QueryCommissionRate<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
             QueryCommissionRate::<SdkTypes> {
@@ -4341,19 +4526,29 @@ pub mod args {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
                 dump_tx: self.dump_tx,
+                output_folder: self.output_folder,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
-                fee_amount: self.fee_amount,
-                fee_token: ctx.get(&self.fee_token),
+                gas_payer: ctx.get_opt_cached(&self.gas_payer),
+                gas_amount: self.gas_amount,
+                gas_token: ctx.get(&self.gas_token),
                 gas_limit: self.gas_limit,
-                signing_key: self.signing_key.map(|x| ctx.get_cached(&x)),
+                signing_keys: self
+                    .signing_keys
+                    .iter()
+                    .map(|key| ctx.get_cached(key))
+                    .collect(),
+                signatures: self
+                    .signatures
+                    .iter()
+                    .map(|path| std::fs::read(path).unwrap())
+                    .collect(),
                 verification_key: self
                     .verification_key
-                    .map(|x| ctx.get_cached(&x)),
-                signer: self.signer.map(|x| ctx.get(&x)),
+                    .map(|public_key| ctx.get_cached(&public_key)),
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -4395,6 +4590,10 @@ pub mod args {
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
+            .arg(GAS_PAYER.def().help(
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to --signing-keys.",
+            ))
             .arg(GAS_AMOUNT.def().help(
                 "The amount being paid for the inclusion of this transaction",
             ))
@@ -4411,26 +4610,35 @@ pub mod args {
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
             .arg(
-                SIGNING_KEY_OPT
+                SIGNING_KEYS
                     .def()
                     .help(
                         "Sign the transaction with the key for the given \
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name)
-                    .conflicts_with(VERIFICATION_KEY.name),
+                    .conflicts_with_all([
+                        SIGNATURES.name,
+                        VERIFICATION_KEY.name,
+                    ]),
             )
             .arg(
-                SIGNER
+                SIGNATURES
                     .def()
                     .help(
-                        "Sign the transaction with the keypair of the public \
-                         key of the given address.",
+                        "List of file paths containing a serialized signature \
+                         to be attached to a transaction. Requires to provide \
+                         a gas payer.",
                     )
-                    .conflicts_with(SIGNING_KEY_OPT.name)
-                    .conflicts_with(VERIFICATION_KEY.name),
+                    .conflicts_with_all([
+                        SIGNING_KEYS.name,
+                        VERIFICATION_KEY.name,
+                    ])
+                    .requires(GAS_PAYER.name),
             )
+            .arg(OUTPUT_FOLDER_PATH.def().help(
+                "The output folder path where the artifact will be stored.",
+            ))
             .arg(
                 VERIFICATION_KEY
                     .def()
@@ -4439,8 +4647,7 @@ pub mod args {
                          public key, public key hash or alias from your \
                          wallet.",
                     )
-                    .conflicts_with(SIGNER.name)
-                    .conflicts_with(SIGNING_KEY_OPT.name),
+                    .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
         }
@@ -4453,17 +4660,19 @@ pub mod args {
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let fee_amount =
+            let gas_payer = GAS_PAYER.parse(matches);
+            let gas_amount =
                 InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
-            let fee_token = GAS_TOKEN.parse(matches);
+            let gas_token = GAS_TOKEN.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
-            let signing_key = SIGNING_KEY_OPT.parse(matches);
+            let signing_keys = SIGNING_KEYS.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
             let verification_key = VERIFICATION_KEY.parse(matches);
-            let signer = SIGNER.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             Self {
                 dry_run,
                 dump_tx,
@@ -4472,16 +4681,18 @@ pub mod args {
                 ledger_address,
                 initialized_account_alias,
                 wallet_alias_force,
-                fee_amount,
-                fee_token,
+                gas_payer,
+                gas_amount,
+                gas_token,
                 gas_limit,
                 expiration,
-                signing_key,
+                signing_keys,
+                signatures,
                 verification_key,
-                signer,
                 tx_reveal_code_path,
                 password,
                 chain_id,
+                output_folder,
             }
         }
     }

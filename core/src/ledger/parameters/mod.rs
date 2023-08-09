@@ -46,6 +46,8 @@ pub struct Parameters {
     pub implicit_vp_code_hash: Hash,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
+    /// Maximum number of signature per transaction
+    pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
     pub pos_gain_p: Dec,
     /// PoS gain d (read only)
@@ -117,6 +119,7 @@ impl Parameters {
             tx_whitelist,
             implicit_vp_code_hash,
             epochs_per_year,
+            max_signatures_per_transaction,
             pos_gain_p,
             pos_gain_d,
             staked_ratio,
@@ -168,6 +171,13 @@ impl Parameters {
         let epochs_per_year_key = storage::get_epochs_per_year_key();
         storage.write(&epochs_per_year_key, epochs_per_year)?;
 
+        let max_signatures_per_transaction_key =
+            storage::get_max_signatures_per_transaction_key();
+        storage.write(
+            &max_signatures_per_transaction_key,
+            max_signatures_per_transaction,
+        )?;
+
         let pos_gain_p_key = storage::get_pos_gain_p_key();
         storage.write(&pos_gain_p_key, pos_gain_p)?;
 
@@ -195,6 +205,17 @@ impl Parameters {
         }
         Ok(())
     }
+}
+
+/// Get the max signatures per transactio parameter
+pub fn max_signatures_per_transaction<S>(
+    storage: &S,
+) -> storage_api::Result<Option<u8>>
+where
+    S: StorageRead,
+{
+    let key = storage::get_max_signatures_per_transaction_key();
+    storage.read(&key)
 }
 
 /// Update the max_expected_time_per_block parameter in storage. Returns the
@@ -340,6 +361,20 @@ where
     storage.write_bytes(&key, implicit_vp)
 }
 
+/// Update the max signatures per transaction storage parameter
+pub fn update_max_signature_per_tx<S>(
+    storage: &mut S,
+    value: u8,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage::get_max_signatures_per_transaction_key();
+    // Using `fn write_bytes` here, because implicit_vp doesn't need to be
+    // encoded, it's bytes already.
+    storage.write(&key, value)
+}
+
 /// Read the the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,
@@ -434,6 +469,15 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read the maximum signatures per transaction
+    let max_signatures_per_transaction_key =
+        storage::get_max_signatures_per_transaction_key();
+    let value: Option<u8> =
+        storage.read(&max_signatures_per_transaction_key)?;
+    let max_signatures_per_transaction: u8 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read PoS gain P
     let pos_gain_p_key = storage::get_pos_gain_p_key();
     let value = storage.read(&pos_gain_p_key)?;
@@ -478,6 +522,7 @@ where
         tx_whitelist,
         implicit_vp_code_hash,
         epochs_per_year,
+        max_signatures_per_transaction,
         pos_gain_p,
         pos_gain_d,
         staked_ratio,

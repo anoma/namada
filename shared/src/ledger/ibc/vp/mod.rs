@@ -393,6 +393,7 @@ mod tests {
     use crate::types::time::DurationSecs;
     use crate::types::token::{balance_key, Amount};
     use crate::types::transaction::TxType;
+    use crate::types::tx::TxBuilder;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -827,14 +828,13 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -965,14 +965,13 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1169,14 +1168,13 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
 
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
@@ -1297,14 +1295,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1943,14 +1942,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2080,14 +2080,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2255,14 +2256,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2399,14 +2401,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2548,14 +2551,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2697,14 +2701,15 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wl_storage.storage.chain_id.clone();
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &keypair_1(),
-        )));
+
+        let tx_builder =
+            TxBuilder::new(wl_storage.storage.chain_id.clone(), None);
+        let tx = tx_builder
+            .add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .add_gas_payer(keypair_1())
+            .build();
+
         let gas_meter = VpGasMeter::new(0);
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
