@@ -98,6 +98,7 @@ impl Gov {
     {
         let path = self.proposal_id_path(id);
         let data = client.simple_request(path).await?;
+        dbg!(&data);
         let decoded: Option<StorageProposal> =
             borsh::BorshDeserialize::try_from_slice(&data[..])?;
         Ok(decoded)
@@ -156,8 +157,10 @@ impl crate::ledger::queries::Router for Gov {
             crate::ledger::queries::require_no_proof(request)?;
             crate::ledger::queries::require_no_data(request)?;
             let data = proposal_id(ctx, id)?;
+            dbg!(&data);
             let data = borsh::BorshSerialize::try_to_vec(&data)
                 .into_storage_result()?;
+            dbg!(&data);
             return Ok(crate::ledger::queries::EncodedResponseQuery {
                 data,
                 info: Default::default(),
