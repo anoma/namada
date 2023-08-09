@@ -24,7 +24,6 @@ mod tests {
     use namada::proof_of_stake::unbond_handle;
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada::types::tx::TxBuilder;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -171,12 +170,10 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = withdraw.try_to_vec().unwrap();
-        let tx_builder = TxBuilder::new(ChainId::default(), None);
-        let tx = tx_builder
+        let tx = Tx::new(ChainId::default(), None)
             .add_code(tx_code)
             .add_serialized_data(tx_data)
-            .add_gas_payer(key)
-            .signed_build();
+            .sign_wrapper(key);
         let signed_tx = tx;
 
         // Read data before we apply tx:

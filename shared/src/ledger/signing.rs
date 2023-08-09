@@ -48,7 +48,6 @@ use crate::types::transaction::governance::{
 };
 use crate::types::transaction::pos::InitValidator;
 use crate::types::transaction::{Fee, TxType};
-use crate::types::tx::TxBuilder;
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -362,12 +361,12 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 /// progress on chain.
 pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    tx_builder: TxBuilder,
+    tx_builder: Tx,
     args: &args::Tx,
     epoch: Epoch,
     gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBuilder {
+) -> Tx {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
         solve_pow_challenge(client, args, &gas_payer, requires_pow).await;

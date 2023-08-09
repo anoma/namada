@@ -964,7 +964,6 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE};
-    use namada::types::tx::TxBuilder;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -1539,7 +1538,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let public_key = keypair.ref_to();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1589,7 +1588,7 @@ mod test_process_proposal {
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::from_uint(100, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1657,7 +1656,7 @@ mod test_process_proposal {
             )
             .unwrap();
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::from_uint(1, 0).expect("Test failed"),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1726,7 +1725,7 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::native_whole(1_000_100),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1779,7 +1778,7 @@ mod test_process_proposal {
         let mut txs = vec![];
         for i in 0..3 {
             let mut outer_tx =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount: Amount::native_whole(i as u64),
                         token: shell.wl_storage.storage.native_token.clone(),
@@ -1857,7 +1856,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
 
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1909,7 +1908,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1966,7 +1965,7 @@ mod test_process_proposal {
             pow_solution: None,
         };
 
-        let tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        let tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         let mut decrypted = tx.clone();
         decrypted.update_header(TxType::Decrypted(DecryptedTx::Undecryptable));
 
@@ -1994,7 +1993,7 @@ mod test_process_proposal {
     #[test]
     fn test_too_many_decrypted_txs() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
@@ -2030,12 +2029,10 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
-        let tx = tx_builder
+        let tx = Tx::new(shell.chain_id.clone(), None)
             .add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
-            .add_gas_payer(keypair)
-            .signed_build();
+            .sign_wrapper(keypair);
 
         let response = {
             let request = ProcessProposal {
@@ -2071,7 +2068,7 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2145,7 +2142,7 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2202,7 +2199,7 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2291,7 +2288,7 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2360,7 +2357,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2422,7 +2419,7 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2482,7 +2479,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2524,7 +2521,7 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: token::Amount::zero(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -2580,7 +2577,7 @@ mod test_process_proposal {
     fn test_include_only_protocol_txs() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),

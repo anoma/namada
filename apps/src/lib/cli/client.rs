@@ -254,8 +254,7 @@ impl<IO> CliApi<IO> {
                             args.clone(),
                             signing_data.gas_payer.clone(),
                         )
-                        .await?
-                        .unsigned_build();
+                        .await?;
 
                         signing::generate_test_vector(
                             &client,

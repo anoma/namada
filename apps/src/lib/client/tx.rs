@@ -27,7 +27,6 @@ use namada::types::storage::{Epoch, Key};
 use namada::types::token;
 use namada::types::transaction::governance::{ProposalType, VoteProposalData};
 use namada::types::transaction::pos::InitValidator;
-use namada::types::tx::TxBuilder;
 
 use super::rpc;
 use crate::cli::context::WalletAddress;
@@ -74,8 +73,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
                 &public_key,
                 &signing_data.gas_payer,
             )
-            .await?
-            .unsigned_build();
+            .await?;
 
             signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -111,8 +109,7 @@ where
 
     let mut tx =
         tx::build_custom(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -147,8 +144,7 @@ where
 
     let mut tx =
         tx::build_update_account(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -182,8 +178,7 @@ where
 
     let mut tx =
         tx::build_init_account(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -381,7 +376,7 @@ where
             .unwrap();
 
     let chain_id = tx_args.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx_args.expiration);
+    let tx_builder = Tx::new(chain_id, tx_args.expiration);
 
     let (tx_builder, extra_section_hash) =
         tx_builder.add_extra_section_from_hash(validator_vp_code_hash);
@@ -420,8 +415,7 @@ where
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await?
-    .unsigned_build();
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -646,7 +640,7 @@ pub async fn submit_transfer<C: Client + Sync>(
             &signing_data.gas_payer,
         )
         .await?;
-        let mut tx = tx_builder.unsigned_build();
+        let mut tx = tx_builder;
         signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
@@ -707,8 +701,7 @@ where
 
     let mut tx =
         tx::build_ibc_transfer(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -868,7 +861,7 @@ where
         .await?;
 
         let chain_id = args.tx.chain_id.clone().unwrap();
-        let tx_builder = TxBuilder::new(chain_id, args.tx.expiration);
+        let tx_builder = Tx::new(chain_id, args.tx.expiration);
 
         // Put any proposal content into an extra section
         let (tx_builder, extra_section_hash) =
@@ -900,8 +893,7 @@ where
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-        .await?
-        .unsigned_build();
+        .await?;
         signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
@@ -1158,7 +1150,7 @@ where
                 .await?;
 
                 let chain_id = args.tx.chain_id.clone().unwrap();
-                let tx_builder = TxBuilder::new(chain_id, args.tx.expiration);
+                let tx_builder = Tx::new(chain_id, args.tx.expiration);
 
                 let tx_builder = tx_builder
                     .add_code_from_hash(tx_code_hash)
@@ -1172,8 +1164,7 @@ where
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
-                .await?
-                .unsigned_build();
+                .await?;
                 signing::generate_test_vector(client, &mut ctx.wallet, &tx)
                     .await;
 
@@ -1384,8 +1375,7 @@ where
 
     let mut tx =
         tx::build_bond::<C>(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1426,7 +1416,7 @@ where
         &signing_data.gas_payer,
     )
     .await?;
-    let mut tx = tx_builder.unsigned_build();
+    let mut tx = tx_builder;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1464,8 +1454,7 @@ where
 
     let mut tx =
         tx::build_withdraw(client, args.clone(), &signing_data.gas_payer)
-            .await?
-            .unsigned_build();
+            .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1503,8 +1492,7 @@ where
         args.clone(),
         &signing_data.gas_payer,
     )
-    .await?
-    .unsigned_build();
+    .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1544,8 +1532,7 @@ where
         args.clone(),
         &signing_data.gas_payer,
     )
-    .await?
-    .unsigned_build();
+    .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
