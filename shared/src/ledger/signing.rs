@@ -37,7 +37,7 @@ use crate::ledger::tx::{
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
-use crate::proto::{MaspBuilder, Section, Tx, Signature, MultiSignature};
+use crate::proto::{MaspBuilder, Section, Tx};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -191,20 +191,13 @@ pub fn sign_tx<U: WalletUtils>(
     tx: &mut Tx,
     signing_data: SigningTxData,
 ) {
-    tx.protocol_filter();
-
-    let hashes = tx.inner_section_targets();
-
     if !args.signatures.is_empty() {
         let signatures = args
             .signatures
             .iter()
             .map(|bytes| SignatureIndex::deserialize(bytes).unwrap())
             .collect();
-        tx.add_section(Section::SectionSignature(MultiSignature {
-            targets: hashes,
-            signatures,
-        }));
+        tx.add_signatures(signatures);
     } else if let Some(account_public_keys_map) = signing_data.account_public_keys_map {
         let signing_tx_keypairs = signing_data
             .public_keys
@@ -216,21 +209,12 @@ pub fn sign_tx<U: WalletUtils>(
                 }
             })
             .collect::<Vec<common::SecretKey>>();
-
-        tx.add_section(Section::SectionSignature(MultiSignature::new(
-            hashes,
-            &signing_tx_keypairs,
-            &account_public_keys_map,
-        )));
+        tx.sign_raw(signing_tx_keypairs, account_public_keys_map);
     }
 
     let fee_payer_keypair =
         find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
-    let sections_hashes = tx.sechashes();
-    tx.add_section(Section::Signature(Signature::new(
-        sections_hashes,
-        &fee_payer_keypair,
-    )));
+    tx.sign_wrapper(fee_payer_keypair);
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -361,24 +345,24 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 /// progress on chain.
 pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    tx_builder: Tx,
+    tx: &mut Tx,
     args: &args::Tx,
     epoch: Epoch,
     gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Tx {
+) {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
         solve_pow_challenge(client, args, &gas_payer, requires_pow).await;
 
-    tx_builder.add_wrapper(
+    tx.add_wrapper(
         fee,
         gas_payer,
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
-    )
+    );
 }
 
 #[allow(clippy::result_large_err)]

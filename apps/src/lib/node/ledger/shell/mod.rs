@@ -1890,17 +1890,18 @@ mod test_utils {
             .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Default::default(),
-                token: native_token,
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Default::default(),
+                    token: native_token,
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2086,10 +2087,11 @@ mod abciplus_mempool_tests {
             ext
         };
         let tx = {
-            let mut tx = Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
-                pk: protocol_key.ref_to(),
-                tx: ProtocolTxType::BridgePoolVext,
-            })));
+            let mut tx =
+                Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: protocol_key.ref_to(),
+                    tx: ProtocolTxType::BridgePoolVext,
+                })));
             // invalid tx type, it doesn't match the
             // tx type declared in the header
             tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
@@ -2202,8 +2204,8 @@ mod test_mempool_validate {
     fn test_wrong_tx_type() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let tx = Tx::new(shell.chain_id.clone(), None)
-            .add_code("wasm_code".as_bytes().to_owned());
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.add_code("wasm_code".as_bytes().to_owned());
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2225,18 +2227,19 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: token::Amount::from_uint(100, 0)
-                    .expect("This can't fail"),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: token::Amount::from_uint(100, 0)
+                        .expect("This can't fail"),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2332,9 +2335,8 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let tx_builder = Tx::new(wrong_chain_id.clone(), None);
-        let tx = tx_builder
-            .add_code("wasm_code".as_bytes().to_owned())
+        let mut tx = Tx::new(wrong_chain_id.clone(), None);
+        tx.add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .sign_wrapper(keypair);
 
@@ -2360,8 +2362,9 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let tx = Tx::new(shell.chain_id.clone(), Some(DateTimeUtc::default()))
-            .add_code("wasm_code".as_bytes().to_owned())
+        let mut tx =
+            Tx::new(shell.chain_id.clone(), Some(DateTimeUtc::default()));
+        tx.add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .sign_wrapper(keypair);
 

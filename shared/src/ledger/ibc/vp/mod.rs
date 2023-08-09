@@ -829,8 +829,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -963,8 +963,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1163,8 +1163,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1288,8 +1288,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -1932,8 +1932,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2067,8 +2067,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2240,8 +2240,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2382,8 +2382,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2529,8 +2529,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
@@ -2676,8 +2676,8 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 

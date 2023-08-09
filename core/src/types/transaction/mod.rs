@@ -350,10 +350,11 @@ fn test_process_tx_decrypted_signed() {
     }
 
     use crate::types::key::Signature as S;
-    let mut decrypted = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: false,
-    }));
+    let mut decrypted =
+        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow: false,
+        }));
     // Invalid signed data
     let ed_sig =
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();

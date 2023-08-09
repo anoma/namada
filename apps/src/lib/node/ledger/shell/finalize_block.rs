@@ -1047,17 +1047,18 @@ mod test_finalize_block {
         keypair: &common::SecretKey,
     ) -> ProcessedTx {
         let tx_code = TestWasms::TxNoOp.read_bytes();
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: MIN_FEE_AMOUNT,
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: MIN_FEE_AMOUNT,
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(
@@ -1155,17 +1156,18 @@ mod test_finalize_block {
     fn test_process_proposal_rejected_decrypted_tx() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Default::default(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Default::default(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new(
@@ -3513,9 +3515,8 @@ mod test_finalize_block {
             .wl_storage
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
-        let tx = Tx::new(shell.chain_id.clone(), None)
-            .add_code_from_hash(Hash::default())
-            .add_data(0u64);
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.add_code_from_hash(Hash::default()).add_data(0u64);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

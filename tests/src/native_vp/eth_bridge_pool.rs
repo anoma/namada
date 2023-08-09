@@ -108,10 +108,11 @@ mod test_bridge_pool_vp {
         let wasm_code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
 
-        Tx::new(ChainId::default(), None)
-            .add_code(wasm_code)
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(wasm_code)
             .add_serialized_data(data)
-            .sign_wrapper(keypair.clone())
+            .sign_wrapper(keypair.clone());
+        tx
     }
 
     #[test]

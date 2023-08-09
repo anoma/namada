@@ -20,6 +20,7 @@ use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
 use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::{prepare_tx, Error};
+use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
@@ -31,14 +32,13 @@ use crate::types::eth_bridge_pool::{
 };
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
-use crate::proto::Tx;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args::EthereumBridgePool {
-        tx,
+        tx: tx_args,
         asset,
         recipient,
         sender,
@@ -50,7 +50,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     gas_payer: common::PublicKey,
 ) -> Result<Tx, Error> {
     let DenominatedAmount { amount, .. } =
-        validate_amount(client, amount, &BRIDGE_ADDRESS, tx.force)
+        validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
             .await
             .expect("Failed to validate amount");
 
@@ -72,22 +72,20 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
             .await
             .unwrap();
 
-    let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let tx_builder = tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(transfer);
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
 
     prepare_tx::<C>(
         client,
-        &tx,
-        tx_builder,
+        &tx_args,
+        &mut tx,
         gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await
+    .await;
+    Ok(tx)
 }
 
 /// A json serializable representation of the Ethereum

@@ -108,8 +108,7 @@ where
     submit_reveal_aux(client, ctx, args.tx.clone(), &args.owner).await?;
 
     let mut tx =
-        tx::build_custom(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+        tx::build_custom(client, args.clone(), &signing_data.gas_payer).await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -376,10 +375,9 @@ where
             .unwrap();
 
     let chain_id = tx_args.chain_id.clone().unwrap();
-    let tx_builder = Tx::new(chain_id, tx_args.expiration);
-
-    let (tx_builder, extra_section_hash) =
-        tx_builder.add_extra_section_from_hash(validator_vp_code_hash);
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let extra_section_hash =
+        tx.add_extra_section_from_hash(validator_vp_code_hash);
 
     let data = InitValidator {
         account_keys,
@@ -396,7 +394,7 @@ where
         validator_vp_code_hash: extra_section_hash,
     };
 
-    let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+    tx.add_code_from_hash(tx_code_hash).add_data(data);
 
     let signing_data = signing::aux_signing_data(
         client,
@@ -407,15 +405,15 @@ where
     )
     .await?;
 
-    let mut tx = tx::prepare_tx(
+    tx::prepare_tx(
         client,
         &tx_args,
-        tx_builder,
+        &mut tx,
         signing_data.gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await?;
+    .await;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -633,14 +631,13 @@ pub async fn submit_transfer<C: Client + Sync>(
         .await?;
 
         let arg = args.clone();
-        let (tx_builder, tx_epoch) = tx::build_transfer(
+        let (mut tx, tx_epoch) = tx::build_transfer(
             client,
             &mut ctx.shielded,
             arg,
             &signing_data.gas_payer,
         )
         .await?;
-        let mut tx = tx_builder;
         signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
@@ -861,46 +858,39 @@ where
         .await?;
 
         let chain_id = args.tx.chain_id.clone().unwrap();
-        let tx_builder = Tx::new(chain_id, args.tx.expiration);
+        let mut tx = Tx::new(chain_id, args.tx.expiration);
 
         // Put any proposal content into an extra section
-        let (tx_builder, extra_section_hash) =
-            tx_builder.add_extra_section(init_proposal_content);
+        let extra_section_hash = tx.add_extra_section(init_proposal_content).1;
         init_proposal_data.content = extra_section_hash;
 
         // Put any proposal code into an extra section
-        let tx_builder = if let Some(init_proposal_code) = init_proposal_code {
-            let (tx_builder, extra_section_hash) =
-                tx_builder.add_extra_section(init_proposal_code);
+        if let Some(init_proposal_code) = init_proposal_code {
+            let extra_section_hash = tx.add_extra_section(init_proposal_code).1;
             init_proposal_data.r#type =
                 ProposalType::Default(Some(extra_section_hash));
-            tx_builder
-        } else {
-            tx_builder
-        };
+        }
 
-        let tx_builder = tx_builder
-            .add_code_from_hash(tx_code_hash)
+        tx.add_code_from_hash(tx_code_hash)
             .add_data(init_proposal_data);
 
         submit_reveal_aux(client, &mut ctx, args.tx.clone(), &signer).await?;
 
-        let mut tx = tx::prepare_tx(
+        tx::prepare_tx(
             client,
             &args.tx,
-            tx_builder,
+            &mut tx,
             signing_data.gas_payer.clone(),
             #[cfg(not(feature = "mainnet"))]
             false,
         )
-        .await?;
+        .await;
         signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
         } else {
             signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
-
             tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
         }
 
@@ -1150,21 +1140,18 @@ where
                 .await?;
 
                 let chain_id = args.tx.chain_id.clone().unwrap();
-                let tx_builder = Tx::new(chain_id, args.tx.expiration);
+                let mut tx = Tx::new(chain_id, args.tx.expiration);
+                tx.add_code_from_hash(tx_code_hash).add_data(tx_data);
 
-                let tx_builder = tx_builder
-                    .add_code_from_hash(tx_code_hash)
-                    .add_data(tx_data);
-
-                let mut tx = tx::prepare_tx(
+                tx::prepare_tx(
                     client,
                     &args.tx,
-                    tx_builder,
+                    &mut tx,
                     signing_data.gas_payer.clone(),
                     #[cfg(not(feature = "mainnet"))]
                     false,
                 )
-                .await?;
+                .await;
                 signing::generate_test_vector(client, &mut ctx.wallet, &tx)
                     .await;
 
@@ -1409,14 +1396,13 @@ where
     )
     .await?;
 
-    let (tx_builder, latest_withdrawal_pre) = tx::build_unbond(
+    let (mut tx, latest_withdrawal_pre) = tx::build_unbond(
         client,
         &mut ctx.wallet,
         args.clone(),
         &signing_data.gas_payer,
     )
     .await?;
-    let mut tx = tx_builder;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {

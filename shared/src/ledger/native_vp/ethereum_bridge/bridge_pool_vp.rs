@@ -623,8 +623,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match expect {
@@ -961,8 +961,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
@@ -1023,8 +1023,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1109,8 +1109,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1196,8 +1196,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1310,8 +1310,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let tx = Tx::new(wl_storage.storage.chain_id.clone(), None)
-            .add_data(transfer);
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)

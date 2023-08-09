@@ -27,9 +27,9 @@ mod tests {
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
+    use namada::proto::Tx;
     use namada::types::hash::Hash;
     use namada::types::key::*;
-    use namada::proto::Tx;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
@@ -461,12 +461,11 @@ mod tests {
             let pks_map = AccountPublicKeysMap::from_iter(vec![pk.clone()]);
             let signed_tx_data = vp_host_env::with(|env| {
                 let chain_id = env.wl_storage.storage.chain_id.clone();
-                let tx = Tx::new(chain_id, expiration)
-                    .add_code(code.clone())
+                let mut tx = Tx::new(chain_id, expiration);
+                tx.add_code(code.clone())
                     .add_serialized_data(data.to_vec())
                     .sign_raw(keypairs.clone(), pks_map.clone())
                     .sign_wrapper(keypair.clone());
-
                 env.tx = tx;
                 env.tx.clone()
             });
@@ -557,8 +556,8 @@ mod tests {
             key::testing::keypair_1().ref_to(),
         ]);
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -573,8 +572,8 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code_from_hash(code_hash)
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code_from_hash(code_hash)
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -590,11 +589,11 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
         });
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code_from_hash(code_hash)
-            .add_serialized_data(input_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code_from_hash(code_hash)
+            .add_serialized_data(input_data)
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
     }
@@ -615,8 +614,8 @@ mod tests {
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -649,11 +648,11 @@ mod tests {
         let msg = ibc::msg_update_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -692,8 +691,8 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -725,11 +724,11 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -769,8 +768,8 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -802,11 +801,11 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -848,8 +847,8 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -881,11 +880,11 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -927,8 +926,8 @@ mod tests {
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -961,11 +960,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1010,11 +1009,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
@@ -1067,11 +1066,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1121,8 +1120,8 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone())
             .sign_wrapper(keypair.clone());
@@ -1168,11 +1167,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1253,11 +1252,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1326,11 +1325,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1421,11 +1420,11 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1520,11 +1519,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1620,11 +1619,11 @@ mod tests {
         let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1709,11 +1708,11 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(vec![])
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
-            .sign_wrapper(keypair.clone());
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
