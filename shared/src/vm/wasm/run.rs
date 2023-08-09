@@ -618,18 +618,16 @@ mod tests {
         // shouldn't fail
         let input = 2_usize.pow(23).try_to_vec().unwrap();
 
-        let tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_serialized_data(input);
+        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        tx.add_code(vec![]).add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
 
-        let outer_tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_data(eval_vp);
+        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        outer_tx.add_code(vec![]).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
@@ -654,18 +652,16 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
-        let tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_data(input);
+        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        tx.add_code(vec![]).add_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
 
-        let outer_tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_data(eval_vp);
+        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        outer_tx.add_code(vec![]).add_data(eval_vp);
 
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
@@ -1026,18 +1022,16 @@ mod tests {
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let input = 2_usize.pow(23).try_to_vec().unwrap();
 
-        let tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_serialized_data(input);
+        let mut tx = Tx::new(storage.chain_id.clone(), None);
+        tx.add_code(vec![]).add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
             input: tx,
         };
 
-        let outer_tx = Tx::new(storage.chain_id.clone(), None)
-            .add_code(vec![])
-            .add_data(eval_vp);
+        let mut outer_tx = Tx::new(storage.chain_id.clone(), None);
+        outer_tx.add_code(vec![]).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(

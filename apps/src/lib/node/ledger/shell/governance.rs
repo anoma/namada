@@ -149,10 +149,11 @@ where
     let proposal_code = shell.read_storage_key_bytes(&proposal_code_key);
     match proposal_code {
         Some(proposal_code) => {
-            let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }));
+            let mut tx =
+                Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
+                    #[cfg(not(feature = "mainnet"))]
+                    has_valid_pow: false,
+                }));
             tx.header.chain_id = shell.chain_id.clone();
             tx.set_data(Data::new(encode(&id)));
             tx.set_code(Code::new(proposal_code));

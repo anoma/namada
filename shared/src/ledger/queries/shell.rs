@@ -539,7 +539,8 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let mut outer_tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
+        let mut outer_tx =
+            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             // To be able to dry-run testnet faucet withdrawal, pretend
             // that we got a valid PoW

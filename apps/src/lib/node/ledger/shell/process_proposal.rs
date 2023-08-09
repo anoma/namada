@@ -1538,17 +1538,18 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let public_key = keypair.ref_to();
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Default::default(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            public_key,
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Default::default(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                public_key,
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1588,17 +1589,18 @@ mod test_process_proposal {
     fn test_wrapper_bad_signature_rejected() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::from_uint(100, 0).expect("Test failed"),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::from_uint(100, 0).expect("Test failed"),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1656,17 +1658,18 @@ mod test_process_proposal {
             )
             .unwrap();
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::from_uint(1, 0).expect("Test failed"),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::from_uint(1, 0).expect("Test failed"),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1725,17 +1728,18 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::native_whole(1_000_100),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::native_whole(1_000_100),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2029,8 +2033,8 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let tx = Tx::new(shell.chain_id.clone(), None)
-            .add_code("wasm_code".as_bytes().to_owned())
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.add_code("wasm_code".as_bytes().to_owned())
             .add_data("transaction data".as_bytes().to_owned())
             .sign_wrapper(keypair);
 
@@ -2068,17 +2072,18 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -2142,17 +2147,18 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2199,17 +2205,18 @@ mod test_process_proposal {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2288,17 +2295,18 @@ mod test_process_proposal {
             )
             .unwrap();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2357,17 +2365,18 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -2419,17 +2428,18 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: token::Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: token::Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper
@@ -2479,17 +2489,18 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: token::Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: token::Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -2521,17 +2532,18 @@ mod test_process_proposal {
         let (mut shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: token::Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: token::Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -2577,17 +2589,18 @@ mod test_process_proposal {
     fn test_include_only_protocol_txs() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(1u64);
         let keypair = gen_keypair();
-        let mut wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                Default::default(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));

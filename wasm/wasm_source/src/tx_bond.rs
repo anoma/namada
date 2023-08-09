@@ -107,8 +107,8 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = bond.try_to_vec().unwrap();
-        let tx = Tx::new(ChainId::default(), None)
-            .add_code(tx_code)
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(key);
 

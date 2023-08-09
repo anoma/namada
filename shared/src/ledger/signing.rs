@@ -190,8 +190,6 @@ pub fn sign_tx<U: WalletUtils>(
     tx: &mut Tx,
     signing_data: SigningTxData,
 ) {
-    tx.protocol_filter();
-
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
         let signing_tx_keypairs = signing_data
@@ -204,31 +202,12 @@ pub fn sign_tx<U: WalletUtils>(
                 }
             })
             .collect::<Vec<common::SecretKey>>();
-
-        let hashes = tx
-            .sections
-            .iter()
-            .filter_map(|section| match section {
-                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
-                _ => None,
-            })
-            .collect();
-        tx.add_section(Section::SectionSignature(
-            crate::proto::MultiSignature::new(
-                hashes,
-                &signing_tx_keypairs,
-                &account_public_keys_map,
-            ),
-        ));
+        tx.sign_raw(signing_tx_keypairs, account_public_keys_map);
     }
 
     let gas_payer_keypair =
         find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
-
-    tx.add_section(Section::Signature(crate::proto::Signature::new(
-        tx.sechashes(),
-        &gas_payer_keypair,
-    )));
+    tx.sign_wrapper(gas_payer_keypair);
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -359,24 +338,24 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 /// progress on chain.
 pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    tx_builder: Tx,
+    tx: &mut Tx,
     args: &args::Tx,
     epoch: Epoch,
     gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Tx {
+) {
     #[cfg(not(feature = "mainnet"))]
     let (pow_solution, fee) =
         solve_pow_challenge(client, args, &gas_payer, requires_pow).await;
 
-    tx_builder.add_wrapper(
+    tx.add_wrapper(
         fee,
         gas_payer,
         epoch,
         args.gas_limit.clone(),
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
-    )
+    );
 }
 
 #[allow(clippy::result_large_err)]
