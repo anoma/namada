@@ -318,64 +318,83 @@ where
         transfer: &'trans PendingTransfer,
     ) -> Result<EscrowCheck<'trans>, Error> {
         let tok_is_native_asset = &transfer.transfer.asset == wnam_address;
-        let gas_is_native_asset =
-            transfer.gas_fee.token == self.ctx.storage.native_token;
+
+        // NB: this comparison is not enough to check
+        // if NAM is being used for both tokens and gas
+        // fees, since wrapped NAM will have a different
+        // token address
+        let same_token_and_gas_erc20 =
+            transfer.token_address() == transfer.gas_fee.token;
 
         let (expected_gas_debit, expected_token_debit) = {
+            // NB: there is a corner case where the gas fees and escrowed
+            // tokens are debited from the same address, when the gas fee
+            // payer and token sender are the same, and the underlying
+            // transferred assets are the same
             let same_sender_and_fee_payer =
                 transfer.gas_fee.payer == transfer.transfer.sender;
-            let same_tokens_and_gas_asset = (tok_is_native_asset
-                && gas_is_native_asset)
-                || transfer.token_address() == transfer.gas_fee.token;
-
-            // there is a corner case where the gas fees and escrowed tokens
-            // are debited from the same address
+            let gas_is_native_asset =
+                transfer.gas_fee.token == self.ctx.storage.native_token;
+            let gas_and_token_is_native_asset =
+                gas_is_native_asset && tok_is_native_asset;
+            let same_token_and_gas_asset =
+                gas_and_token_is_native_asset || same_token_and_gas_erc20;
             let same_debited_address =
-                same_sender_and_fee_payer && same_tokens_and_gas_asset;
+                same_sender_and_fee_payer && same_token_and_gas_asset;
 
             if same_debited_address {
-                let debit = transfer
-                    .gas_fee
-                    .amount
-                    .checked_add(transfer.transfer.amount)
-                    .ok_or_else(|| {
-                        Error(eyre!(
-                            "Addition oveflowed adding gas fee + transfer \
-                             amount."
-                        ))
-                    })?;
+                let debit = sum_gas_and_token_amounts(transfer)?;
                 (debit, debit)
             } else {
                 (transfer.gas_fee.amount, transfer.transfer.amount)
             }
         };
+        let (expected_gas_credit, expected_token_credit) = {
+            // NB: there is a corner case where the gas fees and escrowed
+            // tokens are credited to the same address, when the underlying
+            // transferred assets are the same (unless the asset is NAM)
+            let same_credited_address = same_token_and_gas_erc20;
+
+            if same_credited_address {
+                let credit = sum_gas_and_token_amounts(transfer)?;
+                (credit, credit)
+            } else {
+                (transfer.gas_fee.amount, transfer.transfer.amount)
+            }
+        };
+        let (token_check_addr, token_check_escrow_acc) = if tok_is_native_asset
+        {
+            // when minting wrapped NAM on Ethereum, escrow to the Ethereum
+            // bridge address, and draw from NAM token accounts
+            let token = Cow::Borrowed(&self.ctx.storage.native_token);
+            let escrow_account = &BRIDGE_ADDRESS;
+            (token, escrow_account)
+        } else {
+            // otherwise, draw from ERC20/NUT wrapped asset token accounts,
+            // and escrow to the Bridge pool address
+            let token = Cow::Owned(transfer.token_address());
+            let escrow_account = &BRIDGE_POOL_ADDRESS;
+            (token, escrow_account)
+        };
+
         Ok(EscrowCheck {
             gas_check: EscrowDelta {
-                token: if gas_is_native_asset {
-                    Cow::Borrowed(&self.ctx.storage.native_token)
-                } else {
-                    Cow::Borrowed(&transfer.gas_fee.token)
-                },
+                // NB: it's fine to not check for wrapped NAM here,
+                // as users won't hold wrapped NAM tokens in practice,
+                // anyway
+                token: Cow::Borrowed(&transfer.gas_fee.token),
                 payer_account: &transfer.gas_fee.payer,
                 escrow_account: &BRIDGE_POOL_ADDRESS,
                 expected_debit: expected_gas_debit,
-                expected_credit: transfer.gas_fee.amount,
+                expected_credit: expected_gas_credit,
                 _kind: PhantomData,
             },
             token_check: EscrowDelta {
-                token: if tok_is_native_asset {
-                    Cow::Borrowed(&self.ctx.storage.native_token)
-                } else {
-                    Cow::Owned(transfer.token_address())
-                },
+                token: token_check_addr,
                 payer_account: &transfer.transfer.sender,
-                escrow_account: if tok_is_native_asset {
-                    &BRIDGE_ADDRESS
-                } else {
-                    &BRIDGE_POOL_ADDRESS
-                },
+                escrow_account: token_check_escrow_acc,
                 expected_debit: expected_token_debit,
-                expected_credit: transfer.transfer.amount,
+                expected_credit: expected_token_credit,
                 _kind: PhantomData,
             },
         })
@@ -429,6 +448,22 @@ enum GasCheck {}
 
 /// Perform a token check.
 enum TokenCheck {}
+
+/// Sum gas and token amounts on a pending transfer, checking for overflows.
+#[inline]
+fn sum_gas_and_token_amounts(
+    transfer: &PendingTransfer,
+) -> Result<Amount, Error> {
+    transfer
+        .gas_fee
+        .amount
+        .checked_add(transfer.transfer.amount)
+        .ok_or_else(|| {
+            Error(eyre!(
+                "Addition oveflowed adding gas fee + transfer amount."
+            ))
+        })
+}
 
 impl<'a, D, H, CA> NativeVp for BridgePoolVp<'a, D, H, CA>
 where
