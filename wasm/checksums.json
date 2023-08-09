@@ -9,7 +9,7 @@
     "tx_reveal_pk.wasm": "tx_reveal_pk.e6375abba3f750700c06fbdeb2d5edec22b6a382116a67a7f9d7f7ba49f134e1.wasm",
     "tx_transfer.wasm": "tx_transfer.e65b47bc94c5a09e3edc68298ad0e5e35041b91bc4d679bf5b7f433dffdce58e.wasm",
     "tx_unbond.wasm": "tx_unbond.4fd70d297ccedb369bf88d8a8459a47ea733d329410387a6f80a0e026c6e480d.wasm",
-    "tx_unjail_validator.wasm": "tx_unjail_validator.b8e7204b14e15a3c395432f35788eca45ef4332916d96dfba87627a5717916de.wasm",
+    "tx_unjail_validator.wasm": "tx_unjail_validator.28082f1002a97f06b52bc7a9267d1e5675a5241c5d37f7d0c58257f9fa2cc9b2.wasm",
     "tx_update_vp.wasm": "tx_update_vp.65c5ca3e48fdef70e696460eca7540cf6196511d76fb2465133b145409329b3e.wasm",
     "tx_vote_proposal.wasm": "tx_vote_proposal.e0a003d922230d32b741b57ca18913cbc4d5d2290f02cb37dfdaa7f27cebb486.wasm",
     "tx_withdraw.wasm": "tx_withdraw.40499cb0e268d3cc3d9bca5dacca05d8df35f5b90adf4087a5171505472d921a.wasm",
