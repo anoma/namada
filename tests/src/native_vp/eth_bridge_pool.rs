@@ -94,6 +94,17 @@ mod test_bridge_pool_vp {
         // Bertha has ERC20 tokens too.
         let token = wrapped_erc20s::token(&ASSET);
         env.credit_tokens(&bertha_address(), &token, BERTHA_TOKENS.into());
+        // Bertha has... NUTs? :D
+        let nuts = wrapped_erc20s::nut(&ASSET);
+        env.credit_tokens(&bertha_address(), &nuts, BERTHA_TOKENS.into());
+        // give Bertha some wNAM. technically this is impossible to mint,
+        // but we're testing invalid protocol paths...
+        let wnam_tok_addr = wrapped_erc20s::token(&wnam());
+        env.credit_tokens(
+            &bertha_address(),
+            &wnam_tok_addr,
+            BERTHA_TOKENS.into(),
+        );
         env
     }
 
@@ -199,6 +210,82 @@ mod test_bridge_pool_vp {
                 token: nam(),
                 amount: Amount::from(GAS_FEE),
                 payer: albert_address(),
+            },
+        };
+        validate_tx(create_tx(transfer, &bertha_keypair()));
+    }
+
+    #[test]
+    fn invalidate_fees_paid_in_nuts() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: Amount::from(TOKENS),
+            },
+            gas_fee: GasFee {
+                token: wrapped_erc20s::nut(&ASSET),
+                amount: Amount::from(GAS_FEE),
+                payer: bertha_address(),
+            },
+        };
+        invalidate_tx(create_tx(transfer, &bertha_keypair()));
+    }
+
+    #[test]
+    fn invalidate_fees_paid_in_wnam() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: Amount::from(TOKENS),
+            },
+            gas_fee: GasFee {
+                token: wrapped_erc20s::token(&wnam()),
+                amount: Amount::from(GAS_FEE),
+                payer: bertha_address(),
+            },
+        };
+        invalidate_tx(create_tx(transfer, &bertha_keypair()));
+    }
+
+    #[test]
+    fn validate_erc20_tx_with_same_gas_token() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: ASSET,
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: Amount::from(TOKENS),
+            },
+            gas_fee: GasFee {
+                token: wrapped_erc20s::token(&ASSET),
+                amount: Amount::from(GAS_FEE),
+                payer: bertha_address(),
+            },
+        };
+        validate_tx(create_tx(transfer, &bertha_keypair()));
+    }
+
+    #[test]
+    fn validate_wnam_tx_with_diff_gas_token() {
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: Amount::from(TOKENS),
+            },
+            gas_fee: GasFee {
+                token: wrapped_erc20s::token(&ASSET),
+                amount: Amount::from(GAS_FEE),
+                payer: bertha_address(),
             },
         };
         validate_tx(create_tx(transfer, &bertha_keypair()));
