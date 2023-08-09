@@ -184,7 +184,7 @@ mod test_process_tx {
     /// data and returns an identical copy
     #[test]
     fn test_process_tx_raw_tx_no_data() {
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         let code_sec = outer_tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -202,7 +202,7 @@ mod test_process_tx {
     /// of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_data() {
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -224,7 +224,7 @@ mod test_process_tx {
     /// signed data and returns an identical copy of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_signed_data() {
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -252,7 +252,7 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
@@ -287,7 +287,7 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx_unsigned() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Amount::from_uint(10, 0).expect("Test failed"),
                 token: nam(),
@@ -310,7 +310,7 @@ mod test_process_tx {
 #[test]
 fn test_process_tx_decrypted_unsigned() {
     use crate::proto::{Code, Data, Tx};
-    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));
@@ -350,7 +350,7 @@ fn test_process_tx_decrypted_signed() {
     }
 
     use crate::types::key::Signature as S;
-    let mut decrypted = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+    let mut decrypted = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
         #[cfg(not(feature = "mainnet"))]
         has_valid_pow: false,
     }));

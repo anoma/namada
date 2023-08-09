@@ -17,7 +17,6 @@ mod test_bridge_pool_vp {
     use namada::types::ethereum_events::EthAddress;
     use namada::types::key::{common, ed25519, SecretKey};
     use namada::types::token::Amount;
-    use namada::types::tx::TxBuilder;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
 
@@ -109,12 +108,10 @@ mod test_bridge_pool_vp {
         let wasm_code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
 
-        let tx_builder = TxBuilder::new(ChainId::default(), None);
-        tx_builder
+        Tx::new(ChainId::default(), None)
             .add_code(wasm_code)
             .add_serialized_data(data)
-            .add_gas_payer(keypair.clone())
-            .signed_build()
+            .sign_wrapper(keypair.clone())
     }
 
     #[test]

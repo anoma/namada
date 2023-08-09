@@ -31,7 +31,7 @@ use crate::types::eth_bridge_pool::{
 };
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
-use crate::types::tx::TxBuilder;
+use crate::proto::Tx;
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
@@ -48,7 +48,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         code_path,
     }: args::EthereumBridgePool,
     gas_payer: common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, tx.force)
             .await
@@ -73,7 +73,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
             .unwrap();
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let tx_builder = tx_builder
         .add_code_from_hash(tx_code_hash)

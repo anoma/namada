@@ -68,7 +68,7 @@ impl Default for TestTxEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             wl_storage,

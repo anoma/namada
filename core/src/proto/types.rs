@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::ledger::testnet_pow;
 use super::generated::types;
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
@@ -44,7 +45,7 @@ use crate::types::transaction::EllipticCurve;
 use crate::types::transaction::EncryptionKey;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::WrapperTxErr;
-use crate::types::transaction::{hash_tx, DecryptedTx, TxType, WrapperTx};
+use crate::types::transaction::{hash_tx, DecryptedTx, TxType, WrapperTx, Fee, GasLimit};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -1136,8 +1137,23 @@ impl TryFrom<&[u8]> for Tx {
 }
 
 impl Tx {
+    /// Initialize a new transaction builder
+    pub fn new(chain_id: ChainId, expiration: Option<DateTimeUtc>) -> Self {
+        Tx {
+            sections: vec![],
+            header: Header {
+                tx_type: TxType::Raw,
+                chain_id,
+                expiration,
+                timestamp: DateTimeUtc::now(),
+                code_hash: crate::types::hash::Hash::default(),
+                data_hash: crate::types::hash::Hash::default(),
+            },
+        }
+    }
+    
     /// Create a transaction of the given type
-    pub fn new(header: TxType) -> Self {
+    pub fn from_type(header: TxType) -> Self {
         Tx {
             header: Header::new(header),
             sections: vec![],
@@ -1510,6 +1526,112 @@ impl Tx {
             }
         }
         filtered
+    }
+
+    /// Add an extra section to the tx builder by hash
+    pub fn add_extra_section_from_hash(mut self, hash: crate::types::hash::Hash) -> (Self, crate::types::hash::Hash) {
+        let sechash = self.add_section(Section::ExtraData(Code::from_hash(hash))).get_hash();
+        (self, sechash)
+    }
+
+    /// Add an extra section to the tx builder by code
+    pub fn add_extra_section(mut self, code: Vec<u8>) -> (Self, crate::types::hash::Hash) {
+        let sechash = self.add_section(Section::ExtraData(Code::new(code))).get_hash();
+        (self, sechash)
+    }
+
+    /// Add a masp tx section to the tx builder
+    pub fn add_masp_tx_section(mut self, tx: Transaction) -> (Self, crate::types::hash::Hash) {
+        let sechash = self.add_section(Section::MaspTx(tx)).get_hash();
+        (self, sechash)
+    }
+
+    /// Add a masp builder section to the tx builder
+    pub fn add_masp_builder(mut self, builder: MaspBuilder) -> Self {
+        let _sec = self.add_section(Section::MaspBuilder(builder));
+        self
+    }
+
+    /// Add wasm code to the tx builder from hash
+    pub fn add_code_from_hash(mut self, code_hash: crate::types::hash::Hash) -> Self {
+        self.set_code(Code::from_hash(code_hash));
+        self
+    }
+
+    /// Add wasm code to the tx builder
+    pub fn add_code(mut self, code: Vec<u8>) -> Self {
+        self.set_code(Code::new(code));
+        self
+    }
+
+    /// Add wasm data to the tx builder
+    pub fn add_data(mut self, data: impl BorshSerialize) -> Self {
+        let bytes = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+        self.set_data(Data::new(bytes));
+        self
+    }
+
+    /// Add wasm data already serialized to the tx builder
+    pub fn add_serialized_data(mut self, bytes: Vec<u8>) -> Self {
+        self.set_data(Data::new(bytes));
+        self
+    }
+
+    /// Add wrapper tx to the tx builder
+    pub fn add_wrapper(
+        mut self,
+        fee: Fee,
+        gas_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+        #[cfg(not(feature = "mainnet"))] requires_pow: Option<
+            testnet_pow::Solution,
+        >,
+    ) -> Self {
+        self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
+            fee,
+            gas_payer,
+            epoch,
+            gas_limit,
+            #[cfg(not(feature = "mainnet"))]
+            requires_pow,
+        )));
+        self
+    }
+
+    /// Add fee payer keypair to the tx builder
+    pub fn sign_wrapper(mut self, keypair: common::SecretKey) -> Self {
+        self.protocol_filter();
+        self.add_section(Section::Signature(Signature::new(
+            self.sechashes(),
+            &keypair,
+        )));
+        self
+    }
+
+    /// Add signing keys to the tx builder
+    pub fn sign_raw(
+        mut self,
+        keypairs: Vec<common::SecretKey>,
+        account_public_keys_map: AccountPublicKeysMap,
+    ) -> Self {
+        self.protocol_filter();
+        let hashes = self
+            .sections
+            .iter()
+            .filter_map(|section| match section {
+                Section::Data(_) | Section::Code(_) => {
+                    Some(section.get_hash())
+                }
+                _ => None,
+            })
+            .collect();
+        self.add_section(Section::SectionSignature(MultiSignature::new(
+            hashes,
+            &keypairs,
+            &account_public_keys_map,
+        )));
+        self
     }
 }
 

@@ -371,7 +371,7 @@ pub mod wrapper_tx {
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
@@ -404,7 +404,7 @@ pub mod wrapper_tx {
         fn test_decryption_invalid_hash() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
@@ -439,7 +439,7 @@ pub mod wrapper_tx {
         fn test_malleability_attack_detection() {
             let keypair = gen_keypair();
             // the signed tx
-            let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount: Amount::from_uint(10, 0).expect("Test failed"),
                     token: nam(),

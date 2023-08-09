@@ -149,7 +149,7 @@ where
     let proposal_code = shell.read_storage_key_bytes(&proposal_code_key);
     match proposal_code {
         Some(proposal_code) => {
-            let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
+            let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow: false,
             }));

@@ -985,7 +985,6 @@ mod test_finalize_block {
     };
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE_AMOUNT};
-    use namada::types::tx::TxBuilder;
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
     use namada_test_utils::TestWasms;
@@ -1008,7 +1007,7 @@ mod test_finalize_block {
         keypair: &common::SecretKey,
     ) -> (Tx, ProcessedTx) {
         let mut wrapper_tx =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount: MIN_FEE_AMOUNT,
                     token: shell.wl_storage.storage.native_token.clone(),
@@ -1048,7 +1047,7 @@ mod test_finalize_block {
         keypair: &common::SecretKey,
     ) -> ProcessedTx {
         let tx_code = TestWasms::TxNoOp.read_bytes();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: MIN_FEE_AMOUNT,
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1156,7 +1155,7 @@ mod test_finalize_block {
     fn test_process_proposal_rejected_decrypted_tx() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut outer_tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount: Default::default(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1222,7 +1221,7 @@ mod test_finalize_block {
             pow_solution: None,
         };
         let processed_tx = ProcessedTx {
-            tx: Tx::new(TxType::Decrypted(DecryptedTx::Undecryptable))
+            tx: Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
                 .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
@@ -1230,7 +1229,7 @@ mod test_finalize_block {
             },
         };
 
-        let tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
+        let tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         shell.enqueue_tx(tx);
 
         // check that correct error message is returned
@@ -2190,7 +2189,7 @@ mod test_finalize_block {
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
         let mut wrapper_tx =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount: Amount::zero(),
                     token: shell.wl_storage.storage.native_token.clone(),
@@ -3514,11 +3513,9 @@ mod test_finalize_block {
             .wl_storage
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
-        let tx_builder = TxBuilder::new(shell.chain_id.clone(), None);
-        let tx = tx_builder
+        let tx = Tx::new(shell.chain_id.clone(), None)
             .add_code_from_hash(Hash::default())
-            .add_data(0u64)
-            .signed_build();
+            .add_data(0u64);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

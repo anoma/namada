@@ -482,7 +482,6 @@ mod tests {
     use crate::proto::{Code, Data};
     use crate::types::hash::Hash;
     use crate::types::transaction::TxType;
-    use crate::types::tx::TxBuilder;
     use crate::types::validity_predicate::EvalVp;
     use crate::vm::wasm;
 
@@ -552,7 +551,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone()));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
@@ -569,7 +568,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
@@ -619,20 +618,18 @@ mod tests {
         // shouldn't fail
         let input = 2_usize.pow(23).try_to_vec().unwrap();
 
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let tx = tx_builder
+        let tx = Tx::new(storage.chain_id.clone(), None)
             .add_code(vec![])
-            .add_serialized_data(input)
-            .signed_build();
+            .add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
 
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx =
-            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
+        let outer_tx = Tx::new(storage.chain_id.clone(), None)
+            .add_code(vec![])
+            .add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
@@ -657,17 +654,18 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let input = 2_usize.pow(24).try_to_vec().unwrap();
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let tx = tx_builder.add_code(vec![]).add_data(input).signed_build();
+        let tx = Tx::new(storage.chain_id.clone(), None)
+            .add_code(vec![])
+            .add_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
             input: tx,
         };
 
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx =
-            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
+        let outer_tx = Tx::new(storage.chain_id.clone(), None)
+            .add_code(vec![])
+            .add_data(eval_vp);
 
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
@@ -716,7 +714,7 @@ mod tests {
         // Allocating `2^23` (8 MiB) should be below the memory limit and
         // shouldn't fail
         let tx_data = 2_usize.pow(23).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
@@ -740,7 +738,7 @@ mod tests {
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
         let tx_data = 2_usize.pow(24).try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         let error = vp(
@@ -788,7 +786,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_no_op));
         outer_tx.set_data(Data::new(tx_data));
         let result = tx(
@@ -844,7 +842,7 @@ mod tests {
         // limit and should fail
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
@@ -916,7 +914,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =
             wasm::compilation_cache::common::testing::cache();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_read_key));
         outer_tx.set_data(Data::new(tx_data));
         let error = tx(
@@ -964,7 +962,7 @@ mod tests {
         // Borsh.
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let tx_data = key.try_to_vec().unwrap();
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![]));
@@ -1028,20 +1026,18 @@ mod tests {
         storage.write(&key, value.try_to_vec().unwrap()).unwrap();
         let input = 2_usize.pow(23).try_to_vec().unwrap();
 
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let tx = tx_builder
+        let tx = Tx::new(storage.chain_id.clone(), None)
             .add_code(vec![])
-            .add_serialized_data(input)
-            .signed_build();
+            .add_serialized_data(input);
 
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
             input: tx,
         };
 
-        let tx_builder = TxBuilder::new(storage.chain_id.clone(), None);
-        let outer_tx =
-            tx_builder.add_code(vec![]).add_data(eval_vp).signed_build();
+        let outer_tx = Tx::new(storage.chain_id.clone(), None)
+            .add_code(vec![])
+            .add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
@@ -1112,7 +1108,7 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         write_log.write(&key, tx_code).unwrap();
 
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash));
         outer_tx.set_data(Data::new(tx_data));
 
@@ -1156,7 +1152,7 @@ mod tests {
         )
             .expect("unexpected error converting wat2wasm").into_owned();
 
-        let outer_tx = Tx::new(TxType::Raw);
+        let outer_tx = Tx::from_type(TxType::Raw);
         let tx_index = TxIndex::default();
         let mut storage = TestStorage::default();
         let addr = storage.address_gen.generate_address("rng seed");

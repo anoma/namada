@@ -51,7 +51,6 @@ use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::{pos, TxType};
-use crate::types::tx::TxBuilder;
 use crate::types::{storage, token};
 use crate::vm;
 use crate::vm::WasmValidationError;
@@ -282,10 +281,10 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
 pub async fn prepare_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
-    tx_builder: TxBuilder,
+    tx_builder: Tx,
     gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let tx_builder = if args.dry_run {
         tx_builder
     } else {
@@ -393,7 +392,7 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
     address: &Address,
     public_key: &common::PublicKey,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     println!(
         "Submitting a tx to reveal the public key for address {address}..."
     );
@@ -406,16 +405,15 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
     .unwrap();
 
     let chain_id = args.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, args.expiration);
 
-    let tx_builder = tx_builder
+    let tx = Tx::new(chain_id, args.expiration)
         .add_code_from_hash(tx_code_hash)
         .add_data(public_key);
 
     prepare_tx::<C>(
         client,
         args,
-        tx_builder,
+        tx,
         gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
@@ -627,7 +625,7 @@ pub async fn build_validator_commission_change<
         tx_code_path,
     }: args::CommissionRateChange,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let epoch = rpc::query_epoch(client).await;
 
     let tx_code_hash =
@@ -690,7 +688,7 @@ pub async fn build_validator_commission_change<
     };
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
@@ -716,7 +714,7 @@ pub async fn build_unjail_validator<
         tx_code_path,
     }: args::TxUnjailValidator,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     if !rpc::is_validator(client, &validator).await {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx.force {
@@ -776,9 +774,7 @@ pub async fn build_unjail_validator<
         .map_err(Error::EncodeTxFailure)?;
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
-
-    let tx_builder = tx_builder
+    let tx_builder = Tx::new(chain_id, tx.expiration)
         .add_code_from_hash(tx_code_hash)
         .add_data(validator.clone());
 
@@ -803,7 +799,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
         tx_code_path,
     }: args::Withdraw,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let epoch = rpc::query_epoch(client).await;
 
     let validator =
@@ -847,9 +843,8 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
     let data = pos::Withdraw { validator, source };
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
-
-    let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+    let tx_builder = Tx::new(chain_id, tx.expiration)
+        .add_code_from_hash(tx_code_hash).add_data(data);
 
     prepare_tx::<C>(
         client,
@@ -877,7 +872,7 @@ pub async fn build_unbond<
         tx_code_path,
     }: args::Unbond,
     gas_payer: &common::PublicKey,
-) -> Result<(TxBuilder, Option<(Epoch, token::Amount)>), Error> {
+) -> Result<(Tx, Option<(Epoch, token::Amount)>), Error> {
     let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -933,7 +928,7 @@ pub async fn build_unbond<
     };
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
@@ -1024,7 +1019,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
         tx_code_path,
     }: args::Bond,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let validator =
         known_validator_or_err(validator.clone(), tx.force, client).await?;
 
@@ -1064,7 +1059,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
     };
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let tx_builder = tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
@@ -1125,7 +1120,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         tx_code_path,
     }: args::TxIbcTransfer,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     // Check that the source address exists on chain
     let source = source_exists_or_err(source.clone(), tx.force, client).await?;
     // We cannot check the receiver
@@ -1195,7 +1190,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
 
     let chain_id = tx.chain_id.clone().unwrap();
 
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
     let tx_builder = tx_builder
         .add_code_from_hash(tx_code_hash)
         .add_serialized_data(data);
@@ -1293,7 +1288,7 @@ pub async fn build_transfer<
     shielded: &mut ShieldedContext<U>,
     mut args: args::TxTransfer,
     gas_payer: &common::PublicKey,
-) -> Result<(TxBuilder, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>), Error> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1380,7 +1375,7 @@ pub async fn build_transfer<
     }?;
 
     let chain_id = args.tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, args.tx.expiration);
+    let tx_builder = Tx::new(chain_id, args.tx.expiration);
 
     // Add the MASP Transaction and its Builder to facilitate validation
     let (tx_builder, masp_hash, shielded_tx_epoch) =
@@ -1453,7 +1448,7 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
         threshold,
     }: args::TxInitAccount,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let vp_code_hash =
         query_wasm_code_hash(client, vp_code_path.to_str().unwrap())
             .await
@@ -1476,7 +1471,7 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
     };
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let (tx_builder, extra_section_hash) =
         tx_builder.add_extra_section_from_hash(vp_code_hash);
@@ -1512,7 +1507,7 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
         threshold,
     }: args::TxUpdateAccount,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let addr = if let Some(account) = rpc::get_account_info(client, &addr).await
     {
         account.address
@@ -1539,7 +1534,7 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
             .unwrap();
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let tx_builder = Tx::new(chain_id, tx.expiration);
 
     let (tx_builder, extra_section_hash) = match vp_code_hash {
         Some(vp_code_hash) => {
@@ -1580,14 +1575,14 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         owner: _,
     }: args::TxCustom,
     gas_payer: &common::PublicKey,
-) -> Result<TxBuilder, Error> {
+) -> Result<Tx, Error> {
     let tx_code_hash =
         query_wasm_code_hash(client, code_path.to_str().unwrap())
             .await
             .unwrap();
 
     let chain_id = tx.chain_id.clone().unwrap();
-    let mut tx_builder = TxBuilder::new(chain_id, tx.expiration);
+    let mut tx_builder = Tx::new(chain_id, tx.expiration);
 
     tx_builder = tx_builder.add_code_from_hash(tx_code_hash);
 

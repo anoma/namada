@@ -193,7 +193,7 @@ mod protocol_txs {
         ) -> Tx {
             let (tx_data, tx_type) = self.serialize();
             let mut outer_tx =
-                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
                     pk: signing_key.ref_to(),
                     tx: tx_type,
                 })));
@@ -323,7 +323,7 @@ mod protocol_txs {
                 TX_NEW_DKG_KP_WASM,
             );
             let mut outer_tx =
-                Tx::new(TxType::Protocol(Box::new(ProtocolTx {
+                Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
                     pk: signing_key.ref_to(),
                     tx: Self::NewDkgKeypair,
                 })));
