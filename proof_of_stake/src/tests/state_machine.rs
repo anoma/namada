@@ -7,7 +7,9 @@ use std::ops::Deref;
 use assert_matches::assert_matches;
 use itertools::Itertools;
 use namada_core::ledger::storage::testing::TestWlStorage;
-use namada_core::ledger::storage_api::collections::lazy_map::NestedSubKey;
+use namada_core::ledger::storage_api::collections::lazy_map::{
+    Collectable, NestedSubKey,
+};
 use namada_core::ledger::storage_api::token::read_balance;
 use namada_core::ledger::storage_api::{token, StorageRead};
 use namada_core::types::address::{self, Address};
@@ -185,7 +187,7 @@ impl StateMachineTest for ConcretePosState {
 
     fn apply(
         mut state: Self::SystemUnderTest,
-        _ref_state: &<Self::Reference as ReferenceStateMachine>::State,
+        ref_state: &<Self::Reference as ReferenceStateMachine>::State,
         transition: <Self::Reference as ReferenceStateMachine>::Transition,
     ) -> Self::SystemUnderTest {
         let params = crate::read_pos_params(&state.s).unwrap();
@@ -321,6 +323,14 @@ impl StateMachineTest for ConcretePosState {
                     pos_balance_post - pos_balance_pre,
                     src_balance_pre - src_balance_post
                 );
+
+                // Check that the bonds are the same
+                let abs_bonds = ref_state.bonds.get(&id).cloned().unwrap();
+                let conc_bonds = crate::bond_handle(&id.source, &id.validator)
+                    .get_data_handler()
+                    .collect_map(&state.s)
+                    .unwrap();
+                assert_eq!(abs_bonds, conc_bonds);
             }
             Transition::Unbond { id, amount } => {
                 println!("\nCONCRETE Unbond");
@@ -384,6 +394,32 @@ impl StateMachineTest for ConcretePosState {
                 assert_eq!(pos_balance_pre, pos_balance_post);
                 // Post-condition: Source balance should not change
                 assert_eq!(src_balance_post, src_balance_pre);
+
+                // Check that the bonds are the same
+                let abs_bonds = ref_state.bonds.get(&id).cloned().unwrap();
+                let conc_bonds = crate::bond_handle(&id.source, &id.validator)
+                    .get_data_handler()
+                    .collect_map(&state.s)
+                    .unwrap();
+                assert_eq!(abs_bonds, conc_bonds);
+
+                // Check that the unbond records are the same
+                // TODO: figure out how we get entries with 0 amount in the
+                // abstract version (and prevent)
+                let mut abs_unbond_records = ref_state
+                    .unbond_records
+                    .get(&id.validator)
+                    .cloned()
+                    .unwrap();
+                abs_unbond_records.retain(|_, inner_map| {
+                    inner_map.retain(|_, value| !value.is_zero());
+                    !inner_map.is_empty()
+                });
+                let conc_unbond_records =
+                    crate::total_unbonded_handle(&id.validator)
+                        .collect_map(&state.s)
+                        .unwrap();
+                assert_eq!(abs_unbond_records, conc_unbond_records);
             }
             Transition::Withdraw {
                 id: BondId { source, validator },
@@ -441,6 +477,8 @@ impl StateMachineTest for ConcretePosState {
                 new_validator,
                 amount,
             } => {
+                println!("\nCONCRETE Redelegate");
+
                 let current_epoch = state.current_epoch();
                 let pipeline = current_epoch + params.pipeline_len;
 
@@ -553,6 +591,9 @@ impl StateMachineTest for ConcretePosState {
 
                     // Post-condition: Source validator stake at pipeline epoch
                     // is reduced by the redelegation amount
+
+                    // TODO: shouldn't this be reduced by the redelegation
+                    // amount post-slashing tho?
                     let src_validator_stake_pipeline_post =
                         crate::read_validator_stake(
                             &state.s,
@@ -2492,6 +2533,8 @@ impl AbstractPosState {
             );
         }
 
+        let mut bonds_to_remove = Vec::<Epoch>::new();
+
         for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
             tracing::debug!("remaining {}", remaining.to_string_native());
             tracing::debug!(
@@ -2506,6 +2549,9 @@ impl AbstractPosState {
             );
             *bond_amnt -= to_unbond;
             *unbonds += token::Amount::from_change(to_unbond);
+            if bond_amnt.is_zero() {
+                bonds_to_remove.push(*bond_epoch);
+            };
 
             let slashes_for_this_bond: BTreeMap<Epoch, Dec> = validator_slashes
                 .iter()
@@ -2539,6 +2585,10 @@ impl AbstractPosState {
             if remaining.is_zero() {
                 break;
             }
+        }
+
+        for bond_epoch in bonds_to_remove {
+            bonds.remove(&bond_epoch);
         }
 
         tracing::debug!("Bonds after decrementing");
@@ -2631,7 +2681,7 @@ impl AbstractPosState {
                 .filter(|s| *bond_epoch <= s.epoch)
                 .fold(BTreeMap::new(), |mut acc, s| {
                     let cur = acc.entry(s.epoch).or_default();
-                    *cur += s.rate;
+                    *cur = cmp::min(Dec::one(), *cur + s.rate);
                     acc
                 });
             tracing::debug!(
@@ -2699,13 +2749,13 @@ impl AbstractPosState {
             .validator_states
             .get(&pipeline_epoch)
             .unwrap()
-            .get(&new_validator)
+            .get(new_validator)
             .unwrap();
         if *pipeline_state != ValidatorState::Jailed {
-            self.update_validator_sets(&new_validator, change);
+            self.update_validator_sets(new_validator, change);
         }
         self.update_bond(&new_id, change);
-        self.update_validator_total_stake(&new_validator, change);
+        self.update_validator_total_stake(new_validator, change);
     }
 
     /// Update validator's total stake with bonded or unbonded change at the
@@ -2995,6 +3045,8 @@ impl AbstractPosState {
                 - self.params.unbonding_len
                 - self.params.cubic_slashing_window_length
                 - 1;
+
+            let cubic_rate = self.cubic_slash_rate();
             // Now need to basically do the end_of_epoch() procedure
             // from the Informal Systems model
             for (validator, slashes) in slashes_this_epoch {
@@ -3011,6 +3063,7 @@ impl AbstractPosState {
                     &slashes,
                     stake_at_infraction,
                     infraction_epoch,
+                    cubic_rate,
                 );
 
                 // Slash any redelegations from this validator on the
@@ -3039,6 +3092,7 @@ impl AbstractPosState {
                                         &slashes,
                                         redelegation.amount.change(),
                                         infraction_epoch,
+                                        cubic_rate,
                                     );
                                 }
                             }
@@ -3055,6 +3109,7 @@ impl AbstractPosState {
         slashes: &[Slash],
         slashable_stake: token::Change,
         infraction_epoch: Epoch,
+        cubic_rate: Dec,
     ) {
         tracing::debug!(
             "Val {} slashable stake at infraction {}",
@@ -3063,7 +3118,6 @@ impl AbstractPosState {
         );
 
         let mut total_rate = Dec::zero();
-        let cubic_rate = self.cubic_slash_rate();
 
         for slash in slashes {
             debug_assert_eq!(slash.epoch, infraction_epoch);
@@ -3106,7 +3160,7 @@ impl AbstractPosState {
                 if start <= infraction_epoch {
                     let slashes_for_this_unbond = self
                         .validator_slashes
-                        .get(&validator)
+                        .get(validator)
                         .cloned()
                         .unwrap_or_default()
                         .iter()
@@ -3145,7 +3199,7 @@ impl AbstractPosState {
             }
             sum_post_bonds += self
                 .total_bonded
-                .get(&validator)
+                .get(validator)
                 .and_then(|bonded| bonded.get(&Epoch(epoch)))
                 .cloned()
                 .unwrap_or_default()
@@ -3163,7 +3217,7 @@ impl AbstractPosState {
             let mut recent_unbonds = token::Change::default();
             let unbond_records = self
                 .unbond_records
-                .get(&validator)
+                .get(validator)
                 .unwrap()
                 .get(&(self.epoch + offset))
                 .cloned()
@@ -3177,7 +3231,7 @@ impl AbstractPosState {
                 if start <= infraction_epoch {
                     let slashes_for_this_unbond = self
                         .validator_slashes
-                        .get(&validator)
+                        .get(validator)
                         .cloned()
                         .unwrap_or_default()
                         .iter()
@@ -3248,7 +3302,7 @@ impl AbstractPosState {
             tracing::debug!("Updating ABSTRACT voting powers");
             sum_post_bonds += self
                 .total_bonded
-                .get(&validator)
+                .get(validator)
                 .and_then(|bonded| bonded.get(&(self.epoch + offset)))
                 .cloned()
                 .unwrap_or_default()
