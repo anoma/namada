@@ -594,6 +594,8 @@ impl StateMachineTest for ConcretePosState {
 
                     // TODO: shouldn't this be reduced by the redelegation
                     // amount post-slashing tho?
+                    //   NOTE: We changed it to reduce it, check again later
+                    let amount_after_slash = amount - slashed;
                     let src_validator_stake_pipeline_post =
                         crate::read_validator_stake(
                             &state.s,
@@ -604,7 +606,7 @@ impl StateMachineTest for ConcretePosState {
                         .unwrap()
                         .unwrap_or_default();
                     assert_eq!(
-                        src_validator_stake_pipeline_pre - amount,
+                        src_validator_stake_pipeline_pre - amount_after_slash,
                         src_validator_stake_pipeline_post
                     );
 
@@ -637,7 +639,7 @@ impl StateMachineTest for ConcretePosState {
                         .unwrap()
                         .unwrap_or_default();
                     assert_eq!(
-                        dest_validator_stake_pipeline_pre + amount - slashed,
+                        dest_validator_stake_pipeline_pre + amount_after_slash,
                         dest_validator_stake_pipeline_post
                     );
 
@@ -671,7 +673,7 @@ impl StateMachineTest for ConcretePosState {
                         .unwrap_or_default();
                     assert_eq!(
                         dest_delegation_post - dest_delegation_pre,
-                        amount - slashed
+                        amount_after_slash
                     );
                 }
             }
