@@ -715,18 +715,25 @@ mod tests {
         wl_storage: &mut TestWlStorage,
         pending_transfers: &Vec<PendingTransfer>,
     ) {
-        // Gas payer
-        let payer = address::testing::established_address_2();
-        let payer_key = balance_key(&nam(), &payer);
-        let payer_balance = Amount::from(0);
-        wl_storage
-            .write_bytes(
-                &payer_key,
-                payer_balance.try_to_vec().expect("Test failed"),
-            )
+        for transfer in pending_transfers {
+            // Gas
+            let payer = address::testing::established_address_2();
+            let payer_key = balance_key(&transfer.gas_fee.token, &payer);
+            let payer_balance = Amount::from(0);
+            wl_storage
+                .write_bytes(
+                    &payer_key,
+                    payer_balance.try_to_vec().expect("Test failed"),
+                )
+                .expect("Test failed");
+            let escrow_key =
+                balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
+            update::amount(wl_storage, &escrow_key, |balance| {
+                let gas_fee = Amount::from_u64(1);
+                balance.receive(&gas_fee);
+            })
             .expect("Test failed");
 
-        for transfer in pending_transfers {
             if transfer.transfer.asset == wnam() {
                 // native ERC20
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
@@ -772,12 +779,6 @@ mod tests {
                 )
                 .expect("Test failed");
             };
-            let gas_fee = Amount::from(1);
-            let escrow_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-            update::amount(wl_storage, &escrow_key, |balance| {
-                balance.receive(&gas_fee);
-            })
-            .expect("Test failed");
         }
     }
 
