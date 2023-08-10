@@ -618,10 +618,13 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     assert_eq!(val_delta, Some(-amount_self_unbond.change()));
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch
-                + params.unbonding_len
-                + params.cubic_slashing_window_length))
-            .get(&s, &Epoch::default())
+            .at(&Epoch::default())
+            .get(
+                &s,
+                &(pipeline_epoch
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length)
+            )
             .unwrap(),
         if unbonded_genesis_self_bond {
             Some(amount_self_unbond - amount_self_bond)
@@ -631,10 +634,13 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch
-                + params.unbonding_len
-                + params.cubic_slashing_window_length))
-            .get(&s, &(self_bond_epoch + params.pipeline_len))
+            .at(&(self_bond_epoch + params.pipeline_len))
+            .get(
+                &s,
+                &(pipeline_epoch
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length)
+            )
             .unwrap(),
         Some(amount_self_bond)
     );
@@ -750,10 +756,13 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     );
     assert_eq!(
         unbond
-            .at(&(pipeline_epoch
-                + params.unbonding_len
-                + params.cubic_slashing_window_length))
-            .get(&s, &(delegation_epoch + params.pipeline_len))
+            .at(&(delegation_epoch + params.pipeline_len))
+            .get(
+                &s,
+                &(pipeline_epoch
+                    + params.unbonding_len
+                    + params.cubic_slashing_window_length)
+            )
             .unwrap(),
         Some(amount_undel)
     );

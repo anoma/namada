@@ -2286,9 +2286,9 @@ where
                 .at(start_epoch)
                 .get(storage, withdraw_epoch)?
                 .unwrap_or_default();
-            unbonds.at(withdraw_epoch).insert(
+            unbonds.at(start_epoch).insert(
                 storage,
-                *start_epoch,
+                *withdraw_epoch,
                 cur_val + token::Amount::from_change(*unbond_amount),
             )?;
         }
@@ -3317,8 +3317,8 @@ where
     for unbond in unbond_handle.iter(storage)? {
         let (
             NestedSubKey::Data {
-                key: withdraw_epoch,
-                nested_sub_key: SubKey::Data(start_epoch),
+                key: start_epoch,
+                nested_sub_key: SubKey::Data(withdraw_epoch),
             },
             amount,
         ) = unbond?;
@@ -3381,8 +3381,8 @@ where
     {
         tracing::debug!("Remove ({start_epoch}..{withdraw_epoch}) from unbond");
         unbond_handle
-            .at(&withdraw_epoch)
-            .remove(storage, &start_epoch)?;
+            .at(&start_epoch)
+            .remove(storage, &withdraw_epoch)?;
         redelegated_unbonds
             .at(&start_epoch)
             .remove_all(storage, &withdraw_epoch)?;
@@ -4012,8 +4012,8 @@ where
         .map(|next_result| {
             let (
                 NestedSubKey::Data {
-                    key: withdraw_epoch,
-                    nested_sub_key: SubKey::Data(start_epoch),
+                    key: start_epoch,
+                    nested_sub_key: SubKey::Data(withdraw_epoch),
                 },
                 amount,
             ) = next_result?;

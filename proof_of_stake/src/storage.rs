@@ -588,9 +588,9 @@ pub fn is_unbond_key(key: &Key) -> Option<(BondId, Epoch, Epoch)> {
                 DbKeySeg::AddressSeg(source),
                 DbKeySeg::AddressSeg(validator),
                 DbKeySeg::StringSeg(data_1),
-                DbKeySeg::StringSeg(withdraw_epoch_str),
-                DbKeySeg::StringSeg(data_2),
                 DbKeySeg::StringSeg(start_epoch_str),
+                DbKeySeg::StringSeg(data_2),
+                DbKeySeg::StringSeg(withdraw_epoch_str),
             ] if addr == &ADDRESS
                 && prefix == UNBOND_STORAGE_KEY
                 && data_1 == lazy_map::DATA_SUBKEY
