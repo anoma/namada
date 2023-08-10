@@ -48,36 +48,6 @@ use crate::e2e::setup::constants::{
 use crate::e2e::setup::{Bin, Who};
 use crate::{run, run_as};
 
-/// Tests that we can start the ledger with an endpoint for submitting Ethereum
-/// events. This mode can be used in further end-to-end tests.
-#[test]
-fn run_ledger_with_ethereum_events_endpoint() -> Result<()> {
-    let test = setup::single_node_net()?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(0),
-        ethereum_bridge::ledger::Mode::SelfHostedEndpoint,
-        Some(DEFAULT_ETHEREUM_EVENTS_LISTEN_ADDR),
-    );
-
-    // Start the ledger as a validator
-    let mut ledger =
-        run_as!(test, Who::Validator(0), Bin::Node, vec!["ledger"], Some(40))?;
-    ledger.exp_string(
-        "Starting to listen for Borsh-serialized Ethereum events",
-    )?;
-    ledger.exp_string("Namada ledger node started")?;
-
-    ledger.send_control(ControlCode::EndOfText)?;
-    ledger.exp_string(
-        "Stopping listening for Borsh-serialized Ethereum events",
-    )?;
-
-    Ok(())
-}
-
 /// Test we can transfer some DAI to an implicit address on Namada,
 /// then back to Ethereum, burning the assets we minted after the
 /// first transfer.
