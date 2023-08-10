@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::types::address::Address;
 use namada::types::governance::ProposalType;
 use namada::types::storage::Epoch;

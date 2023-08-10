@@ -461,7 +461,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: Option<DateTimeUtc>,
-    /// Generate an ephimeral signing key to be used only once to sign a wrapper tx
+    /// Generate an ephimeral signing key to be used only once to sign a
+    /// wrapper tx
     pub disposable_signing_key: bool,
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,

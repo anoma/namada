@@ -295,7 +295,7 @@ impl<'view> VpEnv<'view> for Ctx {
         hash_list: [Hash; 2],
     ) -> Result<bool, Error> {
         let pk = pk.try_to_vec().unwrap();
-        let hash_list= hash_list.try_to_vec().unwrap();
+        let hash_list = hash_list.try_to_vec().unwrap();
         let valid = unsafe {
             namada_vp_verify_tx_section_signature(
                 pk.as_ptr() as _,
@@ -333,7 +333,9 @@ impl<'view> VpEnv<'view> for Ctx {
     }
 
     fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
-        Ok(unsafe { namada_vp_charge_gas(used_gas) })}
+        unsafe { namada_vp_charge_gas(used_gas) };
+        Ok(())
+    }
 }
 
 impl StorageRead for CtxPreStorageRead<'_> {

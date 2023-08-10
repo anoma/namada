@@ -190,11 +190,11 @@ pub mod vp {
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 
-        // Verify the signatures of a tx 
+        // Verify the signatures of a tx
         pub fn namada_vp_verify_tx_section_signature(
             pk_ptr: u64,
             pk_len: u64,
-            hash_list_ptr: u64, 
+            hash_list_ptr: u64,
             hash_list_len: u64,
         ) -> i64;
 

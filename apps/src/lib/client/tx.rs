@@ -10,8 +10,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
 use namada::ledger::governance::storage as gov_storage;
-use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
-use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
@@ -61,7 +59,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
             },
         )
         .await?;
-        if let Some((mut rtx, epoch, _, pk, wrapper_pk)) = reveal_pk {
+        if let Some((mut rtx, _epoch, _, pk, wrapper_pk)) = reveal_pk {
             // Sign the reveal public key transaction with the fee payer
             signing::sign_tx(
                 &mut ctx.wallet,
@@ -93,7 +91,7 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::TxCustom,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_custom(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_custom(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -118,7 +116,7 @@ pub async fn submit_update_vp<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::TxUpdateVp,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_update_vp(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_update_vp(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -143,7 +141,7 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::TxInitAccount,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_init_account(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_init_account(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -371,7 +369,7 @@ pub async fn submit_init_validator<
     tx.set_data(Data::new(data));
     tx.set_code(Code::from_hash(tx_code_hash));
 
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -630,7 +628,7 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     mut ctx: Context,
     args: args::TxIbcTransfer,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_ibc_transfer(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_ibc_transfer(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -810,7 +808,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
         tx.set_data(Data::new(data));
         tx.set_code(Code::from_hash(tx_code_hash));
 
-        let (mut tx, epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
+        let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
             client,
             &mut ctx.wallet,
             &mut ctx.shielded,
@@ -1084,7 +1082,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                 tx.set_data(Data::new(data));
                 tx.set_code(Code::from_hash(tx_code_hash));
 
-                let (mut tx, epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
+                let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::prepare_tx(
                     client,
                     &mut ctx.wallet,
                     &mut ctx.shielded,
@@ -1121,11 +1119,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
                     "Proposal start epoch for proposal id {} is not definied.",
                     proposal_id
                 );
-                if !args.tx.force {
-                    safe_exit(1)
-                } else {
-                    Ok(())
-                }
+                if !args.tx.force { safe_exit(1) } else { Ok(()) }
             }
         }
     }
@@ -1143,7 +1137,7 @@ pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
         args.clone(),
     )
     .await?;
-    if let Some((mut tx, epoch, _, pk, wrapper_pk)) = reveal_tx {
+    if let Some((mut tx, _epoch, _, pk, wrapper_pk)) = reveal_tx {
         signing::sign_tx(
             &mut ctx.wallet,
             &mut tx,
@@ -1212,7 +1206,7 @@ pub async fn submit_bond<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::Bond,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_bond::<_, _, _>(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_bond::<_, _, _>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -1237,7 +1231,7 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::Unbond,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk, latest_withdrawal_pre) =
+    let (mut tx, _epoch, addr, pk, wrapper_pk, latest_withdrawal_pre) =
         tx::build_unbond(
             client,
             &mut ctx.wallet,
@@ -1264,7 +1258,7 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     mut ctx: Context,
     args: args::Withdraw,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_withdraw(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_withdraw(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
@@ -1293,7 +1287,7 @@ pub async fn submit_validator_commission_change<
     args: args::CommissionRateChange,
 ) -> Result<(), tx::Error> {
     let arg = args.clone();
-    let (mut tx, epoch, addr, pk, wrapper_pk) =
+    let (mut tx, _epoch, addr, pk, wrapper_pk) =
         tx::build_validator_commission_change(
             client,
             &mut ctx.wallet,
@@ -1322,7 +1316,7 @@ pub async fn submit_unjail_validator<
     mut ctx: Context,
     args: args::TxUnjailValidator,
 ) -> Result<(), tx::Error> {
-    let (mut tx, epoch, addr, pk, wrapper_pk) = tx::build_unjail_validator(
+    let (mut tx, _epoch, addr, pk, wrapper_pk) = tx::build_unjail_validator(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,

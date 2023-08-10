@@ -94,7 +94,6 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
 mod testing {
-    use std::collections::BTreeMap;
 
     use tempfile::TempDir;
     use tendermint_rpc::Response;

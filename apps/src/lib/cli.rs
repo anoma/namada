@@ -2288,14 +2288,13 @@ pub mod args {
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     pub use namada::ledger::args::*;
-    use namada::ledger::rpc::format_denominated_amount;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
-    use namada::types::masp::{ExtendedSpendingKey, MaspValue};
+    use namada::types::masp::MaspValue;
     use namada::types::storage::{self, BlockHeight, Epoch};
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
@@ -4372,9 +4371,18 @@ pub mod args {
             app.arg(
                 DRY_RUN_TX
                     .def()
-                    .help("Simulate the transaction application.").conflicts_with(DRY_RUN_WRAPPER_TX.name),
+                    .help("Simulate the transaction application.")
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
             )
-                .arg(DRY_RUN_WRAPPER_TX.def().help("Simulate the complete transaction application. This estimates the gas cost of the transaction.").conflicts_with(DRY_RUN_TX.name))
+            .arg(
+                DRY_RUN_WRAPPER_TX
+                    .def()
+                    .help(
+                        "Simulate the complete transaction application. This \
+                         estimates the gas cost of the transaction.",
+                    )
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
             .arg(DUMP_TX.def().help("Dump transaction bytes to a file."))
             .arg(FORCE.def().help(
                 "Submit the transaction even if it doesn't pass client checks.",
@@ -4418,7 +4426,16 @@ pub mod args {
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
-                .arg(DISPOSABLE_SIGNING_KEY.def().help("Generates an ephimeral, disposable keypair to sign the wrapper transaction. This keypair will be immediately discarded after use.").requires(FEE_UNSHIELD_SPENDING_KEY.name))
+            .arg(
+                DISPOSABLE_SIGNING_KEY
+                    .def()
+                    .help(
+                        "Generates an ephimeral, disposable keypair to sign \
+                         the wrapper transaction. This keypair will be \
+                         immediately discarded after use.",
+                    )
+                    .requires(FEE_UNSHIELD_SPENDING_KEY.name),
+            )
             .arg(
                 SIGNING_KEY_OPT
                     .def()
@@ -4452,7 +4469,16 @@ pub mod args {
                     .conflicts_with(SIGNING_KEY_OPT.name),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
-            .arg(WRAPPER_FEE_PAYER_OPT.def().help("Sign the wrapper transaction (fee payer) with the key of the given public key, public key hash or alias from your wallet.").conflicts_with(DISPOSABLE_SIGNING_KEY.name))
+            .arg(
+                WRAPPER_FEE_PAYER_OPT
+                    .def()
+                    .help(
+                        "Sign the wrapper transaction (fee payer) with the \
+                         key of the given public key, public key hash or \
+                         alias from your wallet.",
+                    )
+                    .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -4468,7 +4494,7 @@ pub mod args {
             let fee_token = FEE_TOKEN.parse(matches);
             let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).into();
+            let gas_limit = GAS_LIMIT.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_key = SIGNING_KEY_OPT.parse(matches);

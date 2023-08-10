@@ -18,7 +18,6 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
-    use std::collections::BTreeMap;
     use std::panic;
 
     use itertools::Itertools;
@@ -133,11 +132,13 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("CannotDeleteVp"));
+        assert!(
+            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("CannotDeleteVp")
+        );
     }
 
     #[test]
@@ -468,26 +469,30 @@ mod tests {
                 env.tx.clone()
             });
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
-            assert!(signed_tx_data
-                .verify_signature(
-                    &pk,
-                    &[
-                        *signed_tx_data.data_sechash(),
-                        *signed_tx_data.code_sechash(),
-                    ],
-                )
-                .is_ok());
+            assert!(
+                signed_tx_data
+                    .verify_signature(
+                        &pk,
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
+                    )
+                    .is_ok()
+            );
 
             let other_keypair = key::testing::keypair_2();
-            assert!(signed_tx_data
-                .verify_signature(
-                    &other_keypair.ref_to(),
-                    &[
-                        *signed_tx_data.data_sechash(),
-                        *signed_tx_data.code_sechash(),
-                    ],
-                )
-                .is_err());
+            assert!(
+                signed_tx_data
+                    .verify_signature(
+                        &other_keypair.ref_to(),
+                        &[
+                            *signed_tx_data.data_sechash(),
+                            *signed_tx_data.code_sechash(),
+                        ],
+                    )
+                    .is_err()
+            );
         }
     }
 

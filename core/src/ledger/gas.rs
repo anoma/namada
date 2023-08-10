@@ -1,12 +1,13 @@
 //! Gas accounting module to track the gas usage in a block for transactions and
 //! validity predicates triggered by transactions.
 
-use crate::types::transaction::wrapper::GasLimit;
-
-use std::{fmt::Display, ops::Div};
+use std::fmt::Display;
+use std::ops::Div;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
+
+use crate::types::transaction::wrapper::GasLimit;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -42,7 +43,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Decimal scale of Gas units
 const SCALE: u64 = 10_000;
 
-/// Representation of gas in sub-units. This effectively decouples gas metering from fee payment, allowing higher resolution when accounting for gas while, at the same time, providing a contained gas value when paying fees.
+/// Representation of gas in sub-units. This effectively decouples gas metering
+/// from fee payment, allowing higher resolution when accounting for gas while,
+/// at the same time, providing a contained gas value when paying fees.
 #[derive(
     Clone,
     Copy,
@@ -69,7 +72,8 @@ impl Gas {
         self.sub.checked_sub(rhs.sub).map(|sub| Self { sub })
     }
 
-    /// Converts the sub gas units to whole ones. If the sub units are not a multiple of the `SCALE` than ceil the quotient
+    /// Converts the sub gas units to whole ones. If the sub units are not a
+    /// multiple of the `SCALE` than ceil the quotient
     fn get_whole_gas_units(&self) -> u64 {
         let quotient = self.sub / SCALE;
         if self.sub % SCALE == 0 {
@@ -115,7 +119,8 @@ impl Display for Gas {
 }
 
 impl From<GasLimit> for Gas {
-    // Derive a Gas instance with a sub amount which is exaclty a whole amount since the limit represents gas in whole units
+    // Derive a Gas instance with a sub amount which is exaclty a whole amount
+    // since the limit represents gas in whole units
     fn from(value: GasLimit) -> Self {
         Self {
             sub: u64::from(value) * SCALE,
@@ -207,8 +212,8 @@ impl GasMetering for TxGasMeter {
 }
 
 impl TxGasMeter {
-    /// Initialize a new Tx gas meter. Requires the `GasLimit` for the specific wrapper
-    /// transaction
+    /// Initialize a new Tx gas meter. Requires the `GasLimit` for the specific
+    /// wrapper transaction
     pub fn new(tx_gas_limit: GasLimit) -> Self {
         Self {
             tx_gas_limit: tx_gas_limit.into(),
@@ -216,7 +221,8 @@ impl TxGasMeter {
         }
     }
 
-    /// Initialize a new gas meter. Requires the gas limit expressed in sub  units
+    /// Initialize a new gas meter. Requires the gas limit expressed in sub
+    /// units
     pub fn new_from_sub_limit(tx_gas_limit: Gas) -> Self {
         Self {
             tx_gas_limit,

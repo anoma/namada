@@ -11,16 +11,12 @@ use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use test_log::test;
 
 use super::setup;
-use crate::e2e::helpers::epoch_sleep;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, CHRISTEL_KEY,
-    ETH, MASP, NAM,
+    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
 };
-use crate::e2e::setup::Who;
 use crate::integration::utils::CapturedOutput;
-use crate::{run, run_as};
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.
@@ -929,7 +925,7 @@ fn masp_txs_and_queries() -> Result<()> {
     // let _log_guard = namada_apps::logging::init_from_env_or(
     //     tracing::level_filters::LevelFilter::INFO,
     // )?;
-    //This address doesn't matter for tests. But an argument is required.
+    // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = CLIShieldedUtils::new(PathBuf::new());
@@ -1263,7 +1259,7 @@ fn wrapper_fee_unshielding() {
             "--fee-amount",
             "0.0009", // Reduce the balance of the fee payer artificially
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
     )
     .unwrap();
@@ -1289,14 +1285,15 @@ fn wrapper_fee_unshielding() {
             "--fee-spending-key",
             A_SPENDING_KEY,
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
     )
     .unwrap();
     node.assert_success();
 
     // 3. Invalid unshielding
-    // TODO: this test shall panic because of the panic in the sdk. Once the panics are removed from there, this test can be updated
+    // TODO: this test shall panic because of the panic in the sdk. Once the
+    // panics are removed from there, this test can be updated
     run(
         &node,
         Bin::Client,
@@ -1315,15 +1312,17 @@ fn wrapper_fee_unshielding() {
             "--fee-spending-key",
             B_SPENDING_KEY,
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
-    );
+    )
+    .unwrap();
 }
 
 /// Test the optional disposable keypair for wrapper signing
 ///
-/// 1. Test that a tx requesting a disposable signer with a correct unshielding operation is succesful
-/// 2. Test that a tx requesting a disposable signer providing an insufficient unshielding is rejected
+/// 1. Test that a tx requesting a disposable signer with a correct unshielding
+/// operation is succesful 2. Test that a tx requesting a disposable signer
+/// providing an insufficient unshielding is rejected
 #[test]
 #[should_panic(expected = "No faucet account found")]
 fn wrapper_disposable_signer() {
@@ -1352,7 +1351,7 @@ fn wrapper_disposable_signer() {
             "--amount",
             "50",
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
     )
     .unwrap();
@@ -1377,15 +1376,16 @@ fn wrapper_disposable_signer() {
             A_SPENDING_KEY,
             "--disposable-signing-key",
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
     )
     .unwrap();
     node.assert_success();
 
     _ = node.next_epoch();
-    //TODO: this test shall panic because the SDK panics, causing the node to be killed. Once panics have been removed from the sdk, this test can be updated
-    // 2. Insufficient unshielding
+    // TODO: this test shall panic because the SDK panics, causing the node to
+    // be killed. Once panics have been removed from the sdk, this test can be
+    // updated 2. Insufficient unshielding
     run(
         &node,
         Bin::Client,
@@ -1405,7 +1405,8 @@ fn wrapper_disposable_signer() {
             A_SPENDING_KEY,
             "--disposable-signing-key",
             "--ledger-address",
-            &validator_one_rpc,
+            validator_one_rpc,
         ],
-    );
+    )
+    .unwrap();
 }

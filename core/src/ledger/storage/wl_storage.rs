@@ -1,7 +1,6 @@
 //! Storage with write log.
 
 use std::iter::Peekable;
-use std::ops::{Deref, DerefMut};
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::ledger::parameters::EpochDuration;
@@ -61,9 +60,9 @@ where
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
 /// storage_api traits.
 pub trait WriteLogAndStorage {
-    // DB type
+    /// DB type
     type D: DB + for<'iter> DBIter<'iter>;
-    // DB hasher type
+    /// DB hasher type
     type H: StorageHasher;
 
     /// Borrow `WriteLog`
@@ -75,7 +74,9 @@ pub trait WriteLogAndStorage {
     /// Borrow `Storage`
     fn storage(&self) -> &Storage<Self::D, Self::H>;
 
-    /// Splitting borrow to get immutable reference to the `Storage` and mutable reference to `WriteLog` when in need of both (avoids complain from the borrow checker)
+    /// Splitting borrow to get immutable reference to the `Storage` and mutable
+    /// reference to `WriteLog` when in need of both (avoids complain from the
+    /// borrow checker)
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
 }
 
@@ -125,7 +126,7 @@ where
     }
 
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
-        (&mut self.write_log, &self.storage)
+        (&mut self.write_log, (self.storage))
     }
 }
 

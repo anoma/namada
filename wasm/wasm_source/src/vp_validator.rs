@@ -406,14 +406,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a PoS action that must be authorized is rejected without a
@@ -587,14 +583,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a transfer on with accounts other than self is accepted.
@@ -831,14 +823,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a validity predicate update is rejected if not whitelisted
@@ -883,14 +871,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(!validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a validity predicate update is accepted if whitelisted
@@ -936,14 +920,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a tx is rejected if not whitelisted
@@ -993,14 +973,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(!validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1046,13 +1022,9 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 }

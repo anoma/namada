@@ -1,12 +1,11 @@
 //! Wasm runners
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::ledger::gas::{
-    self, GasMetering, TxGasMeter, VM_MEMORY_ACCESS_GAS_PER_BYTE,
-    WASM_MEMORY_PAGE_GAS_COST,
+    self, GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
 };
 use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
@@ -268,12 +267,12 @@ where
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
-    vp_code_hash: &Hash,
+    _vp_code_hash: &Hash,
     input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-    gas_meter: &mut VpGasMeter,
+    _gas_meter: &mut VpGasMeter,
 ) -> Result<bool> {
     let input: VpInput = VpInput {
         addr: address,

@@ -1,20 +1,13 @@
-use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
-use namada::core::types::storage::KeySeg;
 use namada::core::types::token::Amount;
-use namada::ledger::args::TxUnjailValidator;
 use namada::ledger::governance;
-use namada::ledger::storage_api::token::read_balance;
 use namada::ledger::storage_api::StorageRead;
-use namada::proof_of_stake::types::{Slash, SlashType, ValidatorStates};
-use namada::proof_of_stake::{
-    self, enqueued_slashes_handle, read_pos_params, ADDRESS,
-};
-use namada::proto::{Code, Section, Signature, Tx};
-use namada::types::chain::ChainId;
+use namada::proof_of_stake::types::SlashType;
+use namada::proof_of_stake::{self, read_pos_params};
+use namada::proto::{Code, Section};
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey};
@@ -28,13 +21,12 @@ use namada::types::transaction::{
     EllipticCurve, InitAccount, InitValidator, UpdateVp,
 };
 use namada_apps::wallet::defaults;
-use namada_apps::wasm_loader;
 use namada_benches::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_PROPOSAL_WASM,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM, WASM_DIR,
+    TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -44,7 +36,7 @@ const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
-//TODO: need to benchmark tx_bridge_pool.wasm
+// TODO: need to benchmark tx_bridge_pool.wasm
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
     let amount = Amount::native_whole(500);
@@ -641,7 +633,7 @@ fn ibc(c: &mut Criterion) {
 fn unjail_validator(c: &mut Criterion) {
     let signed_tx = generate_tx(
         TX_UNJAIL_VALIDATOR_WASM,
-        &defaults::validator_address(),
+        defaults::validator_address(),
         None,
         None,
         Some(&defaults::validator_keypair()),

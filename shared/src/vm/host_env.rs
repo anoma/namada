@@ -2,7 +2,6 @@
 //! within a virtual machine.
 use std::collections::BTreeSet;
 use std::convert::TryInto;
-use std::f64::MIN;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -1357,7 +1356,8 @@ where
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
-    // This is not a storage write, use the same multiplier used for a storage read
+    // This is not a storage write, use the same multiplier used for a storage
+    // read
     tx_charge_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
 }
 
@@ -1755,7 +1755,9 @@ where
 }
 
 /// Verify a transaction signature
-/// TODO: this is just a warkaround to track gas for multiple singature verifications. When the runtime gas meter is implemented, this funcion can be removed
+/// TODO: this is just a warkaround to track gas for multiple singature
+/// verifications. When the runtime gas meter is implemented, this funcion can
+/// be removed
 pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     pk_ptr: u64,
@@ -1826,7 +1828,9 @@ where
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     Ok(
-        // TODO: once the runtime gas meter is implemented we need to benchmark this funcion and charge the gas here. For the moment, the cost of this is included in the benchmark of the masp vp
+        // TODO: once the runtime gas meter is implemented we need to benchmark
+        // this funcion and charge the gas here. For the moment, the cost of
+        // this is included in the benchmark of the masp vp
         HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
             .to_i64(),
     )

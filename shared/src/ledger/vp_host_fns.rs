@@ -2,10 +2,8 @@
 
 use std::num::TryFromIntError;
 
-use namada_core::ledger::gas::VERIFY_TX_SIG_GAS_COST;
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
-use namada_core::types::key::{common, PublicKey};
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };

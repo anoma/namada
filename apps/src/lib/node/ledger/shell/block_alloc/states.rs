@@ -81,9 +81,9 @@ pub trait TryAlloc {
     type Resource<'tx>;
 
     /// Try to allocate resources for a new transaction.
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        resource_required: Self::Resource<'tx>,
+        resource_required: Self::Resource<'_>,
     ) -> Result<(), AllocFailure>;
 }
 

@@ -1,18 +1,13 @@
 //! Implementation of the ['VerifyHeader`], [`ProcessProposal`],
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
-use std::collections::BTreeMap;
-
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
-use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::find_validator_by_raw_hash;
-use namada::proto::Commitment;
-use namada::types::hash::{Hash, HASH_LENGTH};
 use namada::types::internal::TxInQueue;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
@@ -113,14 +108,13 @@ where
         req: RequestProcessProposal,
     ) -> ProcessProposal {
         let tm_raw_hash_string = tm_raw_hash_to_string(&req.proposer_address);
-        let block_proposer = find_validator_by_raw_hash(
-            &self.wl_storage,
-            tm_raw_hash_string,
-        )
-        .unwrap()
-        .expect(
-            "Unable to find native validator address of block proposer from tendermint raw hash",
-        );
+        let block_proposer =
+            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+                .unwrap()
+                .expect(
+                    "Unable to find native validator address of block \
+                     proposer from tendermint raw hash",
+                );
         tracing::info!(
             proposer = ?HEXUPPER.encode(&req.proposer_address),
             height = req.height,
@@ -243,7 +237,11 @@ where
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(&req.proposer_address);
             find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
-                .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash")
+                .unwrap()
+                .expect(
+                    "Unable to find native validator address of block \
+                     proposer from tendermint raw hash",
+                )
         };
 
         let (tx_results, meta) = self.process_txs(
@@ -800,13 +798,15 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
-                // Account for gas and space. This is done even if the transaction is
-                // later deemed invalid, to incentivize the proposer to
-                // include only valid transaction and avoid wasting block
+                // Account for gas and space. This is done even if the
+                // transaction is later deemed invalid, to
+                // incentivize the proposer to include only
+                // valid transaction and avoid wasting block
                 // resources (ABCI only)
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
-                    // Account for the tx's resources even in case of an error. Ignore any allocation error
+                    // Account for the tx's resources even in case of an error.
+                    // Ignore any allocation error
                     let _ = metadata
                         .encrypted_txs_bins
                         .try_dump(tx_bytes, u64::from(wrapper.gas_limit));
@@ -821,7 +821,7 @@ where
                 // try to allocate space and gas for this encrypted tx
                 if let Err(e) = metadata
                     .encrypted_txs_bins
-                    .try_dump(tx_bytes, u64::from(wrapper.gas_limit.clone()))
+                    .try_dump(tx_bytes, u64::from(wrapper.gas_limit))
                 {
                     return TxResult {
                         code: ErrorCodes::AllocationError.into(),
@@ -894,22 +894,18 @@ where
                     }
 
                     // Check that the fee payer has sufficient balance.
-                    let fee_unshield = wrapper
-                        .unshield_section_hash
-                        .map(|ref hash| {
-                            tx.get_section(hash)
-                                .map(|section| {
-                                    if let Section::MaspTx(transaction) =
-                                        section.as_ref()
-                                    {
-                                        Some(transaction.to_owned())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .flatten()
-                        })
-                        .flatten();
+                    let fee_unshield =
+                        wrapper.unshield_section_hash.and_then(|ref hash| {
+                            tx.get_section(hash).and_then(|section| {
+                                if let Section::MaspTx(transaction) =
+                                    section.as_ref()
+                                {
+                                    Some(transaction.to_owned())
+                                } else {
+                                    None
+                                }
+                            })
+                        });
 
                     match self.wrapper_fee_check(
                         &wrapper,
@@ -921,8 +917,7 @@ where
                     ) {
                         Ok(()) => TxResult {
                             code: ErrorCodes::Ok.into(),
-                            info: "Process proposal accepted this \
-                                       transaction"
+                            info: "Process proposal accepted this transaction"
                                 .into(),
                         },
                         Err(e) => TxResult {
@@ -1005,13 +1000,12 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use borsh::BorshDeserialize;
-    use namada::ledger::storage_api::StorageWrite;
     #[cfg(feature = "abcipp")]
     use std::collections::HashMap;
 
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
+    use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
@@ -1023,7 +1017,7 @@ mod test_process_proposal {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{EncryptionKey, Fee, WrapperTx};
+    use namada::types::transaction::{Fee, WrapperTx};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -1145,11 +1139,13 @@ mod test_process_proposal {
                     shell.chain_id.clone(),
                 )
                 .to_bytes();
-        assert!(shell
-            .process_proposal(ProcessProposal {
-                txs: vec![tx.clone(), tx]
-            })
-            .is_err());
+        assert!(
+            shell
+                .process_proposal(ProcessProposal {
+                    txs: vec![tx.clone(), tx]
+                })
+                .is_err()
+        );
     }
 
     #[cfg(feature = "abcipp")]
@@ -1307,9 +1303,11 @@ mod test_process_proposal {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        let mut txs = vec![EthereumTxData::BridgePool(vote_ext.into())
-            .sign(protocol_key, shell.chain_id.clone())
-            .to_bytes()];
+        let mut txs = vec![
+            EthereumTxData::BridgePool(vote_ext.into())
+                .sign(protocol_key, shell.chain_id.clone())
+                .to_bytes(),
+        ];
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
@@ -1593,7 +1591,7 @@ mod test_process_proposal {
     /// by [`process_proposal`].
     #[test]
     fn test_unsigned_wrapper_rejected() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -1641,7 +1639,7 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_wrapper_bad_signature_rejected() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
         let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -1755,7 +1753,11 @@ mod test_process_proposal {
         assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
         assert_eq!(
             response.result.info,
-            String::from("Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent balance to pay fees")
+            String::from(
+                "Error trying to apply a transaction: Error while processing \
+                 transaction's fees: Insufficient transparent balance to pay \
+                 fees"
+            )
         );
     }
 
@@ -1816,7 +1818,11 @@ mod test_process_proposal {
         assert_eq!(response.result.code, u32::from(ErrorCodes::FeeError));
         assert_eq!(
             response.result.info,
-            String::from("Error trying to apply a transaction: Error while processing transaction's fees: Insufficient transparent balance to pay fees")
+            String::from(
+                "Error trying to apply a transaction: Error while processing \
+                 transaction's fees: Insufficient transparent balance to pay \
+                 fees"
+            )
         );
     }
 
@@ -2061,7 +2067,7 @@ mod test_process_proposal {
     /// [`process_proposal`] than expected, they are rejected
     #[test]
     fn test_too_many_decrypted_txs() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
@@ -2094,7 +2100,7 @@ mod test_process_proposal {
     /// Process Proposal should reject a block containing a RawTx, but not panic
     #[test]
     fn test_raw_tx_rejected() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
         let mut tx = Tx::new(TxType::Raw);
         tx.header.chain_id = shell.chain_id.clone();
@@ -2325,7 +2331,7 @@ mod test_process_proposal {
     /// rejected
     #[test]
     fn test_inner_tx_hash_same_block() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         let keypair_2 = crate::wallet::defaults::daewon_keypair();
@@ -2398,7 +2404,7 @@ mod test_process_proposal {
     /// causes the entire block to be rejected
     #[test]
     fn test_wrong_chain_id() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2526,7 +2532,7 @@ mod test_process_proposal {
     /// Test that an expired wrapper transaction causes a block rejection
     #[test]
     fn test_expired_wrapper() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = crate::wallet::defaults::daewon_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2628,7 +2634,7 @@ mod test_process_proposal {
     /// rejection
     #[test]
     fn test_exceeding_max_block_gas_tx() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit: u64 = shell
             .wl_storage
@@ -2676,7 +2682,7 @@ mod test_process_proposal {
     // rejection
     #[test]
     fn test_exceeding_gas_limit_wrapper() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2714,10 +2720,11 @@ mod test_process_proposal {
         }
     }
 
-    // Check that a wrapper using a non-whitelisted token for fee payment causes a block rejection
+    // Check that a wrapper using a non-whitelisted token for fee payment causes
+    // a block rejection
     #[test]
     fn test_fee_non_whitelisted_token() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -2754,10 +2761,11 @@ mod test_process_proposal {
         }
     }
 
-    // Check that a wrapper setting a fee amount lower than the minimum required causes a block rejection
+    // Check that a wrapper setting a fee amount lower than the minimum required
+    // causes a block rejection
     #[test]
     fn test_fee_wrong_minimum_amount() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -2794,7 +2802,8 @@ mod test_process_proposal {
         }
     }
 
-    // Check that a wrapper transactions whose fees cannot be paid causes a block rejection
+    // Check that a wrapper transactions whose fees cannot be paid causes a
+    // block rejection
     #[test]
     fn test_insufficient_balance_for_fee() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -2834,10 +2843,11 @@ mod test_process_proposal {
         }
     }
 
-    // Check that a fee overflow in the wrapper transaction causes a block rejection
+    // Check that a fee overflow in the wrapper transaction causes a block
+    // rejection
     #[test]
     fn test_wrapper_fee_overflow() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
+        let (shell, _recv, _, _) = test_utils::setup();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {

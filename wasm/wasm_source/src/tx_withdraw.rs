@@ -229,8 +229,8 @@ mod tests {
         Ok(())
     }
 
-    fn arb_initial_stake_and_unbonded_amount(
-    ) -> impl Strategy<Value = (token::Amount, token::Amount)> {
+    fn arb_initial_stake_and_unbonded_amount()
+    -> impl Strategy<Value = (token::Amount, token::Amount)> {
         // Generate initial stake
         token::testing::arb_amount_non_zero_ceiled((i64::MAX / 8) as u64)
             .prop_flat_map(|initial_stake| {

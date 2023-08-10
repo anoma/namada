@@ -8,7 +8,6 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
-use serde::{Deserialize, Serialize};
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(

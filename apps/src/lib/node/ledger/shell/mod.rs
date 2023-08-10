@@ -18,8 +18,7 @@ mod stats;
 pub mod testing;
 mod vote_extensions;
 
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -37,14 +36,15 @@ use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::ShellParams;
-use namada::ledger::protocol::{apply_wasm_tx, get_transfer_hash_from_storage};
+use namada::ledger::protocol::{
+    apply_wasm_tx, get_transfer_hash_from_storage, ShellParams,
+};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
     EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::ledger::storage_api::{self, StorageRead, StorageWrite};
+use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{parameters, pos, protocol, replay_protection};
 use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
 use namada::proto::{self, Section, Tx};
@@ -1202,10 +1202,11 @@ where
             },
             TxType::Wrapper(wrapper) => {
                 // Tx gas limit
-                let mut gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
+                let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if gas_meter.add_tx_size_gas(tx_bytes).is_err() {
                     response.code = ErrorCodes::TxGasLimit.into();
-                    response.log = "{INVALID_MSG}: Wrapper transactions exceeds its gas limit"
+                    response.log = "{INVALID_MSG}: Wrapper transactions \
+                                    exceeds its gas limit"
                         .to_string();
                     return response;
                 }
@@ -1219,10 +1220,9 @@ where
                 );
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ErrorCodes::AllocationError.into();
-                    response.log =
-                        "{INVALID_MSG}: Wrapper transaction exceeds the maximum block \
-                                gas limit"
-                            .to_string();
+                    response.log = "{INVALID_MSG}: Wrapper transaction \
+                                    exceeds the maximum block gas limit"
+                        .to_string();
                     return response;
                 }
 
@@ -1241,8 +1241,8 @@ where
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
-                        "{INVALID_MSG}: Inner transaction hash {} already in storage, replay \
-                     attempt",
+                        "{INVALID_MSG}: Inner transaction hash {} already in \
+                         storage, replay attempt",
                         inner_tx_hash
                     );
                     return response;
@@ -1264,25 +1264,23 @@ where
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
-                    "{INVALID_MSG}: Wrapper transaction hash {} already in storage, replay \
-                     attempt",
-                    wrapper_hash
-                );
+                        "{INVALID_MSG}: Wrapper transaction hash {} already \
+                         in storage, replay attempt",
+                        wrapper_hash
+                    );
                     return response;
                 }
 
                 let fee_unshield = wrapper
                     .unshield_section_hash
-                    .map(|ref hash| tx.get_section(hash))
-                    .flatten()
-                    .map(|section| {
+                    .and_then(|ref hash| tx.get_section(hash))
+                    .and_then(|section| {
                         if let Section::MaspTx(transaction) = section.as_ref() {
                             Some(transaction.to_owned())
                         } else {
                             None
                         }
-                    })
-                    .flatten();
+                    });
                 // Validate wrapper fees
                 if let Err(e) = self.wrapper_fee_check(
                     &wrapper,
@@ -1400,7 +1398,8 @@ where
         false
     }
 
-    /// Check that the Wrapper's signer has enough funds to pay fees. If a block proposer is provided, updates the balance of the fee payer
+    /// Check that the Wrapper's signer has enough funds to pay fees. If a block
+    /// proposer is provided, updates the balance of the fee payer
     #[allow(clippy::too_many_arguments)]
     pub fn wrapper_fee_check<CA>(
         &self,
@@ -1427,7 +1426,11 @@ where
 
         if wrapper.fee.amount_per_gas_unit < gas_cost {
             // The fees do not match the minimum required
-            return Err(Error::TxApply(protocol::Error::FeeError(format!("Fee amount {:?} do not match the minimum required amount {:?} for token {}", wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token))));
+            return Err(Error::TxApply(protocol::Error::FeeError(format!(
+                "Fee amount {:?} do not match the minimum required amount \
+                 {:?} for token {}",
+                wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token
+            ))));
         }
 
         let balance = storage_api::token::read_balance(
@@ -1438,7 +1441,9 @@ where
         .expect("Token balance read in the protocol must not fail");
 
         if let Some(transaction) = masp_transaction {
-            // Validation of the commitment to this section is done when checking the aggregated signature of the wrapper, no need for further validation
+            // Validation of the commitment to this section is done when
+            // checking the aggregated signature of the wrapper, no need for
+            // further validation
 
             // Validate data and generate unshielding tx
             let transfer_code_hash =
@@ -1463,11 +1468,13 @@ where
                 .expect("Missing fee unshielding gas limit in storage");
 
             // Runtime check
-            // NOTE: A clean tx write log must be provided to this call for a correct vp validation. Block write log, instead, should contain any prior changes (if any).
-            // This is to simulate the unshielding tx (to
-            // prevent the already written keys from being
-            // passed/triggering VPs) but we cannot commit the tx write
-            // log yet cause the tx could still be invalid.
+            // NOTE: A clean tx write log must be provided to this call for a
+            // correct vp validation. Block write log, instead, should contain
+            // any prior changes (if any). This is to simulate the
+            // unshielding tx (to prevent the already written keys
+            // from being passed/triggering VPs) but we cannot
+            // commit the tx write log yet cause the tx could still
+            // be invalid.
             temp_wl_storage.write_log.precommit_tx();
 
             match apply_wasm_tx(
@@ -1508,14 +1515,14 @@ where
                 temp_wl_storage,
                 proposer,
                 #[cfg(not(feature = "mainnet"))]
-                self.has_valid_pow_solution(&wrapper),
-                &wrapper,
+                self.has_valid_pow_solution(wrapper),
+                wrapper,
             ),
             None => protocol::check_fees(
                 temp_wl_storage,
                 #[cfg(not(feature = "mainnet"))]
-                self.has_valid_pow_solution(&wrapper),
-                &wrapper,
+                self.has_valid_pow_solution(wrapper),
+                wrapper,
             ),
         };
 
@@ -1579,21 +1586,20 @@ where
 /// for the shell
 #[cfg(test)]
 mod test_utils {
-    use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
-    use data_encoding::HEXUPPER;
-    use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::validator_consensus_key_handle;
-    use namada::tendermint_proto::abci::VoteInfo;
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use data_encoding::HEXUPPER;
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{
         update_allowed_conversions, LastBlock, Sha256Hasher,
     };
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::parameters::PosParams;
+    use namada::proof_of_stake::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
+    use namada::tendermint_proto::abci::VoteInfo;
     use namada::types::address;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1608,9 +1614,9 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint_proto::abci::Misbehavior;
     use crate::facade::tendermint_proto::abci::{
-        RequestInitChain, RequestProcessProposal,
+        Misbehavior, RequestInitChain, RequestPrepareProposal,
+        RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types;
@@ -2704,7 +2710,8 @@ mod test_mempool_validate {
         assert_eq!(result.code, u32::from(ErrorCodes::TxGasLimit));
     }
 
-    // Check that a wrapper using a non-whitelisted token for fee payment is rejected
+    // Check that a wrapper using a non-whitelisted token for fee payment is
+    // rejected
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -2736,7 +2743,8 @@ mod test_mempool_validate {
         assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
     }
 
-    // Check that a wrapper setting a fee amount lower than the minimum required is rejected
+    // Check that a wrapper setting a fee amount lower than the minimum required
+    // is rejected
     #[test]
     fn test_fee_wrong_minimum_amount() {
         let (shell, _recv, _, _) = test_utils::setup();

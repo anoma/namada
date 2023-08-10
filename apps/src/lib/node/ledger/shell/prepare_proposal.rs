@@ -1,28 +1,25 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-
 use namada::core::hints;
 use namada::core::ledger::gas::TxGasMeter;
-use namada::core::ledger::parameters;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
-use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::find_validator_by_raw_hash;
-use namada::proto::{Tx, Section};
+use namada::proto::{Section, Tx};
 use namada::types::address::Address;
-use namada::types::key::tm_raw_hash_to_string;
 use namada::types::internal::TxInQueue;
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
-use namada::types::transaction::{AffineCurve, DecryptedTx, EllipticCurve, TxType};
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::WasmCacheAccess;
+use namada::types::transaction::{
+    AffineCurve, DecryptedTx, EllipticCurve, TxType,
+};
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheAccess;
 
 use super::super::*;
 use super::block_alloc::states::{
@@ -69,7 +66,11 @@ where
                 &self.wl_storage,
                 tm_raw_hash_string,
             )
-            .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash");
+            .unwrap()
+            .expect(
+                "Unable to find native validator address of block proposer \
+                 from tendermint raw hash",
+            );
             let (encrypted_txs, alloc) = self.build_encrypted_txs(
                 alloc,
                 &req.txs,
@@ -77,9 +78,9 @@ where
                 &block_proposer,
             );
             let mut txs = encrypted_txs;
-        // decrypt the wrapper txs included in the previous block
-        let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
-        txs.append(&mut decrypted_txs);
+            // decrypt the wrapper txs included in the previous block
+            let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
+            txs.append(&mut decrypted_txs);
 
             // add vote extension protocol txs
             let mut protocol_txs = self.build_protocol_txs(
@@ -165,7 +166,7 @@ where
                 match self.validate_wrapper_bytes(tx_bytes,  block_time, &mut temp_wl_storage,  &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
                     Ok(gas) => {
                         temp_wl_storage.write_log.commit_tx();
-                        Some((tx_bytes.to_owned(), gas)) 
+                        Some((tx_bytes.to_owned(), gas))
                     },
                     Err(()) => {
                         temp_wl_storage.write_log.drop_tx();
@@ -178,7 +179,7 @@ where
                     .map_or_else(
                         |status| match status {
                             AllocFailure::Rejected { bin_resource_left} => {
-                                tracing::debug!( 
+                                tracing::debug!(
                                     ?tx_bytes,
                                     bin_resource_left,
                                     proposal_height =
@@ -203,7 +204,7 @@ where
                         |()| true,
                     )
             })
-            .map(|(tx, _)| tx) 
+            .map(|(tx, _)| tx)
             .collect();
         let alloc = alloc.next_state();
 
@@ -239,16 +240,25 @@ where
 
         tx.validate_tx().map_err(|_| ())?;
         if let TxType::Wrapper(wrapper) = tx.header().tx_type {
-                        // Check tx gas limit for tx size
-            let mut tx_gas_meter =
-                TxGasMeter::new(wrapper.gas_limit.clone().into());
+            // Check tx gas limit for tx size
+            let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
             // Check replay protection
-            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage).map_err(|_| ())?;
+            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage)
+                .map_err(|_| ())?;
 
             // Check fees
-            let fee_unshield = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section.as_ref() {Some(transaction.to_owned())} else {None} ).flatten()).flatten();
+            let fee_unshield =
+                wrapper.unshield_section_hash.and_then(|ref hash| {
+                    tx.get_section(hash).and_then(|section| {
+                        if let Section::MaspTx(transaction) = section.as_ref() {
+                            Some(transaction.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                });
             match self.wrapper_fee_check(
                 &wrapper,
                 fee_unshield,
@@ -258,11 +268,8 @@ where
                 Some(block_proposer),
             ) {
                 Ok(()) => Ok(u64::from(wrapper.gas_limit)),
-                Err(_) => Err(())
+                Err(_) => Err(()),
             }
-            
-            
-            
         } else {
             Err(())
         }
@@ -501,28 +508,30 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::BorshSerialize;
+    use namada::core::ledger::parameters;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
+    use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::ledger::rpc::get_public_key;
+    use namada::ledger::storage_api::StorageRead;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
-    use namada::types::address::{self, Address};
-    use namada::types::token;
-    use namada::ledger::gas::Gas;
-use data_encoding::HEXUPPER;
-    use namada::core::types::key::PublicKeyTmRawHash;
-    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch, read_consensus_validator_set_addresses_with_stake, validator_consensus_key_handle, read_pos_params};
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, Epoch,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Code, Data, Header, Section, Signature, Signed};
+    use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
-    use namada::types::key::{RefTo, tm_consensus_key_raw_hash};
+    use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
+    use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
@@ -544,7 +553,7 @@ use data_encoding::HEXUPPER;
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell, get_pkh_from_address,
+        self, gen_keypair, get_pkh_from_address, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -666,7 +675,7 @@ use data_encoding::HEXUPPER;
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-            None
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -881,13 +890,16 @@ use data_encoding::HEXUPPER;
         should_panic(expected = "A Tendermint quorum should never")
     )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
-        use crate::facade::tendermint_proto::abci::{VoteInfo, Validator};
+        use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
 
         const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
         let (mut shell, _recv, _, _oracle_control_recv) =
-            test_utils::setup_with_cfg(test_utils::SetupCfg { last_height: FIRST_HEIGHT, num_validators:2  }); 
+            test_utils::setup_with_cfg(test_utils::SetupCfg {
+                last_height: FIRST_HEIGHT,
+                num_validators: 2,
+            });
 
         let params = shell.wl_storage.pos_queries().get_pos_params();
 
@@ -917,7 +929,7 @@ use data_encoding::HEXUPPER;
             .collect::<Vec<_>>();
 
         let mut consensus_set: BTreeSet<WeightedValidator> =
-        read_consensus_validator_set_addresses_with_stake(
+            read_consensus_validator_set_addresses_with_stake(
                 &shell.wl_storage,
                 Epoch::default(),
             )
@@ -941,44 +953,45 @@ use data_encoding::HEXUPPER;
 
         for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
             if address == wallet::defaults::validator_address() {
-            validators_handle
-                .at(&val_stake)
-                .remove(&mut shell.wl_storage, &val_position)
-                .expect("Test failed");
-            validators_handle
-                .at(&1.into())
-                .insert(&mut shell.wl_storage, val_position, address)
-                .expect("Test failed");
+                validators_handle
+                    .at(&val_stake)
+                    .remove(&mut shell.wl_storage, &val_position)
+                    .expect("Test failed");
+                validators_handle
+                    .at(&1.into())
+                    .insert(&mut shell.wl_storage, val_position, address)
+                    .expect("Test failed");
             }
         }
-        // Insert some stake for the second validator to prevent total stake from going to 0
+        // Insert some stake for the second validator to prevent total stake
+        // from going to 0
 
         let votes = vec![
             VoteInfo {
-            validator: Some(Validator {
-                address: pkh1.clone(),
-                power: u128::try_from(val1.bonded_stake).expect("Test failed")
-                    as i64,
-            }),
-            signed_last_block: true,
-        },
-        
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u128::try_from(val1.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
+                }),
+                signed_last_block: true,
+            },
             VoteInfo {
-            validator: Some(Validator {
-                address: pkh2,
-                power: u128::try_from(val2.bonded_stake).expect("Test failed")
-                    as i64,
-
-            }),
-            signed_last_block: true,
-        },
+                validator: Some(Validator {
+                    address: pkh2,
+                    power: u128::try_from(val2.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
+                }),
+                signed_last_block: true,
+            },
         ];
         let req = FinalizeBlock {
             proposer_address: pkh1,
             votes,
-            ..Default::default()  
+            ..Default::default()
         };
-        shell.start_new_epoch(Some(req)); 
+        shell.start_new_epoch(Some(req));
         assert_eq!(
             shell.wl_storage.pos_queries().get_epoch(
                 shell.wl_storage.pos_queries().get_current_decision_height()
@@ -1090,7 +1103,10 @@ use data_encoding::HEXUPPER;
         shell
             .wl_storage
             .storage
-            .write(&balance_key, Amount::native_whole(1_000).try_to_vec().unwrap())
+            .write(
+                &balance_key,
+                Amount::native_whole(1_000).try_to_vec().unwrap(),
+            )
             .unwrap();
 
         let mut req = RequestPrepareProposal {
@@ -1110,7 +1126,7 @@ use data_encoding::HEXUPPER;
                 GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-                None
+                None,
             ))));
             tx.header.chain_id = shell.chain_id.clone();
             tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1122,7 +1138,11 @@ use data_encoding::HEXUPPER;
                 &keypair,
             )));
 
-            let gas = Gas::from(tx.header().wrapper().expect("Wrong tx type").gas_limit).checked_sub(Gas::from(tx.to_bytes().len() as u64)).unwrap();
+            let gas = Gas::from(
+                tx.header().wrapper().expect("Wrong tx type").gas_limit,
+            )
+            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
+            .unwrap();
             shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
@@ -1180,7 +1200,7 @@ use data_encoding::HEXUPPER;
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-            None
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1232,7 +1252,7 @@ use data_encoding::HEXUPPER;
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-            None
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1273,7 +1293,7 @@ use data_encoding::HEXUPPER;
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
             None,
-            None
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
@@ -1326,32 +1346,31 @@ use data_encoding::HEXUPPER;
             GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
             None,
-            None
+            None,
         ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         let tx_code = Code::new("wasm_code".as_bytes().to_owned());
-        wrapper.set_code(tx_code.clone());
+        wrapper.set_code(tx_code);
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
-        wrapper.set_data(tx_data.clone());
+        wrapper.set_data(tx_data);
         let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
             &keypair,
         )));
 
-        new_wrapper.update_header(
-            TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: 1.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                keypair_2.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-                None
-            ))));
+        new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            keypair_2.ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
             &keypair_2,
@@ -1387,7 +1406,7 @@ use data_encoding::HEXUPPER;
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
-                None
+                None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.header.expiration = Some(DateTimeUtc::default());
@@ -1444,8 +1463,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &keypair)));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &keypair,
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1481,8 +1504,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &keypair)));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &keypair,
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1495,7 +1522,8 @@ use data_encoding::HEXUPPER;
         assert!(result.txs.is_empty());
     }
 
-    // Check that a wrapper using a non-whitelisted token for fee payment is not included in the block
+    // Check that a wrapper using a non-whitelisted token for fee payment is not
+    // included in the block
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -1516,8 +1544,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1530,7 +1562,8 @@ use data_encoding::HEXUPPER;
         assert!(result.txs.is_empty());
     }
 
-    // Check that a wrapper setting a fee amount lower than the minimum required is not included in the block
+    // Check that a wrapper setting a fee amount lower than the minimum required
+    // is not included in the block
     #[test]
     fn test_fee_wrong_minimum_amount() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -1550,8 +1583,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1584,8 +1621,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],
@@ -1618,8 +1659,12 @@ use data_encoding::HEXUPPER;
         let mut wrapper_tx = Tx::new(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(wrapper_tx.sechashes(), &crate::wallet::defaults::albert_keypair())));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
 
         let req = RequestPrepareProposal {
             txs: vec![wrapper_tx.to_bytes()],

@@ -184,11 +184,14 @@ impl AbcippShim {
                             .proposer_address,
                     );
                     let block_proposer = find_validator_by_raw_hash(
-                                &self.service.wl_storage,
-                                tm_raw_hash_string,
-                            )
-                            .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash")
-                        ;
+                        &self.service.wl_storage,
+                        tm_raw_hash_string,
+                    )
+                    .unwrap()
+                    .expect(
+                        "Unable to find native validator address of block \
+                         proposer from tendermint raw hash",
+                    );
 
                     let (processing_results, _) = self.service.process_txs(
                         &self.delivered_txs,

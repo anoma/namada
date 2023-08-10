@@ -2,7 +2,7 @@
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
 pub mod wrapper_tx {
-    use std::fmt::Formatter;
+
     use std::num::ParseIntError;
     use std::str::FromStr;
 
@@ -11,23 +11,16 @@ pub mod wrapper_tx {
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use masp_primitives::transaction::Transaction;
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::ledger::storage_api::StorageRead;
-    use crate::proto::Tx;
-    use crate::proto::{Code, Data, Section};
+    use crate::proto::{Code, Data, Section, Tx};
     use crate::types::address::{masp, Address};
-    use crate::types::chain::ChainId;
     use crate::types::hash::Hash;
-    use crate::types::key::common::SecretKey;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
-    use crate::types::token::{
-        Amount, DenominatedAmount, Denomination, Transfer,
-    };
+    use crate::types::token::{Amount, DenominatedAmount, Transfer};
     use crate::types::uint::Uint;
 
     /// TODO: Determine a sane number for this
@@ -186,14 +179,16 @@ pub mod wrapper_tx {
     pub struct WrapperTx {
         /// The fee to be payed for including the tx
         pub fee: Fee,
-        /// Used for signature verification and to determine an implicit account of the fee payer
+        /// Used for signature verification and to determine an implicit
+        /// account of the fee payer
         pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// The hash of the optional, unencrypted, unshielding transaction for fee payment
+        /// The hash of the optional, unencrypted, unshielding transaction for
+        /// fee payment
         pub unshield_section_hash: Option<Hash>,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
@@ -344,7 +339,9 @@ pub mod wrapper_tx {
             Ok(tx)
         }
 
-        /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns an error if the amount overflows or if failure during denomination conversion
+        /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
+        /// an error if the amount overflows or if failure during denomination
+        /// conversion
         pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
             let fees = Uint::checked_mul(
                 self.gas_limit.into(),
@@ -439,8 +436,6 @@ pub mod wrapper_tx {
         fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
-
-            use crate::types::key::SecretKey;
 
             let mut rng: ThreadRng = thread_rng();
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()

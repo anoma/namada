@@ -1,10 +1,7 @@
-use borsh::BorshDeserialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::key::RefTo;
 use namada::core::types::token::{Amount, Transfer};
-use namada::proto::Section;
-use namada::types::token::DenominatedAmount;
 use namada_apps::wallet::defaults;
 use namada_benches::{generate_tx, TX_TRANSFER_WASM};
 

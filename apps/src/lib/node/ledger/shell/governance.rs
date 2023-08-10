@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use namada::core::ledger::slash_fund::ADDRESS as slash_fund_address;
 use namada::core::types::transaction::governance::ProposalType;
 use namada::ledger::events::EventType;
@@ -168,7 +166,7 @@ where
                 tx,
                 &TxIndex::default(),
                 ShellParams::new(
-                    &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), // No gas limit for governance proposal
+                    &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), /* No gas limit for governance proposal */
                     &mut shell.wl_storage,
                     &mut shell.vp_wasm_cache,
                     &mut shell.tx_wasm_cache,

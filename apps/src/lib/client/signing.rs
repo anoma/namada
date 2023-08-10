@@ -1,6 +1,8 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::borrow::Cow;
+
 use namada::core::types::token::Amount;
 use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::rpc::TxBroadcastData;
@@ -11,8 +13,6 @@ use namada::proof_of_stake::Epoch;
 use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::key::*;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 use crate::cli::args;
 
@@ -36,11 +36,12 @@ where
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
 ///
-/// It also return a second, optional key for the wrapper's signer if it differs from the inner tx's one.
+/// It also return a second, optional key for the wrapper's signer if it differs
+/// from the inner tx's one.
 pub async fn tx_signer<C, U, V>(
     client: &C,
     wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+    _shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     default: TxSigningKey,
 ) -> Result<
@@ -89,7 +90,9 @@ where
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
-/// progress on chain. Accepts an optional balance reflecting any modification applied to it by the inner tx for a correct fee validation.
+/// progress on chain. Accepts an optional balance reflecting any modification
+/// applied to it by the inner tx for a correct fee validation.
+#[allow(clippy::too_many_arguments)]
 pub async fn sign_wrapper<'key, C, U, V>(
     client: &C,
     wallet: &mut Wallet<U>,

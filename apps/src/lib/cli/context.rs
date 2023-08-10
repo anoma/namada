@@ -1,10 +1,9 @@
 //! CLI input types can be used for command arguments
 
-use std::collections::{HashMap, HashSet};
+use std::env;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, fs};
 
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
@@ -16,7 +15,9 @@ use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::CLIShieldedUtils;
-use crate::config::genesis::{self, genesis_config};
+#[cfg(any(test, feature = "dev"))]
+use crate::config::genesis;
+use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::CliWalletUtils;
@@ -97,7 +98,8 @@ impl Context {
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        // NOTE: workaround to make this function work both in integration tests and benchmarks
+        // NOTE: workaround to make this function work both in integration tests
+        // and benchmarks
         let (wallet, native_token) = if genesis_file_path.is_file() {
             let genesis =
                 genesis_config::read_genesis_config(&genesis_file_path);

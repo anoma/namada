@@ -14,25 +14,16 @@
 //! For more realistic results these benchmarks should be run on all the
 //! combination of supported OS/architecture.
 
-use masp_primitives::transaction::Transaction;
-use masp_proofs::prover::LocalTxProver;
-use namada::ledger::args::InputAmount;
-use namada::ledger::masp;
-use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
-use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::tendermint_rpc::{self, HttpClient};
-use namada::types::token::DenominatedAmount;
-use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
-use std::fs::File;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_proofs::prover::LocalTxProver;
 use namada::core::ledger::ibc::storage::port_key;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
@@ -44,12 +35,9 @@ use namada::ibc::clients::ics07_tendermint::client_state::{
 };
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics02_client::client_type::ClientType as NamadaClientType;
-use namada::ibc::core::ics02_client::consensus_state::ConsensusState as TraitConsensusState;
 use namada::ibc::core::ics02_client::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics03_connection::connection::ConnectionEnd;
 use namada::ibc::core::ics03_connection::connection::{
-    Counterparty, State as ConnectionState,
+    ConnectionEnd, Counterparty, State as ConnectionState,
 };
 use namada::ibc::core::ics03_connection::version::Version;
 use namada::ibc::core::ics04_channel::channel::{
@@ -57,18 +45,14 @@ use namada::ibc::core::ics04_channel::channel::{
 };
 use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentRoot;
+use namada::ibc::core::ics23_commitment::commitment::{
+    CommitmentPrefix, CommitmentRoot,
+};
 use namada::ibc::core::ics23_commitment::specs::ProofSpecs;
-use namada::ibc::core::ics24_host::identifier::ChannelId as NamadaChannelId;
-use namada::ibc::core::ics24_host::identifier::ClientId;
-use namada::ibc::core::ics24_host::identifier::ClientId as NamadaClientId;
-use namada::ibc::core::ics24_host::identifier::ConnectionId;
-use namada::ibc::core::ics24_host::identifier::ConnectionId as NamadaConnectionId;
-use namada::ibc::core::ics24_host::identifier::PortChannelId as NamadaPortChannelId;
-use namada::ibc::core::ics24_host::identifier::PortId as NamadaPortId;
 use namada::ibc::core::ics24_host::identifier::{
-    ChainId as IbcChainId, ChannelId, PortChannelId, PortId,
+    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
+    ConnectionId, ConnectionId as NamadaConnectionId,
+    PortChannelId as NamadaPortChannelId, PortId as NamadaPortId, PortId,
 };
 use namada::ibc::core::ics24_host::Path as IbcPath;
 use namada::ibc::signer::Signer;
@@ -78,15 +62,19 @@ use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
+use namada::ledger::args::InputAmount;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
+use namada::ledger::masp;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
-use namada::proto::Tx;
-use namada::proto::{Code, Data, Section, Signature};
+use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::tendermint::Hash;
+use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
 use namada::types::masp::{
@@ -94,6 +82,7 @@ use namada::types::masp::{
 };
 use namada::types::storage::{BlockHeight, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
+use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::{InitProposalData, ProposalType};
 use namada::types::transaction::pos::Bond;
 use namada::types::transaction::GasLimit;
@@ -101,9 +90,7 @@ use namada::vm::wasm::run;
 use namada_apps::cli::args::{Tx as TxArgs, TxTransfer};
 use namada_apps::cli::context::FromContext;
 use namada_apps::cli::Context;
-use namada_apps::client::tx;
 use namada_apps::config::TendermintMode;
-use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_proto::abci::RequestInitChain;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
@@ -111,6 +98,7 @@ use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 pub const WASM_DIR: &str = "../wasm";
@@ -422,7 +410,8 @@ pub fn generate_tx(
         },
     ));
 
-    // NOTE: don't use the hash to avoid computing the cost of loading the wasm code
+    // NOTE: don't use the hash to avoid computing the cost of loading the wasm
+    // code
     tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
         wasm_code_path,
@@ -468,7 +457,7 @@ pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
     prost::Message::encode(&msg.to_any(), &mut data).unwrap();
     tx.set_data(Data::new(data));
 
-    //NOTE: the Ibc VP doesn't actually check the signature
+    // NOTE: the Ibc VP doesn't actually check the signature
     tx
 }
 
@@ -655,7 +644,7 @@ impl Client for BenchShell {
 
     async fn perform<R>(
         &self,
-        request: R,
+        _request: R,
     ) -> Result<R::Response, tendermint_rpc::Error>
     where
         R: tendermint_rpc::SimpleRequest,

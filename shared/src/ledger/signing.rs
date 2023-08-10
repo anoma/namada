@@ -22,12 +22,13 @@ use namada_core::types::address::{
 };
 use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::pos;
-use namada_core::types::uint::Uint;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use zeroize::Zeroizing;
 
+use super::masp::{ShieldedContext, ShieldedUtils};
+use super::rpc::validate_amount;
 use crate::ibc::applications::transfer::msgs::transfer::{
     MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
 };
@@ -58,9 +59,6 @@ use crate::types::transaction::governance::{
 use crate::types::transaction::{
     Fee, InitAccount, InitValidator, TxType, UpdateVp, WrapperTx,
 };
-
-use super::masp::{ShieldedContext, ShieldedUtils};
-use super::rpc::validate_amount;
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -161,7 +159,8 @@ pub enum TxSigningKey {
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
 ///
-/// Also return the optional signer of the wrapper tx if differs from the inner's one.
+/// Also return the optional signer of the wrapper tx if differs from the
+/// inner's one.
 pub async fn tx_signer<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -206,7 +205,11 @@ pub async fn tx_signer<
     match signer {
         TxSigningKey::WalletAddress(signer) if signer == masp() => {
             if wrapper_signer.is_none() {
-                other_err("Wrapper transaction cannot be signed by masp; please specify the key from which to look up the signing key.".to_string())
+                other_err(
+                    "Wrapper transaction cannot be signed by masp; please \
+                     specify the key from which to look up the signing key."
+                        .to_string(),
+                )
             } else {
                 Ok((None, masp_tx_key().ref_to(), wrapper_signer))
             }
@@ -229,7 +232,8 @@ pub async fn tx_signer<
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
 ///
-/// It also takes a second, optional keypair to sign the wrapper header separately.
+/// It also takes a second, optional keypair to sign the wrapper header
+/// separately.
 ///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
@@ -310,16 +314,13 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     requires_pow: bool,
     source: Address,
 ) {
-    use std::collections::BTreeMap;
-
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
         C,
         BTreeMap<Address, Amount>,
     >(client, &gas_cost_key)
     .await
-    .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
-    .flatten()
+    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
     {
         Some(amount) => amount,
         None => {
@@ -379,13 +380,14 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
+#[allow(clippy::too_many_arguments)]
 pub async fn wrap_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
     client: &C,
-    wallet: &mut Wallet<U>,
+    #[allow(unused_variables)] wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     mut tx: Tx,
     args: &args::Tx,
@@ -401,8 +403,7 @@ pub async fn wrap_tx<
         BTreeMap<Address, Amount>,
     >(client, &gas_cost_key)
     .await
-    .map(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
-    .flatten()
+    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
     {
         Some(amount) => amount,
         None => {
@@ -470,7 +471,8 @@ pub async fn wrap_tx<
                         amount: diff,
                         denom: 0.into(),
                     }),
-                    // These last two fields are not used in the function, mock them
+                    // These last two fields are not used in the function, mock
+                    // them
                     native_token: args.fee_token.clone(),
                     tx_code_path: PathBuf::new(),
                 };
@@ -570,11 +572,17 @@ pub async fn wrap_tx<
             } else {
                 let token_addr = args.fee_token.clone();
                 let err_msg = format!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {}, balance: {}.",
-            format_denominated_amount(client, &token_addr, total_fee).await,
-            format_denominated_amount(client, &token_addr, updated_balance).await,
-        );
+                    "The wrapper transaction source doesn't have enough \
+                     balance to pay fee {}, balance: {}.",
+                    format_denominated_amount(client, &token_addr, total_fee)
+                        .await,
+                    format_denominated_amount(
+                        client,
+                        &token_addr,
+                        updated_balance
+                    )
+                    .await,
+                );
                 eprintln!("{}", err_msg);
                 if !args.force && cfg!(feature = "mainnet") {
                     panic!("{}", err_msg);
@@ -612,8 +620,8 @@ pub async fn wrap_tx<
         },
         keypair.clone(),
         epoch,
-        //TODO: partially validate the gas limit in client
-        args.gas_limit.clone(),
+        // TODO: partially validate the gas limit in client
+        args.gas_limit,
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
         unshield_section_hash,
@@ -663,6 +671,7 @@ pub async fn wrap_tx<
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
+#[allow(clippy::too_many_arguments)]
 pub async fn sign_wrapper<
     'key,
     C: crate::ledger::queries::Client + Sync,
@@ -775,7 +784,8 @@ where
         alias = format!("{alias_prefix}_{ctr}");
     }
     // Generate a disposable keypair to sign the wrapper if requested
-    // TODO: once the wrapper transaction has been accepted this key can be deleted from wallet
+    // TODO: once the wrapper transaction has been accepted this key can be
+    // deleted from wallet
     let (alias, disposable_keypair) = wallet
         .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
         .expect("Failed to initialize disposable keypair")

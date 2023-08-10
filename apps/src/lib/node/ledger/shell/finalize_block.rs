@@ -1,6 +1,6 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
 use namada::ledger::events::EventType;
@@ -136,7 +136,11 @@ where
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
             find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
-                .unwrap().expect("Unable to find native validator address of block proposer from tendermint raw hash")
+                .unwrap()
+                .expect(
+                    "Unable to find native validator address of block \
+                     proposer from tendermint raw hash",
+                )
         };
 
         // Tracks the accepted transactions
@@ -221,7 +225,8 @@ where
 
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                 if let TxType::Wrapper(wrapper) = &tx_header.tx_type {
-                    // Charge fee if wrapper transaction went out of gas or failed because of fees
+                    // Charge fee if wrapper transaction went out of gas or
+                    // failed because of fees
                     let error_code =
                         ErrorCodes::from_u32(processed_tx.result.code).unwrap();
                     if (error_code == ErrorCodes::TxGasLimit)
@@ -290,7 +295,7 @@ where
                     let has_valid_pow =
                         self.invalidate_pow_solution_if_valid(wrapper);
 
-                    let gas_meter = TxGasMeter::new(wrapper.gas_limit.into());
+                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
 
                     (
                         tx_event,
@@ -352,7 +357,7 @@ where
                 TxType::Raw => {
                     tracing::error!(
                         "Internal logic error: FinalizeBlock received a \
-                             TxType::Raw transaction"
+                         TxType::Raw transaction"
                     );
                     continue;
                 }
@@ -471,7 +476,7 @@ where
                         } else {
                             tracing::trace!(
                                 "all VPs accepted transaction {} storage \
-                             modification {:#?}",
+                                 modification {:#?}",
                                 tx_event["hash"],
                                 result
                             );
@@ -979,7 +984,6 @@ mod test_finalize_block {
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
-    use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::{
         is_validator_slashes_key, slashes_prefix,
     };
@@ -2021,9 +2025,11 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -2033,9 +2039,11 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(!rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            !rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -2149,9 +2157,11 @@ mod test_finalize_block {
                 None,
             );
         }
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -2268,14 +2278,18 @@ mod test_finalize_block {
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(!shell
-            .wl_storage
-            .has_key(&inner_hash_key)
-            .expect("Test failed"))
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
     }
 
     #[test]
-    /// Test that the hash of the wrapper transaction is committed to storage even if the wrapper tx fails. The inner transaction hash must instead be removed
+    /// Test that the hash of the wrapper transaction is committed to storage
+    /// even if the wrapper tx fails. The inner transaction hash must instead be
+    /// removed
     fn test_commits_hash_if_wrapper_failure() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
@@ -2323,22 +2337,29 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
 
-        // Check wrapper hash has been committed to storage even if it failed. Check that, instead, the inner hash has been removed
+        // Check wrapper hash has been committed to storage even if it failed.
+        // Check that, instead, the inner hash has been removed
         assert_eq!(event.event_type.to_string(), String::from("accepted"));
         let code = event.attributes.get("code").expect("Testfailed").as_str();
         assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
 
-        assert!(shell
-            .wl_storage
-            .has_key(&wrapper_hash_key)
-            .expect("Test failed"));
-        assert!(!shell
-            .wl_storage
-            .has_key(&inner_hash_key)
-            .expect("Test failed"))
+        assert!(
+            shell
+                .wl_storage
+                .has_key(&wrapper_hash_key)
+                .expect("Test failed")
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
     }
 
-    // Test that if the fee payer doesn't have enough funds for fee payment the ledger drains their balance. Note that because of the checks in process proposal this scenario should never happen
+    // Test that if the fee payer doesn't have enough funds for fee payment the
+    // ledger drains their balance. Note that because of the checks in process
+    // proposal this scenario should never happen
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
@@ -2387,7 +2408,7 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
         let balance_key = namada::core::types::token::balance_key(
             &shell.wl_storage.storage.native_token,
-            &Address::from(&keypair.to_public().into()),
+            &Address::from(&keypair.to_public()),
         );
         let balance: Amount = shell
             .wl_storage
@@ -2398,7 +2419,8 @@ mod test_finalize_block {
         assert_eq!(balance, 0.into())
     }
 
-    // Test that the fees collected from a block are withdrew from the wrapper signer and credited to the block proposer
+    // Test that the fees collected from a block are withdrew from the wrapper
+    // signer and credited to the block proposer
     #[test]
     fn test_fee_payment_to_block_proposer() {
         let (mut shell, _, _, _) = setup();
@@ -2617,9 +2639,11 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(enqueued_slashes_handle()
-            .at(&Epoch::default())
-            .is_empty(&shell.wl_storage)?);
+        assert!(
+            enqueued_slashes_handle()
+                .at(&Epoch::default())
+                .is_empty(&shell.wl_storage)?
+        );
         assert_eq!(
             get_num_consensus_validators(&shell.wl_storage, Epoch::default())
                 .unwrap(),
@@ -2638,17 +2662,21 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(enqueued_slashes_handle()
-                .at(&epoch)
-                .is_empty(&shell.wl_storage)?);
+            assert!(
+                enqueued_slashes_handle()
+                    .at(&epoch)
+                    .is_empty(&shell.wl_storage)?
+            );
             assert_eq!(
                 get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(!enqueued_slashes_handle()
-            .at(&processing_epoch)
-            .is_empty(&shell.wl_storage)?);
+        assert!(
+            !enqueued_slashes_handle()
+                .at(&processing_epoch)
+                .is_empty(&shell.wl_storage)?
+        );
 
         // Advance to the processing epoch
         loop {
@@ -2671,9 +2699,11 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(enqueued_slashes_handle()
-                    .at(&shell.wl_storage.storage.block.epoch)
-                    .is_empty(&shell.wl_storage)?);
+                assert!(
+                    enqueued_slashes_handle()
+                        .at(&shell.wl_storage.storage.block.epoch)
+                        .is_empty(&shell.wl_storage)?
+                );
                 let stake1 = read_validator_stake(
                     &shell.wl_storage,
                     &params,
@@ -3219,13 +3249,15 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(namada_proof_of_stake::is_validator_frozen(
-            &shell.wl_storage,
-            &val1.address,
-            current_epoch,
-            &params
-        )
-        .unwrap());
+        assert!(
+            namada_proof_of_stake::is_validator_frozen(
+                &shell.wl_storage,
+                &val1.address,
+                current_epoch,
+                &params
+            )
+            .unwrap()
+        );
         assert!(
             namada_proof_of_stake::validator_slashes_handle(&val1.address)
                 .is_empty(&shell.wl_storage)

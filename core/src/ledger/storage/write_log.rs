@@ -76,7 +76,14 @@ pub struct WriteLog {
     block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
-    /// A precommit bucket for the `tx_write_log`. This is useful for validation when a clean `tx_write_log` is needed without committing any modification already in there. These modifications can be temporarely stored here and then discarded or committed to the `block_write_log`, together with th content of `tx_write_log`. No direct key write/update/delete should ever happen on this field, this log should only be populated through a dump of the `tx_write_log` and should be cleaned either when committing or dumping the `tx_write_log`
+    /// A precommit bucket for the `tx_write_log`. This is useful for
+    /// validation when a clean `tx_write_log` is needed without committing any
+    /// modification already in there. These modifications can be temporarely
+    /// stored here and then discarded or committed to the `block_write_log`,
+    /// together with th content of `tx_write_log`. No direct key
+    /// write/update/delete should ever happen on this field, this log should
+    /// only be populated through a dump of the `tx_write_log` and should be
+    /// cleaned either when committing or dumping the `tx_write_log`
     tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
     ibc_events: BTreeSet<IbcEvent>,
@@ -273,7 +280,8 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
-        // Temp writes are not propagated to db so just charge the cost of accessing storage
+        // Temp writes are not propagated to db so just charge the cost of
+        // accessing storage
         Ok((gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
@@ -360,13 +368,15 @@ impl WriteLog {
 
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts. The keys in the precommit are not included in the result of this function.
+    /// of the newly created accounts. The keys in the precommit are not
+    /// included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log.keys().cloned().collect()
     }
 
-    /// Get the storage keys changed and accounts keys initialized in the current transaction and precommit. The account keys point to the validity predicates
-    /// of the newly created accounts.
+    /// Get the storage keys changed and accounts keys initialized in the
+    /// current transaction and precommit. The account keys point to the
+    /// validity predicates of the newly created accounts.
     pub fn get_keys_with_precommit(&self) -> BTreeSet<storage::Key> {
         self.tx_precommit_write_log
             .keys()
@@ -420,7 +430,8 @@ impl WriteLog {
         &self.ibc_events
     }
 
-    /// Add the entire content of the tx write log to the precommit one. The tx log gets reset in the process.
+    /// Add the entire content of the tx write log to the precommit one. The tx
+    /// log gets reset in the process.
     pub fn precommit_tx(&mut self) {
         let tx_log = std::mem::replace(
             &mut self.tx_write_log,
@@ -430,9 +441,9 @@ impl WriteLog {
         self.tx_precommit_write_log.extend(tx_log)
     }
 
-    /// Commit the current transaction's write log and precommit log to the block when it's
-    /// accepted by all the triggered validity predicates. Starts a new
-    /// transaction write log.
+    /// Commit the current transaction's write log and precommit log to the
+    /// block when it's accepted by all the triggered validity predicates.
+    /// Starts a new transaction write log.
     pub fn commit_tx(&mut self) {
         // First precommit everything
         self.precommit_tx();
@@ -450,8 +461,9 @@ impl WriteLog {
         self.take_ibc_events();
     }
 
-    /// Drop the current transaction's write log and precommit when it's declined by any of
-    /// the triggered validity predicates. Starts a new transaction write log.
+    /// Drop the current transaction's write log and precommit when it's
+    /// declined by any of the triggered validity predicates. Starts a new
+    /// transaction write log.
     pub fn drop_tx(&mut self) {
         self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();

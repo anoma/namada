@@ -25,8 +25,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::ledger::gas::Gas;
-use crate::ledger::gas::VpsGas;
+use crate::ledger::gas::{Gas, VpsGas};
 use crate::types::address::Address;
 use crate::types::dec::Dec;
 use crate::types::hash::Hash;

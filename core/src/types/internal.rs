@@ -40,11 +40,7 @@ impl HostEnvResult {
 
 impl From<bool> for HostEnvResult {
     fn from(success: bool) -> Self {
-        if success {
-            Self::Success
-        } else {
-            Self::Fail
-        }
+        if success { Self::Success } else { Self::Fail }
     }
 }
 
@@ -61,7 +57,9 @@ mod tx_queue {
     pub struct TxInQueue {
         /// Wrapper tx
         pub tx: Tx,
-        /// The available gas remaining for the inner tx (for gas accounting). This allows for a more detailed logging about the gas used by the wrapper and that used by the inner
+        /// The available gas remaining for the inner tx (for gas accounting).
+        /// This allows for a more detailed logging about the gas used by the
+        /// wrapper and that used by the inner
         pub gas: Gas,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet

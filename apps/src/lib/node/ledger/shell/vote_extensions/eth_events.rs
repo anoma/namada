@@ -313,7 +313,7 @@ where
     pub fn validate_eth_events_vext_list<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-            + 'iter,
+        + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
             (token::Amount, Signed<ethereum_events::Vext>),
@@ -334,7 +334,7 @@ where
     pub fn filter_invalid_eth_events_vexts<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<ethereum_events::Vext>>
-            + 'iter,
+        + 'iter,
     ) -> impl Iterator<Item = (token::Amount, Signed<ethereum_events::Vext>)> + 'iter
     {
         self.validate_eth_events_vext_list(vote_extensions)
@@ -839,7 +839,7 @@ mod test_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0 .0, 0);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
         let consensus_in_mem = validators_handle
@@ -894,22 +894,26 @@ mod test_vote_extensions {
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
-        assert!(shell
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
-            .is_err());
+        assert!(
+            shell
+                .wl_storage
+                .pos_queries()
+                .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
+                .is_err()
+        );
         let prev_epoch =
-            Epoch(shell.wl_storage.storage.get_current_epoch().0 .0 - 1);
-        assert!(shell
-            .shell
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_protocol_pk(
-                &signing_key.ref_to(),
-                Some(prev_epoch)
-            )
-            .is_ok());
+            Epoch(shell.wl_storage.storage.get_current_epoch().0.0 - 1);
+        assert!(
+            shell
+                .shell
+                .wl_storage
+                .pos_queries()
+                .get_validator_from_protocol_pk(
+                    &signing_key.ref_to(),
+                    Some(prev_epoch)
+                )
+                .is_ok()
+        );
 
         assert!(shell.validate_eth_events_vext(vote_ext, signed_height));
     }

@@ -13,10 +13,9 @@ use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
 use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use namada::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
 use namada::ibc::signer::Signer;
-use namada::ibc::tx_msg::Msg;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance;
 use namada::ledger::ibc::vp::Ibc;
@@ -25,21 +24,18 @@ use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::slash_fund::SlashFundVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
-use namada::proto::{Code, Section, Tx};
+use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
-use namada::types::chain::ChainId;
-use namada::types::ethereum_events::TransfersToNamada;
 use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::storage::TxIndex;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_apps::wallet::defaults;
-use namada_apps::wasm_loader;
 use namada_benches::{
     generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
     generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM, WASM_DIR,
+    TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
 };
 
 fn replay_protection(c: &mut Criterion) {
@@ -214,13 +210,15 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(governance
-                    .validate_tx(
-                        &signed_tx,
-                        governance.ctx.keys_changed,
-                        governance.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    governance
+                        .validate_tx(
+                            &signed_tx,
+                            governance.ctx.keys_changed,
+                            governance.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -228,7 +226,7 @@ fn governance(c: &mut Criterion) {
     group.finish();
 }
 
-//TODO: missing native vps
+// TODO: missing native vps
 //    - pos
 //    - parameters
 //    - eth bridge
@@ -290,13 +288,15 @@ fn slash_fund(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(slash_fund
-                    .validate_tx(
-                        &tx,
-                        slash_fund.ctx.keys_changed,
-                        slash_fund.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    slash_fund
+                        .validate_tx(
+                            &tx,
+                            slash_fund.ctx.keys_changed,
+                            slash_fund.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -375,13 +375,14 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
-                        &signed_tx,
+                assert!(
+                    ibc.validate_tx(
+                        signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }
@@ -439,13 +440,15 @@ fn vp_multitoken(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(multitoken
-                    .validate_tx(
-                        &signed_tx,
-                        multitoken.ctx.keys_changed,
-                        multitoken.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    multitoken
+                        .validate_tx(
+                            signed_tx,
+                            multitoken.ctx.keys_changed,
+                            multitoken.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }

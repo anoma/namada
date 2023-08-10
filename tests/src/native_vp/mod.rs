@@ -11,7 +11,6 @@ use namada::ledger::storage::traits::Sha256Hasher;
 use namada::types::address::Address;
 use namada::types::storage;
 use namada::vm::WasmCacheRwAccess;
-use namada_core::ledger::gas::TxGasMeter;
 
 use crate::tx::TestTxEnv;
 

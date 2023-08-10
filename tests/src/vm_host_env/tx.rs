@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::parameters::{self, EpochDuration};

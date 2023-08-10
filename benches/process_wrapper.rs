@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
-
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::ledger::storage::TempWlStorage;
 use namada::proto::Signature;
-use namada::types::chain::ChainId;
 use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;

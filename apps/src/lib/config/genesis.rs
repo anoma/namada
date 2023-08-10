@@ -271,7 +271,8 @@ pub mod genesis_config {
         pub fee_unshielding_gas_limit: u64,
         /// Fee unshielding descriptions limit
         pub fee_unshielding_descriptions_limit: u64,
-        /// Map of the cost per gas unit for every token allowed for fee payment
+        /// Map of the cost per gas unit for every token allowed for fee
+        /// payment
         pub gas_cost: BTreeMap<Address, token::Amount>,
     }
 
@@ -348,21 +349,13 @@ pub mod genesis_config {
                 commission_rate: config
                     .commission_rate
                     .and_then(|rate| {
-                        if rate <= Dec::one() {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect("Commission rate must be between 0.0 and 1.0"),
                 max_commission_rate_change: config
                     .max_commission_rate_change
                     .and_then(|rate| {
-                        if rate <= Dec::one() {
-                            Some(rate)
-                        } else {
-                            None
-                        }
+                        if rate <= Dec::one() { Some(rate) } else { None }
                     })
                     .expect(
                         "Max commission rate change must be between 0.0 and \

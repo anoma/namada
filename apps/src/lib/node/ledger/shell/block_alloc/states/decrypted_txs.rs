@@ -9,9 +9,9 @@ impl TryAlloc for BlockAllocator<BuildingDecryptedTxBatch> {
     type Resource<'tx> = &'tx [u8];
 
     #[inline]
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        tx: Self::Resource<'tx>,
+        tx: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
         self.decrypted_txs.try_dump(DumpResource::Space(tx))
     }

@@ -226,9 +226,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -281,9 +282,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -342,9 +344,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -401,9 +404,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -453,9 +457,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -514,9 +519,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -555,9 +561,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -597,8 +604,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(!vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 }

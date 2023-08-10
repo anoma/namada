@@ -5,9 +5,9 @@ impl TryAlloc for BlockAllocator<BuildingProtocolTxBatch> {
     type Resource<'tx> = &'tx [u8];
 
     #[inline]
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        tx: Self::Resource<'tx>,
+        tx: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
         self.protocol_txs.try_dump(DumpResource::Space(tx))
     }

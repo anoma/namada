@@ -181,7 +181,7 @@ where
     pub fn validate_bp_roots_vext_list<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<bridge_pool_roots::Vext>>
-            + 'iter,
+        + 'iter,
     ) -> impl Iterator<
         Item = std::result::Result<
             (token::Amount, Signed<bridge_pool_roots::Vext>),
@@ -203,7 +203,7 @@ where
     pub fn filter_invalid_bp_roots_vexts<'iter>(
         &'iter self,
         vote_extensions: impl IntoIterator<Item = Signed<bridge_pool_roots::Vext>>
-            + 'iter,
+        + 'iter,
     ) -> impl Iterator<Item = (token::Amount, Signed<bridge_pool_roots::Vext>)> + 'iter
     {
         self.validate_bp_roots_vext_list(vote_extensions)
@@ -290,7 +290,6 @@ mod test_bp_vote_extensions {
     };
     use namada::proto::{SignableEthMessage, Signed};
     use namada::tendermint_proto::abci::VoteInfo;
-    use namada::tendermint_proto::types::Validator;
     #[cfg(not(feature = "abcipp"))]
     use namada::types::ethereum_events::Uint;
     #[cfg(not(feature = "abcipp"))]

@@ -166,7 +166,7 @@ where
     pub fn validate_valset_upd_vext_list(
         &self,
         vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
-            + 'static,
+        + 'static,
     ) -> impl Iterator<
         Item = std::result::Result<
             (token::Amount, validator_set_update::SignedVext),
@@ -187,7 +187,7 @@ where
     pub fn filter_invalid_valset_upd_vexts(
         &self,
         vote_extensions: impl IntoIterator<Item = validator_set_update::SignedVext>
-            + 'static,
+        + 'static,
     ) -> impl Iterator<Item = (token::Amount, validator_set_update::SignedVext)> + '_
     {
         self.validate_valset_upd_vext_list(vote_extensions)
@@ -563,7 +563,7 @@ mod test_vote_extensions {
 
         // validators from the current epoch sign over validator
         // set of the next epoch
-        assert_eq!(shell.wl_storage.storage.get_current_epoch().0 .0, 0);
+        assert_eq!(shell.wl_storage.storage.get_current_epoch().0.0, 0);
 
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
@@ -619,21 +619,25 @@ mod test_vote_extensions {
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
-        assert!(shell
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
-            .is_err());
+        assert!(
+            shell
+                .wl_storage
+                .pos_queries()
+                .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
+                .is_err()
+        );
         let prev_epoch = shell.wl_storage.storage.get_current_epoch().0 - 1;
-        assert!(shell
-            .shell
-            .wl_storage
-            .pos_queries()
-            .get_validator_from_protocol_pk(
-                &protocol_key.ref_to(),
-                Some(prev_epoch)
-            )
-            .is_ok());
+        assert!(
+            shell
+                .shell
+                .wl_storage
+                .pos_queries()
+                .get_validator_from_protocol_pk(
+                    &protocol_key.ref_to(),
+                    Some(prev_epoch)
+                )
+                .is_ok()
+        );
 
         assert!(shell.validate_valset_upd_vext(vote_ext, signing_epoch));
     }

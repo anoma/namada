@@ -1,21 +1,20 @@
 use std::marker::PhantomData;
 
-use crate::node::ledger::shell::block_alloc::BlockResources;
-
 use super::super::{AllocFailure, BlockAllocator, DumpResource, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
     EncryptedTxBatchAllocator, NextStateImpl, TryAlloc, WithEncryptedTxs,
     WithoutEncryptedTxs,
 };
+use crate::node::ledger::shell::block_alloc::BlockResources;
 
 impl TryAlloc for BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
     type Resource<'tx> = BlockResources<'tx>;
 
     #[inline]
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        resource_required: Self::Resource<'tx>,
+        resource_required: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
         self.encrypted_txs
             .space
@@ -43,9 +42,9 @@ impl TryAlloc
     type Resource<'tx> = BlockResources<'tx>;
 
     #[inline]
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        _resource_required: Self::Resource<'tx>,
+        _resource_required: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
         Err(AllocFailure::Rejected {
             bin_resource_left: 0,
@@ -98,9 +97,9 @@ impl TryAlloc for EncryptedTxBatchAllocator {
     type Resource<'tx> = BlockResources<'tx>;
 
     #[inline]
-    fn try_alloc<'tx>(
+    fn try_alloc(
         &mut self,
-        resource_required: Self::Resource<'tx>,
+        resource_required: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
         match self {
             EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {

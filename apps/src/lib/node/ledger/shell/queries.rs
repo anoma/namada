@@ -136,9 +136,6 @@ where
 #[cfg(test)]
 #[cfg(not(feature = "abcipp"))]
 mod test_queries {
-    use crate::facade::tendermint_proto::abci::VoteInfo;
-    use crate::node::ledger::shell::test_utils::get_pkh_from_address;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
     use namada::ledger::pos::PosQueries;
@@ -146,7 +143,10 @@ mod test_queries {
     use namada::types::storage::Epoch;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::VoteInfo;
     use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shell::test_utils::get_pkh_from_address;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     macro_rules! test_must_send_valset_upd {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {

@@ -326,5 +326,7 @@ impl TxEnv for Ctx {
     }
 
     fn charge_gas(&mut self, used_gas: u64) -> Result<(), Error> {
-        Ok(unsafe { namada_tx_charge_gas(used_gas) })}
+        unsafe { namada_tx_charge_gas(used_gas) };
+        Ok(())
+    }
 }

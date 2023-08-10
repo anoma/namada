@@ -1,7 +1,6 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::{signing, tx as sdk_tx};
-use namada::tendermint_rpc::HttpClient;
 use namada::types::control_flow::ProceedOrElse;
 
 use crate::cli;
@@ -237,7 +236,7 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
-                        let (mut tx, epoch, addr, pk, wrapper_pk) =
+                        let (mut tx, _epoch, addr, pk, wrapper_pk) =
                             bridge_pool::build_bridge_pool_tx(
                                 &client,
                                 &mut ctx.wallet,

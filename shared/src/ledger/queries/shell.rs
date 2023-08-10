@@ -93,15 +93,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use std::collections::BTreeMap;
-
     use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
     use namada_core::ledger::parameters;
     use namada_core::ledger::storage::TempWlStorage;
     use namada_core::types::transaction::DecryptedTx;
 
     use crate::ledger::protocol::{self, ShellParams};
-    use crate::ledger::storage::write_log::WriteLog;
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
     use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
@@ -117,7 +114,7 @@ where
     let mut tx_gas_meter = match tx.header().tx_type {
         TxType::Wrapper(wrapper) => {
             let mut tx_gas_meter =
-                TxGasMeter::new(wrapper.gas_limit.to_owned().into());
+                TxGasMeter::new(wrapper.gas_limit.to_owned());
             protocol::apply_wrapper_tx(
                 &wrapper,
                 None,
@@ -137,8 +134,9 @@ where
             temp_wl_storage.write_log.commit_tx();
             cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
-            // NOTE: the encryption key for a dry-run should always be an hardcoded, dummy one
-            let privkey =
+            // NOTE: the encryption key for a dry-run should always be an
+            // hardcoded, dummy one
+            let _privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
             tx.update_header(TxType::Decrypted(
                 DecryptedTx::Decrypted { #[cfg(not(feature = "mainnet"))]
@@ -149,7 +147,8 @@ where
             TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
         }
         TxType::Protocol(_) | TxType::Decrypted(_) => {
-            // If dry run only the inner tx, use the max block gas as the gas limit
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
             TxGasMeter::new(
                 ctx.wl_storage
                     .read(&parameters::storage::get_max_block_gas_key())
@@ -164,7 +163,8 @@ where
                 has_valid_pow: true,
             }));
 
-            // If dry run only the inner tx, use the max block gas as the gas limit
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
             TxGasMeter::new(
                 ctx.wl_storage
                     .read(&parameters::storage::get_max_block_gas_key())
@@ -194,7 +194,8 @@ where
         ))?;
     // Account gas for both inner and wrapper (if available)
     data.gas_used = cumulated_gas;
-    // NOTE: the keys changed by the wrapper transaction (if any) are not returned from this function
+    // NOTE: the keys changed by the wrapper transaction (if any) are not
+    // returned from this function
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {
         data,

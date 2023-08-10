@@ -16,11 +16,10 @@ use namada::ledger::storage::{
 use namada::proof_of_stake::pos_queries::PosQueries;
 use namada::proof_of_stake::types::WeightedValidator;
 use namada::proof_of_stake::{
-    read_consensus_validator_set_addresses_with_stake, read_pos_params,
+    read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
 use namada::tendermint_proto::abci::VoteInfo;
-use namada::tendermint_proto::types::Validator;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::hash::Hash;

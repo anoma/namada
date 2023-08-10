@@ -1,21 +1,19 @@
 //! The ledger's protocol
-use std::collections::{BTreeMap, BTreeSet};
-
+use std::collections::BTreeSet;
 use std::panic;
 
 use borsh::BorshSerialize;
+use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::{TxGasMeter, Gas};
-use namada_core::types::storage::Key;
-use namada_core::proto::Section;
-use namada_core::ledger::storage::TempWlStorage;
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
-use namada_core::types::hash::Hash;
+use namada_core::ledger::gas::TxGasMeter;
 use namada_core::ledger::storage::wl_storage::WriteLogAndStorage;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::proto::Section;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::Key;
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::WrapperTx;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator, Empty};
-use eyre::{eyre, WrapErr};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::gas::{self, GasMetering, VpGasMeter};
@@ -29,17 +27,15 @@ use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pos::{self, PosVP};
-use crate::ledger::replay_protection;
 use crate::ledger::storage::write_log::WriteLog;
-use crate::ledger::storage_api;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
+use crate::ledger::{replay_protection, storage_api};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::hash;
-use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::protocol::{EthereumTxData, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use crate::types::{hash, storage};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
@@ -101,25 +97,29 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     WLS: WriteLogAndStorage + StorageRead,
 {
-        tx_gas_meter: &'a mut TxGasMeter,
-        wl_storage: &'a mut WLS,
-        vp_wasm_cache: &'a mut VpCache<CA>,
-        tx_wasm_cache: &'a mut TxCache<CA>,
+    tx_gas_meter: &'a mut TxGasMeter,
+    wl_storage: &'a mut WLS,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
 }
 
 impl<'a, CA, WLS> ShellParams<'a, CA, WLS>
 where
-    
     CA: 'static + WasmCacheAccess + Sync,
     WLS: WriteLogAndStorage + StorageRead,
- {
+{
     /// Create a new instance of `ShellParams`
-    pub fn new(tx_gas_meter: &'a mut TxGasMeter,  wl_storage: &'a mut WLS, vp_wasm_cache: &'a mut VpCache<CA>, tx_wasm_cache: &'a mut TxCache<CA>) -> Self {
+    pub fn new(
+        tx_gas_meter: &'a mut TxGasMeter,
+        wl_storage: &'a mut WLS,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    ) -> Self {
         Self {
             tx_gas_meter,
             wl_storage,
             vp_wasm_cache,
-            tx_wasm_cache
+            tx_wasm_cache,
         }
     }
 }
@@ -137,10 +137,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: Tx,
-    tx_bytes: &'a[u8],
+    tx_bytes: &'a [u8],
     tx_index: TxIndex,
     tx_gas_meter: &'a mut TxGasMeter,
-    wl_storage: &'a mut WlStorage<D, H>, 
+    wl_storage: &'a mut WlStorage<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     block_proposer: Option<&'a Address>,
@@ -159,8 +159,8 @@ where
         }) => apply_wasm_tx(
             tx,
             &tx_index,
-            ShellParams{
-                tx_gas_meter ,
+            ShellParams {
+                tx_gas_meter,
                 wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -172,13 +172,27 @@ where
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
         TxType::Wrapper(ref wrapper) => {
-            let masp_transaction = wrapper.unshield_section_hash.map(|ref hash| tx.get_section(hash).map(|section| if let Section::MaspTx(transaction) = section.as_ref() { Some(transaction.to_owned()) } else { None }).flatten()).flatten();
+            let masp_transaction =
+                wrapper.unshield_section_hash.and_then(|ref hash| {
+                    tx.get_section(hash).and_then(|section| {
+                        if let Section::MaspTx(transaction) = section.as_ref() {
+                            Some(transaction.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                });
 
             let changed_keys = apply_wrapper_tx(
                 wrapper,
                 masp_transaction,
                 tx_bytes,
-                ShellParams { tx_gas_meter, wl_storage, vp_wasm_cache, tx_wasm_cache },
+                ShellParams {
+                    tx_gas_meter,
+                    wl_storage,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
                 block_proposer,
                 #[cfg(not(feature = "mainnet"))]
                 has_valid_pow,
@@ -191,24 +205,27 @@ where
                 ibc_events: BTreeSet::default(),
             })
         }
-        TxType::Decrypted(DecryptedTx::Undecryptable) => Ok(TxResult::default()) 
+        TxType::Decrypted(DecryptedTx::Undecryptable) => {
+            Ok(TxResult::default())
+        }
     }
 }
 
-    /// Load the wasm hash for a transfer from storage.
-    ///
-    /// # Panics
-    /// If the transaction hash is not found in storage
-    pub fn get_transfer_hash_from_storage<S>(storage: &S) -> Hash
-where S: StorageRead{
-        let transfer_code_name_key =
-            Key::wasm_code_name("tx_transfer.wasm".to_string());
-            storage
-            .read(&transfer_code_name_key)
-            .expect("Could not read the storage")
-            .expect("Expected tx transfer hash in storage")
-
-    }
+/// Load the wasm hash for a transfer from storage.
+///
+/// # Panics
+/// If the transaction hash is not found in storage
+pub fn get_transfer_hash_from_storage<S>(storage: &S) -> Hash
+where
+    S: StorageRead,
+{
+    let transfer_code_name_key =
+        Key::wasm_code_name("tx_transfer.wasm".to_string());
+    storage
+        .read(&transfer_code_name_key)
+        .expect("Could not read the storage")
+        .expect("Expected tx transfer hash in storage")
+}
 
 /// Performs the required operation on a wrapper transaction:
 ///  - replay protection
@@ -228,17 +245,21 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H=H>,
+    WLS: WriteLogAndStorage<D = D, H = H>,
 {
     let mut changed_keys = BTreeSet::default();
     let mut tx: Tx = tx_bytes.try_into().unwrap();
 
-    // Writes wrapper tx hash to block write log (changes must be persisted even in case of failure)
-    let wrapper_hash_key = 
-replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
-        shell_params.wl_storage.write(&wrapper_hash_key, ()).expect("Error while writing tx hash to storage");
-        changed_keys.insert(wrapper_hash_key);
-     
+    // Writes wrapper tx hash to block write log (changes must be persisted even
+    // in case of failure)
+    let wrapper_hash_key =
+        replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
+    shell_params
+        .wl_storage
+        .write(&wrapper_hash_key, ())
+        .expect("Error while writing tx hash to storage");
+    changed_keys.insert(wrapper_hash_key);
+
     // Charge fee before performing any fallible operations
     charge_fee(
         wrapper,
@@ -254,15 +275,20 @@ replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
     shell_params.tx_gas_meter.add_tx_size_gas(tx_bytes)?;
 
     // If wrapper was succesful, write inner tx hash to storage
-    let inner_hash_key= 
-replay_protection::get_tx_hash_key(&hash::Hash(tx.update_header(TxType::Raw).header_hash().0));
-        shell_params.wl_storage.write(&inner_hash_key, ()).expect("Error while writing tx hash to storage");
-        changed_keys.insert(inner_hash_key); 
-    
+    let inner_hash_key = replay_protection::get_tx_hash_key(&hash::Hash(
+        tx.update_header(TxType::Raw).header_hash().0,
+    ));
+    shell_params
+        .wl_storage
+        .write(&inner_hash_key, ())
+        .expect("Error while writing tx hash to storage");
+    changed_keys.insert(inner_hash_key);
+
     Ok(changed_keys)
 }
 
-/// Charge fee for the provided wrapper transaction. In ABCI returns an error if the balance of the block proposer overflows. In ABCI plus returns error if:
+/// Charge fee for the provided wrapper transaction. In ABCI returns an error if
+/// the balance of the block proposer overflows. In ABCI plus returns error if:
 /// - The unshielding fails
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
@@ -270,7 +296,7 @@ replay_protection::get_tx_hash_key(&hash::Hash(tx.update_header(TxType::Raw).hea
 pub fn charge_fee<'a, D, H, CA, WLS>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    shell_params: &mut ShellParams<'a, CA, WLS>, 
+    shell_params: &mut ShellParams<'a, CA, WLS>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     block_proposer: Option<&Address>,
     changed_keys: &mut BTreeSet<Key>,
@@ -279,22 +305,23 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H> 
+    WLS: WriteLogAndStorage<D = D, H = H>,
 {
-    let (  wl_storage, vp_wasm_cache, tx_wasm_cache) = match shell_params {
-     ShellParams {tx_gas_meter: _,  wl_storage, vp_wasm_cache, tx_wasm_cache} => (
-            wl_storage,
-            vp_wasm_cache,
-            tx_wasm_cache
-        )};
+    let ShellParams {
+        tx_gas_meter: _,
+        wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    } = shell_params;
 
     // Unshield funds if requested
-        let unexpected_unshielding_tx =    if let Some(transaction ) = masp_transaction {
+    let unexpected_unshielding_tx = if let Some(transaction) = masp_transaction
+    {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
             TxGasMeter::new(
-                wl_storage 
+                wl_storage
                     .read::<u64>(
                         &namada_core::ledger::parameters::storage::get_fee_unshielding_gas_limit_key(
                         ),
@@ -307,91 +334,115 @@ where
             *wl_storage,
             &wrapper.fee.token,
             &wrapper.fee_payer(),
-        ).map_err(|e| Error::FeeError(e.to_string()))?;
-            let unshield_amount = wrapper
-                .get_tx_fee().map_err(|e| Error::FeeUnshieldingError(e))?
-                .checked_sub(transparent_balance)
-                .and_then(|v| if v.is_zero() { None } else { Some(v) });
+        )
+        .map_err(|e| Error::FeeError(e.to_string()))?;
+        let unshield_amount = wrapper
+            .get_tx_fee()
+            .map_err(Error::FeeUnshieldingError)?
+            .checked_sub(transparent_balance)
+            .and_then(|v| if v.is_zero() { None } else { Some(v) });
 
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
         if let Some(unshield_amount) = unshield_amount {
-        match wrapper.generate_fee_unshielding(
-            unshield_amount,
-            get_transfer_hash_from_storage(*wl_storage),
-                transaction
-        ) {
-            Ok(fee_unshielding_tx) => {
-                // NOTE: A clean tx write log must be provided to this call for a correct vp validation. Block write log, instead, should contain any prior changes (if any)
+            match wrapper.generate_fee_unshielding(
+                unshield_amount,
+                get_transfer_hash_from_storage(*wl_storage),
+                transaction,
+            ) {
+                Ok(fee_unshielding_tx) => {
+                    // NOTE: A clean tx write log must be provided to this call
+                    // for a correct vp validation. Block write log, instead,
+                    // should contain any prior changes (if any)
                     wl_storage.write_log_mut().precommit_tx();
-                match apply_wasm_tx(
+                    match apply_wasm_tx(
                         fee_unshielding_tx,
-                    &TxIndex::default(),
-                        ShellParams { tx_gas_meter: &mut tx_gas_meter,  wl_storage: *wl_storage , vp_wasm_cache , tx_wasm_cache  },
-    #[cfg(not(feature = "mainnet"))] false,
-                    
-                ) {
-                    Ok(result) => {
-                            //NOTE: do not commit yet cause this could be exploited to get free unshieldings
+                        &TxIndex::default(),
+                        ShellParams {
+                            tx_gas_meter: &mut tx_gas_meter,
+                            wl_storage: *wl_storage,
+                            vp_wasm_cache,
+                            tx_wasm_cache,
+                        },
+                        #[cfg(not(feature = "mainnet"))]
+                        false,
+                    ) {
+                        Ok(result) => {
+                            // NOTE: do not commit yet cause this could be
+                            // exploited to get free unshieldings
                             if !result.is_accepted() {
+                                wl_storage.write_log_mut().drop_tx();
+                                tracing::error!(
+                                    "The unshielding tx is invalid, some VPs \
+                                     rejected it: {:#?}",
+                                    result.vps_result.rejected_vps
+                                );
+                            }
+                        }
+                        Err(e) => {
                             wl_storage.write_log_mut().drop_tx();
                             tracing::error!(
-                                "The unshielding tx is invalid, some VPs \
-                                     rejected it: {:#?}",
-                                result.vps_result.rejected_vps
+                                "The unshielding tx is invalid, wasm run \
+                                 failed: {}",
+                                e
                             );
                         }
                     }
-                    Err(e) => {
-                        wl_storage.write_log_mut().drop_tx();
-                        tracing::error!(
-                            "The unshielding tx is invalid, wasm run \
-                                 failed: {}",
-                            e
-                        );
-                    }
                 }
+                Err(e) => tracing::error!("{}", e),
             }
-            Err(e) => tracing::error!("{}", e), 
-        }
             false
         } else {
-
-        true}
+            true
+        }
     } else {
         false
     };
 
-           // Charge or check fees
+    // Charge or check fees
     match block_proposer {
-        Some(proposer) => transfer_fee(*wl_storage, proposer, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?,
-        None => check_fees(*wl_storage, #[cfg(not(feature = "mainnet"))]has_valid_pow, &wrapper)?
-        }
+        Some(proposer) => transfer_fee(
+            *wl_storage,
+            proposer,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+            wrapper,
+        )?,
+        None => check_fees(
+            *wl_storage,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+            wrapper,
+        )?,
+    }
 
     changed_keys.extend(wl_storage.write_log_mut().get_keys_with_precommit());
 
     // Commit tx write log even in case of subsequent errors
     wl_storage.write_log_mut().commit_tx();
 
-    if unexpected_unshielding_tx{
-        Err(Error::FeeUnshieldingError(namada_core::types::transaction::WrapperTxErr::InvalidUnshield("Found unnecessary unshielding tx attached".to_string())))
+    if unexpected_unshielding_tx {
+        Err(Error::FeeUnshieldingError(
+            namada_core::types::transaction::WrapperTxErr::InvalidUnshield(
+                "Found unnecessary unshielding tx attached".to_string(),
+            ),
+        ))
     } else {
         Ok(())
     }
-
-
 }
 
-/// Perform the actual transfer of fess from the fee payer to the block proposer.
-pub fn transfer_fee<WLS>( 
+/// Perform the actual transfer of fess from the fee payer to the block
+/// proposer.
+pub fn transfer_fee<WLS>(
     wl_storage: &mut WLS,
-    block_proposer: &Address, 
+    block_proposer: &Address,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
-) -> Result<()> 
+) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead
+    WLS: WriteLogAndStorage + StorageRead,
 {
     let balance = storage_api::token::read_balance(
         wl_storage,
@@ -403,13 +454,14 @@ where
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             if balance.checked_sub(fees).is_some() {
-        token_transfer(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            block_proposer,
-            fees,
-        ).map_err(|e| Error::FeeError(e.to_string()))
+                token_transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    fees,
+                )
+                .map_err(|e| Error::FeeError(e.to_string()))
             } else {
                 // Balance was insufficient for fee payment
                 #[cfg(not(feature = "mainnet"))]
@@ -418,104 +470,133 @@ where
                 let reject = true;
 
                 if reject {
-                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+                    #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
                     {
-                        // Move all the available funds in the transparent balance of the fee payer
-        token_transfer(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            block_proposer,
-            balance,
-        ).map_err(|e| Error::FeeError(e.to_string()))?;
+                        // Move all the available funds in the transparent
+                        // balance of the fee payer
+                        token_transfer(
+                            wl_storage,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                            block_proposer,
+                            balance,
+                        )
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
 
-
-                        return Err(Error::FeeError("Transparent balance of wrapper's signer was insufficient to pay fee. All the available transparent funds have been moved to the block proposer".to_string()));
+                        return Err(Error::FeeError(
+                            "Transparent balance of wrapper's signer was \
+                             insufficient to pay fee. All the available \
+                             transparent funds have been moved to the block \
+                             proposer"
+                                .to_string(),
+                        ));
                     }
-                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
-                    return Err(Error::FeeError("Insufficient transparent balance to pay fees"
-                        .to_string()));
+                    #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+                    return Err(Error::FeeError(
+                        "Insufficient transparent balance to pay fees"
+                            .to_string(),
+                    ));
                 } else {
-                    tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
+                    tracing::debug!(
+                        "Balance was insufficient for fee payment but a valid \
+                         PoW was provided"
+                    );
                     Ok(())
                 }
             }
         }
         Err(e) => {
             // Fee overflow
-                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+            #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
             {
-                // Move all the available funds in the transparent balance of the fee payer
-token_transfer(
-            wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-            block_proposer,
-            balance,
-        ).map_err(|e| Error::FeeError(e.to_string()))?;
+                // Move all the available funds in the transparent balance of
+                // the fee payer
+                token_transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    balance,
+                )
+                .map_err(|e| Error::FeeError(e.to_string()))?;
 
-
-                return Err(Error::FeeError(
-                    format!("{}. All the available transparent funds have been moved to the block proposer", e
+                return Err(Error::FeeError(format!(
+                    "{}. All the available transparent funds have been moved \
+                     to the block proposer",
+                    e
                 )));
             }
 
-                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+            #[cfg(any(feature = "abciplus", feature = "abcipp"))]
             return Err(Error::FeeError(e.to_string()));
         }
-}
+    }
 }
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
 /// insufficient balance or if the transfer the `dest` would overflow (This can
-/// only happen if the total supply does't fit in `token::Amount`). Contrary to `storage_api::token::transfer` this function updates the tx write log and not the block write log.
+/// only happen if the total supply does't fit in `token::Amount`). Contrary to
+/// `storage_api::token::transfer` this function updates the tx write log and
+/// not the block write log.
 fn token_transfer<WLS>(
-    wl_storage: &mut WLS,    token: &Address,
+    wl_storage: &mut WLS,
+    token: &Address,
     src: &Address,
     dest: &Address,
-    amount: Amount
-) -> Result<()> 
+    amount: Amount,
+) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead
-    {
-    
+    WLS: WriteLogAndStorage + StorageRead,
+{
     let src_key = namada_core::types::token::balance_key(token, src);
-    let src_balance = namada_core::ledger::storage_api::token::read_balance(wl_storage, token, src).expect("Token balance read in protocol must not fail");
+    let src_balance = namada_core::ledger::storage_api::token::read_balance(
+        wl_storage, token, src,
+    )
+    .expect("Token balance read in protocol must not fail");
     match src_balance.checked_sub(amount) {
         Some(new_src_balance) => {
             if src == dest {
                 return Ok(());
             }
             let dest_key = namada_core::types::token::balance_key(token, dest);
-            let dest_balance = namada_core::ledger::storage_api::token::read_balance(wl_storage, token, dest).expect("Token balance read in protocol must not fail");
+            let dest_balance =
+                namada_core::ledger::storage_api::token::read_balance(
+                    wl_storage, token, dest,
+                )
+                .expect("Token balance read in protocol must not fail");
             match dest_balance.checked_add(amount) {
                 Some(new_dest_balance) => {
-                    wl_storage.write_log_mut().write(&src_key, new_src_balance.try_to_vec().unwrap()).map_err(|e| Error::FeeError(e.to_string()))?;
-                    match wl_storage.write_log_mut().write(&dest_key, new_dest_balance.try_to_vec().unwrap()) {
+                    wl_storage
+                        .write_log_mut()
+                        .write(&src_key, new_src_balance.try_to_vec().unwrap())
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
+                    match wl_storage.write_log_mut().write(
+                        &dest_key,
+                        new_dest_balance.try_to_vec().unwrap(),
+                    ) {
                         Ok(_) => Ok(()),
-                        Err(e) => Err(Error::FeeError(e.to_string()))
-                    }}
+                        Err(e) => Err(Error::FeeError(e.to_string())),
+                    }
+                }
                 None => Err(Error::FeeError(
-                    "The transfer would overflow destination balance".to_string(),
+                    "The transfer would overflow destination balance"
+                        .to_string(),
                 )),
             }
         }
-        None => {
-            Err(Error::FeeError("Insufficient source balance".to_string()))
-        }
+        None => Err(Error::FeeError("Insufficient source balance".to_string())),
     }
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
-pub fn check_fees<WLS>( 
+pub fn check_fees<WLS>(
     wl_storage: &WLS,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool, 
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
-) -> Result<()> 
+) -> Result<()>
 where
-    WLS: WriteLogAndStorage + StorageRead
+    WLS: WriteLogAndStorage + StorageRead,
 {
-    
     let balance = storage_api::token::read_balance(
         wl_storage,
         &wrapper.fee.token,
@@ -523,26 +604,30 @@ where
     )
     .unwrap();
 
-    let fees = wrapper.get_tx_fee().map_err(|e| Error::FeeError(e.to_string()))?;
+    let fees = wrapper
+        .get_tx_fee()
+        .map_err(|e| Error::FeeError(e.to_string()))?;
 
     if balance.checked_sub(fees).is_some() {
         Ok(())
     } else {
-        
-                // Balance was insufficient for fee payment
-                #[cfg(not(feature = "mainnet"))]
-                let reject = !has_valid_pow;
-                #[cfg(feature = "mainnet")]
-                let reject = true;
+        // Balance was insufficient for fee payment
+        #[cfg(not(feature = "mainnet"))]
+        let reject = !has_valid_pow;
+        #[cfg(feature = "mainnet")]
+        let reject = true;
 
         if reject {
-            Err(Error::FeeError("Insufficient transparent balance to pay fees".to_string()))
+            Err(Error::FeeError(
+                "Insufficient transparent balance to pay fees".to_string(),
+            ))
         } else {
-            
-                    tracing::debug!("Balance was insufficient for fee payment but a valid PoW was provided");
-                    Ok(())
+            tracing::debug!(
+                "Balance was insufficient for fee payment but a valid PoW was \
+                 provided"
+            );
+            Ok(())
         }
-
     }
 }
 
@@ -558,24 +643,25 @@ where
     CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    WLS: WriteLogAndStorage<D = D, H = H>
+    WLS: WriteLogAndStorage<D = D, H = H>,
 {
-    let (tx_gas_meter,  storage, write_log, vp_wasm_cache, tx_wasm_cache) =
-        match shell_params {
-            ShellParams{
-                tx_gas_meter ,
-                wl_storage,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            } => {
-                let (write_log, storage) = wl_storage.split_borrow();
-                (
-                tx_gas_meter,
-storage,write_log,                vp_wasm_cache,
-                tx_wasm_cache,
-            )
-            }
-        };
+    let ShellParams {
+        tx_gas_meter,
+        wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    } = shell_params;
+
+    let (tx_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) = {
+        let (write_log, storage) = wl_storage.split_borrow();
+        (
+            tx_gas_meter,
+            storage,
+            write_log,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        )
+    };
 
     let verifiers = execute_tx(
         &tx,

@@ -15,7 +15,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::Amount;
-use namada_core::types::address::{masp, masp_tx_key, Address};
+use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
 use namada_proof_of_stake::parameters::PosParams;
@@ -240,6 +240,7 @@ impl ProcessTxResponse {
 
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
+#[allow(clippy::too_many_arguments)]
 pub async fn prepare_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -339,9 +340,9 @@ pub async fn process_tx<
             wrapper_hash,
             decrypted_hash,
         };
-        //TODO: implement the code to resubmit the wrapper if it fails because of masp epoch
-        // Either broadcast or submit transaction and collect result into
-        // sum type
+        // TODO: implement the code to resubmit the wrapper if it fails because
+        // of masp epoch Either broadcast or submit transaction and
+        // collect result into sum type
         if args.broadcast_only {
             broadcast_tx(client, &to_broadcast)
                 .await
@@ -415,7 +416,7 @@ pub async fn is_reveal_pk_needed<
     V: ShieldedUtils,
 >(
     client: &C,
-    shielded: &mut ShieldedContext<V>,
+    _shielded: &mut ShieldedContext<V>,
     public_key: &common::PublicKey,
     args: &args::Tx,
 ) -> Result<bool, Error>
@@ -1556,7 +1557,8 @@ pub async fn build_transfer<
         if let Address::Implicit(_) = source {
             Some(new_balance)
         } else {
-            // Fees will be paid by the underlying implicit account or by the wrapper signer if the signer of the inner tx is masp
+            // Fees will be paid by the underlying implicit account or by the
+            // wrapper signer if the signer of the inner tx is masp
             None
         }
     };
@@ -1671,15 +1673,20 @@ pub async fn build_transfer<
     // Manage the two masp epochs
     let masp_epoch = match (unshielding_epoch, shielded_tx_epoch) {
         (Some(fee_unshield_epoch), Some(transfer_unshield_epoch)) => {
-            // If the two masp epochs are different, either the wrapper or the inner tx will fail, so abort tx creation
+            // If the two masp epochs are different, either the wrapper or the
+            // inner tx will fail, so abort tx creation
             if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
-                return Err(Error::Other("Fee unshilding masp tx and inner tx masp transaction were crafted on an epoch boundary".to_string()));
+                return Err(Error::Other(
+                    "Fee unshilding masp tx and inner tx masp transaction \
+                     were crafted on an epoch boundary"
+                        .to_string(),
+                ));
             }
             // Take the smaller of the two epochs
             Some(fee_unshield_epoch.min(transfer_unshield_epoch))
         }
-        (Some(fee_unshielding_epoch), None) => unshielding_epoch,
-        (None, Some(transfer_unshield_epoch)) => shielded_tx_epoch,
+        (Some(_fee_unshielding_epoch), None) => unshielding_epoch,
+        (None, Some(_transfer_unshield_epoch)) => shielded_tx_epoch,
         (None, None) => None,
     };
     Ok((

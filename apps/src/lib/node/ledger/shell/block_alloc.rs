@@ -7,7 +7,7 @@
 //!
 //! The code in this module doesn't perform any deserializing to
 //! verify if we are, in fact, allocating space for the correct
-//! kind of tx for the current [`BlockSpaceAllocator`] state. It
+//! kind of tx for the current [`BlockAllocator`] state. It
 //! is up to `PrepareProposal` to dispatch the correct kind of tx
 //! into the current state of the allocator.
 //!
@@ -31,7 +31,9 @@
 //!
 //! # How gas is allocated
 //!
-//! Gas is only relevant to DKG encrypted txs. Every encrypted tx define its gas limit. We take this entire gas limit as the amount of gas requested by the tx.
+//! Gas is only relevant to DKG encrypted txs. Every encrypted tx define its gas
+//! limit. We take this entire gas limit as the amount of gas requested by the
+//! tx.
 
 pub mod states;
 
@@ -101,10 +103,10 @@ impl<'tx> BlockResources<'tx> {
 ///
 /// We keep track of the current gas utilized by:
 ///
-///   - DKG encrypted transactions.  
+///   - DKG encrypted transactions.
 #[derive(Debug, Default)]
 pub struct BlockAllocator<State> {
-    /// The current state of the [`BlockSpaceAllocator`] state machine.
+    /// The current state of the [`BlockAllocator`] state machine.
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
@@ -138,7 +140,8 @@ where
 
 impl<M> BlockAllocator<states::BuildingEncryptedTxBatch<M>> {
     /// Construct a new [`BlockAllocator`], with an upper bound
-    /// on the max size of all txs in a block defined by Tendermint and an upper bound on the max gas in a block.
+    /// on the max size of all txs in a block defined by Tendermint and an upper
+    /// bound on the max gas in a block.
     #[inline]
     pub fn init(
         tendermint_max_block_space_in_bytes: u64,
@@ -161,7 +164,7 @@ impl<State> BlockAllocator<State> {
     ///
     /// This is calculated based on the difference between the Tendermint
     /// block space for a given round and the sum of the allotted space
-    /// to each [`TxBin`] instance in a [`BlockSpaceAllocator`].
+    /// to each [`TxBin`] instance in a [`BlockAllocator`].
     #[inline]
     fn uninitialized_space_in_bytes(&self) -> u64 {
         let total_bin_space = self.protocol_txs.allotted
@@ -172,7 +175,8 @@ impl<State> BlockAllocator<State> {
 }
 
 /// Allotted resource for a batch of transactions of the same kind in some
-/// proposed block. At the moment this is used to track two resources of the block: space and gas. Space is measured in bytes while gas in gas units.
+/// proposed block. At the moment this is used to track two resources of the
+/// block: space and gas. Space is measured in bytes while gas in gas units.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct TxBin {
     /// The current resource utilization of the batch of transactions.
@@ -256,14 +260,29 @@ impl EncryptedTxsBins {
     }
 
     pub fn try_dump(&mut self, tx: &[u8], gas: u64) -> Result<(), String> {
-        self.space.try_dump(DumpResource::Space(tx)).map_err(|e| match e {
-            AllocFailure::Rejected { .. } => "No more space left in the block for wrapper txs".to_string(),
-            AllocFailure::OverflowsBin { .. } => "The given wrapper tx is larger than 1/3 of the available block space".to_string()
-        })?;
-        self.gas.try_dump(DumpResource::Gas(gas)).map_err(|e| match e {
-            AllocFailure::Rejected { .. } => "No more gas left in the block for wrapper txs".to_string(),
-            AllocFailure::OverflowsBin { .. } => "The given wrapper tx requires more gas than available to the entire block".to_string()
-        })
+        self.space
+            .try_dump(DumpResource::Space(tx))
+            .map_err(|e| match e {
+                AllocFailure::Rejected { .. } => "No more space left in the \
+                                                  block for wrapper txs"
+                    .to_string(),
+                AllocFailure::OverflowsBin { .. } => "The given wrapper tx is \
+                                                      larger than 1/3 of the \
+                                                      available block space"
+                    .to_string(),
+            })?;
+        self.gas
+            .try_dump(DumpResource::Gas(gas))
+            .map_err(|e| match e {
+                AllocFailure::Rejected { .. } => {
+                    "No more gas left in the block for wrapper txs".to_string()
+                }
+                AllocFailure::OverflowsBin { .. } => {
+                    "The given wrapper tx requires more gas than available to \
+                     the entire block"
+                        .to_string()
+                }
+            })
     }
 }
 
@@ -384,13 +403,13 @@ mod tests {
 
     proptest! {
         /// Check if we reject a tx when its respective bin
-        /// capacity has been reached on a [`BlockSpaceAllocator`].
+        /// capacity has been reached on a [`BlockAllocator`].
         #[test]
         fn test_reject_tx_on_bin_cap_reached(max in prop::num::u64::ANY) {
             proptest_reject_tx_on_bin_cap_reached(max)
         }
 
-        /// Check if the initial bin capcity of the [`BlockSpaceAllocator`]
+        /// Check if the initial bin capcity of the [`BlockAllocator`]
         /// is correct.
         #[test]
         fn test_initial_bin_capacity(max in prop::num::u64::ANY) {
@@ -468,10 +487,11 @@ mod tests {
             new_size < bin.allotted
         });
         for tx in encrypted_txs {
-            assert!(bins
-                .borrow_mut()
-                .try_alloc(BlockResources::new(&tx, 0))
-                .is_ok());
+            assert!(
+                bins.borrow_mut()
+                    .try_alloc(BlockResources::new(&tx, 0))
+                    .is_ok()
+            );
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -522,9 +542,9 @@ mod tests {
             }
     }
 
-    /// Return random bin sizes for a [`BlockSpaceAllocator`].
-    fn arb_max_bin_sizes(
-    ) -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
+    /// Return random bin sizes for a [`BlockAllocator`].
+    fn arb_max_bin_sizes()
+    -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
         const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
         (1..=MAX_BLOCK_SIZE_BYTES).prop_map(
             |tendermint_max_block_space_in_bytes| {

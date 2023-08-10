@@ -2,7 +2,6 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, Write};
 use std::iter::Iterator;

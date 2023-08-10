@@ -14,7 +14,9 @@ use syn::{parse_macro_input, ExprAssign, FnArg, ItemFn, ItemStruct, Pat};
 
 /// Generate WASM binding for a transaction main entrypoint function.
 ///
-/// It expects an attribute in the form: `gas = u64`, so that a call to the gas meter can be injected as the first instruction of the transaction to account for the whitelisted gas amount.
+/// It expects an attribute in the form: `gas = u64`, so that a call to the gas
+/// meter can be injected as the first instruction of the transaction to account
+/// for the whitelisted gas amount.
 ///
 /// This macro expects a function with signature:
 ///
@@ -88,7 +90,9 @@ pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Generate WASM binding for validity predicate main entrypoint function.
 ///
-/// It expects an attribute in the form: `gas = u64`, so that a call to the gas meter can be injected as the first instruction of the validity predicate to account for the whitelisted gas amount.
+/// It expects an attribute in the form: `gas = u64`, so that a call to the gas
+/// meter can be injected as the first instruction of the validity predicate to
+/// account for the whitelisted gas amount.
 ///
 /// This macro expects a function with signature:
 ///

@@ -253,17 +253,18 @@ pub(super) fn check_balance_changes(
         .read_pre_value::<Amount>(receiver)?
         .unwrap_or_default()
         .change();
-    let receiver_balance_post =
-        match reader.read_post_value::<Amount>(receiver)? {
-            Some(value) => value,
-            None => {
-                return Err(eyre!(
+    let receiver_balance_post = match reader
+        .read_post_value::<Amount>(receiver)?
+    {
+        Some(value) => value,
+        None => {
+            return Err(eyre!(
                 "Rejecting transaction as could not read_post balance key {}",
                 receiver,
             ));
-            }
         }
-        .change();
+    }
+    .change();
 
     let sender_balance_delta =
         calculate_delta(sender_balance_pre, sender_balance_post)?;
