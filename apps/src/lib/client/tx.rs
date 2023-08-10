@@ -1232,11 +1232,10 @@ where
         })
         .collect::<Vec<common::SecretKey>>();
 
-    if let Some(account_public_keys_map) = signing_data.account_public_keys_map {
-        let signatures = tx.compute_section_signature(
-            secret_keys,
-            &account_public_keys_map,
-        );
+    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
+    {
+        let signatures =
+            tx.compute_section_signature(secret_keys, &account_public_keys_map);
 
         for signature in &signatures {
             let filename = format!(
@@ -1252,8 +1251,11 @@ where
             let signature_path = File::create(&output_path)
                 .expect("Should be able to create signature file.");
 
-            serde_json::to_writer_pretty(signature_path, &signature.serialize())
-                .expect("Signature should be deserializable.");
+            serde_json::to_writer_pretty(
+                signature_path,
+                &signature.serialize(),
+            )
+            .expect("Signature should be deserializable.");
             println!(
                 "Signature for {} serialized at {}",
                 &account_public_keys_map

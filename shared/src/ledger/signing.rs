@@ -198,7 +198,9 @@ pub fn sign_tx<U: WalletUtils>(
             .map(|bytes| SignatureIndex::deserialize(bytes).unwrap())
             .collect();
         tx.add_signatures(signatures);
-    } else if let Some(account_public_keys_map) = signing_data.account_public_keys_map {
+    } else if let Some(account_public_keys_map) =
+        signing_data.account_public_keys_map
+    {
         let signing_tx_keypairs = signing_data
             .public_keys
             .iter()
