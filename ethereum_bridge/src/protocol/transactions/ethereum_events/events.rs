@@ -609,6 +609,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use assert_matches::assert_matches;
     use borsh::BorshSerialize;
     use eyre::Result;
@@ -648,21 +650,88 @@ mod tests {
             .expect("Test failed");
     }
 
+    /// Helper data structure to feed to [`init_bridge_pool_transfers`].
+    struct TransferData {
+        kind: eth_bridge_pool::TransferToEthereumKind,
+        gas_token: Address,
+    }
+
+    impl Default for TransferData {
+        fn default() -> Self {
+            Self {
+                kind: eth_bridge_pool::TransferToEthereumKind::Erc20,
+                gas_token: nam(),
+            }
+        }
+    }
+
+    /// Build [`TransferData`] values.
+    struct TransferDataBuilder {
+        kind: Option<eth_bridge_pool::TransferToEthereumKind>,
+        gas_token: Option<Address>,
+    }
+
+    #[allow(dead_code)]
+    impl TransferDataBuilder {
+        fn new() -> Self {
+            Self {
+                kind: None,
+                gas_token: None,
+            }
+        }
+
+        fn kind(
+            mut self,
+            kind: eth_bridge_pool::TransferToEthereumKind,
+        ) -> Self {
+            self.kind = Some(kind);
+            self
+        }
+
+        fn kind_erc20(self) -> Self {
+            self.kind(eth_bridge_pool::TransferToEthereumKind::Erc20)
+        }
+
+        fn kind_nut(self) -> Self {
+            self.kind(eth_bridge_pool::TransferToEthereumKind::Nut)
+        }
+
+        fn gas_token(mut self, address: Address) -> Self {
+            self.gas_token = Some(address);
+            self
+        }
+
+        fn gas_erc20(self, address: &EthAddress) -> Self {
+            self.gas_token(wrapped_erc20s::token(address))
+        }
+
+        fn gas_nut(self, address: &EthAddress) -> Self {
+            self.gas_token(wrapped_erc20s::nut(address))
+        }
+
+        fn build(self) -> TransferData {
+            TransferData {
+                kind: self.kind.unwrap_or_else(|| TransferData::default().kind),
+                gas_token: self
+                    .gas_token
+                    .unwrap_or_else(|| TransferData::default().gas_token),
+            }
+        }
+    }
+
     fn init_bridge_pool_transfers<A>(
         wl_storage: &mut TestWlStorage,
         assets_transferred: A,
     ) -> Vec<PendingTransfer>
     where
-        A: Into<
-            BTreeSet<(EthAddress, eth_bridge_pool::TransferToEthereumKind)>,
-        >,
+        A: Into<HashMap<EthAddress, TransferData>>,
     {
         let sender = address::testing::established_address_1();
         let payer = address::testing::established_address_2();
 
         // set pending transfers
         let mut pending_transfers = vec![];
-        for (i, (asset, kind)) in
+        for (i, (asset, TransferData { kind, gas_token })) in
             assets_transferred.into().into_iter().enumerate()
         {
             let transfer = PendingTransfer {
@@ -674,7 +743,7 @@ mod tests {
                     kind,
                 },
                 gas_fee: GasFee {
-                    token: nam(),
+                    token: gas_token,
                     amount: Amount::from(1),
                     payer: payer.clone(),
                 },
@@ -700,14 +769,16 @@ mod tests {
                 .map(|i| {
                     (
                         EthAddress([i; 20]),
-                        if i & 1 == 0 {
-                            eth_bridge_pool::TransferToEthereumKind::Erc20
-                        } else {
-                            eth_bridge_pool::TransferToEthereumKind::Nut
-                        },
+                        TransferDataBuilder::new()
+                            .kind(if i & 1 == 0 {
+                                eth_bridge_pool::TransferToEthereumKind::Erc20
+                            } else {
+                                eth_bridge_pool::TransferToEthereumKind::Nut
+                            })
+                            .build(),
                     )
                 })
-                .collect::<BTreeSet<_>>(),
+                .collect::<HashMap<_, _>>(),
         )
     }
 
@@ -970,14 +1041,36 @@ mod tests {
         let random_erc20_token = wrapped_erc20s::nut(&random_erc20);
         let random_erc20_2 = EthAddress([0xee; 20]);
         let random_erc20_token_2 = wrapped_erc20s::token(&random_erc20_2);
+        let random_erc20_3 = EthAddress([0xdd; 20]);
+        let random_erc20_token_3 = wrapped_erc20s::token(&random_erc20_3);
+        let random_erc20_4 = EthAddress([0xcc; 20]);
+        let random_erc20_token_4 = wrapped_erc20s::nut(&random_erc20_4);
+        let erc20_gas_addr = EthAddress([
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19,
+        ]);
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [
-                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Erc20),
-                (random_erc20, eth_bridge_pool::TransferToEthereumKind::Nut),
+                (native_erc20, TransferData::default()),
+                (random_erc20, TransferDataBuilder::new().kind_nut().build()),
                 (
                     random_erc20_2,
-                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    TransferDataBuilder::new().kind_erc20().build(),
+                ),
+                (
+                    random_erc20_3,
+                    TransferDataBuilder::new()
+                        .kind_erc20()
+                        .gas_erc20(&erc20_gas_addr)
+                        .build(),
+                ),
+                (
+                    random_erc20_4,
+                    TransferDataBuilder::new()
+                        .kind_nut()
+                        .gas_erc20(&erc20_gas_addr)
+                        .build(),
                 ),
             ],
         );
@@ -995,39 +1088,53 @@ mod tests {
             transfers,
             relayer: relayer.clone(),
         };
-        let payer_balance_key = balance_key(&nam(), &relayer);
-        let pool_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        let mut bp_balance_pre = Amount::try_from_slice(
+        let payer_nam_balance_key = balance_key(&nam(), &relayer);
+        let payer_erc_balance_key =
+            balance_key(&wrapped_erc20s::token(&erc20_gas_addr), &relayer);
+        let pool_nam_balance_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
+        let pool_erc_balance_key = balance_key(
+            &wrapped_erc20s::token(&erc20_gas_addr),
+            &BRIDGE_POOL_ADDRESS,
+        );
+        let mut bp_nam_balance_pre = Amount::try_from_slice(
             &wl_storage
-                .read_bytes(&pool_balance_key)
+                .read_bytes(&pool_nam_balance_key)
+                .expect("Test failed")
+                .expect("Test failed"),
+        )
+        .expect("Test failed");
+        let mut bp_erc_balance_pre = Amount::try_from_slice(
+            &wl_storage
+                .read_bytes(&pool_erc_balance_key)
                 .expect("Test failed")
                 .expect("Test failed"),
         )
         .expect("Test failed");
         let mut changed_keys = act_on(&mut wl_storage, event).unwrap();
 
-        assert!(
-            changed_keys.remove(&balance_key(
-                &random_erc20_token,
-                &BRIDGE_POOL_ADDRESS
-            ))
-        );
-        assert!(
-            changed_keys.remove(&balance_key(
-                &random_erc20_token_2,
-                &BRIDGE_POOL_ADDRESS
-            ))
-        );
+        for erc20 in [
+            random_erc20_token,
+            random_erc20_token_2,
+            random_erc20_token_3,
+            random_erc20_token_4,
+        ] {
+            assert!(
+                changed_keys.remove(&balance_key(&erc20, &BRIDGE_POOL_ADDRESS)),
+                "Expected {erc20:?} Bridge pool balance to change"
+            );
+            assert!(
+                changed_keys.remove(&minted_balance_key(&erc20)),
+                "Expected {erc20:?} minted supply to change"
+            );
+        }
         assert!(
             changed_keys
                 .remove(&minted_balance_key(&wrapped_erc20s::token(&wnam())))
         );
-        assert!(changed_keys.remove(&minted_balance_key(&random_erc20_token)));
-        assert!(
-            changed_keys.remove(&minted_balance_key(&random_erc20_token_2))
-        );
-        assert!(changed_keys.remove(&payer_balance_key));
-        assert!(changed_keys.remove(&pool_balance_key));
+        assert!(changed_keys.remove(&payer_nam_balance_key));
+        assert!(changed_keys.remove(&payer_erc_balance_key));
+        assert!(changed_keys.remove(&pool_nam_balance_key));
+        assert!(changed_keys.remove(&pool_erc_balance_key));
         assert!(changed_keys.remove(&get_nonce_key()));
         assert!(changed_keys.iter().all(|k| pending_keys.contains(k)));
 
@@ -1040,24 +1147,45 @@ mod tests {
             // NOTE: we should have one write -- the bridge pool nonce update
             1
         );
-        let relayer_balance = Amount::try_from_slice(
+        let relayer_nam_balance = Amount::try_from_slice(
             &wl_storage
-                .read_bytes(&payer_balance_key)
+                .read_bytes(&payer_nam_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
         )
         .expect("Test failed");
-        assert_eq!(relayer_balance, Amount::from(3));
-        let bp_balance_post = Amount::try_from_slice(
+        assert_eq!(relayer_nam_balance, Amount::from(3));
+        let relayer_erc_balance = Amount::try_from_slice(
             &wl_storage
-                .read_bytes(&pool_balance_key)
+                .read_bytes(&payer_erc_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
         )
         .expect("Test failed");
-        bp_balance_pre.spend(&bp_balance_post);
-        assert_eq!(bp_balance_pre, Amount::from(3));
-        assert_eq!(bp_balance_post, Amount::from(0));
+        assert_eq!(relayer_erc_balance, Amount::from(2));
+
+        let bp_nam_balance_post = Amount::try_from_slice(
+            &wl_storage
+                .read_bytes(&pool_nam_balance_key)
+                .expect("Test failed: read error")
+                .expect("Test failed: no value in storage"),
+        )
+        .expect("Test failed");
+        let bp_erc_balance_post = Amount::try_from_slice(
+            &wl_storage
+                .read_bytes(&pool_erc_balance_key)
+                .expect("Test failed: read error")
+                .expect("Test failed: no value in storage"),
+        )
+        .expect("Test failed");
+
+        bp_nam_balance_pre.spend(&bp_nam_balance_post);
+        assert_eq!(bp_nam_balance_pre, Amount::from(3));
+        assert_eq!(bp_nam_balance_post, Amount::from(0));
+
+        bp_erc_balance_pre.spend(&bp_erc_balance_post);
+        assert_eq!(bp_erc_balance_pre, Amount::from(2));
+        assert_eq!(bp_erc_balance_post, Amount::from(0));
     }
 
     #[test]
@@ -1272,30 +1400,30 @@ mod tests {
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [
-                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Erc20),
+                (native_erc20, TransferData::default()),
                 (
                     EthAddress([0xaa; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    TransferDataBuilder::new().kind_erc20().build(),
                 ),
                 (
                     EthAddress([0xbb; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                    TransferDataBuilder::new().kind_nut().build(),
                 ),
                 (
                     EthAddress([0xcc; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    TransferDataBuilder::new().kind_erc20().build(),
                 ),
                 (
                     EthAddress([0xdd; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                    TransferDataBuilder::new().kind_nut().build(),
                 ),
                 (
                     EthAddress([0xee; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    TransferDataBuilder::new().kind_erc20().build(),
                 ),
                 (
                     EthAddress([0xff; 20]),
-                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                    TransferDataBuilder::new().kind_nut().build(),
                 ),
             ],
         );
