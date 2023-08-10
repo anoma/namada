@@ -249,16 +249,16 @@ where
                         if let Err(msg) = protocol::charge_fee(
                             wrapper,
                             masp_transaction,
-                            &processed_tx.tx,
+                            ShellParams::new(
+                                TxGasMeter::new_from_sub_limit(u64::MAX),
+                                &mut self.wl_storage,
+                                &mut self.vp_wasm_cache,
+                                &mut self.tx_wasm_cache,
+                            ),
                             #[cfg(not(feature = "mainnet"))]
                             has_valid_pow,
                             Some(&native_block_proposer_address),
                             &mut BTreeSet::default(),
-                            &mut self.wl_storage.write_log,
-                            &self.wl_storage.storage,
-                            &mut BTreeSet::default(),
-                            &mut self.vp_wasm_cache,
-                            &mut self.tx_wasm_cache,
                         ) {
                             self.wl_storage.write_log.drop_tx();
                             tracing::error!(
