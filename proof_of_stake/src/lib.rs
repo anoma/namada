@@ -2198,6 +2198,7 @@ where
         delegator_redelegated_bonds_handle(source).at(validator);
 
     // `resultUnbonding`
+    // Find the bonds to fully unbond and one to partially unbond, if necessary
     let bonds_to_unbond = find_bonds_to_remove(
         storage,
         &bonds_handle.get_data_handler(),
@@ -2206,6 +2207,8 @@ where
     dbg!(&bonds_to_unbond);
 
     // `modifiedRedelegation`
+    // A bond may have both redelegated and non-redelegated tokens in it. If
+    // this is the case, compute the modified state of the redelegation.
     let modified_redelegation = match bonds_to_unbond.new_entry {
         Some((bond_epoch, new_bond_amount)) => {
             println!(
@@ -2229,19 +2232,18 @@ where
         None => ModifiedRedelegation::default(),
     };
 
+    // Compute the new unbonds eagerly
     // `keysUnbonds`
-    let unbond_keys = if let Some((start_epoch, _)) = bonds_to_unbond.new_entry
-    {
-        let mut to_remove = bonds_to_unbond.epochs.clone();
-        to_remove.insert(start_epoch);
-        to_remove
-    } else {
-        bonds_to_unbond.epochs.clone()
-    };
-
+    let bond_epochs_to_unbond =
+        if let Some((start_epoch, _)) = bonds_to_unbond.new_entry {
+            let mut to_remove = bonds_to_unbond.epochs.clone();
+            to_remove.insert(start_epoch);
+            to_remove
+        } else {
+            bonds_to_unbond.epochs.clone()
+        };
     // `newUnbonds`
-    // TODO: in-memory or directly into storage via Lazy?
-    let new_unbonds_map = unbond_keys
+    let new_unbonds_map = bond_epochs_to_unbond
         .into_iter()
         .map(|epoch| {
             let cur_bond_value = bonds_handle
@@ -2274,12 +2276,7 @@ where
     }
 
     // `updatedUnbonded`
-    // TODO: can this be combined with the previous step?
-    // TODO: figure out what I do here with both unbonds and unbond_records!
-    // It seems that if this unbond is not a redelegation, then we update the
-    // unbonds in storage with the `new_unbonds_map`. If it is a redelegation,
-    // then we don't do anything with this new map in storage.
-    // Yeah, we don't record unbonds for redelegations
+    // Update the unbonds in storage using the eager map computed above
     if !is_redelegation {
         for ((start_epoch, withdraw_epoch), unbond_amount) in
             new_unbonds_map.iter()
@@ -2297,13 +2294,6 @@ where
         }
     }
 
-    // NEW REDELEGATED UNBONDS
-    // NOTE: I think we only need to update the redelegated unbonds if this is
-    // NOT a redelegation
-    // We should do this regardless - the `is_redelegation` is to determine if
-    // the current call is from redelegation, but there might be redelegation
-    // already that's being unbonded or re-redelegated which is being updated
-    // here.
     // `newRedelegatedUnbonds`
     println!("\nDEBUGGING REDELEGATED UNBONDS\n");
     dbg!(
@@ -2683,6 +2673,8 @@ struct ModifiedRedelegation {
     new_amount: Option<token::Change>,
 }
 
+/// Used in `fn unbond_tokens` to compute the modified state of a redelegation
+/// if redelegated tokens are being unbonded.
 fn compute_modified_redelegation<S>(
     storage: &S,
     redelegated_bonds: &RedelegatedBonds,
@@ -2836,7 +2828,7 @@ type EagerRedelegatedUnbonds = BTreeMap<
 /// Check assumptions in the Quint spec namada-redelegation.qnt
 /// TODO: try to optimize this by only writing to storage via Lazy!
 fn compute_new_redelegated_unbonds<S>(
-    storage: &mut S,
+    storage: &S,
     redelegated_bonds: &NestedMap<Epoch, RedelegatedBonds>,
     epochs_to_remove: &HashSet<Epoch>,
     modified_redelegation: &ModifiedRedelegation,

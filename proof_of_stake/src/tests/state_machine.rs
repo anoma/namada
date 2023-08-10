@@ -31,14 +31,16 @@ use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
 use crate::tests::arb_params_and_genesis_validators;
 use crate::types::{
-    BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
-    SlashedAmount, ValidatorState, WeightedValidator,
+    BondId, EagerRedelegatedBondsMap, GenesisValidator, ReverseOrdTokenAmount,
+    Slash, SlashType, SlashedAmount, ValidatorState, WeightedValidator,
 };
 use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
-    enqueued_slashes_handle, read_below_threshold_validator_set_addresses,
-    read_pos_params, redelegate_tokens, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle, RedelegationError,
+    delegator_redelegated_bonds_handle, enqueued_slashes_handle,
+    read_below_threshold_validator_set_addresses, read_pos_params,
+    redelegate_tokens, validator_deltas_handle, validator_slashes_handle,
+    validator_state_handle, BondsForRemovalRes, EagerRedelegatedUnbonds,
+    ModifiedRedelegation, RedelegationError,
 };
 
 prop_state_machine! {
@@ -88,14 +90,47 @@ struct AbstractPosState {
     enqueued_slashes: BTreeMap<Epoch, BTreeMap<Address, Vec<Slash>>>,
     /// The last epoch in which a validator committed an infraction
     validator_last_slash_epochs: BTreeMap<Address, Epoch>,
-    /// Unbond records required for slashing.
+    /// Validator's total unbonded required for slashing.
     /// Inner `Epoch` is the epoch in which the unbond became active.
     /// Outer `Epoch` is the epoch in which the underlying bond became active.
-    unbond_records:
+    total_unbonded:
         BTreeMap<Address, BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>>>,
     /// The outer key is the epoch in which redelegation became active
     /// (pipeline offset). The next key is the address of the delegator.
     redelegations: Redelegations,
+    delegator_redelegated_bonded: BTreeMap<
+        Address,
+        BTreeMap<
+            Address,
+            BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Change>>>,
+        >,
+    >,
+    delegator_redelegated_unbonded: BTreeMap<
+        Address,
+        BTreeMap<
+            Address,
+            BTreeMap<
+                (Epoch, Epoch),
+                BTreeMap<Address, BTreeMap<Epoch, token::Amount>>,
+            >,
+        >,
+    >,
+    validator_total_redelegated_bonded: BTreeMap<
+        Address,
+        BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Amount>>>,
+    >,
+    validator_total_redelegated_unbonded: BTreeMap<
+        Address,
+        BTreeMap<
+            Epoch,
+            BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Amount>>>,
+        >,
+    >,
+    incoming_redelegations: BTreeMap<Address, BTreeMap<Address, Epoch>>,
+    outgoing_redelegations: BTreeMap<
+        Address,
+        BTreeMap<Address, BTreeMap<(Epoch, Epoch), token::Amount>>,
+    >,
 }
 
 type Redelegations = BTreeMap<Epoch, BTreeMap<Address, Vec<Redelegation>>>;
@@ -407,7 +442,7 @@ impl StateMachineTest for ConcretePosState {
                 // TODO: figure out how we get entries with 0 amount in the
                 // abstract version (and prevent)
                 let mut abs_unbond_records = ref_state
-                    .unbond_records
+                    .total_unbonded
                     .get(&id.validator)
                     .cloned()
                     .unwrap();
@@ -1483,8 +1518,14 @@ impl ReferenceStateMachine for AbstractPosState {
                     validator_slashes: Default::default(),
                     enqueued_slashes: Default::default(),
                     validator_last_slash_epochs: Default::default(),
-                    unbond_records: Default::default(),
+                    total_unbonded: Default::default(),
                     redelegations: Default::default(),
+                    delegator_redelegated_bonded: Default::default(),
+                    delegator_redelegated_unbonded: Default::default(),
+                    validator_total_redelegated_bonded: Default::default(),
+                    validator_total_redelegated_unbonded: Default::default(),
+                    incoming_redelegations: Default::default(),
+                    outgoing_redelegations: Default::default(),
                 };
 
                 for GenesisValidator {
@@ -1838,7 +1879,21 @@ impl ReferenceStateMachine for AbstractPosState {
                     id
                 );
 
-                if *amount != token::Amount::default() {
+                // `totalBonded`
+                let sum_bonded = state
+                    .total_bonded
+                    .get(&id.validator)
+                    .map(|a| {
+                        a.iter().fold(
+                            token::Change::zero(),
+                            |acc, (epoch, amount)| acc + *amount,
+                        )
+                    })
+                    .unwrap();
+
+                if *amount != token::Amount::default()
+                    && amount.change() <= sum_bonded
+                {
                     let change = token::Change::from(*amount);
                     state.update_state_with_unbond(id, change);
 
@@ -2505,8 +2560,8 @@ impl AbstractPosState {
             + self.params.unbonding_len
             + self.params.cubic_slashing_window_length;
         let bonds = self.bonds.entry(id.clone()).or_default();
-        let unbond_records = self
-            .unbond_records
+        let total_unbonded = self
+            .total_unbonded
             .entry(id.validator.clone())
             .or_default()
             .entry(pipeline_epoch)
@@ -2522,6 +2577,12 @@ impl AbstractPosState {
             .get(&id.validator)
             .cloned()
             .unwrap_or_default();
+        let delegator_redelegated_bonds = self
+            .delegator_redelegated_bonded
+            .entry(id.source.clone())
+            .or_default()
+            .entry(id.validator.clone())
+            .or_default();
 
         let mut remaining = change;
         let mut amount_after_slashing = token::Change::default();
@@ -2535,61 +2596,191 @@ impl AbstractPosState {
             );
         }
 
-        let mut bonds_to_remove = Vec::<Epoch>::new();
+        // Get the bonds for removal
+        let bonds_to_remove = Self::find_bonds_to_remove(bonds, change);
 
-        for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
-            tracing::debug!("remaining {}", remaining.to_string_native());
-            tracing::debug!(
-                "Bond epoch {} - amnt {}",
-                bond_epoch,
-                bond_amnt.to_string_native()
-            );
-            let to_unbond = cmp::min(*bond_amnt, remaining);
-            tracing::debug!(
-                "to_unbond (init) = {}",
-                to_unbond.to_string_native()
-            );
-            *bond_amnt -= to_unbond;
-            *unbonds += token::Amount::from_change(to_unbond);
-            if bond_amnt.is_zero() {
-                bonds_to_remove.push(*bond_epoch);
+        // Modified redelegation
+        // The unbond may need to partially unbond redelegated tokens, so
+        // compute if necessary
+        let modified_redelegation = match bonds_to_remove.new_entry {
+            Some((bond_epoch, new_bond_amount)) => {
+                // println!(
+                //     "\n New redel entry for epoch {} -> amount {}",
+                //     bond_epoch, new_bond_amount
+                // );
+                let cur_bond_amount =
+                    bonds.get(&bond_epoch).cloned().unwrap_or_default();
+                if delegator_redelegated_bonds.contains_key(&bond_epoch) {
+                    Self::compute_modified_redelegation(
+                        delegator_redelegated_bonds,
+                        bond_epoch,
+                        cur_bond_amount - new_bond_amount,
+                    )
+                } else {
+                    ModifiedRedelegation::default()
+                }
+            }
+            None => ModifiedRedelegation::default(),
+        };
+
+        // New unbonds. This will be needed for a couple things
+        let unbonded_bond_starts =
+            if let Some((start_epoch, _)) = bonds_to_remove.new_entry {
+                let mut to_remove = bonds_to_remove.epochs.clone();
+                to_remove.insert(start_epoch);
+                to_remove
+            } else {
+                bonds_to_remove.epochs.clone()
             };
+        let new_unbonds = unbonded_bond_starts
+            .into_iter()
+            .map(|start| {
+                let cur_bond_amnt = bonds.get(&start).cloned().unwrap();
+                let new_value = if let Some((start_epoch, new_bond_amount)) =
+                    bonds_to_remove.new_entry
+                {
+                    if start_epoch == start {
+                        cur_bond_amnt - new_bond_amount
+                    } else {
+                        cur_bond_amnt
+                    }
+                } else {
+                    cur_bond_amnt
+                };
+                ((start, withdraw_epoch), new_value)
+            })
+            .collect::<BTreeMap<(Epoch, Epoch), token::Change>>();
 
-            let slashes_for_this_bond: BTreeMap<Epoch, Dec> = validator_slashes
-                .iter()
-                .cloned()
-                .filter(|s| *bond_epoch <= s.epoch)
-                .fold(BTreeMap::new(), |mut acc, s| {
-                    let cur = acc.entry(s.epoch).or_default();
-                    *cur += s.rate;
-                    acc
-                });
-            tracing::debug!(
-                "Slashes for this bond{:?}",
-                slashes_for_this_bond.clone()
-            );
-            amount_after_slashing += compute_amount_after_slashing(
-                &slashes_for_this_bond,
-                token::Amount::from_change(to_unbond),
-                self.params.unbonding_len,
-                self.params.cubic_slashing_window_length,
-            )
-            .change();
-            tracing::debug!(
-                "Cur amnt after slashing = {}",
-                &amount_after_slashing.to_string_native()
-            );
+        // Update the bonds and unbonds in the AbstractState
+        for bond_epoch in &bonds_to_remove.epochs {
+            bonds.remove(bond_epoch);
+        }
+        if let Some((bond_epoch, new_bond_amt)) = bonds_to_remove.new_entry {
+            bonds.insert(bond_epoch, new_bond_amt);
+        }
+        *unbonds += new_unbonds
+            .values()
+            .map(|amount| token::Amount::from(*amount))
+            .sum::<token::Amount>();
 
-            let amt = unbond_records.entry(*bond_epoch).or_default();
-            *amt += token::Amount::from_change(to_unbond);
+        // Compute new redelegated unbonds (which requires unmodified
+        // redelegated bonds)
+        let new_redelegated_unbonds = Self::compute_new_redelegated_unbonds(
+            delegator_redelegated_bonds,
+            &bonds_to_remove.epochs,
+            &modified_redelegation,
+        );
 
-            remaining -= to_unbond;
-            if remaining.is_zero() {
-                break;
+        // Update the delegator's redelegated bonds in the state
+        for epoch_to_remove in &bonds_to_remove.epochs {
+            delegator_redelegated_bonds.remove(epoch_to_remove);
+        }
+        if let Some(epoch) = modified_redelegation.epoch {
+            let rbonds = delegator_redelegated_bonds.entry(epoch).or_default();
+
+            if let Some(val_to_modify) =
+                &modified_redelegation.validator_to_modify
+            {
+                let mut updated_vals_to_remove =
+                    modified_redelegation.validators_to_remove.clone();
+                updated_vals_to_remove.remove(val_to_modify);
+
+                if let Some(epoch_to_modify) =
+                    modified_redelegation.epoch_to_modify
+                {
+                    let mut updated_epochs_to_remove =
+                        modified_redelegation.epochs_to_remove.clone();
+                    updated_epochs_to_remove.remove(&epoch_to_modify);
+                    let val_bonds_to_modify =
+                        rbonds.entry(val_to_modify.clone()).or_default();
+                    for epoch in updated_epochs_to_remove {
+                        val_bonds_to_modify.remove(&epoch);
+                    }
+                    val_bonds_to_modify.insert(
+                        epoch_to_modify,
+                        modified_redelegation.new_amount.unwrap(),
+                    );
+                    // Then, remove the updated_vals_to_remove keys from the
+                    // redelegated_bonds map before doing...
+                } else {
+                    // Remove the updated_vals_to_remove keys from the
+                    // redelegated_bonds map first
+                    for val in &updated_vals_to_remove {
+                        rbonds.remove(val);
+                    }
+                    // Then remove to epochs_to_remove from the redelegated
+                    // bonds of the val_to_modify
+                    let val_bonds_to_modify =
+                        rbonds.entry(val_to_modify.clone()).or_default();
+                    for epoch in &modified_redelegation.epochs_to_remove {
+                        val_bonds_to_modify.remove(epoch);
+                    }
+                }
+            } else {
+                // Remove all validators in
+                // modified_redelegation.validators_to_remove
+                // from redelegated_bonds
+                for val in &modified_redelegation.validators_to_remove {
+                    rbonds.remove(val);
+                }
             }
         }
 
-        for bond_epoch in bonds_to_remove {
+        // let mut bonds_to_remove = Vec::<Epoch>::new();
+
+        // for (bond_epoch, bond_amnt) in bonds.iter_mut().rev() {
+        //     tracing::debug!("remaining {}", remaining.to_string_native());
+        //     tracing::debug!(
+        //         "Bond epoch {} - amnt {}",
+        //         bond_epoch,
+        //         bond_amnt.to_string_native()
+        //     );
+        //     let to_unbond = cmp::min(*bond_amnt, remaining);
+        //     tracing::debug!(
+        //         "to_unbond (init) = {}",
+        //         to_unbond.to_string_native()
+        //     );
+        //     *bond_amnt -= to_unbond;
+        //     *unbonds += token::Amount::from_change(to_unbond);
+        //     if bond_amnt.is_zero() {
+        //         bonds_to_remove.push(*bond_epoch);
+        //     };
+
+        //     let slashes_for_this_bond: BTreeMap<Epoch, Dec> =
+        // validator_slashes         .iter()
+        //         .cloned()
+        //         .filter(|s| *bond_epoch <= s.epoch)
+        //         .fold(BTreeMap::new(), |mut acc, s| {
+        //             let cur = acc.entry(s.epoch).or_default();
+        //             *cur += s.rate;
+        //             acc
+        //         });
+        //     tracing::debug!(
+        //         "Slashes for this bond{:?}",
+        //         slashes_for_this_bond.clone()
+        //     );
+        //     amount_after_slashing += compute_amount_after_slashing(
+        //         &slashes_for_this_bond,
+        //         token::Amount::from_change(to_unbond),
+        //         self.params.unbonding_len,
+        //         self.params.cubic_slashing_window_length,
+        //     )
+        //     .change();
+        //     tracing::debug!(
+        //         "Cur amnt after slashing = {}",
+        //         &amount_after_slashing.to_string_native()
+        //     );
+
+        //     let amt = unbond_records.entry(*bond_epoch).or_default();
+        //     *amt += token::Amount::from_change(to_unbond);
+
+        //     remaining -= to_unbond;
+        //     if remaining.is_zero() {
+        //         break;
+        //     }
+        // }
+
+        for bond_epoch in bonds_to_remove.epochs {
             bonds.remove(&bond_epoch);
         }
 
@@ -2634,7 +2825,7 @@ impl AbstractPosState {
         let pipeline_epoch = self.pipeline();
         let bonds = self.bonds.entry(id.clone()).or_default();
         let unbond_records = self
-            .unbond_records
+            .total_unbonded
             .entry(id.validator.clone())
             .or_default()
             .entry(pipeline_epoch)
@@ -3147,7 +3338,7 @@ impl AbstractPosState {
             tracing::debug!("\nEpoch {}", epoch);
             let mut recent_unbonds = token::Change::default();
             let unbond_records = self
-                .unbond_records
+                .total_unbonded
                 .entry(validator.clone())
                 .or_default()
                 .get(&Epoch(epoch))
@@ -3218,7 +3409,7 @@ impl AbstractPosState {
             );
             let mut recent_unbonds = token::Change::default();
             let unbond_records = self
-                .unbond_records
+                .total_unbonded
                 .get(validator)
                 .unwrap()
                 .get(&(self.epoch + offset))
@@ -3694,6 +3885,215 @@ impl AbstractPosState {
             }
             false
         })
+    }
+
+    fn find_bonds_to_remove(
+        bonds: &BTreeMap<Epoch, token::Change>,
+        amount: token::Change,
+    ) -> BondsForRemovalRes {
+        let mut bonds_for_removal = BondsForRemovalRes::default();
+        let mut remaining = amount;
+
+        for (&bond_epoch, &bond_amount) in bonds.into_iter().rev() {
+            let to_unbond = cmp::min(bond_amount, remaining);
+            if to_unbond == bond_amount {
+                bonds_for_removal.epochs.insert(bond_epoch);
+            } else {
+                bonds_for_removal.new_entry =
+                    Some((bond_epoch, bond_amount - to_unbond));
+            }
+            remaining -= to_unbond;
+            if remaining == token::Change::zero() {
+                break;
+            }
+        }
+        bonds_for_removal
+    }
+
+    fn compute_modified_redelegation(
+        delegator_redelegated_bonds: &mut BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<Epoch, token::Change>>,
+        >,
+        bond_epoch: Epoch,
+        amount: token::Change,
+    ) -> ModifiedRedelegation {
+        let mut modified_redelegation = ModifiedRedelegation::default();
+
+        let redelegated_bonds =
+            delegator_redelegated_bonds.entry(bond_epoch).or_default();
+        let (src_validators, total_redelegated) =
+            redelegated_bonds.iter().fold(
+                (HashSet::<Address>::new(), token::Change::zero()),
+                |mut acc, (src_val, redel_bonds)| {
+                    acc.0.insert(src_val.clone());
+                    acc.1 += redel_bonds
+                        .values()
+                        .fold(token::Change::zero(), |sum, val| sum + *val);
+                    acc
+                },
+            );
+
+        if total_redelegated <= amount {
+            return modified_redelegation;
+        }
+
+        modified_redelegation.epoch = Some(bond_epoch);
+
+        let mut remaining = amount;
+        for src_val in src_validators {
+            if remaining == token::Change::default() {
+                break;
+            }
+            let bonds = redelegated_bonds.get(&src_val).unwrap();
+            let total_src_amount =
+                bonds.values().cloned().sum::<token::Change>();
+
+            modified_redelegation
+                .validators_to_remove
+                .insert(src_val.clone());
+
+            if total_redelegated <= remaining {
+                remaining -= total_src_amount;
+            } else {
+                let src_bonds_to_remove =
+                    Self::find_bonds_to_remove(bonds, remaining);
+
+                remaining = token::Change::zero();
+
+                if let Some((bond_epoch, new_bond_amount)) =
+                    src_bonds_to_remove.new_entry
+                {
+                    modified_redelegation.validator_to_modify = Some(src_val);
+                    modified_redelegation.epochs_to_remove = {
+                        let mut epochs = src_bonds_to_remove.epochs;
+                        epochs.insert(bond_epoch);
+                        epochs
+                    };
+                    modified_redelegation.epoch_to_modify = Some(bond_epoch);
+                    modified_redelegation.new_amount = Some(new_bond_amount);
+                } else {
+                    modified_redelegation.validator_to_modify = Some(src_val);
+                    modified_redelegation.epochs_to_remove =
+                        src_bonds_to_remove.epochs;
+                }
+            }
+        }
+
+        modified_redelegation
+    }
+
+    fn compute_new_redelegated_unbonds(
+        redelegated_bonds: &mut BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<Epoch, token::Change>>,
+        >,
+        epochs_to_remove: &HashSet<Epoch>,
+        modified_redelegation: &ModifiedRedelegation,
+    ) -> BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Change>>>
+    {
+        let unbonded_epochs = if let Some(epoch) = modified_redelegation.epoch {
+            let mut epochs = epochs_to_remove.clone();
+            epochs.insert(epoch);
+            epochs
+                .iter()
+                .cloned()
+                .filter(|e| redelegated_bonds.contains_key(&e))
+                .collect::<HashSet<Epoch>>()
+        } else {
+            epochs_to_remove
+                .iter()
+                .cloned()
+                .filter(|e| redelegated_bonds.contains_key(&e))
+                .collect::<HashSet<Epoch>>()
+        };
+
+        let new_redelegated_unbonds: EagerRedelegatedUnbonds = unbonded_epochs
+            .into_iter()
+            .map(|start| {
+                let mut rbonds = EagerRedelegatedBondsMap::default();
+                if modified_redelegation
+                    .epoch
+                    .map(|redelegation_epoch| start != redelegation_epoch)
+                    .unwrap_or(true)
+                {
+                    for (src_val, bonds) in
+                        redelegated_bonds.get(&start).unwrap()
+                    {
+                        for (bond_epoch, bond_amount) in bonds {
+                            rbonds
+                                .entry(src_val.clone())
+                                .or_default()
+                                .insert(*bond_epoch, *bond_amount);
+                        }
+                    }
+                    (start, rbonds)
+                } else {
+                    for src_validator in
+                        &modified_redelegation.validators_to_remove
+                    {
+                        if modified_redelegation
+                            .validator_to_modify
+                            .as_ref()
+                            .map(|validator| src_validator != validator)
+                            .unwrap_or(true)
+                        {
+                            let raw_bonds = redelegated_bonds
+                                .entry(start)
+                                .or_default()
+                                .entry(src_validator.clone())
+                                .or_default();
+                            for (bond_epoch, bond_amount) in raw_bonds {
+                                rbonds
+                                    .entry(src_validator.clone())
+                                    .or_default()
+                                    .insert(*bond_epoch, *bond_amount);
+                            }
+                        } else {
+                            for bond_start in
+                                &modified_redelegation.epochs_to_remove
+                            {
+                                let cur_redel_bond_amount = redelegated_bonds
+                                    .entry(start)
+                                    .or_default()
+                                    .entry(src_validator.clone())
+                                    .or_default()
+                                    .entry(*bond_start)
+                                    .or_default();
+
+                                let raw_bonds = rbonds
+                                    .entry(src_validator.clone())
+                                    .or_default();
+                                if modified_redelegation
+                                    .epoch_to_modify
+                                    .as_ref()
+                                    .map(|epoch| bond_start != epoch)
+                                    .unwrap_or(true)
+                                {
+                                    raw_bonds.insert(
+                                        *bond_start,
+                                        *cur_redel_bond_amount,
+                                    );
+                                } else {
+                                    raw_bonds.insert(
+                                        *bond_start,
+                                        *cur_redel_bond_amount
+                                            - modified_redelegation
+                                                .new_amount
+                                                // Safe unwrap - it shouldn't
+                                                // get to
+                                                // this if it's None
+                                                .unwrap(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    (start, rbonds)
+                }
+            })
+            .collect();
+        new_redelegated_unbonds
     }
 }
 
