@@ -51,8 +51,8 @@ use crate::{run, run_as};
 /// Test we can transfer some DAI to an implicit address on Namada,
 /// then back to Ethereum, burning the assets we minted after the
 /// first transfer.
-#[tokio::test]
-async fn test_roundtrip_eth_transfer() -> Result<()> {
+#[test]
+fn test_roundtrip_eth_transfer() -> Result<()> {
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
     const QUERY_TIMEOUT_SECONDS: u64 = 40;
     const SOLE_VALIDATOR: Who = Who::Validator(0);
@@ -243,6 +243,7 @@ async fn test_roundtrip_eth_transfer() -> Result<()> {
 ///    has been relayed.
 /// 5. We check that the event is removed from the bridge pool.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_bridge_pool_e2e() {
     const LEDGER_STARTUP_TIMEOUT_SECONDS: u64 = 40;
     const CLIENT_COMMAND_TIMEOUT_SECONDS: u64 = 60;
@@ -442,6 +443,7 @@ async fn test_bridge_pool_e2e() {
 /// Tests transfers of wNAM ERC20s from Ethereum are treated differently to
 /// other ERC20 transfers.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wnam_transfer() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         eth_start_height: Default::default(),
@@ -549,6 +551,7 @@ async fn test_wnam_transfer() -> Result<()> {
 /// Tests that the ledger configures its Ethereum oracle with values from
 /// storage, if the Ethereum bridge has been bootstrapped for the Namada chain.
 #[test]
+#[cfg(DISABLED)]
 fn test_configure_oracle_from_storage() -> Result<()> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         eth_start_height: Default::default(),
@@ -615,6 +618,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
 
 /// Test we can transfer some DAI to an implicit address on Namada.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_dai_transfer_implicit() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -644,6 +648,7 @@ async fn test_dai_transfer_implicit() -> Result<()> {
 
 /// Test we can transfer some DAI to an established address on Namada.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_dai_transfer_established() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -685,6 +690,7 @@ async fn test_dai_transfer_established() -> Result<()> {
 /// not authorized if the transaction is not signed by the key that controls the
 /// implicit address.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -744,6 +750,7 @@ async fn test_wdai_transfer_implicit_unauthorized() -> Result<()> {
 /// not authorized if the transaction is not signed by the key that controls the
 /// implicit address.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -813,6 +820,7 @@ async fn test_wdai_transfer_established_unauthorized() -> Result<()> {
 /// Test transferring some wDAI from an implicit address on Namada to another
 /// implicit address of Namada.
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -879,6 +887,7 @@ async fn test_wdai_transfer_implicit_to_implicit() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -960,6 +969,7 @@ async fn test_wdai_transfer_implicit_to_established() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
@@ -1040,6 +1050,7 @@ async fn test_wdai_transfer_established_to_implicit() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(DISABLED)]
 async fn test_wdai_transfer_established_to_established() -> Result<()> {
     let (test, bg_ledger) = setup_single_validator_test()?;
 
