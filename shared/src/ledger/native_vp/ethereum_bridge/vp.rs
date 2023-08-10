@@ -588,7 +588,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -638,7 +638,7 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
@@ -691,7 +691,7 @@ mod tests {
         let verifiers = BTreeSet::from([]);
 
         // set up the VP
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,

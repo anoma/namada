@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -10,6 +11,7 @@ use ark_ec::AffineCurve;
 use ark_ec::PairingEngine;
 use borsh::schema::{Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
@@ -22,8 +24,10 @@ use thiserror::Error;
 
 use super::generated::types;
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
+use crate::ledger::testnet_pow;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::keccak::{keccak_hash, KeccakHash};
@@ -41,7 +45,9 @@ use crate::types::transaction::EllipticCurve;
 use crate::types::transaction::EncryptionKey;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::WrapperTxErr;
-use crate::types::transaction::{hash_tx, DecryptedTx, TxType, WrapperTx};
+use crate::types::transaction::{
+    hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -57,6 +63,12 @@ pub enum Error {
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
     InvalidTimestamp(prost_types::TimestampError),
+    #[error("The section signature is invalid: {0}")]
+    InvalidSectionSignature(String),
+    #[error("Couldn't serialize transaction from JSON at {0}")]
+    InvalidJSONDeserialization(String),
+    #[error("The wrapper signature is invalid.")]
+    InvalidWrapperSignature,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -360,6 +372,146 @@ impl Code {
     }
 }
 
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+)]
+pub struct SignatureIndex {
+    pub signature: common::Signature,
+    pub index: u8,
+}
+
+impl SignatureIndex {
+    pub fn from_single_signature(signature: common::Signature) -> Self {
+        Self {
+            signature,
+            index: 0,
+        }
+    }
+
+    pub fn to_vec(&self) -> Vec<Self> {
+        vec![self.clone()]
+    }
+
+    pub fn verify(
+        &self,
+        public_key_index_map: &AccountPublicKeysMap,
+        data: &impl SignableBytes,
+    ) -> std::result::Result<(), VerifySigError> {
+        let public_key =
+            public_key_index_map.get_public_key_from_index(self.index);
+        if let Some(public_key) = public_key {
+            common::SigScheme::verify_signature(
+                &public_key,
+                data,
+                &self.signature,
+            )
+        } else {
+            Err(VerifySigError::MissingData)
+        }
+    }
+}
+
+impl Ord for SignatureIndex {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.index.cmp(&other.index)
+    }
+}
+
+impl PartialOrd for SignatureIndex {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// A section representing a multisig over another section
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct MultiSignature {
+    /// The hash of the section being signed
+    targets: Vec<crate::types::hash::Hash>,
+    /// The signature over the above hash
+    pub signatures: BTreeSet<SignatureIndex>,
+}
+
+impl MultiSignature {
+    /// Sign the given section hash with the given key and return a section
+    pub fn new(
+        targets: Vec<crate::types::hash::Hash>,
+        secret_keys: &[common::SecretKey],
+        public_keys_index_map: &AccountPublicKeysMap,
+    ) -> Self {
+        let target = Self {
+            targets: targets.clone(),
+            signatures: BTreeSet::new(),
+        }
+        .get_hash();
+
+        let signatures_public_keys_map =
+            secret_keys.iter().map(|secret_key: &common::SecretKey| {
+                let signature = common::SigScheme::sign(secret_key, target);
+                let public_key = secret_key.ref_to();
+                (public_key, signature)
+            });
+
+        let signatures = signatures_public_keys_map
+            .filter_map(|(public_key, signature)| {
+                let public_key_index = public_keys_index_map
+                    .get_index_from_public_key(&public_key);
+                public_key_index
+                    .map(|index| SignatureIndex { signature, index })
+            })
+            .collect::<BTreeSet<SignatureIndex>>();
+
+        Self {
+            targets,
+            signatures,
+        }
+    }
+
+    pub fn total_signatures(&self) -> u8 {
+        self.signatures.len() as u8
+    }
+
+    /// Hash this signature section
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(
+            self.try_to_vec()
+                .expect("unable to serialize multisignature section"),
+        );
+        hasher
+    }
+
+    /// Get the hash of this section
+    pub fn get_hash(&self) -> crate::types::hash::Hash {
+        crate::types::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
+
+    pub fn get_raw_hash(&self) -> crate::types::hash::Hash {
+        Self {
+            signatures: BTreeSet::new(),
+            ..self.clone()
+        }
+        .get_hash()
+    }
+}
+
 /// A section representing the signature over another section
 #[derive(
     Clone,
@@ -371,26 +523,19 @@ impl Code {
     Deserialize,
 )]
 pub struct Signature {
-    /// Additional random data
-    salt: [u8; 8],
     /// The hash of the section being signed
     targets: Vec<crate::types::hash::Hash>,
-    /// The public key to verify the below signature
-    pub_key: common::PublicKey,
     /// The signature over the above hashes
     pub signature: Option<common::Signature>,
 }
 
 impl Signature {
-    /// Sign the given section hash with the given key and return a section
     pub fn new(
         targets: Vec<crate::types::hash::Hash>,
         sec_key: &common::SecretKey,
     ) -> Self {
         let mut sec = Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
             targets,
-            pub_key: sec_key.ref_to(),
             signature: None,
         };
         sec.signature = Some(common::SigScheme::sign(sec_key, sec.get_hash()));
@@ -414,11 +559,14 @@ impl Signature {
     }
 
     /// Verify that the signature contained in this section is valid
-    pub fn verify_signature(&self) -> std::result::Result<(), VerifySigError> {
+    pub fn verify_signature(
+        &self,
+        public_key: &common::PublicKey,
+    ) -> std::result::Result<(), VerifySigError> {
         let signature =
             self.signature.as_ref().ok_or(VerifySigError::MissingData)?;
         common::SigScheme::verify_signature(
-            &self.pub_key,
+            public_key,
             &Self {
                 signature: None,
                 ..self.clone()
@@ -730,6 +878,8 @@ pub enum Section {
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
     /// A transaction signature. Often produced by hardware wallets
+    SectionSignature(MultiSignature),
+    /// A transaction header/protocol signature
     Signature(Signature),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
@@ -759,7 +909,8 @@ impl Section {
             Self::Data(data) => data.hash(hasher),
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
-            Self::Signature(sig) => sig.hash(hasher),
+            Self::Signature(signature) => signature.hash(hasher),
+            Self::SectionSignature(signatures) => signatures.hash(hasher),
             Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
@@ -825,6 +976,15 @@ impl Section {
     /// Extract the signature from this section if possible
     pub fn signature(&self) -> Option<Signature> {
         if let Self::Signature(data) = self {
+            Some(data.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Extract the section signature from this section if possible
+    pub fn section_signature(&self) -> Option<MultiSignature> {
+        if let Self::SectionSignature(data) = self {
             Some(data.clone())
         } else {
             None
@@ -978,13 +1138,42 @@ impl TryFrom<&[u8]> for Tx {
     }
 }
 
+impl Default for Tx {
+    fn default() -> Self {
+        Self {
+            header: Header::new(TxType::Raw),
+            sections: vec![],
+        }
+    }
+}
+
 impl Tx {
+    /// Initialize a new transaction builder
+    pub fn new(chain_id: ChainId, expiration: Option<DateTimeUtc>) -> Self {
+        Tx {
+            sections: vec![],
+            header: Header {
+                chain_id,
+                expiration,
+                ..Header::new(TxType::Raw)
+            },
+        }
+    }
+
     /// Create a transaction of the given type
-    pub fn new(header: TxType) -> Self {
+    pub fn from_type(header: TxType) -> Self {
         Tx {
             header: Header::new(header),
             sections: vec![],
         }
+    }
+
+    /// Dump tx to hex string
+    pub fn serialize(&self) -> String {
+        let tx_bytes = self
+            .try_to_vec()
+            .expect("Transation should be serializable");
+        HEXUPPER.encode(&tx_bytes)
     }
 
     /// Get the transaction header
@@ -1105,36 +1294,102 @@ impl Tx {
         bytes
     }
 
+    /// Verify that the section with the given hash has been signed by the given
+    /// public key
+    pub fn verify_section_signatures(
+        &self,
+        hashes: &[crate::types::hash::Hash],
+        public_keys_index_map: AccountPublicKeysMap,
+        threshold: u8,
+        max_signatures: Option<u8>,
+    ) -> std::result::Result<(), Error> {
+        let max_signatures = max_signatures.unwrap_or(u8::MAX);
+        let mut valid_signatures = 0;
+
+        for section in &self.sections {
+            if let Section::SectionSignature(signatures) = section {
+                if !hashes.iter().all(|x| {
+                    signatures.targets.contains(x) || section.get_hash() == *x
+                }) {
+                    return Err(Error::InvalidSectionSignature(
+                        "missing target hash.".to_string(),
+                    ));
+                }
+
+                for target in &signatures.targets {
+                    if self.get_section(target).is_none() {
+                        return Err(Error::InvalidSectionSignature(
+                            "Missing target section.".to_string(),
+                        ));
+                    }
+                }
+
+                if signatures.total_signatures() > max_signatures {
+                    return Err(Error::InvalidSectionSignature(
+                        "too many signatures.".to_string(),
+                    ));
+                }
+
+                if signatures.total_signatures() < threshold {
+                    return Err(Error::InvalidSectionSignature(
+                        "too few signatures.".to_string(),
+                    ));
+                }
+
+                for signature_index in &signatures.signatures {
+                    let is_valid_signature = signature_index
+                        .verify(
+                            &public_keys_index_map,
+                            &signatures.get_raw_hash(),
+                        )
+                        .is_ok();
+                    if is_valid_signature {
+                        valid_signatures += 1;
+                    }
+                    if valid_signatures >= threshold {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Err(Error::InvalidSectionSignature(
+            "invalid signatures.".to_string(),
+        ))
+    }
+
     /// Verify that the sections with the given hashes have been signed together
     /// by the given public key. I.e. this function looks for one signature that
     /// covers over the given slice of hashes.
     pub fn verify_signature(
         &self,
-        pk: &common::PublicKey,
+        public_key: &common::PublicKey,
         hashes: &[crate::types::hash::Hash],
-    ) -> std::result::Result<&Signature, VerifySigError> {
+    ) -> Result<&Signature> {
         for section in &self.sections {
-            if let Section::Signature(sig_sec) = section {
-                // Check that the signer is matched and that the hashes being
+            if let Section::Signature(signature) = section {
+                // Check that the hashes being
                 // checked are a subset of those in this section
-                if sig_sec.pub_key == *pk
-                    && hashes.iter().all(|x| {
-                        sig_sec.targets.contains(x) || section.get_hash() == *x
-                    })
-                {
+                if hashes.iter().all(|x| {
+                    signature.targets.contains(x) || section.get_hash() == *x
+                }) {
                     // Ensure that all the sections the signature signs over are
                     // present
-                    for target in &sig_sec.targets {
+                    for target in &signature.targets {
                         if self.get_section(target).is_none() {
-                            return Err(VerifySigError::MissingData);
+                            return Err(Error::InvalidSectionSignature(
+                                "Target section is missing.".to_string(),
+                            ));
                         }
                     }
                     // Finally verify that the signature itself is valid
-                    return sig_sec.verify_signature().map(|_| sig_sec);
+                    return signature
+                        .verify_signature(public_key)
+                        .map(|_| signature)
+                        .map_err(|_| Error::InvalidWrapperSignature);
                 }
             }
         }
-        Err(VerifySigError::MissingData)
+        Err(Error::InvalidWrapperSignature)
     }
 
     /// Validate any and all ciphertexts stored in this transaction
@@ -1180,7 +1435,7 @@ impl Tx {
     /// Encrypt all sections in this transaction other than the header and
     /// signatures over it
     #[cfg(feature = "ferveo-tpke")]
-    pub fn encrypt(&mut self, pubkey: &EncryptionKey) {
+    pub fn encrypt(&mut self, pubkey: &EncryptionKey) -> &mut Self {
         let header_hash = self.header_hash();
         let mut plaintexts = vec![];
         // Iterate backwrds to sidestep the effects of deletion on indexing
@@ -1195,6 +1450,7 @@ impl Tx {
         // Encrypt all eligible sections in one go
         self.sections
             .push(Section::Ciphertext(Ciphertext::new(plaintexts, pubkey)));
+        self
     }
 
     /// Determines the type of the input Tx
@@ -1279,6 +1535,126 @@ impl Tx {
             }
         }
         filtered
+    }
+
+    /// Add an extra section to the tx builder by hash
+    pub fn add_extra_section_from_hash(
+        &mut self,
+        hash: crate::types::hash::Hash,
+    ) -> crate::types::hash::Hash {
+        let sechash = self
+            .add_section(Section::ExtraData(Code::from_hash(hash)))
+            .get_hash();
+        sechash
+    }
+
+    /// Add an extra section to the tx builder by code
+    pub fn add_extra_section(
+        &mut self,
+        code: Vec<u8>,
+    ) -> (&mut Self, crate::types::hash::Hash) {
+        let sechash = self
+            .add_section(Section::ExtraData(Code::new(code)))
+            .get_hash();
+        (self, sechash)
+    }
+
+    /// Add a masp tx section to the tx builder
+    pub fn add_masp_tx_section(
+        &mut self,
+        tx: Transaction,
+    ) -> (&mut Self, crate::types::hash::Hash) {
+        let sechash = self.add_section(Section::MaspTx(tx)).get_hash();
+        (self, sechash)
+    }
+
+    /// Add a masp builder section to the tx builder
+    pub fn add_masp_builder(&mut self, builder: MaspBuilder) -> &mut Self {
+        let _sec = self.add_section(Section::MaspBuilder(builder));
+        self
+    }
+
+    /// Add wasm code to the tx builder from hash
+    pub fn add_code_from_hash(
+        &mut self,
+        code_hash: crate::types::hash::Hash,
+    ) -> &mut Self {
+        self.set_code(Code::from_hash(code_hash));
+        self
+    }
+
+    /// Add wasm code to the tx builder
+    pub fn add_code(&mut self, code: Vec<u8>) -> &mut Self {
+        self.set_code(Code::new(code));
+        self
+    }
+
+    /// Add wasm data to the tx builder
+    pub fn add_data(&mut self, data: impl BorshSerialize) -> &mut Self {
+        let bytes = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+        self.set_data(Data::new(bytes));
+        self
+    }
+
+    /// Add wasm data already serialized to the tx builder
+    pub fn add_serialized_data(&mut self, bytes: Vec<u8>) -> &mut Self {
+        self.set_data(Data::new(bytes));
+        self
+    }
+
+    /// Add wrapper tx to the tx builder
+    pub fn add_wrapper(
+        &mut self,
+        fee: Fee,
+        gas_payer: common::PublicKey,
+        epoch: Epoch,
+        gas_limit: GasLimit,
+        #[cfg(not(feature = "mainnet"))] requires_pow: Option<
+            testnet_pow::Solution,
+        >,
+    ) -> &mut Self {
+        self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
+            fee,
+            gas_payer,
+            epoch,
+            gas_limit,
+            #[cfg(not(feature = "mainnet"))]
+            requires_pow,
+        )));
+        self
+    }
+
+    /// Add fee payer keypair to the tx builder
+    pub fn sign_wrapper(&mut self, keypair: common::SecretKey) -> &mut Self {
+        self.protocol_filter();
+        self.add_section(Section::Signature(Signature::new(
+            self.sechashes(),
+            &keypair,
+        )));
+        self
+    }
+
+    /// Add signing keys to the tx builder
+    pub fn sign_raw(
+        &mut self,
+        keypairs: Vec<common::SecretKey>,
+        account_public_keys_map: AccountPublicKeysMap,
+    ) -> &mut Self {
+        self.protocol_filter();
+        let hashes = self
+            .sections
+            .iter()
+            .filter_map(|section| match section {
+                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
+                _ => None,
+            })
+            .collect();
+        self.add_section(Section::SectionSignature(MultiSignature::new(
+            hashes,
+            &keypairs,
+            &account_public_keys_map,
+        )));
+        self
     }
 }
 

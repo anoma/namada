@@ -261,6 +261,8 @@ pub mod genesis_config {
         pub implicit_vp: String,
         /// Expected number of epochs per year
         pub epochs_per_year: u64,
+        /// Max signature per transaction
+        pub max_signatures_per_transaction: u8,
         /// PoS gain p
         pub pos_gain_p: Dec,
         /// PoS gain d
@@ -601,10 +603,13 @@ pub mod genesis_config {
             implicit_vp_code_path,
             implicit_vp_sha256,
             epochs_per_year: parameters.epochs_per_year,
+            max_signatures_per_transaction: parameters
+                .max_signatures_per_transaction,
             pos_gain_p: parameters.pos_gain_p,
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Dec::zero(),
             pos_inflation_amount: token::Amount::zero(),
+            #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees: parameters.wrapper_tx_fees,
         };
 
@@ -848,6 +853,8 @@ pub struct Parameters {
     pub implicit_vp_sha256: [u8; 32],
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
+    /// Maximum amount of signatures per transaction
+    pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
     pub pos_gain_p: Dec,
     /// PoS gain d (read only)
@@ -969,12 +976,14 @@ pub fn genesis(num_validators: u64) -> Genesis {
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
         implicit_vp_sha256: Default::default(),
+        max_signatures_per_transaction: 15,
         epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
                                    * per epoch (60 = min_duration) */
         pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
+        #[cfg(not(feature = "mainnet"))]
         wrapper_tx_fees: Some(token::Amount::native_whole(0)),
     };
     let albert = EstablishedAccount {

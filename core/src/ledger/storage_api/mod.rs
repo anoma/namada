@@ -1,6 +1,7 @@
 //! The common storage read trait is implemented in the storage, client RPC, tx
 //! and VPs (both native and WASM).
 
+pub mod account;
 pub mod collections;
 mod error;
 pub mod governance;
