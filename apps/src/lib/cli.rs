@@ -3893,7 +3893,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx<CliTypes>>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
         }
     }
