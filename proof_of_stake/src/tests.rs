@@ -2467,7 +2467,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 1
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &Default::default(),
         &empty_mr,
@@ -2480,7 +2480,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 2
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set5,
         &empty_mr,
@@ -2492,7 +2492,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 3
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set56,
         &empty_mr,
@@ -2503,7 +2503,7 @@ fn test_compute_new_redelegated_unbonds() {
     // Test case 4
     println!("\nTEST CASE 4\n");
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set56,
         &all_mr,
@@ -2513,7 +2513,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 5
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set56,
         &mod_val_mr,
@@ -2525,7 +2525,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 6
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set56,
         &mod_val_partial_mr,
@@ -2542,7 +2542,7 @@ fn test_compute_new_redelegated_unbonds() {
 
     // Test case 7
     let res = compute_new_redelegated_unbonds(
-        &mut storage,
+        &storage,
         &redelegated_bonds,
         &set56,
         &mod_epoch_partial_mr,
@@ -5288,11 +5288,11 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
 
     let src_validator = validators[0].address.clone();
-    let init_stake_src = validators[0].tokens;
+    let _init_stake_src = validators[0].tokens;
     let dest_validator = validators[1].address.clone();
-    let init_stake_dest = validators[1].tokens;
+    let _init_stake_dest = validators[1].tokens;
     let dest_validator_2 = validators[2].address.clone();
-    let init_stake_dest_2 = validators[2].tokens;
+    let _init_stake_dest_2 = validators[2].tokens;
 
     let mut storage = TestWlStorage::default();
     let params = PosParams {

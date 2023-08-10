@@ -2301,6 +2301,9 @@ where
         &bonds_to_unbond.epochs,
         &modified_redelegation
     );
+    // This is what the delegator's redelegated unbonds would look like if this
+    // was the only unbond in the PoS system. We need to add these redelegated
+    // unbonds to the existing redelegated unbonds
     let new_redelegated_unbonds = compute_new_redelegated_unbonds(
         storage,
         &redelegated_bonds,
@@ -2338,8 +2341,7 @@ where
         let delegator_redelegated_unbonded =
             delegator_redelegated_unbonds_handle(source).at(validator);
 
-        // Quint `def updateRedelegatedUnbonded` - not called when `if
-        // is_redelegation`
+        // Quint `def updateRedelegatedUnbonded`
         let new_epoch_pairs = new_redelegated_unbonds
             .keys()
             .map(|epoch| (*epoch, withdrawable_epoch))
