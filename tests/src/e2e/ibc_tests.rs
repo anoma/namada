@@ -82,9 +82,7 @@ use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
 use super::setup::set_ethereum_bridge_mode;
-use crate::e2e::helpers::{
-    find_address, get_actor_rpc, get_validator_pk, wait_for_wasm_pre_compile,
-};
+use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
 use crate::e2e::setup::{
     self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
@@ -299,8 +297,9 @@ fn run_two_nets() -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
     ledger_a.exp_string(VALIDATOR_NODE)?;
     ledger_b.exp_string(VALIDATOR_NODE)?;
 
-    wait_for_wasm_pre_compile(&mut ledger_a)?;
-    wait_for_wasm_pre_compile(&mut ledger_b)?;
+    // wait for the first block
+    ledger_a.exp_regex("Committed block .* height: 2")?;
+    ledger_b.exp_regex("Committed block .* height: 2")?;
 
     // Wait for a first block
     ledger_a.exp_string("Committed block hash")?;
