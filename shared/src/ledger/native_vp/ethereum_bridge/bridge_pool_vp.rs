@@ -203,7 +203,7 @@ where
         }
     }
 
-    /// Check that the gas was correctly escrow.
+    /// Check that the gas was correctly escrowed.
     fn check_gas_escrow(
         &self,
         wnam_address: &EthAddress,
