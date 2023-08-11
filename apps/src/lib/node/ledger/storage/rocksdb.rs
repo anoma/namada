@@ -34,6 +34,7 @@
 //!     - `header`: block's header
 
 use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -257,7 +258,7 @@ impl RocksDB {
         &self,
         out_file_path: std::path::PathBuf,
         historic: bool,
-        height: &mut Option<BlockHeight>,
+        height: Option<BlockHeight>,
     ) {
         // Find the last block height
         let state_cf = self
@@ -272,7 +273,7 @@ impl RocksDB {
         )
         .expect("Unable to decode block height");
 
-        let height = height.get_or_insert(last_height);
+        let height = height.unwrap_or(last_height);
 
         let full_path = out_file_path
             .with_file_name(format!(
@@ -311,18 +312,17 @@ impl RocksDB {
         }
 
         // subspace
-        if *height != last_height {
+        if height != last_height {
             // Restoring subspace at specified height
-
             let restored_subspace = self
-                .iter_prefix(&Key::default())
+                .iter_prefix(None)
                 .par_bridge()
                 .fold(
                     || "".to_string(),
                     |mut cur, (key, _value, _gas)| match self
                         .read_subspace_val_with_height(
                             &Key::from(key.to_db_key()),
-                            *height,
+                            height,
                             last_height,
                         )
                         .expect("Unable to find subspace key")
@@ -374,6 +374,7 @@ impl RocksDB {
             self.0.iterator_cf_opt(cf, read_opts, IteratorMode::Start)
         };
 
+        let mut buf = BufWriter::new(file);
         for (key, raw_val, _gas) in PersistentPrefixIterator(
             PrefixIterator::new(iter, String::default()),
             // Empty string to prevent prefix stripping, the prefix is
@@ -381,9 +382,10 @@ impl RocksDB {
         ) {
             let val = HEXLOWER.encode(&raw_val);
             let bytes = format!("\"{key}\" = \"{val}\"\n");
-            file.write_all(bytes.as_bytes())
-                .expect("Unable to write to output file");
+            buf.write_all(bytes.as_bytes())
+                .expect("Unable to write to buffer");
         }
+        buf.flush().expect("Unable to write to output file");
     }
 
     /// Rollback to previous block. Given the inner working of tendermint

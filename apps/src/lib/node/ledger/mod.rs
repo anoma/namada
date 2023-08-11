@@ -226,7 +226,7 @@ pub fn dump_db(
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    db.dump_block(out_file_path, historic, &mut block_height.clone());
+    db.dump_block(out_file_path, historic, block_height);
 }
 
 /// Roll Namada state back to the previous height
