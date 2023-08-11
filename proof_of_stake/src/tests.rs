@@ -3891,7 +3891,7 @@ fn test_slash_validator() {
     // There are no non-genesis bonds or slashes
     println!("\nTEST 1:");
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -3921,7 +3921,7 @@ fn test_slash_validator() {
         )
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -3948,7 +3948,7 @@ fn test_slash_validator() {
         )
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -3975,7 +3975,7 @@ fn test_slash_validator() {
         )
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -4014,7 +4014,7 @@ fn test_slash_validator() {
         .insert(&mut storage, Epoch(3), token::Change::from(1))
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -4049,7 +4049,7 @@ fn test_slash_validator() {
         )
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -4084,7 +4084,7 @@ fn test_slash_validator() {
         .remove(&mut storage, &Epoch(3))
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -4135,7 +4135,7 @@ fn test_slash_validator() {
         .insert(&mut storage, current_epoch, token::Change::from(6))
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,
@@ -4187,7 +4187,7 @@ fn test_slash_validator() {
         )
         .unwrap();
     let res = slash_validator(
-        &mut storage,
+        &storage,
         &params,
         &bob,
         slash_rate,

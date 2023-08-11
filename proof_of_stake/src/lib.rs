@@ -5190,7 +5190,7 @@ where
 }
 
 fn slash_validator<S>(
-    storage: &mut S,
+    storage: &S,
     params: &PosParams,
     validator: &Address,
     slash_rate: Dec,
@@ -5455,6 +5455,8 @@ where
                 let redel_unbonds = total_redelegated_unbonded.at(&epoch);
                 let non_redelegated_amount = if !redel_unbonds
                     .is_empty(storage)?
+                // TODO: shouldn't the below just
+                // use `unbonded` above?
                 {
                     total_unbonded
                         .get(storage, &epoch)?

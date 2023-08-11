@@ -78,6 +78,11 @@ type AbstractValidatorTotalRedelegatedBonded = BTreeMap<
     BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Amount>>>,
 >;
 
+type AbstractTotalRedelegatedUnbonded = BTreeMap<
+    Epoch,
+    BTreeMap<Epoch, BTreeMap<Address, BTreeMap<Epoch, token::Amount>>>,
+>;
+
 type AbstractValidatorTotalRedelegatedUnbonded = BTreeMap<
     Address,
     BTreeMap<
@@ -3446,67 +3451,569 @@ impl AbstractPosState {
             .get(&self.epoch)
             .cloned()
             .unwrap_or_default();
-        if !slashes_this_epoch.is_empty() {
-            let infraction_epoch = self.epoch
-                - self.params.unbonding_len
-                - self.params.cubic_slashing_window_length
-                - 1;
 
-            let cubic_rate = self.cubic_slash_rate();
-            // Now need to basically do the end_of_epoch() procedure
-            // from the Informal Systems model
-            for (validator, slashes) in slashes_this_epoch {
-                // Slash this validator on it's full stake at infration
-                let stake_at_infraction = self
-                    .validator_stakes
-                    .get(&infraction_epoch)
-                    .unwrap()
-                    .get(&validator)
-                    .cloned()
-                    .unwrap_or_default();
-                self.slash_a_validator(
-                    &validator,
-                    &slashes,
-                    stake_at_infraction,
-                    infraction_epoch,
+        if slashes_this_epoch.is_empty() {
+            return;
+        }
+
+        let infraction_epoch =
+            self.epoch - self.params.slash_processing_epoch_offset();
+        let cubic_rate = self.cubic_slash_rate();
+
+        // Get effective slash rate per validator and update the slashes in the
+        // Abstract state
+        let mut slash_rates = BTreeMap::<Address, Dec>::new();
+        for (validator, slashes) in slashes_this_epoch {
+            let cur_slashes =
+                self.validator_slashes.entry(validator.clone()).or_default();
+            let tot_rate = slash_rates.entry(validator.clone()).or_default();
+
+            for slash in slashes {
+                debug_assert_eq!(slash.epoch, infraction_epoch);
+                let rate = cmp::max(
+                    slash.r#type.get_slash_rate(&self.params),
                     cubic_rate,
                 );
+                *tot_rate = cmp::min(Dec::one(), *tot_rate + rate);
+                cur_slashes.push(Slash {
+                    epoch: slash.epoch,
+                    block_height: Default::default(),
+                    r#type: SlashType::DuplicateVote,
+                    rate,
+                });
+            }
+        }
 
-                // Slash any redelegations from this validator on the
-                // destination validator's stake
-                for (start_epoch, redelegations) in self.redelegations.clone() {
-                    // If the redelegations are still slashable
-                    if start_epoch + self.params.unbonding_len > self.epoch {
-                        for (delegator, redelegations) in redelegations {
-                            for redelegation in redelegations {
-                                // If the source is this validator
-                                if redelegation.src == validator
-                                // And the redelegation came from a slashable bond
-                                    && redelegation.bond_start <= infraction_epoch
-                                {
-                                    // Slash the destination validator on the
-                                    // redelegation amount
-                                    tracing::debug!(
-                                        "Slashing redelegation of {delegator} \
-                                         from {} to {} of {} tokens.",
-                                        redelegation.src,
-                                        redelegation.dest,
-                                        redelegation.amount.to_string_native()
-                                    );
-                                    self.slash_a_validator(
-                                        &redelegation.dest,
-                                        &slashes,
-                                        redelegation.amount.change(),
-                                        infraction_epoch,
-                                        cubic_rate,
-                                    );
-                                }
-                            }
-                        }
+        // TODO: need to generalize this to abritrary pipeline len
+        let mut map_validator_slash: BTreeMap<
+            Address,
+            BTreeMap<Epoch, token::Change>,
+        > = BTreeMap::new();
+        for (validator, rate) in slash_rates {
+            self.process_validator_slash(
+                &validator,
+                rate,
+                &mut map_validator_slash,
+            );
+            // map_validator_slash.insert(validator, slash_res);
+        }
+
+        for (validator, slash_amounts) in map_validator_slash {
+            let next_stake_pre = *self
+                .validator_stakes
+                .get(&self.epoch.next())
+                .unwrap()
+                .get(&validator)
+                .unwrap();
+            let delta_cur = *slash_amounts.get(&self.epoch).unwrap();
+
+            let cur_stake = self
+                .validator_stakes
+                .entry(self.epoch)
+                .or_default()
+                .entry(validator.clone())
+                .or_default();
+            *cur_stake -= delta_cur;
+
+            let next_stake_post = next_stake_pre
+                - *slash_amounts.get(&self.epoch.next()).unwrap();
+            let next_stake_read = self
+                .validator_stakes
+                .get(&self.epoch.next())
+                .unwrap()
+                .get(&validator)
+                .cloned()
+                .unwrap();
+
+            let delta_next = next_stake_post - next_stake_read;
+
+            let next_stake = self
+                .validator_stakes
+                .entry(self.epoch.next())
+                .or_default()
+                .entry(validator.clone())
+                .or_default();
+            *next_stake -= delta_next;
+        }
+
+        // ---------------------------------------------
+
+        // for (validator, slashes) in slashes_this_epoch {
+        //     // Slash this validator on it's full stake at infration
+        //     let stake_at_infraction = self
+        //         .validator_stakes
+        //         .get(&infraction_epoch)
+        //         .unwrap()
+        //         .get(&validator)
+        //         .cloned()
+        //         .unwrap_or_default();
+        //     self.slash_a_validator(
+        //         &validator,
+        //         &slashes,
+        //         stake_at_infraction,
+        //         infraction_epoch,
+        //         cubic_rate,
+        //     );
+
+        // // Slash any redelegations from this validator on the
+        // // destination validator's stake
+        // for (start_epoch, redelegations) in self.redelegations.clone() {
+        //     // If the redelegations are still slashable
+        //     if start_epoch + self.params.unbonding_len > self.epoch {
+        //         for (delegator, redelegations) in redelegations {
+        //             for redelegation in redelegations {
+        //                 // If the source is this validator
+        //                 if redelegation.src == validator
+        //                     // And the redelegation came from a slashable
+        // bond                         && redelegation.bond_start <=
+        // infraction_epoch                 {
+        //                     // Slash the destination validator on the
+        //                     // redelegation amount
+        //                     tracing::debug!(
+        //                         "Slashing redelegation of {delegator} \
+        //                          from {} to {} of {} tokens.",
+        //                         redelegation.src,
+        //                         redelegation.dest,
+        //                         redelegation.amount.to_string_native()
+        //                     );
+        //                     self.slash_a_validator(
+        //                         &redelegation.dest,
+        //                         &slashes,
+        //                         redelegation.amount.change(),
+        //                         infraction_epoch,
+        //                         cubic_rate,
+        //                     );
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        // }
+    }
+
+    fn process_validator_slash(
+        &mut self,
+        validator: &Address,
+        slash_rate: Dec,
+        val_slash_amounts: &mut BTreeMap<
+            Address,
+            BTreeMap<Epoch, token::Change>,
+        >,
+    ) {
+        let result_slash =
+            self.slash_validator(validator, slash_rate, val_slash_amounts);
+
+        // `updatedSlashedAmountMap`
+        val_slash_amounts
+            .entry(validator.clone())
+            .or_insert(result_slash);
+
+        let dest_validators = self
+            .outgoing_redelegations
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        for dest_val in dest_validators {
+            let to_modify =
+                val_slash_amounts.entry(dest_val.clone()).or_default();
+
+            // `slashValidatorRedelegation`
+            self.slash_validator_redelegation(
+                validator, &dest_val, slash_rate, to_modify,
+            );
+        }
+    }
+
+    fn slash_validator(
+        &self,
+        validator: &Address,
+        slash_rate: Dec,
+        val_slash_amounts: &BTreeMap<Address, BTreeMap<Epoch, token::Change>>,
+    ) -> BTreeMap<Epoch, token::Change> {
+        let infraction_epoch =
+            self.epoch - self.params.slash_processing_epoch_offset();
+        let infraction_stake = self
+            .validator_stakes
+            .get(&infraction_epoch)
+            .unwrap()
+            .get(validator)
+            .cloned()
+            .unwrap_or_default();
+
+        let total_bonded = self
+            .total_bonded
+            .get(validator)
+            .cloned()
+            .unwrap_or_default();
+
+        let total_unbonded = self
+            .total_unbonded
+            .get(validator)
+            .cloned()
+            .unwrap_or_default();
+        let total_redelegated_unbonded = self
+            .validator_total_redelegated_unbonded
+            .get(validator)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut init_total_unbonded = token::Change::default();
+        let mut init_bond_balance = token::Change::default();
+        let mut init_redelegated_bond_balance =
+            BTreeMap::<Epoch, token::Change>::new();
+
+        for epoch in Epoch::iter_bounds_inclusive(
+            infraction_epoch.next(),
+            self.epoch.prev(),
+        ) {
+            init_total_unbonded += self.compute_total_unbonded(
+                validator,
+                infraction_epoch,
+                &total_unbonded.get(&epoch).cloned().unwrap_or_default(),
+                &total_redelegated_unbonded
+                    .get(&epoch)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+
+            init_bond_balance +=
+                total_bonded.get(&epoch).cloned().unwrap_or_default()
+                    - Self::compute_recent_total_unbonded(
+                        infraction_epoch,
+                        total_unbonded.get(&epoch).unwrap(),
+                        total_redelegated_unbonded.get(&epoch).unwrap(),
+                    );
+
+            // TODO: finish here
+        }
+        Default::default()
+    }
+
+    fn compute_recent_total_unbonded(
+        infraction_epoch: Epoch,
+        total_unbonded: &BTreeMap<Epoch, token::Amount>,
+        total_redelegated_unbonded: &BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<Epoch, token::Amount>>,
+        >,
+    ) -> token::Change {
+        total_unbonded.iter().fold(
+            token::Change::zero(),
+            |acc, (start_epoch, amount)| {
+                if *start_epoch > infraction_epoch
+                    && *amount > token::Amount::zero()
+                {
+                    let non_redelegated_amount = if let Some(redel_unbonds) =
+                        total_redelegated_unbonded.get(start_epoch)
+                    {
+                        *amount
+                            + redel_unbonds.iter().fold(
+                                token::Amount::zero(),
+                                |sum, (_, unbonded_map)| {
+                                    sum + unbonded_map
+                                        .iter()
+                                        .map(|(_epoch, amount)| *amount)
+                                        .sum::<token::Amount>()
+                                },
+                            )
+                    } else {
+                        *amount
+                    };
+                    acc + non_redelegated_amount.change()
+                } else {
+                    acc
+                }
+            },
+        )
+    }
+
+    fn compute_total_unbonded(
+        &self,
+        validator: &Address,
+        infraction_epoch: Epoch,
+        total_unbonded: &BTreeMap<Epoch, token::Amount>,
+        total_redelegated_unbonded: &BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<Epoch, token::Amount>>,
+        >,
+    ) -> token::Change {
+        let mut total = token::Change::zero();
+        for (epoch, _amount) in total_unbonded {
+            if *epoch > infraction_epoch {
+                continue;
+            }
+            let list_slashes = self
+                .validator_slashes
+                .get(validator)
+                .unwrap()
+                .iter()
+                .filter(|&slash| {
+                    // TODO: check bounds!
+                    *epoch <= slash.epoch
+                        && slash.epoch
+                            + self.params.slash_processing_epoch_offset()
+                            <= infraction_epoch
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let redelegated_unbonded = total_redelegated_unbonded.get(epoch);
+
+            // `fold_and_slash_redelegated_bonds`
+            let result_fold = if let Some(redelegated_unbonded) =
+                redelegated_unbonded
+            {
+                let (mut total_redelegated, mut total_after_slashing) =
+                    (token::Change::zero(), token::Change::zero());
+
+                for (src_validator, unbonded_map) in redelegated_unbonded {
+                    for (bond_start, unbonded) in unbonded_map {
+                        let src_slashes = self
+                            .validator_slashes
+                            .get(src_validator)
+                            .unwrap()
+                            .iter()
+                            .filter(|&s| {
+                                self.params.in_redelegation_slashing_window(
+                                    s.epoch,
+                                    self.params
+                                        .redelegation_start_epoch_from_end(
+                                            infraction_epoch,
+                                        ),
+                                    infraction_epoch,
+                                ) && *bond_start <= s.epoch
+                                    && s.epoch
+                                        + self
+                                            .params
+                                            .slash_processing_epoch_offset()
+                                        <= infraction_epoch
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>();
+
+                        let mut merged = list_slashes
+                            .iter()
+                            .chain(src_slashes.iter())
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        merged.sort_by(|s1, s2| {
+                            s1.epoch.partial_cmp(&s2.epoch).unwrap()
+                        });
+
+                        total_redelegated += unbonded.change();
+                        total_after_slashing += Self::apply_slashes_to_amount(
+                            &self.params,
+                            &merged,
+                            unbonded.change(),
+                        );
                     }
+                }
+
+                FoldRedelegatedBondsResult {
+                    total_redelegated: token::Amount::from(total_redelegated),
+                    total_after_slashing: token::Amount::from(
+                        total_after_slashing,
+                    ),
+                }
+            } else {
+                FoldRedelegatedBondsResult::default()
+            };
+
+            let total_not_redelegated =
+                total_unbonded.get(epoch).cloned().unwrap_or_default()
+                    - result_fold.total_redelegated;
+            let after_not_redelegated = Self::apply_slashes_to_amount(
+                &self.params,
+                &list_slashes,
+                total_not_redelegated.change(),
+            );
+            let amount_after_slashing = after_not_redelegated
+                + result_fold.total_after_slashing.change();
+            total += amount_after_slashing;
+        }
+
+        total
+    }
+
+    fn slash_validator_redelegation(
+        &self,
+        validator: &Address,
+        dest_validator: &Address,
+        slash_rate: Dec,
+        slash_amounts: &mut BTreeMap<Epoch, token::Change>,
+    ) {
+        let infraction_epoch =
+            self.epoch - self.params.slash_processing_epoch_offset();
+
+        let dest_total_redelegated_unbonded = self
+            .validator_total_redelegated_unbonded
+            .get(dest_validator)
+            .unwrap();
+        let validator_slashes = self.validator_slashes.get(validator).unwrap();
+
+        // Loop over outgoing redelegations of validator -> dest_validator
+        let outgoing_redelegations = self
+            .outgoing_redelegations
+            .get(validator)
+            .unwrap()
+            .get(dest_validator)
+            .unwrap();
+        for ((src_start_epoch, redel_start), amount) in outgoing_redelegations {
+            if self.params.in_redelegation_slashing_window(
+                infraction_epoch,
+                *redel_start,
+                self.params.redelegation_end_epoch_from_start(*redel_start),
+            ) && *src_start_epoch <= infraction_epoch
+            {
+                self.slash_redelegation(
+                    amount.change(),
+                    *src_start_epoch,
+                    *redel_start,
+                    validator,
+                    slash_rate,
+                    validator_slashes,
+                    dest_total_redelegated_unbonded,
+                    slash_amounts,
+                );
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn slash_redelegation(
+        &self,
+        amount: token::Change,
+        bond_start: Epoch,
+        redel_start: Epoch,
+        src_validator: &Address,
+        slash_rate: Dec,
+        slashes: &[Slash],
+        dest_total_redelegated_unbonded: &AbstractTotalRedelegatedUnbonded,
+        slash_amounts: &mut BTreeMap<Epoch, token::Change>,
+    ) {
+        let infraction_epoch =
+            self.epoch - self.params.slash_processing_epoch_offset();
+
+        // Do initial computation of total unbonded
+        let mut tot_unbonded = token::Change::zero();
+        for epoch in
+            Epoch::iter_bounds_inclusive(infraction_epoch.next(), self.epoch)
+        {
+            let total_redelegated_unbonded =
+                dest_total_redelegated_unbonded.get(&epoch);
+            if let Some(tot_redel_unbonded) = total_redelegated_unbonded {
+                if Self::has_redelegation(
+                    tot_redel_unbonded,
+                    bond_start,
+                    redel_start,
+                    src_validator,
+                ) {
+                    tot_unbonded += tot_redel_unbonded
+                        .get(&redel_start)
+                        .unwrap()
+                        .get(src_validator)
+                        .unwrap()
+                        .get(&bond_start)
+                        .cloned()
+                        .unwrap()
+                        .change();
                 }
             }
         }
+
+        for epoch in Epoch::iter_range(self.epoch, self.params.pipeline_len) {
+            let total_redelegated_unbonded = dest_total_redelegated_unbonded
+                .get(&epoch)
+                .cloned()
+                .unwrap_or_default();
+            let updated_total_unbonded = if Self::has_redelegation(
+                &total_redelegated_unbonded,
+                bond_start,
+                redel_start,
+                src_validator,
+            ) {
+                tot_unbonded
+            } else {
+                tot_unbonded
+                    + total_redelegated_unbonded
+                        .get(&bond_start)
+                        .unwrap()
+                        .get(src_validator)
+                        .unwrap()
+                        .get(&bond_start)
+                        .cloned()
+                        .unwrap()
+                        .change()
+            };
+            let list_slashes = slashes
+                .iter()
+                .filter(|&slash| {
+                    self.params.in_redelegation_slashing_window(
+                        slash.epoch,
+                        self.params
+                            .redelegation_start_epoch_from_end(redel_start),
+                        redel_start,
+                    ) && bond_start <= slash.epoch
+                        && slash.epoch
+                            + self.params.slash_processing_epoch_offset()
+                            < infraction_epoch
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let slashed = slash_rate
+                * Self::apply_slashes_to_amount(
+                    &self.params,
+                    &list_slashes,
+                    amount,
+                );
+
+            let list_slashes = slashes
+                .iter()
+                .filter(|&slash| {
+                    self.params.in_redelegation_slashing_window(
+                        slash.epoch,
+                        self.params
+                            .redelegation_start_epoch_from_end(redel_start),
+                        redel_start,
+                    ) && bond_start <= slash.epoch
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let slashable_stake = slash_rate
+                * Self::apply_slashes_to_amount(
+                    &self.params,
+                    &list_slashes,
+                    amount - updated_total_unbonded,
+                );
+
+            tot_unbonded = updated_total_unbonded;
+            let slashed_amt = slash_amounts.entry(epoch).or_default();
+            *slashed_amt += cmp::min(slashed, slashable_stake);
+        }
+    }
+
+    fn has_redelegation(
+        total_redelegated_unbonded: &BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<Epoch, token::Amount>>,
+        >,
+        bond_start: Epoch,
+        redel_start: Epoch,
+        src_validator: &Address,
+    ) -> bool {
+        if let Some(redel_unbonded) =
+            total_redelegated_unbonded.get(&redel_start)
+        {
+            if let Some(unbonded) = redel_unbonded.get(src_validator) {
+                if unbonded.contains_key(&bond_start) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn slash_a_validator(
@@ -3863,10 +4370,8 @@ impl AbstractPosState {
 
     /// Compute the cubic slashing rate for the current epoch
     fn cubic_slash_rate(&self) -> Dec {
-        let infraction_epoch = self.epoch
-            - self.params.unbonding_len
-            - 1_u64
-            - self.params.cubic_slashing_window_length;
+        let infraction_epoch =
+            self.epoch - self.params.slash_processing_epoch_offset();
         tracing::debug!("Infraction epoch: {}", infraction_epoch);
         let window_width = self.params.cubic_slashing_window_length;
         let epoch_start = Epoch::from(
@@ -4398,7 +4903,7 @@ impl AbstractPosState {
 
     fn apply_slashes_to_amount(
         params: &PosParams,
-        slashes: &Vec<Slash>,
+        slashes: &[Slash],
         amount: token::Change,
     ) -> token::Change {
         let mut final_amount = amount;
