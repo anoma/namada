@@ -333,7 +333,7 @@ impl<'view> VpEnv<'view> for Ctx {
     }
 
     fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
-        unsafe { namada_vp_charge_gas(used_gas) };
+        unsafe { gas(used_gas) };
         Ok(())
     }
 }

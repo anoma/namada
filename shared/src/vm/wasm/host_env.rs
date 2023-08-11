@@ -60,7 +60,6 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            // Runtime gas meter
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
             "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
@@ -82,8 +81,6 @@ where
             "namada_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
             "namada_tx_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_native_token),
             "namada_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
-            // Whitelisted gas meter
-            "namada_tx_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
         },
     }
 }
@@ -105,7 +102,6 @@ where
             // default namespace
             "env" => {
                 "memory" => initial_memory,
-                // Runtime gas meter
                 "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
                 "namada_vp_read_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_pre),
                 "namada_vp_read_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_post),
@@ -130,8 +126,6 @@ where
                 "namada_vp_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_native_token),
                 "namada_vp_has_valid_pow" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_valid_pow),
                 "namada_vp_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_log_string),
-                // Whitelisted gas meter
-                "namada_vp_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             },
         }
 }
