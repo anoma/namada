@@ -2449,6 +2449,7 @@ pub mod args {
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
+    pub const CONVERSION_TABLE: Arg<PathBuf> = arg("conversion-table");
     pub const DAEMON_MODE: ArgFlag = flag("daemon");
     pub const DAEMON_MODE_RETRY_DUR: ArgOpt<Duration> = arg_opt("retry-sleep");
     pub const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> =
@@ -2517,7 +2518,6 @@ pub mod args {
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
-    pub const NAM_PER_ETH: Arg<f64> = arg("nam-per-eth");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
@@ -2877,12 +2877,38 @@ pub mod args {
     }
 
     impl CliToSdkCtxless<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
-        fn to_sdk_ctxless(self) -> RecommendBatch<SdkTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
             RecommendBatch::<SdkTypes> {
                 query: self.query.to_sdk_ctxless(),
                 max_gas: self.max_gas,
                 gas: self.gas,
-                nam_per_eth: self.nam_per_eth,
+                conversion_table: {
+                    let file = std::io::BufReader::new(
+                        std::fs::File::open(self.conversion_table).expect(
+                            "Failed to open the provided file to the \
+                             conversion table",
+                        ),
+                    );
+                    let table: HashMap<String, f64> =
+                        serde_json::from_reader(file)
+                            .expect("Failed to parse conversion table");
+                    table
+                        .into_iter()
+                        .map(|(token, conversion_rate)| {
+                            let token_from_ctx =
+                                FromContext::<Address>::new(token);
+                            let address = ctx.get(&token_from_ctx);
+                            let alias = token_from_ctx.into_raw();
+                            (
+                                address,
+                                BpConversionTableEntry {
+                                    alias,
+                                    conversion_rate,
+                                },
+                            )
+                        })
+                        .collect()
+                },
             }
         }
     }
@@ -2892,12 +2918,12 @@ pub mod args {
             let query = Query::parse(matches);
             let max_gas = MAX_ETH_GAS.parse(matches);
             let gas = ETH_GAS.parse(matches);
-            let nam_to_eth = NAM_PER_ETH.parse(matches);
+            let conversion_table = CONVERSION_TABLE.parse(matches);
             Self {
                 query,
                 max_gas,
                 gas,
-                nam_per_eth: nam_to_eth,
+                conversion_table,
             }
         }
 
@@ -4589,6 +4615,7 @@ pub mod args {
     impl NamadaTypes for CliTypes {
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
+        type BpConversionTable = PathBuf;
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
