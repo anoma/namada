@@ -710,8 +710,8 @@ pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
     /// An optional parameter indicating how much net
     /// gas the relayer is willing to pay.
     pub gas: Option<u64>,
-    /// Estimate amount of gwei a certain token type is worth.
-    pub conversion_table: HashMap<Address, BpConversionTableEntry>,
+    /// Bridge pool recommendations conversion rates table.
+    pub conversion_table: C::BpConversionTable,
 }
 
 /// A transfer to be added to the Ethereum bridge pool.

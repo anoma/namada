@@ -2358,6 +2358,7 @@ pub mod cmds {
 }
 
 pub mod args {
+    use std::collections::HashMap;
     use std::convert::TryFrom;
     use std::env;
     use std::net::SocketAddr;
@@ -2876,7 +2877,7 @@ pub mod args {
         }
     }
 
-    impl CliToSdkCtxless<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
+    impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
             RecommendBatch::<SdkTypes> {
                 query: self.query.to_sdk_ctxless(),
@@ -2940,9 +2941,9 @@ pub mod args {
                      costs as close to the given value as possible without \
                      exceeding it.",
                 ))
-                .arg(NAM_PER_ETH.def().help(
-                    "The amount of NAM that one ETH is worth, represented as \
-                     a decimal number.",
+                .arg(CONVERSION_TABLE.def().help(
+                    "Path to a JSON object containing a mapping between token \
+                     aliases (or addresses) and their conversion rates in gwei",
                 ))
         }
     }

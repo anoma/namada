@@ -532,26 +532,43 @@ mod recommendations {
         let validator_gas = signature_fee()
             * signature_checks(voting_powers, &bp_root.signatures)
             + valset_fee() * valset_size;
-        // This is the amount of gwei a single name is worth
-        let gwei_per_nam = Uint::from_u64(
-            (10u64.pow(9) as f64 / args.nam_per_eth).floor() as u64,
-        );
 
         // we don't recommend transfers that have already been relayed
         let mut contents: Vec<(String, I256, PendingTransfer)> =
             query_signed_bridge_pool(client)
                 .await?
                 .into_iter()
-                .filter_map(|(k, v)| {
-                    if !in_progress.contains(&v) {
+                .filter_map(|(pending_hash, pending)| {
+                    if !in_progress.contains(&pending) {
+                        let conversion_rate =
+                            if let Some(entry) = args
+                                .conversion_table
+                                .get(&pending.gas_fee.token)
+                            {
+                                let rate = entry.conversion_rate;
+                                if rate <= 0.0f64 {
+                                    eprintln!(
+                                        "Ignoring token with an invalid conversion rate: {}",
+                                        pending.gas_fee.token,
+                                    );
+                                    return None;
+                                }
+                                rate
+                            } else {
+                                return None;
+                            };
+                        // This is the amount of gwei a single gas token is worth
+                        let gwei_per_gas_token = Uint::from_u64(
+                            (10u64.pow(9) as f64 / conversion_rate).floor() as u64,
+                        );
                         Some((
-                            k,
-                            I256::try_from(v.gas_fee.amount * gwei_per_nam)
+                            pending_hash,
+                            I256::try_from(pending.gas_fee.amount * gwei_per_gas_token)
                                 .map(|cost| transfer_fee() - cost)
                                 .try_halt(|err| {
                                     tracing::debug!(%err, "Failed to convert value to I256");
                                 }),
-                            v,
+                            pending,
                         ))
                     } else {
                         None
@@ -568,7 +585,13 @@ mod recommendations {
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
-        generate(contents, validator_gas, max_gas, max_cost)?;
+        generate(
+            contents,
+            &args.conversion_table,
+            validator_gas,
+            max_gas,
+            max_cost,
+        )?;
 
         control_flow::proceed(())
     }
@@ -611,6 +634,7 @@ mod recommendations {
     /// input parameters.
     fn generate(
         contents: Vec<(String, I256, PendingTransfer)>,
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         validator_gas: Uint,
         max_gas: Uint,
         max_cost: I256,
@@ -630,13 +654,11 @@ mod recommendations {
         let mut total_cost = I256::try_from(validator_gas).try_halt(|err| {
             tracing::debug!(%err, "Failed to convert value to I256");
         })?;
-        let mut total_fees = uint::ZERO;
+        let mut total_fees = HashMap::new();
         let mut recommendation = vec![];
         for (hash, cost, transfer) in contents.into_iter() {
             let next_total_gas = total_gas + unsigned_transfer_fee();
             let next_total_cost = total_cost + cost;
-            let next_total_fees =
-                total_fees + Uint::from(transfer.gas_fee.amount);
             if cost.is_negative() {
                 if next_total_gas <= max_gas && next_total_cost <= max_cost {
                     state.feasible_region = true;
@@ -661,7 +683,7 @@ mod recommendations {
             }
             total_cost = next_total_cost;
             total_gas = next_total_gas;
-            total_fees = next_total_fees;
+            update_total_fees(&mut total_fees, transfer, conversion_table);
         }
 
         control_flow::proceed(
@@ -672,7 +694,7 @@ mod recommendations {
                     total_gas
                 );
                 println!("Estimated net profit (in gwei): {}", -total_cost);
-                println!("Total fees (in NAM): {}", total_fees);
+                println!("Total fees: {total_fees:#?}");
                 Some(recommendation)
             } else {
                 println!(
@@ -682,6 +704,23 @@ mod recommendations {
                 None
             },
         )
+    }
+
+    fn update_total_fees(
+        total_fees: &mut HashMap<String, Uint>,
+        transfer: PendingTransfer,
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
+    ) {
+        let GasFee { token, amount, .. } = transfer.gas_fee;
+        let fees = total_fees
+            .entry(
+                conversion_table
+                    .get(&token)
+                    .map(|entry| entry.alias.clone())
+                    .unwrap_or_else(|| token.to_string()),
+            )
+            .or_insert(uint::ZERO);
+        *fees += Uint::from(amount);
     }
 
     #[cfg(test)]
@@ -783,6 +822,7 @@ mod recommendations {
             let expected = vec![hash; 17];
             let recommendation = generate(
                 process_transfers(profitable),
+                &Default::default(),
                 Uint::from_u64(800_000),
                 uint::MAX_VALUE,
                 I256::zero(),
@@ -800,6 +840,7 @@ mod recommendations {
             let expected: Vec<_> = vec![hash; 17];
             let recommendation = generate(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(800_000),
                 uint::MAX_VALUE,
                 I256::zero(),
@@ -816,6 +857,7 @@ mod recommendations {
             let expected = vec![hash; 2];
             let recommendation = generate(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(50_000),
                 Uint::from_u64(150_000),
                 I256(uint::MAX_SIGNED_VALUE),
@@ -836,6 +878,7 @@ mod recommendations {
                 .collect();
             let recommendation = generate(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(150_000),
                 uint::MAX_VALUE,
                 I256::from(20_000),
@@ -853,6 +896,7 @@ mod recommendations {
             transfers.extend([transfer(17_500), transfer(17_500)]);
             let recommendation = generate(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(150_000),
                 Uint::from_u64(330_000),
                 I256::from(20_000),
@@ -867,6 +911,7 @@ mod recommendations {
             let transfers = vec![transfer(75_000); 4];
             let recommendation = generate(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(300_000),
                 uint::MAX_VALUE,
                 I256::from(20_000),
