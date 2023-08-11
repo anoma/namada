@@ -309,6 +309,12 @@ impl DenominatedAmount {
         }
     }
 
+    /// Check if the inner [`Amount`] is zero.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.amount.is_zero()
+    }
+
     /// A precise string representation. The number of
     /// decimal places in this string gives the denomination.
     /// This not true of the string produced by the `Display`
