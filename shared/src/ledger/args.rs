@@ -716,8 +716,8 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     pub sender: C::Address,
     /// The amount to be transferred
     pub amount: InputAmount,
-    /// The amount of fees (in NAM)
-    pub fee_amount: token::Amount,
+    /// The amount of gas fees
+    pub fee_amount: InputAmount,
     /// The account of fee payer.
     ///
     /// If unset, it is the same as the sender.

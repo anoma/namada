@@ -2817,7 +2817,8 @@ pub mod args {
             let recipient = BRIDGE_POOL_TARGET.parse(matches);
             let sender = SOURCE.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let fee_amount = BRIDGE_POOL_GAS_AMOUNT.parse(matches).amount;
+            let fee_amount =
+                InputAmount::Unvalidated(BRIDGE_POOL_GAS_AMOUNT.parse(matches));
             let fee_payer = BRIDGE_POOL_GAS_PAYER.parse(matches);
             let fee_token = BRIDGE_POOL_GAS_TOKEN.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);

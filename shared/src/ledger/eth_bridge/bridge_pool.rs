@@ -9,7 +9,7 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::types::key::common;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -55,11 +55,21 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     gas_payer: common::PublicKey,
 ) -> Result<Tx, Error> {
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
-    let DenominatedAmount { amount, .. } =
-        validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
-            .await
-            .expect("Failed to validate amount");
-
+    let DenominatedAmount { amount, .. } = validate_amount(
+        client,
+        amount,
+        &wrapped_erc20s::token(&asset),
+        tx_args.force,
+    )
+    .await
+    .ok_or_else(|| Error::Other("Failed to validate amount".into()))?;
+    let DenominatedAmount {
+        amount: fee_amount, ..
+    } = validate_amount(client, fee_amount, &fee_token, tx_args.force)
+        .await
+        .ok_or_else(|| {
+            Error::Other("Failed to validate Bridge pool fee amount".into())
+        })?;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
