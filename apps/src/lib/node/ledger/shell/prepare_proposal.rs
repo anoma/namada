@@ -163,7 +163,7 @@ where
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                match self.validate_wrapper_bytes(tx_bytes,  block_time, &mut temp_wl_storage,  &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
+                match self.validate_wrapper_bytes(tx_bytes, block_time, &mut temp_wl_storage, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
                     Ok(gas) => {
                         temp_wl_storage.write_log.commit_tx();
                         Some((tx_bytes.to_owned(), gas))

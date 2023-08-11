@@ -31,7 +31,7 @@
 //!
 //! # How gas is allocated
 //!
-//! Gas is only relevant to DKG encrypted txs. Every encrypted tx define its gas
+//! Gas is only relevant to DKG encrypted txs. Every encrypted tx defines its gas
 //! limit. We take this entire gas limit as the amount of gas requested by the
 //! tx.
 
@@ -77,8 +77,11 @@ pub enum AllocFailure {
     OverflowsBin { bin_resource: u64 },
 }
 
+/// The block resource to be dumped
 pub enum DumpResource<'r> {
+    /// Block space (in bytes)
     Space(&'r [u8]),
+    /// Block gas (in gas sub-units)
     Gas(u64),
 }
 
@@ -101,9 +104,7 @@ impl<'tx> BlockResources<'tx> {
 ///   - DKG decrypted transactions.
 ///   - Protocol transactions.
 ///
-/// We keep track of the current gas utilized by:
-///
-///   - DKG encrypted transactions.
+/// Gas usage of DKG encrypted txs is also tracked.
 #[derive(Debug, Default)]
 pub struct BlockAllocator<State> {
     /// The current state of the [`BlockAllocator`] state machine.
@@ -217,13 +218,7 @@ impl TxBin {
         tx_resource: DumpResource,
     ) -> Result<(), AllocFailure> {
         let tx_resource = match tx_resource {
-            DumpResource::Space(tx) => {
-                u64::try_from(tx.len()).map_err(|_| {
-                    AllocFailure::OverflowsBin {
-                        bin_resource: self.allotted,
-                    }
-                })?
-            }
+            DumpResource::Space(tx) => tx.len() as u64,
             DumpResource::Gas(gas) => gas,
         };
 
@@ -487,11 +482,10 @@ mod tests {
             new_size < bin.allotted
         });
         for tx in encrypted_txs {
-            assert!(
-                bins.borrow_mut()
-                    .try_alloc(BlockResources::new(&tx, 0))
-                    .is_ok()
-            );
+            assert!(bins
+                .borrow_mut()
+                .try_alloc(BlockResources::new(&tx, 0))
+                .is_ok());
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -543,8 +537,8 @@ mod tests {
     }
 
     /// Return random bin sizes for a [`BlockAllocator`].
-    fn arb_max_bin_sizes()
-    -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
+    fn arb_max_bin_sizes(
+    ) -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
         const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
         (1..=MAX_BLOCK_SIZE_BYTES).prop_map(
             |tendermint_max_block_space_in_bytes| {
