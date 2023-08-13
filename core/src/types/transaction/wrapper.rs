@@ -13,6 +13,7 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
+    use crate::ledger::testnet_pow;
     use crate::types::address::Address;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -240,7 +241,7 @@ pub mod wrapper_tx {
             epoch: Epoch,
             gas_limit: GasLimit,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
-                crate::ledger::testnet_pow::Solution,
+                testnet_pow::Solution,
             >,
         ) -> WrapperTx {
             Self {
@@ -255,7 +256,7 @@ pub mod wrapper_tx {
 
         /// Get the address of the implicit account associated
         /// with the public key
-        pub fn fee_payer(&self) -> Address {
+        pub fn gas_payer(&self) -> Address {
             Address::from(&self.pk)
         }
 
@@ -370,7 +371,7 @@ pub mod wrapper_tx {
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
@@ -403,7 +404,7 @@ pub mod wrapper_tx {
         fn test_decryption_invalid_hash() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount: Amount::from_uint(10, 0).expect("Test failed"),
                         token: nam(),
@@ -438,17 +439,18 @@ pub mod wrapper_tx {
         fn test_malleability_attack_detection() {
             let keypair = gen_keypair();
             // the signed tx
-            let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount: Amount::from_uint(10, 0).expect("Test failed"),
-                    token: nam(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            ))));
+            let mut tx =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount: Amount::from_uint(10, 0).expect("Test failed"),
+                        token: nam(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                ))));
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));

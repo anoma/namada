@@ -99,9 +99,13 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the tx WASM code file
-    pub code_path: C::Data,
+    pub code_path: Option<PathBuf>,
     /// Path to the data file
     pub data_path: Option<C::Data>,
+    /// Path to the serialized transaction
+    pub serialized_tx: Option<C::Data>,
+    /// The address that correspond to the signatures/signing-keys
+    pub owner: C::Address,
 }
 
 /// Transfer transaction arguments
@@ -164,14 +168,14 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Address of the source account
-    pub source: C::Address,
     /// Path to the VP WASM code file for the new account
     pub vp_code_path: PathBuf,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Public key for the new account
-    pub public_key: C::PublicKey,
+    pub public_keys: Vec<C::PublicKey>,
+    /// The account multisignature threshold
+    pub threshold: Option<u8>,
 }
 
 /// Transaction to initialize a new account
@@ -179,12 +183,12 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Source
-    pub source: C::Address,
     /// Signature scheme
     pub scheme: SchemeType,
-    /// Account key
-    pub account_key: Option<C::PublicKey>,
+    /// Account keys
+    pub account_keys: Vec<C::PublicKey>,
+    /// The account multisignature threshold
+    pub threshold: Option<u8>,
     /// Consensus key
     pub consensus_key: Option<C::Keypair>,
     /// Ethereum cold key
@@ -207,15 +211,19 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
 
 /// Transaction to update a VP arguments
 #[derive(Clone, Debug)]
-pub struct TxUpdateVp<C: NamadaTypes = SdkTypes> {
+pub struct TxUpdateAccount<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Path to the VP WASM code file
-    pub vp_code_path: PathBuf,
+    pub vp_code_path: Option<PathBuf>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Address of the account whose VP is to be updated
     pub addr: C::Address,
+    /// Public keys
+    pub public_keys: Vec<C::PublicKey>,
+    /// The account threshold
+    pub threshold: Option<u8>,
 }
 
 /// Bond arguments
@@ -304,6 +312,15 @@ pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
 
 /// Query token balance(s)
 #[derive(Clone, Debug)]
+pub struct QueryAccount<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Address of an owner
+    pub owner: C::Address,
+}
+
+/// Query token balance(s)
+#[derive(Clone, Debug)]
 pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
@@ -383,6 +400,17 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+/// Sign a transaction offline
+pub struct SignTx<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transaction data
+    pub tx_data: C::Data,
+    /// The account address
+    pub owner: C::Address,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
@@ -435,8 +463,10 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
-    /// Dump the transaction bytes
+    /// Dump the transaction bytes to file
     pub dump_tx: bool,
+    /// The output directory path to where serialize the transaction
+    pub output_folder: Option<PathBuf>,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
     /// Do not wait for the transaction to be added to the blockchain
@@ -449,10 +479,12 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
+    /// The fee payer signing key
+    pub gas_payer: Option<C::Keypair>,
     /// The amount being payed to include the transaction
-    pub fee_amount: InputAmount,
+    pub gas_amount: InputAmount,
     /// The token in which the fee is being paid
-    pub fee_token: C::Address,
+    pub gas_token: C::Address,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
@@ -460,9 +492,9 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
-    pub signing_key: Option<C::Keypair>,
-    /// Sign the tx with the keypair of the public key of the given address
-    pub signer: Option<C::Address>,
+    pub signing_keys: Vec<C::Keypair>,
+    /// List of signatures to attach to the transaction
+    pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Sign the tx with the public key for the given alias from your wallet
@@ -633,11 +665,11 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     /// The amount to be transferred
     pub amount: InputAmount,
     /// The amount of fees (in NAM)
-    pub gas_amount: token::Amount,
+    pub fee_amount: token::Amount,
     /// The account of fee payer.
-    pub gas_payer: C::Address,
+    pub fee_payer: C::Address,
     /// Path to the tx WASM code file
-    pub code_path: C::Data,
+    pub code_path: PathBuf,
 }
 
 /// Bridge pool proof arguments.

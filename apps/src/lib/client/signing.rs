@@ -31,7 +31,7 @@ where
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-pub async fn tx_signer<C, U>(
+pub async fn tx_signers<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
@@ -42,7 +42,7 @@ where
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
+    namada::ledger::signing::tx_signers::<C, U>(client, wallet, args, default)
         .await
 }
 
