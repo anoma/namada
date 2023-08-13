@@ -549,6 +549,19 @@ impl<IO> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_protocol_parameters(&client, args).await;
                     }
+                    Sub::QueryPgf(QueryPgf(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_pgf(&client, args).await;
+                    }
                     Sub::QueryAccount(QueryAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(

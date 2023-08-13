@@ -4561,6 +4561,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "regex",
+ "serde 1.0.163",
  "serde_json",
  "sha2 0.9.9",
  "tempfile",

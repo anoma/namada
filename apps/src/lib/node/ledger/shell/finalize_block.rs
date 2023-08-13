@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::pgf::storage::keys as pgf_storage;
+use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -92,8 +94,7 @@ where
                 &mut self.wl_storage,
             )?;
 
-            let _proposals_result =
-                execute_governance_proposals(self, &mut response)?;
+            execute_governance_proposals(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
@@ -817,6 +818,68 @@ where
                 .remove(&mut self.wl_storage, &address)?;
         }
 
+        // Pgf inflation
+        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
+        let pgf_inflation_rate = self
+            .read_storage_key::<Dec>(&pgf_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_pd_rate = pgf_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
+        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
+
+        credit_tokens(
+            &mut self.wl_storage,
+            &staking_token,
+            &pgf_address,
+            pgf_inflation_amount,
+        )?;
+
+        tracing::info!(
+            "Minting {} tokens for PGF rewards distribution into the PGF \
+             account.",
+            pgf_inflation_amount.to_string_native()
+        );
+
+        // Pgf steward inflation
+        let pgf_stewards_inflation_rate_key =
+            pgf_storage::get_steward_inflation_rate_key();
+        let pgf_stewards_inflation_rate = self
+            .read_storage_key::<Dec>(&pgf_stewards_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_stewards_pd_rate =
+            pgf_stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
+        let pgf_stewards_key = pgf_storage::get_stewards_key();
+        let pgf_stewards: BTreeSet<Address> =
+            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
+
+        let pgf_steward_reward = match pgf_stewards.len() {
+            0 => Dec::zero(),
+            _ => pgf_steward_inflation
+                .trunc_div(&Dec::from(pgf_stewards.len()))
+                .unwrap_or_default(),
+        };
+        let pgf_steward_reward = token::Amount::from(pgf_steward_reward);
+
+        for steward in pgf_stewards {
+            credit_tokens(
+                &mut self.wl_storage,
+                &staking_token,
+                &steward,
+                pgf_steward_reward,
+            )?;
+            tracing::info!(
+                "Minting {} tokens for PGF Steward rewards distribution into \
+                 the steward address {}.",
+                pgf_steward_reward.to_string_native(),
+                steward,
+            );
+        }
+
         Ok(())
     }
 
@@ -941,6 +1004,11 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada::core::ledger::governance::storage::keys::get_proposal_execution_key;
+    use namada::core::ledger::governance::storage::proposal::ProposalType;
+    use namada::core::ledger::governance::storage::vote::{
+        StorageProposalVote, VoteType,
+    };
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -973,7 +1041,6 @@ mod test_finalize_block {
     use namada::types::ethereum_events::{
         EthAddress, TransferToEthereum, Uint as ethUint,
     };
-    use namada::types::governance::ProposalVote;
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -981,7 +1048,7 @@ mod test_finalize_block {
     use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::types::transaction::governance::{
-        InitProposalData, ProposalType, VoteProposalData,
+        InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx, MIN_FEE_AMOUNT};
@@ -1756,11 +1823,8 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(
-            0,
-            ProposalVote::Yay(namada::types::governance::VoteType::Default),
-        );
-        add_proposal(1, ProposalVote::Nay);
+        add_proposal(0, StorageProposalVote::Yay(VoteType::Default));
+        add_proposal(1, StorageProposalVote::Nay);
 
         // Commit the genesis state
         shell.wl_storage.commit_block().unwrap();
@@ -3507,10 +3571,9 @@ mod test_finalize_block {
     /// Test that updating the ethereum bridge params via governance works.
     #[tokio::test]
     async fn test_eth_bridge_param_updates() {
-        use namada::ledger::governance::storage as gov_storage;
         let (mut shell, _broadcaster, _, mut control_receiver) =
             setup_at_height(3u64);
-        let proposal_execution_key = gov_storage::get_proposal_execution_key(0);
+        let proposal_execution_key = get_proposal_execution_key(0);
         shell
             .wl_storage
             .write(&proposal_execution_key, 0u64)

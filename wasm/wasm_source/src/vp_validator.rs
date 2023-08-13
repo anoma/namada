@@ -30,8 +30,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
-        } else if gov_storage::is_vote_key(key) {
-            let voter_address = gov_storage::get_voter_address(key);
+        } else if gov_storage::keys::is_vote_key(key) {
+            let voter_address = gov_storage::keys::get_voter_address(key);
             if let Some(address) = voter_address {
                 Self::GovernanceVote(address)
             } else {

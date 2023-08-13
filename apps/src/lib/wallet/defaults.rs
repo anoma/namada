@@ -8,7 +8,7 @@ pub use dev::{
     validator_keys,
 };
 use namada::ledger::wallet::alias::Alias;
-use namada::ledger::{eth_bridge, governance, pos};
+use namada::ledger::{eth_bridge, governance, pgf, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
 
@@ -22,6 +22,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), governance::ADDRESS),
         ("eth_bridge".into(), eth_bridge::ADDRESS),
+        ("pgf".into(), pgf::ADDRESS),
     ];
     // Genesis validators
     let validator_addresses =
@@ -75,7 +76,7 @@ mod dev {
 
     use borsh::BorshDeserialize;
     use namada::ledger::wallet::alias::Alias;
-    use namada::ledger::{governance, pos};
+    use namada::ledger::{governance, pgf, pos};
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
@@ -146,6 +147,7 @@ mod dev {
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::ADDRESS),
+            ("governance".into(), pgf::ADDRESS),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),
