@@ -8,6 +8,9 @@ use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
+use namada_core::ledger::governance::storage::proposal::StorageProposal;
+use namada_core::ledger::governance::utils::Vote;
 use namada_core::ledger::storage::LastBlock;
 #[cfg(not(feature = "mainnet"))]
 use namada_core::ledger::testnet_pow;
@@ -23,11 +26,9 @@ use namada_proof_of_stake::types::{
 };
 use serde::Serialize;
 
+use crate::core::ledger::governance::storage::keys as gov_storage;
 use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
-use crate::ledger::governance::parameters::GovParams;
-use crate::ledger::governance::storage as gov_storage;
-use crate::ledger::native_vp::governance::utils::Votes;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
@@ -37,7 +38,6 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
-use crate::types::governance::{ProposalVote, VotePower};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
@@ -124,8 +124,8 @@ pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
 fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
-    response.unwrap_or_else(|_err| {
-        panic!("Error in the query");
+    response.unwrap_or_else(|err| {
+        panic!("Error in the query: {:?}", err.to_string());
     })
 }
 
@@ -628,69 +628,6 @@ pub async fn query_tx_response<C: crate::ledger::queries::Client + Sync>(
     Ok(result)
 }
 
-/// Get the votes for a given proposal id
-pub async fn get_proposal_votes<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    epoch: Epoch,
-    proposal_id: u64,
-) -> Votes {
-    let validators = get_all_validators(client, epoch).await;
-
-    let vote_prefix_key =
-        gov_storage::get_proposal_vote_prefix_key(proposal_id);
-    let vote_iter =
-        query_storage_prefix::<C, ProposalVote>(client, &vote_prefix_key).await;
-
-    let mut yay_validators: HashMap<Address, (VotePower, ProposalVote)> =
-        HashMap::new();
-    let mut delegators: HashMap<
-        Address,
-        HashMap<Address, (VotePower, ProposalVote)>,
-    > = HashMap::new();
-
-    if let Some(vote_iter) = vote_iter {
-        for (key, vote) in vote_iter {
-            let voter_address = gov_storage::get_voter_address(&key)
-                .expect("Vote key should contain the voting address.")
-                .clone();
-            if vote.is_yay() && validators.contains(&voter_address) {
-                let amount: VotePower =
-                    get_validator_stake(client, epoch, &voter_address)
-                        .await
-                        .try_into()
-                        .expect("Amount of bonds");
-                yay_validators.insert(voter_address, (amount, vote));
-            } else if !validators.contains(&voter_address) {
-                let validator_address =
-                    gov_storage::get_vote_delegation_address(&key)
-                        .expect(
-                            "Vote key should contain the delegation address.",
-                        )
-                        .clone();
-                let delegator_token_amount = get_bond_amount_at(
-                    client,
-                    &voter_address,
-                    &validator_address,
-                    epoch,
-                )
-                .await;
-                if let Some(amount) = delegator_token_amount {
-                    let entry = delegators.entry(voter_address).or_default();
-                    entry.insert(
-                        validator_address,
-                        (VotePower::from(amount), vote),
-                    );
-                }
-            }
-        }
-    }
-
-    Votes {
-        yay_validators,
-        delegators,
-    }
-}
-
 /// Get the PoS parameters
 pub async fn get_pos_params<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -761,6 +698,34 @@ pub async fn get_delegators_delegation<
 ) -> HashSet<Address> {
     unwrap_client_response::<C, _>(
         RPC.vp().pos().delegation_validators(client, address).await,
+    )
+}
+
+/// Get the delegator's delegation at some epoh
+pub async fn get_delegators_delegation_at<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    address: &Address,
+    epoch: Epoch,
+) -> HashMap<Address, token::Amount> {
+    unwrap_client_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .delegations(client, address, &Some(epoch))
+            .await,
+    )
+}
+
+/// Query proposal by Id
+pub async fn query_proposal_by_id<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    proposal_id: u64,
+) -> Option<StorageProposal> {
+    // let a = RPC.vp().gov().proposal_id(client, &proposal_id).await;
+    // println!("{:?}", a.err().unwrap());
+    unwrap_client_response::<C, _>(
+        RPC.vp().gov().proposal_id(client, &proposal_id).await,
     )
 }
 
@@ -900,11 +865,11 @@ pub async fn query_unbond_with_slashing<
 }
 
 /// Get the givernance parameters
-pub async fn get_governance_parameters<
+pub async fn query_governance_parameters<
     C: crate::ledger::queries::Client + Sync,
 >(
     client: &C,
-) -> GovParams {
+) -> GovernanceParameters {
     let key = gov_storage::get_max_proposal_code_size_key();
     let max_proposal_code_size = query_storage_value::<C, u64>(client, &key)
         .await
@@ -925,25 +890,35 @@ pub async fn get_governance_parameters<
         .await
         .expect("Parameter should be definied.");
 
-    let key = gov_storage::get_min_proposal_period_key();
-    let min_proposal_period = query_storage_value::<C, u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
+    let key = gov_storage::get_min_proposal_voting_period_key();
+    let min_proposal_voting_period =
+        query_storage_value::<C, u64>(client, &key)
+            .await
+            .expect("Parameter should be definied.");
 
     let key = gov_storage::get_max_proposal_period_key();
     let max_proposal_period = query_storage_value::<C, u64>(client, &key)
         .await
         .expect("Parameter should be definied.");
 
-    GovParams {
-        min_proposal_fund: u128::try_from(min_proposal_fund)
-            .expect("Amount out of bounds") as u64,
+    GovernanceParameters {
+        min_proposal_fund,
         max_proposal_code_size,
-        min_proposal_period,
+        min_proposal_voting_period,
         max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
     }
+}
+
+/// Get the givernance parameters
+pub async fn query_proposal_votes<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    proposal_id: u64,
+) -> Vec<Vote> {
+    unwrap_client_response::<C, Vec<Vote>>(
+        RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
+    )
 }
 
 /// Get the bond amount at the given epoch
@@ -976,7 +951,6 @@ pub async fn bonds_and_unbonds<C: crate::ledger::queries::Client + Sync>(
             .await,
     )
 }
-
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs, enriched with extra information calculated from
 /// the data.

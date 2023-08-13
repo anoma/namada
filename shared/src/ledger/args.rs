@@ -163,6 +163,44 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+/// Transaction to initialize create a new proposal
+#[derive(Clone, Debug)]
+pub struct InitProposal<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// The proposal data
+    pub proposal_data: C::Data,
+    /// Native token address
+    pub native_token: C::NativeAddress,
+    /// Flag if proposal should be run offline
+    pub is_offline: bool,
+    /// Flag if proposal is of type Pgf stewards
+    pub is_pgf_stewards: bool,
+    /// Flag if proposal is of type Pgf funding
+    pub is_pgf_funding: bool,
+    /// Path to the tx WASM file
+    pub tx_code_path: PathBuf,
+}
+
+/// Transaction to vote on a proposal
+#[derive(Clone, Debug)]
+pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Proposal id
+    pub proposal_id: Option<u64>,
+    /// The vote
+    pub vote: String,
+    /// The address of the voter
+    pub voter: C::Address,
+    /// Flag if proposal vote should be run offline
+    pub is_offline: bool,
+    /// The proposal file path
+    pub proposal_data: Option<C::Data>,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
@@ -281,6 +319,13 @@ pub struct QueryProposal<C: NamadaTypes = SdkTypes> {
 /// Query protocol parameters
 #[derive(Clone, Debug)]
 pub struct QueryProtocolParameters<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+}
+
+/// Query pgf data
+#[derive(Clone, Debug)]
+pub struct QueryPgf<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
 }
@@ -465,7 +510,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub dry_run: bool,
     /// Dump the transaction bytes to file
     pub dump_tx: bool,
-    /// The output directory path to where serialize the transaction
+    /// The output directory path to where serialize the data
     pub output_folder: Option<PathBuf>,
     /// Submit the transaction even if it doesn't pass client checks
     pub force: bool,
