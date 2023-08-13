@@ -3927,11 +3927,8 @@ where
 
     // Check that the validator is jailed up to the pipeline epoch
     for epoch in current_epoch.iter_range(params.pipeline_len + 1) {
-        let state = validator_state_handle(validator).get(
-            storage,
-            current_epoch,
-            &params,
-        )?;
+        let state =
+            validator_state_handle(validator).get(storage, epoch, &params)?;
         if let Some(state) = state {
             if state != ValidatorState::Jailed {
                 return Err(UnjailValidatorError::NotJailed(
