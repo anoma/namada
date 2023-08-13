@@ -127,30 +127,6 @@ pub mod main {
     }
 }
 
-/// A tx that attempts to mint tokens in the transfer's target without debiting
-/// the tokens from the source. This tx is expected to be rejected by the
-/// token's VP.
-#[cfg(feature = "tx_mint_tokens")]
-pub mod main {
-    use namada_test_utils::tx_data::TxMintData;
-    use namada_tx_prelude::*;
-
-    #[transaction]
-    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-        let signed = tx_data;
-        let mint_data =
-            TxMintData::try_from_slice(&signed.data().unwrap()[..]).unwrap();
-        log_string(format!("apply_tx called to mint tokens: {:#?}", mint_data));
-        let TxMintData {
-            minter,
-            target,
-            token,
-            amount,
-        } = mint_data;
-        token::mint(ctx, &minter, &target, &token, amount)
-    }
-}
-
 /// A VP that always returns `true`.
 #[cfg(feature = "vp_always_true")]
 pub mod main {
