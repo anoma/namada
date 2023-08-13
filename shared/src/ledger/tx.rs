@@ -42,7 +42,7 @@ use crate::ibc::tx_msg::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
-use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
+use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
     TxResponse,
@@ -1132,7 +1132,8 @@ pub async fn build_default_proposal<
     init_proposal_data.content = extra_section_hash;
 
     if let Some(init_proposal_code) = proposal.data {
-        let (_, extra_section_hash) = tx_builder.add_extra_section(init_proposal_code);
+        let (_, extra_section_hash) =
+            tx_builder.add_extra_section(init_proposal_code);
         init_proposal_data.r#type =
             ProposalType::Default(Some(extra_section_hash));
     };
@@ -1607,30 +1608,34 @@ pub async fn build_transfer<
     let mut tx = Tx::new(chain_id, args.tx.expiration);
 
     // Add the MASP Transaction and its Builder to facilitate validation
-    let (masp_hash, shielded_tx_epoch) = if let Some(shielded_parts) =
-        shielded_parts
+    let (masp_hash, shielded_tx_epoch) = if let Some(ShieldedTransfer {
+        builder,
+        masp_tx,
+        metadata,
+        epoch,
+    }) = shielded_parts
     {
         // Add a MASP Transaction section to the Tx and get the tx hash
-        let masp_tx_hash = tx.add_masp_tx_section(shielded_parts.1).1;
+        let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
 
         // Get the decoded asset types used in the transaction to give
         // offline wallet users more information
-        let asset_types = used_asset_types(shielded, client, &shielded_parts.0)
+        let asset_types = used_asset_types(shielded, client, &builder)
             .await
             .unwrap_or_default();
 
         tx.add_masp_builder(MaspBuilder {
             asset_types,
             // Store how the Info objects map to Descriptors/Outputs
-            metadata: shielded_parts.2,
+            metadata,
             // Store the data that was used to construct the Transaction
-            builder: shielded_parts.0,
+            builder,
             // Link the Builder to the Transaction by hash code
             target: masp_tx_hash,
         });
 
         // The MASP Transaction section hash will be used in Transfer
-        (Some(masp_tx_hash), Some(shielded_parts.3))
+        (Some(masp_tx_hash), Some(epoch))
     } else {
         (None, None)
     };
