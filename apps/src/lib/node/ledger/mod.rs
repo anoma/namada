@@ -329,7 +329,7 @@ async fn run_aux_setup(
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {
         let sys = System::new_with_specifics(RefreshKind::new().with_memory());
-        let available_memory_bytes = sys.available_memory() * 1024;
+        let available_memory_bytes = sys.available_memory();
         tracing::info!(
             "Available memory: {}",
             Byte::from_bytes(available_memory_bytes as u128)
