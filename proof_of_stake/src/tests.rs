@@ -51,9 +51,10 @@ use crate::{
     staking_token_address, store_total_consensus_stake, total_deltas_handle,
     unbond_handle, unbond_tokens, unjail_validator, update_validator_deltas,
     update_validator_set, validator_consensus_key_handle,
-    validator_set_update_tendermint, validator_slashes_handle,
-    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
-    BecomeValidator, STORE_VALIDATOR_SETS_LEN,
+    validator_set_positions_handle, validator_set_update_tendermint,
+    validator_slashes_handle, validator_state_handle, withdraw_tokens,
+    write_validator_address_raw_hash, BecomeValidator,
+    STORE_VALIDATOR_SETS_LEN,
 };
 
 proptest! {
@@ -121,6 +122,22 @@ proptest! {
     ) {
         test_slashes_with_unbonding_aux(
             params, genesis_validators, unbond_delay)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_unjail_validator_aux`
+    #![proptest_config(Config {
+        cases: 5,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_unjail_validator(
+        (pos_params, genesis_validators)
+            in arb_params_and_genesis_validators(Some(4),6..9)
+    ) {
+        test_unjail_validator_aux(pos_params,
+            genesis_validators)
     }
 }
 
@@ -2111,4 +2128,128 @@ fn arb_genesis_validators(
                 }
             },
         )
+}
+
+fn test_unjail_validator_aux(
+    params: PosParams,
+    mut validators: Vec<GenesisValidator>,
+) {
+    println!("\nTest inputs: {params:?}, genesis validators: {validators:#?}");
+    let mut s = TestWlStorage::default();
+
+    // Find the validator with the most stake and 100x his stake to keep the
+    // cubic slash rate small
+    let num_vals = validators.len();
+    validators.sort_by_key(|a| a.tokens);
+    validators[num_vals - 1].tokens = 100 * validators[num_vals - 1].tokens;
+
+    // Get second highest stake validator tomisbehave
+    let val_addr = &validators[num_vals - 2].address;
+    let val_tokens = validators[num_vals - 2].tokens;
+    println!(
+        "Validator that will misbehave addr {val_addr}, tokens {}",
+        val_tokens.to_string_native()
+    );
+
+    // Genesis
+    let mut current_epoch = s.storage.block.epoch;
+    init_genesis(
+        &mut s,
+        &params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    s.commit_block().unwrap();
+
+    current_epoch = advance_epoch(&mut s, &params);
+    super::process_slashes(&mut s, current_epoch).unwrap();
+
+    // Discover first slash
+    let slash_0_evidence_epoch = current_epoch;
+    let evidence_block_height = BlockHeight(0); // doesn't matter for slashing logic
+    let slash_0_type = SlashType::DuplicateVote;
+    slash(
+        &mut s,
+        &params,
+        current_epoch,
+        slash_0_evidence_epoch,
+        evidence_block_height,
+        slash_0_type,
+        val_addr,
+        current_epoch.next(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        validator_state_handle(val_addr)
+            .get(&s, current_epoch, &params)
+            .unwrap(),
+        Some(ValidatorState::Consensus)
+    );
+
+    for epoch in Epoch::iter_bounds_inclusive(
+        current_epoch.next(),
+        current_epoch + params.pipeline_len,
+    ) {
+        // Check the validator state
+        assert_eq!(
+            validator_state_handle(val_addr)
+                .get(&s, epoch, &params)
+                .unwrap(),
+            Some(ValidatorState::Jailed)
+        );
+        // Check the validator set positions
+        assert!(
+            validator_set_positions_handle()
+                .at(&epoch)
+                .get(&s, val_addr)
+                .unwrap()
+                .is_none(),
+        );
+    }
+
+    // Advance past an epoch in which we can unbond
+    let unfreeze_epoch =
+        slash_0_evidence_epoch + params.slash_processing_epoch_offset();
+    while current_epoch < unfreeze_epoch + 4u64 {
+        current_epoch = advance_epoch(&mut s, &params);
+        super::process_slashes(&mut s, current_epoch).unwrap();
+    }
+
+    // Unjail the validator
+    unjail_validator(&mut s, val_addr, current_epoch).unwrap();
+
+    // Check the validator state
+    for epoch in
+        Epoch::iter_bounds_inclusive(current_epoch, current_epoch.next())
+    {
+        assert_eq!(
+            validator_state_handle(val_addr)
+                .get(&s, epoch, &params)
+                .unwrap(),
+            Some(ValidatorState::Jailed)
+        );
+    }
+
+    assert_eq!(
+        validator_state_handle(val_addr)
+            .get(&s, current_epoch + params.pipeline_len, &params)
+            .unwrap(),
+        Some(ValidatorState::Consensus)
+    );
+    assert!(
+        validator_set_positions_handle()
+            .at(&(current_epoch + params.pipeline_len))
+            .get(&s, val_addr)
+            .unwrap()
+            .is_some(),
+    );
+
+    // Advance another epoch
+    current_epoch = advance_epoch(&mut s, &params);
+    super::process_slashes(&mut s, current_epoch).unwrap();
+
+    let second_att = unjail_validator(&mut s, val_addr, current_epoch);
+    assert!(second_att.is_err());
 }
