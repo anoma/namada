@@ -202,6 +202,13 @@ where
             .gov_params
             .init_storage(&mut self.wl_storage)
             .expect("Initializing chain parameters must not fail");
+
+        // Initialize pgf parameters
+        genesis
+            .pgf_params
+            .init_storage(&mut self.wl_storage)
+            .expect("Initializing chain parameters must not fail");
+
         // configure the Ethereum bridge if the configuration is set.
         if let Some(config) = genesis.ethereum_bridge_params {
             tracing::debug!("Initializing Ethereum bridge storage.");
