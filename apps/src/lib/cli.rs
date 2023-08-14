@@ -1971,52 +1971,87 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
+        /// The [`super::Context`] provides access to the wallet and the
+        /// config. It will generate a new wallet and config, if they
+        /// don't exist.
+        WithContext(EthBridgePoolWithCtx),
+        /// Utils don't have [`super::Context`], only the global arguments.
+        WithoutContext(EthBridgePoolWithoutCtx),
+    }
+
+    /// Ethereum Bridge pool commands requiring [`super::Context`].
+    #[derive(Clone, Debug)]
+    pub enum EthBridgePoolWithCtx {
         /// Get a recommendation on a batch of transfers
         /// to relay.
-        RecommendBatch(args::RecommendBatch<args::CliTypes>),
+        RecommendBatch(RecommendBatch),
+    }
+
+    /// Ethereum Bridge pool commands not requiring [`super::Context`].
+    #[derive(Clone, Debug)]
+    pub enum EthBridgePoolWithoutCtx {
         /// Construct a proof that a set of transfers is in the pool.
         /// This can be used to relay transfers across the
         /// bridge to Ethereum.
-        ConstructProof(args::BridgePoolProof<args::CliTypes>),
+        ConstructProof(ConstructProof),
         /// Construct and relay a bridge pool proof to
         /// Ethereum directly.
-        RelayProof(args::RelayBridgePoolProof<args::CliTypes>),
+        RelayProof(RelayProof),
         /// Query the contents of the pool.
-        QueryPool(args::Query<args::CliTypes>),
+        QueryPool(QueryEthBridgePool),
         /// Query to provable contents of the pool.
-        QuerySigned(args::Query<args::CliTypes>),
+        QuerySigned(QuerySignedBridgePool),
         /// Check the confirmation status of `TransferToEthereum`
         /// events.
-        QueryRelays(args::Query<args::CliTypes>),
+        QueryRelays(QueryRelayProgress),
     }
 
     impl Cmd for EthBridgePool {
         fn add_sub(app: App) -> App {
-            app.subcommand(ConstructProof::def().display_order(1))
+            app.subcommand(RecommendBatch::def().display_order(1))
+                .subcommand(ConstructProof::def().display_order(1))
+                .subcommand(RelayProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
                 .subcommand(QuerySignedBridgePool::def().display_order(1))
                 .subcommand(QueryRelayProgress::def().display_order(1))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let recommend = RecommendBatch::parse(matches)
-                .map(|query| Self::RecommendBatch(query.0));
-            let construct_proof = ConstructProof::parse(matches)
-                .map(|proof| Self::ConstructProof(proof.0));
-            let relay_proof = RelayProof::parse(matches)
-                .map(|proof| Self::RelayProof(proof.0));
-            let query_pool = QueryEthBridgePool::parse(matches)
-                .map(|q| Self::QueryPool(q.0));
-            let query_signed = QuerySignedBridgePool::parse(matches)
-                .map(|q| Self::QuerySigned(q.0));
-            let query_relays = QueryRelayProgress::parse(matches)
-                .map(|q| Self::QueryRelays(q.0));
+            use EthBridgePoolWithCtx::*;
+            use EthBridgePoolWithoutCtx::*;
+
+            let recommend = Self::parse_with_ctx(matches, RecommendBatch);
+            let construct_proof =
+                Self::parse_without_ctx(matches, ConstructProof);
+            let relay_proof = Self::parse_without_ctx(matches, RelayProof);
+            let query_pool = Self::parse_without_ctx(matches, QueryPool);
+            let query_signed = Self::parse_without_ctx(matches, QuerySigned);
+            let query_relays = Self::parse_without_ctx(matches, QueryRelays);
+
             construct_proof
                 .or(recommend)
                 .or(relay_proof)
                 .or(query_pool)
                 .or(query_signed)
                 .or(query_relays)
+        }
+    }
+
+    impl EthBridgePool {
+        /// A helper method to parse sub cmds with context
+        fn parse_with_ctx<T: SubCmd>(
+            matches: &ArgMatches,
+            sub_to_self: impl Fn(T) -> EthBridgePoolWithCtx,
+        ) -> Option<Self> {
+            T::parse(matches).map(|sub| Self::WithContext(sub_to_self(sub)))
+        }
+
+        /// A helper method to parse sub cmds without context
+        fn parse_without_ctx<T: SubCmd>(
+            matches: &ArgMatches,
+            sub_to_self: impl Fn(T) -> EthBridgePoolWithoutCtx,
+        ) -> Option<Self> {
+            T::parse(matches).map(|sub| Self::WithoutContext(sub_to_self(sub)))
         }
     }
 
@@ -2134,7 +2169,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEthBridgePool(args::Query<args::CliTypes>);
+    pub struct QueryEthBridgePool(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryEthBridgePool {
         const CMD: &'static str = "query";
@@ -2153,7 +2188,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySignedBridgePool(args::Query<args::CliTypes>);
+    pub struct QuerySignedBridgePool(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QuerySignedBridgePool {
         const CMD: &'static str = "query-signed";
@@ -2175,7 +2210,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRelayProgress(args::Query<args::CliTypes>);
+    pub struct QueryRelayProgress(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryRelayProgress {
         const CMD: &'static str = "query-relayed";
@@ -2199,14 +2234,14 @@ pub mod cmds {
         /// Query an Ethereum ABI encoding of the consensus validator
         /// set in Namada, at the given epoch, or the latest
         /// one, if none is provided.
-        ConsensusValidatorSet(args::ConsensusValidatorSet<args::CliTypes>),
+        ConsensusValidatorSet(ConsensusValidatorSet),
         /// Query an Ethereum ABI encoding of a proof of the consensus
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
-        ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>),
+        ValidatorSetProof(ValidatorSetProof),
         /// Relay a validator set update to Namada's Ethereum bridge
         /// smart contracts.
-        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay<args::CliTypes>),
+        ValidatorSetUpdateRelay(ValidatorSetUpdateRelay),
     }
 
     impl SubCmd for ValidatorSet {
@@ -2216,11 +2251,11 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let consensus_validator_set =
                     ConsensusValidatorSet::parse(matches)
-                        .map(|args| Self::ConsensusValidatorSet(args.0));
+                        .map(Self::ConsensusValidatorSet);
                 let validator_set_proof = ValidatorSetProof::parse(matches)
-                    .map(|args| Self::ValidatorSetProof(args.0));
+                    .map(Self::ValidatorSetProof);
                 let relay = ValidatorSetUpdateRelay::parse(matches)
-                    .map(|args| Self::ValidatorSetUpdateRelay(args.0));
+                    .map(Self::ValidatorSetUpdateRelay);
                 consensus_validator_set.or(validator_set_proof).or(relay)
             })
         }
@@ -2241,7 +2276,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub struct ConsensusValidatorSet(
-        args::ConsensusValidatorSet<args::CliTypes>,
+        pub args::ConsensusValidatorSet<args::CliTypes>,
     );
 
     impl SubCmd for ConsensusValidatorSet {
@@ -2265,7 +2300,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>);
+    pub struct ValidatorSetProof(pub args::ValidatorSetProof<args::CliTypes>);
 
     impl SubCmd for ValidatorSetProof {
         const CMD: &'static str = "proof";
@@ -2289,7 +2324,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub struct ValidatorSetUpdateRelay(
-        args::ValidatorSetUpdateRelay<args::CliTypes>,
+        pub args::ValidatorSetUpdateRelay<args::CliTypes>,
     );
 
     impl SubCmd for ValidatorSetUpdateRelay {
@@ -5467,9 +5502,39 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-pub fn namada_relayer_cli() -> Result<(cmds::NamadaRelayer, Context)> {
+pub enum NamadaRelayer {
+    EthBridgePoolWithCtx(Box<(cmds::EthBridgePoolWithCtx, Context)>),
+    EthBridgePoolWithoutCtx(cmds::EthBridgePoolWithoutCtx),
+    ValidatorSet(cmds::ValidatorSet),
+}
+
+pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     let app = namada_relayer_app();
-    cmds::NamadaRelayer::parse_or_print_help(app)
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => match cmd {
+            cmds::NamadaRelayer::EthBridgePool(
+                cmds::EthBridgePool::WithContext(sub_cmd),
+            ) => {
+                let global_args = args::Global::parse(&matches);
+                let context = Context::new(global_args)?;
+                Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
+                    sub_cmd, context,
+                ))))
+            }
+            cmds::NamadaRelayer::EthBridgePool(
+                cmds::EthBridgePool::WithoutContext(sub_cmd),
+            ) => Ok(NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd)),
+            cmds::NamadaRelayer::ValidatorSet(sub_cmd) => {
+                Ok(NamadaRelayer::ValidatorSet(sub_cmd))
+            }
+        },
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
 }
 
 fn namada_app() -> App {
