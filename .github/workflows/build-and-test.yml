@@ -394,6 +394,7 @@ jobs:
         nightly_version: [nightly-2023-06-01]
         mold_version: [1.7.0]
         comet_bft: [0.37.2]
+        hermes: [1.6.0-namada-beta1]
         make:
           - name: e2e
             suffix: ''
@@ -525,6 +526,11 @@ jobs:
           curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${{ matrix.comet_bft }}/cometbft_${{ matrix.comet_bft }}_linux_amd64.tar.gz
           tar -xvzf cometbft.tar.gz
           mv cometbft /usr/local/bin
+      - name: Download Hermes
+        run: |
+          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${{ matrix.hermes }}/hermes-v${{ matrix.hermes }}-x86_64-unknown-linux-gnu.tar.gz
+          tar -xvzf hermes.tar.gz
+          mv hermes /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
@@ -532,6 +538,7 @@ jobs:
           chmod +x target/release/namadan
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/cometbft
+          chmod +x /usr/local/bin/hermes
       - name: Run e2e test
         run: |
           python3 .github/workflows/scripts/schedule-e2e.py
