@@ -202,7 +202,7 @@ pub enum Error {
     WasmValidationFailure(WasmValidationError),
     /// Encoding transaction failure
     #[error("Encoding tx data, {0}, shouldn't fail")]
-    EncodeTxFailure(std::io::Error),
+    EncodeTxFailure(String),
     /// Like EncodeTxFailure but for the encode error type
     #[error("Encoding tx data, {0}, shouldn't fail")]
     EncodeFailure(EncodeError),
@@ -787,7 +787,7 @@ pub async fn build_unjail_validator<
     let _data = validator
         .clone()
         .try_to_vec()
-        .map_err(Error::EncodeTxFailure)?;
+        .map_err(|err| Error::EncodeTxFailure(err.to_string()))?;
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
