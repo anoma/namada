@@ -4,7 +4,7 @@
 
 ## Overview
 
-[Namada](http://namada.net) is a Proof-of-Stake L1 for interchain asset-agnostic privacy. Namada uses Tendermint BFT
+[Namada](http://namada.net) is a Proof-of-Stake L1 for interchain asset-agnostic privacy. Namada uses CometBFT
 consensus and enables multi-asset shielded transfers for any native
 or non-native asset. Namada features full IBC protocol support,
 a natively integrated Ethereum bridge, a modern proof-of-stake
@@ -27,7 +27,7 @@ interaction with the protocol.
 
 ## 💾 Installing
 
-There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [Tendermint](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
+There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [CometBFT](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
 
 ```shell
 make install
@@ -72,7 +72,7 @@ To change the log level, set `NAMADA_LOG` environment variable to one of:
 * `debug`
 * `trace`
 
-The default is set to `info` for all the modules, expect for Tendermint ABCI, which has a lot of `debug` logging.
+The default is set to `info` for all the modules, expect for CombetBFT ABCI, which has a lot of `debug` logging.
 
 For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.
 
@@ -84,4 +84,4 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires that the Heliax fork of tendermint[v0.1.4-abciplus] is installed and available on path. This can be achieved through following [these instructions](https://docs.namada.net/user-guide/install/installing-tendermint.html)
+The ledger currently requires [CometBFT v0.37.2](https://github.com/cometbft/cometbft/releases/tag/v0.37.2) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
