@@ -37,7 +37,7 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
 };
 
 #[allow(missing_docs)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum WasmValidationError {
     #[error(
         "Invalid WASM using forbidden features: {0}. Expected: \
