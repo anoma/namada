@@ -95,7 +95,7 @@ pub const TX_CHANGE_COMMISSION_WASM: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 /// Errors to do with transaction events.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     /// Accepted tx timeout
     #[error("Timed out waiting for tx to be accepted")]
