@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 use super::onchain::{PgfFunding, PgfSteward};
+use crate::types::address::Address;
 use crate::types::storage::Epoch;
 use crate::types::token;
 
@@ -222,9 +223,26 @@ pub fn is_valid_default_proposal_data(
 
 pub fn is_valid_pgf_stewards_data(
     data: &Vec<PgfSteward>,
+    author: &Address,
 ) -> Result<(), ProposalValidation> {
     if !data.is_empty() {
-        Ok(())
+        let total_added_stewards = data
+            .iter()
+            .filter(|steward| steward.action.is_add())
+            .cloned()
+            .collect::<Vec<PgfSteward>>();
+        if total_added_stewards.len() > 1 {
+            Err(ProposalValidation::InvalidPgfStewardsExtraData)
+        } else if total_added_stewards.is_empty() {
+            Ok(())
+        } else {
+            let steward_address = &total_added_stewards.get(0).unwrap().address;
+            if steward_address.eq(author) {
+                return Ok(());
+            } else {
+                return Err(ProposalValidation::InvalidPgfStewardsExtraData);
+            }
+        }
     } else {
         Err(ProposalValidation::InvalidPgfStewardsExtraData)
     }

@@ -150,7 +150,7 @@ impl PgfStewardProposal {
             &self.proposal.content,
             governance_parameters.max_proposal_content_size,
         )?;
-        is_valid_pgf_stewards_data(&self.data)?;
+        is_valid_pgf_stewards_data(&self.data, &self.proposal.author)?;
 
         Ok(self)
     }
@@ -243,6 +243,13 @@ pub enum PgfAction {
     Add,
     /// Remove action
     Remove,
+}
+
+impl PgfAction {
+    /// Check if a pgf action is adding a steward
+    pub fn is_add(&self) -> bool {
+        matches!(self, PgfAction::Add)
+    }
 }
 
 /// Pgf fundings
