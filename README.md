@@ -84,4 +84,4 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires that the Heliax fork of tendermint[v0.1.4-abciplus] is installed and available on path. This can be achieved through following [these instructions](https://docs.namada.net/user-guide/install/installing-tendermint.html)
+The ledger currently requires [CometBFT v0.37.2](https://github.com/cometbft/cometbft/releases/tag/v0.37.2) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
