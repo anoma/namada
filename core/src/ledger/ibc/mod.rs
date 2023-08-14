@@ -140,7 +140,7 @@ where
                     .borrow()
                     .get_ibc_event("denomination_trace")
                     .map_err(|_| {
-                        Error::Denom(format!("Reading the IBC event failed",))
+                        Error::Denom("Reading the IBC event failed".to_string())
                     })?;
                 if let Some(event) = result {
                     if let (Some(trace_hash), Some(ibc_denom)) = (
