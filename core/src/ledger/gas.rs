@@ -7,6 +7,8 @@ use std::ops::Div;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
+use super::parameters;
+use super::storage_api::{self, StorageRead};
 use crate::types::transaction::wrapper::GasLimit;
 
 #[allow(missing_docs)]
@@ -42,6 +44,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
 const SCALE: u64 = 10_000;
+
+/// Helper function to retrieve the `max_block_gas` protocol parameter from
+/// storage
+pub fn get_max_block_gas(
+    storage: &impl StorageRead,
+) -> std::result::Result<u64, storage_api::Error> {
+    storage
+        .read(&parameters::storage::get_max_block_gas_key())?
+        .ok_or(storage_api::Error::SimpleMessage(
+            "Missing max_block_gas parameter from storage",
+        ))
+}
 
 /// Representation of gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,

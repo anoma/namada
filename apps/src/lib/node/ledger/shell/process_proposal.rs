@@ -54,10 +54,8 @@ where
     fn from(wl_storage: &WlStorage<D, H>) -> Self {
         let max_proposal_bytes =
             wl_storage.pos_queries().get_max_proposal_bytes().get();
-        let max_block_gas = wl_storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading from storage")
-            .expect("Missing max_block_gas parameter in storage");
+        let max_block_gas =
+            namada::core::ledger::gas::get_max_block_gas(wl_storage).unwrap();
         let encrypted_txs_bin =
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -2636,11 +2634,9 @@ mod test_process_proposal {
     fn test_exceeding_max_block_gas_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let block_gas_limit: u64 = shell
-            .wl_storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading from storage")
-            .expect("Missing max_block_gas parameter in storage");
+        let block_gas_limit =
+            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
+                .unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(

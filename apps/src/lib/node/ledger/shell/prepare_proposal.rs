@@ -508,14 +508,12 @@ mod test_prepare_proposal {
     use std::collections::{BTreeSet, HashMap};
 
     use borsh::BorshSerialize;
-    use namada::core::ledger::parameters;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
     use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::ledger::storage_api::StorageRead;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
@@ -1441,11 +1439,9 @@ mod test_prepare_proposal {
     fn test_exceeding_max_block_gas_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let block_gas_limit: u64 = shell
-            .wl_storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading from storage")
-            .expect("Missing max_block_gas parameter in storage");
+        let block_gas_limit =
+            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
+                .unwrap();
         let keypair = gen_keypair();
 
         let wrapper = WrapperTx::new(

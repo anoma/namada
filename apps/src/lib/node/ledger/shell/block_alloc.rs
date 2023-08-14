@@ -31,9 +31,9 @@
 //!
 //! # How gas is allocated
 //!
-//! Gas is only relevant to DKG encrypted txs. Every encrypted tx defines its gas
-//! limit. We take this entire gas limit as the amount of gas requested by the
-//! tx.
+//! Gas is only relevant to DKG encrypted txs. Every encrypted tx defines its
+//! gas limit. We take this entire gas limit as the amount of gas requested by
+//! the tx.
 
 pub mod states;
 
@@ -55,9 +55,7 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use namada::core::ledger::parameters;
 use namada::core::ledger::storage::{self, WlStorage};
-use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::pos_queries::PosQueries;
 
 #[allow(unused_imports)]
@@ -128,13 +126,9 @@ where
 {
     #[inline]
     fn from(storage: &WlStorage<D, H>) -> Self {
-        let max_block_gas = storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading from storage")
-            .expect("Missing max_block_gas parameter in storage");
         Self::init(
             storage.pos_queries().get_max_proposal_bytes().get(),
-            max_block_gas,
+            namada::core::ledger::gas::get_max_block_gas(storage).unwrap(),
         )
     }
 }
@@ -482,10 +476,11 @@ mod tests {
             new_size < bin.allotted
         });
         for tx in encrypted_txs {
-            assert!(bins
-                .borrow_mut()
-                .try_alloc(BlockResources::new(&tx, 0))
-                .is_ok());
+            assert!(
+                bins.borrow_mut()
+                    .try_alloc(BlockResources::new(&tx, 0))
+                    .is_ok()
+            );
         }
 
         let bins = RefCell::new(bins.into_inner().next_state());
@@ -537,8 +532,8 @@ mod tests {
     }
 
     /// Return random bin sizes for a [`BlockAllocator`].
-    fn arb_max_bin_sizes(
-    ) -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
+    fn arb_max_bin_sizes()
+    -> impl Strategy<Value = (u64, u64, usize, usize, usize)> {
         const MAX_BLOCK_SIZE_BYTES: u64 = 1000;
         (1..=MAX_BLOCK_SIZE_BYTES).prop_map(
             |tendermint_max_block_space_in_bytes| {

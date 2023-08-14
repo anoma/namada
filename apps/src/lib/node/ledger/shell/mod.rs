@@ -1213,10 +1213,10 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    self.wl_storage
-                        .read(&parameters::storage::get_max_block_gas_key())
-                        .expect("Error while reading from storage")
-                        .expect("Missing max_block_gas parameter in storage"),
+                    namada::core::ledger::gas::get_max_block_gas(
+                        &self.wl_storage,
+                    )
+                    .unwrap(),
                 );
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ErrorCodes::AllocationError.into();
@@ -2643,11 +2643,9 @@ mod test_mempool_validate {
     fn test_exceeding_max_block_gas_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let block_gas_limit: u64 = shell
-            .wl_storage
-            .read(&parameters::storage::get_max_block_gas_key())
-            .expect("Error while reading from storage")
-            .expect("Missing max_block_gas parameter in storage");
+        let block_gas_limit =
+            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
+                .unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(

@@ -94,7 +94,6 @@ where
     H: 'static + StorageHasher + Sync,
 {
     use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
-    use namada_core::ledger::parameters;
     use namada_core::ledger::storage::TempWlStorage;
     use namada_core::types::transaction::DecryptedTx;
 
@@ -150,10 +149,9 @@ where
             // If dry run only the inner tx, use the max block gas as the gas
             // limit
             TxGasMeter::new(
-                ctx.wl_storage
-                    .read(&parameters::storage::get_max_block_gas_key())
-                    .expect("Error while reading storage")
-                    .expect("Missing parameter in storage"),
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
             )
         }
         TxType::Raw => {
@@ -166,10 +164,9 @@ where
             // If dry run only the inner tx, use the max block gas as the gas
             // limit
             TxGasMeter::new(
-                ctx.wl_storage
-                    .read(&parameters::storage::get_max_block_gas_key())
-                    .expect("Error while reading storage")
-                    .expect("Missing parameter in storage"),
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
             )
         }
     };
