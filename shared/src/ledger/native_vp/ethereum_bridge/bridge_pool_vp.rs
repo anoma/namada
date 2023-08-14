@@ -355,7 +355,6 @@ mod test_bridge_pool_vp {
     use crate::ledger::storage::write_log::WriteLog;
     use crate::ledger::storage::{Storage, WlStorage};
     use crate::ledger::storage_api::StorageWrite;
-    use crate::proto::Data;
     use crate::types::address::{nam, wnam};
     use crate::types::chain::ChainId;
     use crate::types::eth_bridge_pool::{GasFee, TransferToEthereum};
@@ -566,7 +565,7 @@ mod test_bridge_pool_vp {
     {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -622,8 +621,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match expect {
@@ -905,7 +904,7 @@ mod test_bridge_pool_vp {
     fn test_adding_transfer_twice_fails() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = initial_pool();
@@ -960,8 +959,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(!res.expect("Test failed"));
@@ -973,7 +972,7 @@ mod test_bridge_pool_vp {
     fn test_zero_gas_fees_rejected() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1022,8 +1021,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1039,7 +1038,7 @@ mod test_bridge_pool_vp {
         let mut wl_storage = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1108,8 +1107,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1124,7 +1123,7 @@ mod test_bridge_pool_vp {
     fn test_reject_mint_wnam() {
         // setup
         let mut wl_storage = setup_storage();
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
@@ -1195,8 +1194,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)
@@ -1232,7 +1231,7 @@ mod test_bridge_pool_vp {
             )
             .expect("Test failed");
         wl_storage.write_log.commit_tx();
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1309,8 +1308,8 @@ mod test_bridge_pool_vp {
             ),
         };
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(transfer.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
+        tx.add_data(transfer);
 
         let res = vp
             .validate_tx(&tx, &keys_changed, &verifiers)

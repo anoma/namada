@@ -6,8 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod key;
-
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;
@@ -74,9 +72,30 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
 /// Checks if a proposal id is being executed
 pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
     let proposal_execution_key =
-        gov_storage::get_proposal_execution_key(proposal_id);
+        gov_storage::keys::get_proposal_execution_key(proposal_id);
 
     ctx.has_key_pre(&proposal_execution_key)
+}
+
+/// Verify section signatures
+pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+    let max_signatures_per_transaction =
+        parameters::max_signatures_per_transaction(&ctx.pre())?;
+
+    let public_keys_index_map =
+        storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
+    let threshold =
+        storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+
+    let targets = &[*tx.data_sechash(), *tx.code_sechash()];
+    tx.verify_section_signatures(
+        targets,
+        public_keys_index_map,
+        threshold,
+        max_signatures_per_transaction,
+    )
+    .map_err(|_e| Error::SimpleMessage("Invalid signatures"))
+    .map(|_| true)
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:

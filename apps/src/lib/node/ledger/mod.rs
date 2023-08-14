@@ -14,8 +14,8 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::ledger::governance::storage as gov_storage;
 use namada::types::storage::Key;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -64,7 +64,7 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 //```
 impl Shell {
     fn load_proposals(&mut self) {
-        let proposals_key = gov_storage::get_commiting_proposals_prefix(
+        let proposals_key = governance_storage::get_commiting_proposals_prefix(
             self.wl_storage.storage.last_epoch.0,
         );
 
@@ -73,7 +73,7 @@ impl Shell {
         for (key, _, _) in proposal_iter {
             let key =
                 Key::from_str(key.as_str()).expect("Key should be parsable");
-            if gov_storage::get_commit_proposal_epoch(&key).unwrap()
+            if governance_storage::get_commit_proposal_epoch(&key).unwrap()
                 != self.wl_storage.storage.last_epoch.0
             {
                 // NOTE: `iter_prefix` iterate over the matching prefix. In this
@@ -85,7 +85,7 @@ impl Shell {
                 continue;
             }
 
-            let proposal_id = gov_storage::get_commit_proposal_id(&key);
+            let proposal_id = governance_storage::get_commit_proposal_id(&key);
             if let Some(id) = proposal_id {
                 self.proposal_data.insert(id);
             }
@@ -329,7 +329,7 @@ async fn run_aux_setup(
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {
         let sys = System::new_with_specifics(RefreshKind::new().with_memory());
-        let available_memory_bytes = sys.available_memory() * 1024;
+        let available_memory_bytes = sys.available_memory();
         tracing::info!(
             "Available memory: {}",
             Byte::from_bytes(available_memory_bytes as u128)
