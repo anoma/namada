@@ -266,7 +266,7 @@ where
 struct BridgePoolProofResponse {
     hashes: Vec<KeccakHash>,
     relayer_address: Address,
-    total_fees: Amount,
+    total_fees: HashMap<Address, Amount>,
     abi_encoded_proof: Vec<u8>,
 }
 
@@ -297,12 +297,20 @@ where
         relayer_address: args.relayer,
         total_fees: appendices
             .map(|appendices| {
-                appendices
-                    .into_iter()
-                    .map(|app| app.gas_fee.amount)
-                    .sum::<Amount>()
+                appendices.into_iter().fold(
+                    HashMap::new(),
+                    |mut total_fees, app| {
+                        let GasFee { token, amount, .. } =
+                            app.gas_fee.into_owned();
+                        let fees = total_fees
+                            .entry(token)
+                            .or_insert_with(Amount::zero);
+                        fees.receive(&amount);
+                        total_fees
+                    },
+                )
             })
-            .unwrap_or(Amount::zero()),
+            .unwrap_or_default(),
         abi_encoded_proof: bp_proof_bytes,
     };
     println!("{}", serde_json::to_string(&resp).unwrap());
