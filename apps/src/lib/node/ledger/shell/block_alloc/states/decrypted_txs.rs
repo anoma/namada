@@ -6,12 +6,12 @@ use super::{
 };
 
 impl TryAlloc for BlockAllocator<BuildingDecryptedTxBatch> {
-    type Resource<'tx> = &'tx [u8];
+    type Resources<'tx> = &'tx [u8];
 
     #[inline]
     fn try_alloc(
         &mut self,
-        tx: Self::Resource<'_>,
+        tx: Self::Resources<'_>,
     ) -> Result<(), AllocFailure> {
         self.decrypted_txs.try_dump(tx)
     }

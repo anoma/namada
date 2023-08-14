@@ -78,12 +78,12 @@ pub enum WithoutEncryptedTxs {}
 /// For more info, read the module docs of
 /// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait TryAlloc {
-    type Resource<'tx>;
+    type Resources<'tx>;
 
     /// Try to allocate resources for a new transaction.
     fn try_alloc(
         &mut self,
-        resource_required: Self::Resource<'_>,
+        resource_required: Self::Resources<'_>,
     ) -> Result<(), AllocFailure>;
 }
 
