@@ -196,7 +196,7 @@ pub enum Error {
     ),
     /// No Balance found for token
     #[error("{0}")]
-    MaspError(builder::Error<std::convert::Infallible>),
+    MaspError(String),
     /// Wasm validation failed
     #[error("Validity predicate code validation failed with {0}")]
     WasmValidationFailure(WasmValidationError),
@@ -1598,7 +1598,7 @@ pub async fn build_transfer<
                 Box::new(args.tx.gas_token.clone()),
             ))
         }
-        Err(err) => Err(Error::MaspError(err)),
+        Err(err) => Err(Error::MaspError(err.to_string())),
     }?;
 
     let chain_id = args.tx.chain_id.clone().unwrap();
