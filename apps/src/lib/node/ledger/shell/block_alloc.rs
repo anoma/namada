@@ -75,22 +75,45 @@ pub enum AllocFailure {
     OverflowsBin { bin_resource: u64 },
 }
 
-/// The block resource to be dumped
-pub enum DumpResource<'r> {
-    /// Block space (in bytes)
-    Space(&'r [u8]),
-    /// Block gas (in gas sub-units)
-    Gas(u64),
-}
-
+/// The block resources that need to be allocated
 pub struct BlockResources<'tx> {
     tx: &'tx [u8],
     gas: u64,
 }
 
 impl<'tx> BlockResources<'tx> {
+    /// Generates a new block resource instance
     pub fn new(tx: &'tx [u8], gas: u64) -> Self {
         Self { tx, gas }
+    }
+}
+
+/// Marker type for the block space
+#[derive(Debug, Default, Clone, Copy)]
+pub struct BlockSpace;
+/// Marker type for the block gas
+#[derive(Debug, Default, Clone, Copy)]
+pub struct BlockGas;
+
+pub trait Resource {
+    type Input<'r>;
+
+    fn usage_of(input: Self::Input<'_>) -> u64;
+}
+
+impl Resource for BlockSpace {
+    type Input<'r> = &'r [u8];
+
+    fn usage_of(input: Self::Input<'_>) -> u64 {
+        input.len() as u64
+    }
+}
+
+impl Resource for BlockGas {
+    type Input<'r> = u64;
+
+    fn usage_of(input: Self::Input<'_>) -> u64 {
+        input
     }
 }
 
@@ -109,13 +132,13 @@ pub struct BlockAllocator<State> {
     _state: PhantomData<*const State>,
     /// The total space Tendermint has allotted to the
     /// application for the current block height.
-    block: TxBin,
+    block: TxBin<BlockSpace>,
     /// The current space utilized by protocol transactions.
-    protocol_txs: TxBin,
+    protocol_txs: TxBin<BlockSpace>,
     /// The current space and gas utilized by DKG encrypted transactions.
     encrypted_txs: EncryptedTxsBins,
     /// The current space utilized by DKG decrypted transactions.
-    decrypted_txs: TxBin,
+    decrypted_txs: TxBin<BlockSpace>,
 }
 
 impl<D, H, M> From<&WlStorage<D, H>>
@@ -173,14 +196,16 @@ impl<State> BlockAllocator<State> {
 /// proposed block. At the moment this is used to track two resources of the
 /// block: space and gas. Space is measured in bytes while gas in gas units.
 #[derive(Debug, Copy, Clone, Default)]
-pub struct TxBin {
+pub struct TxBin<R: Resource> {
     /// The current resource utilization of the batch of transactions.
     occupied: u64,
     /// The maximum resource amount the batch of transactions may occupy.
     allotted: u64,
+    /// The resource that this bin is tracking
+    _resource: PhantomData<R>,
 }
 
-impl TxBin {
+impl<R: Resource> TxBin<R> {
     /// Return the amount of resource left in this [`TxBin`].
     #[inline]
     pub fn resource_left(&self) -> u64 {
@@ -193,6 +218,7 @@ impl TxBin {
         Self {
             allotted: max_capacity,
             occupied: 0,
+            _resource: PhantomData,
         }
     }
 
@@ -209,20 +235,16 @@ impl TxBin {
     /// allotted.
     pub fn try_dump(
         &mut self,
-        tx_resource: DumpResource,
+        resource: R::Input<'_>,
     ) -> Result<(), AllocFailure> {
-        let tx_resource = match tx_resource {
-            DumpResource::Space(tx) => tx.len() as u64,
-            DumpResource::Gas(gas) => gas,
-        };
-
-        if tx_resource > self.allotted {
+        let resource = R::usage_of(resource);
+        if resource > self.allotted {
             let bin_size = self.allotted;
             return Err(AllocFailure::OverflowsBin {
                 bin_resource: bin_size,
             });
         }
-        let occupied = self.occupied + tx_resource;
+        let occupied = self.occupied + resource;
         if occupied <= self.allotted {
             self.occupied = occupied;
             Ok(())
@@ -235,8 +257,8 @@ impl TxBin {
 
 #[derive(Debug, Default)]
 pub struct EncryptedTxsBins {
-    space: TxBin,
-    gas: TxBin,
+    space: TxBin<BlockSpace>,
+    gas: TxBin<BlockGas>,
 }
 
 impl EncryptedTxsBins {
@@ -249,29 +271,25 @@ impl EncryptedTxsBins {
     }
 
     pub fn try_dump(&mut self, tx: &[u8], gas: u64) -> Result<(), String> {
-        self.space
-            .try_dump(DumpResource::Space(tx))
-            .map_err(|e| match e {
-                AllocFailure::Rejected { .. } => "No more space left in the \
-                                                  block for wrapper txs"
-                    .to_string(),
-                AllocFailure::OverflowsBin { .. } => "The given wrapper tx is \
-                                                      larger than 1/3 of the \
-                                                      available block space"
-                    .to_string(),
-            })?;
-        self.gas
-            .try_dump(DumpResource::Gas(gas))
-            .map_err(|e| match e {
-                AllocFailure::Rejected { .. } => {
-                    "No more gas left in the block for wrapper txs".to_string()
-                }
-                AllocFailure::OverflowsBin { .. } => {
-                    "The given wrapper tx requires more gas than available to \
-                     the entire block"
-                        .to_string()
-                }
-            })
+        self.space.try_dump(tx).map_err(|e| match e {
+            AllocFailure::Rejected { .. } => {
+                "No more space left in the block for wrapper txs".to_string()
+            }
+            AllocFailure::OverflowsBin { .. } => "The given wrapper tx is \
+                                                  larger than 1/3 of the \
+                                                  available block space"
+                .to_string(),
+        })?;
+        self.gas.try_dump(gas).map_err(|e| match e {
+            AllocFailure::Rejected { .. } => {
+                "No more gas left in the block for wrapper txs".to_string()
+            }
+            AllocFailure::OverflowsBin { .. } => {
+                "The given wrapper tx requires more gas than available to the \
+                 entire block"
+                    .to_string()
+            }
+        })
     }
 }
 

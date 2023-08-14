@@ -1,4 +1,4 @@
-use super::super::{AllocFailure, BlockAllocator, DumpResource};
+use super::super::{AllocFailure, BlockAllocator};
 use super::{BuildingProtocolTxBatch, TryAlloc};
 
 impl TryAlloc for BlockAllocator<BuildingProtocolTxBatch> {
@@ -9,6 +9,6 @@ impl TryAlloc for BlockAllocator<BuildingProtocolTxBatch> {
         &mut self,
         tx: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
-        self.protocol_txs.try_dump(DumpResource::Space(tx))
+        self.protocol_txs.try_dump(tx)
     }
 }

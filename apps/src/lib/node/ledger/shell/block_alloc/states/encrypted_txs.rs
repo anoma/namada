@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocFailure, BlockAllocator, DumpResource, TxBin};
+use super::super::{AllocFailure, BlockAllocator, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
     EncryptedTxBatchAllocator, NextStateImpl, TryAlloc, WithEncryptedTxs,
@@ -16,12 +16,8 @@ impl TryAlloc for BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
         &mut self,
         resource_required: Self::Resource<'_>,
     ) -> Result<(), AllocFailure> {
-        self.encrypted_txs
-            .space
-            .try_dump(DumpResource::Space(resource_required.tx))?;
-        self.encrypted_txs
-            .gas
-            .try_dump(DumpResource::Gas(resource_required.gas))
+        self.encrypted_txs.space.try_dump(resource_required.tx)?;
+        self.encrypted_txs.gas.try_dump(resource_required.gas)
     }
 }
 

@@ -15,13 +15,11 @@ use namada::types::transaction::protocol::{
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
 
-use super::block_alloc::EncryptedTxsBins;
+use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::RequestProcessProposal;
-use crate::node::ledger::shell::block_alloc::{
-    AllocFailure, DumpResource, TxBin,
-};
+use crate::node::ledger::shell::block_alloc::{AllocFailure, TxBin};
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 
@@ -35,7 +33,7 @@ pub struct ValidationMeta {
     #[cfg(feature = "abcipp")]
     pub digests: DigestCounters,
     /// Space utilized by all txs.
-    pub txs_bin: TxBin,
+    pub txs_bin: TxBin<BlockSpace>,
     /// Check if the decrypted tx queue has any elements
     /// left.
     ///
@@ -459,8 +457,7 @@ where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // try to allocate space for this tx
-        if let Err(e) = metadata.txs_bin.try_dump(DumpResource::Space(tx_bytes))
-        {
+        if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {
                 code: ErrorCodes::AllocationError.into(),
                 info: match e {
