@@ -221,9 +221,6 @@ pub enum Error {
     /// The proposal can't be found
     #[error("Proposal {0} can't be found")]
     ProposalDoesNotExist(u64),
-    /// Encoding public key failure
-    #[error("Encoding a public key, {0}, shouldn't fail")]
-    EncodeKeyFailure(std::io::Error),
     /// Updating an VP of an implicit account
     #[error(
         "A validity predicate of an implicit address cannot be directly \
