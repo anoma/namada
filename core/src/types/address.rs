@@ -102,7 +102,7 @@ const PREFIX_IBC: &str = "ibc";
 const PREFIX_ETH: &str = "eth";
 
 #[allow(missing_docs)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq, Clone)]
 pub enum DecodeError {
     #[error("Error decoding address from Bech32m: {0}")]
     DecodeBech32(bech32::Error),
