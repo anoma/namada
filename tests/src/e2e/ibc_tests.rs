@@ -129,8 +129,6 @@ fn run_ledger_ibc() -> Result<()> {
     ledger_a.exp_string("Committed block hash")?;
     ledger_b.exp_string("Committed block hash")?;
 
-    wait_for_wasm_pre_compile(&mut ledger_a)?;
-    wait_for_wasm_pre_compile(&mut ledger_b)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
