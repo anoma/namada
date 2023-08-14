@@ -1370,6 +1370,12 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         // Set the initial state before starting transactions
         let (token, receiver) = ibc::init_storage();
         let (client_id, _client_state, mut writes) = ibc::prepare_client();
@@ -1404,13 +1410,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
         // Receive the packet, but no token is received
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
