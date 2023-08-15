@@ -29,7 +29,7 @@ use crate::types::time::DateTimeUtc;
 pub const IBC_KEY_LIMIT: usize = 120;
 
 #[allow(missing_docs)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error("Error parsing address: {0}")]
     ParseAddress(address::DecodeError),
