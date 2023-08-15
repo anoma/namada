@@ -77,8 +77,6 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = "0.13.25"
-ibc-relayer = {git = "https://github.com/heliaxdev/hermes.git", rev = "fea6928dace1af3e38c5b223f933c1d07720811d", default-features = false}
-ibc-relayer-types = {git = "https://github.com/heliaxdev/hermes.git", rev = "fea6928dace1af3e38c5b223f933c1d07720811d", default-features = false }
 ics23 = "0.9.0"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.7.1", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
@@ -122,6 +120,7 @@ sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}
+tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = "0.3.0"

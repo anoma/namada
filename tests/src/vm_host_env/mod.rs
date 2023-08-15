@@ -21,7 +21,7 @@ mod tests {
     use std::panic;
 
     use itertools::Itertools;
-    use namada::ibc::tx_msg::Msg;
+    use namada::ibc::core::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::ibc::vp::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
@@ -1247,8 +1247,7 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let hashed_denom = ibc_token.to_string();
-        let msg = ibc::msg_transfer(port_id, channel_id, hashed_denom, &sender);
+        let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
