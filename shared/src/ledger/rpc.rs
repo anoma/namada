@@ -26,7 +26,6 @@ use namada_proof_of_stake::types::{
 };
 use serde::Serialize;
 
-use crate::core::ledger::governance::storage::keys as gov_storage;
 use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
@@ -870,45 +869,7 @@ pub async fn query_governance_parameters<
 >(
     client: &C,
 ) -> GovernanceParameters {
-    let key = gov_storage::get_max_proposal_code_size_key();
-    let max_proposal_code_size = query_storage_value::<C, u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_max_proposal_content_key();
-    let max_proposal_content_size = query_storage_value::<C, u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_fund_key();
-    let min_proposal_fund = query_storage_value::<C, Amount>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_grace_epoch_key();
-    let min_proposal_grace_epochs = query_storage_value::<C, u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_min_proposal_voting_period_key();
-    let min_proposal_voting_period =
-        query_storage_value::<C, u64>(client, &key)
-            .await
-            .expect("Parameter should be definied.");
-
-    let key = gov_storage::get_max_proposal_period_key();
-    let max_proposal_period = query_storage_value::<C, u64>(client, &key)
-        .await
-        .expect("Parameter should be definied.");
-
-    GovernanceParameters {
-        min_proposal_fund,
-        max_proposal_code_size,
-        min_proposal_voting_period,
-        max_proposal_period,
-        max_proposal_content_size,
-        min_proposal_grace_epochs,
-    }
+    unwrap_client_response::<C, _>(RPC.vp().gov().parameters(client).await)
 }
 
 /// Get the givernance parameters

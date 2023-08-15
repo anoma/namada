@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use namada_core::ledger::governance::storage::proposal::PGFTarget;
 use namada_core::types::address::Address;
 
+use crate::core::ledger::pgf::parameters::PgfParameters;
 use crate::ledger::queries::types::RequestCtx;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api;
@@ -11,6 +12,7 @@ use crate::ledger::storage_api;
 router! {PGF,
     ( "stewards" ) -> BTreeSet<Address> = stewards,
     ( "fundings" ) -> BTreeSet<PGFTarget> = funding,
+    ( "parameters" ) -> PgfParameters = parameters,
 }
 
 /// Query the currect pgf steward set
@@ -33,4 +35,15 @@ where
     H: 'static + StorageHasher + Sync,
 {
     storage_api::pgf::get_payments(ctx.wl_storage)
+}
+
+/// Query the PGF parameters
+fn parameters<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<PgfParameters>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    storage_api::pgf::get_parameters(ctx.wl_storage)
 }

@@ -201,7 +201,7 @@ impl StorageProposal {
 
     /// Return the status of a proposal
     pub fn get_status(&self, current_epoch: Epoch) -> ProposalStatus {
-        if self.voting_start_epoch > self.voting_end_epoch {
+        if self.voting_start_epoch > current_epoch {
             ProposalStatus::Pending
         } else if self.voting_start_epoch <= current_epoch
             && current_epoch <= self.voting_end_epoch
