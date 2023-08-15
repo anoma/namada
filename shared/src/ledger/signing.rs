@@ -1,6 +1,5 @@
 //! Functions to sign transactions
 use std::collections::HashMap;
-use std::io::ErrorKind;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -39,7 +38,7 @@ pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::types::error::{Error, TxError};
+use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -636,41 +635,26 @@ pub async fn to_ledger_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) -> Result<LedgerVector, std::io::Error> {
-    let init_account_hash = query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM)
-        .await
-        .unwrap();
+) -> Result<LedgerVector, Error> {
+    let init_account_hash =
+        query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM).await?;
     let init_validator_hash =
-        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM)
-            .await
-            .unwrap();
-    let init_proposal_hash = query_wasm_code_hash(client, TX_INIT_PROPOSAL)
-        .await
-        .unwrap();
-    let vote_proposal_hash = query_wasm_code_hash(client, TX_VOTE_PROPOSAL)
-        .await
-        .unwrap();
-    let reveal_pk_hash =
-        query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
+        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM).await?;
+    let init_proposal_hash =
+        query_wasm_code_hash(client, TX_INIT_PROPOSAL).await?;
+    let vote_proposal_hash =
+        query_wasm_code_hash(client, TX_VOTE_PROPOSAL).await?;
+    let reveal_pk_hash = query_wasm_code_hash(client, TX_REVEAL_PK).await?;
     let update_account_hash =
-        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
-            .await
-            .unwrap();
-    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
-        .await
-        .unwrap();
-    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await.unwrap();
-    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await.unwrap();
-    let unbond_hash =
-        query_wasm_code_hash(client, TX_UNBOND_WASM).await.unwrap();
-    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM)
-        .await
-        .unwrap();
+        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM).await?;
+    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM).await?;
+    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await?;
+    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await?;
+    let unbond_hash = query_wasm_code_hash(client, TX_UNBOND_WASM).await?;
+    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
-        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM)
-            .await
-            .unwrap();
-    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await.unwrap();
+        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM).await?;
+    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
@@ -705,11 +689,13 @@ pub async fn to_ledger_vector<
         .push(format!("Code hash : {}", HEXLOWER.encode(&code_hash.0)));
 
     if code_hash == init_account_hash {
-        let init_account =
-            InitAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
-
+        let init_account = InitAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         tv.name = "Init Account 0".to_string();
 
         let extra = tx
@@ -735,10 +721,13 @@ pub async fn to_ledger_vector<
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
-        let init_validator =
-            InitValidator::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_validator = InitValidator::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Validator 0".to_string();
 
@@ -781,10 +770,13 @@ pub async fn to_ledger_vector<
             format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_proposal_hash {
-        let init_proposal_data =
-            InitProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_proposal_data = InitProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Proposal 0".to_string();
 
@@ -826,10 +818,13 @@ pub async fn to_ledger_vector<
         tv.output
             .push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
-        let vote_proposal =
-            VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let vote_proposal = VoteProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Vote Proposal 0".to_string();
 
@@ -855,8 +850,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == reveal_pk_hash {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Account 0".to_string();
 
@@ -868,10 +866,13 @@ pub async fn to_ledger_vector<
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_account_hash {
-        let transfer =
-            UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = UpdateAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Update VP 0".to_string();
 
@@ -902,10 +903,13 @@ pub async fn to_ledger_vector<
             None => (),
         };
     } else if code_hash == transfer_hash {
-        let transfer =
-            Transfer::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = Transfer::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         // To facilitate lookups of MASP AssetTypes
         let mut asset_types = HashMap::new();
         let builder = if let Some(shielded_hash) = transfer.shielded {
@@ -951,19 +955,21 @@ pub async fn to_ledger_vector<
     } else if code_hash == ibc_hash {
         let msg = Any::decode(
             tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
                 .as_ref(),
         )
-        .map_err(|x| std::io::Error::new(ErrorKind::Other, x))?;
+        .map_err(|x| Error::from(EncodingError::Conversion(x.to_string())))?;
 
         tv.name = "IBC 0".to_string();
         tv.output.push("Type : IBC".to_string());
 
         match msg.type_url.as_str() {
             MSG_TRANSFER_TYPE_URL => {
-                let transfer = MsgTransfer::try_from(msg).map_err(|_| {
-                    std::io::Error::from(ErrorKind::InvalidData)
-                })?;
+                let transfer = MsgTransfer::try_from(msg)
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))
+                    .map_err(|err| {
+                        Error::from(EncodingError::Conversion(err.to_string()))
+                    })?;
                 let transfer_token = format!(
                     "{} {}",
                     transfer.token.amount, transfer.token.denom
@@ -1008,10 +1014,13 @@ pub async fn to_ledger_vector<
             }
         }
     } else if code_hash == bond_hash {
-        let bond =
-            pos::Bond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let bond = pos::Bond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Bond 0".to_string();
 
@@ -1033,10 +1042,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", bond.amount.to_string_native()),
         ]);
     } else if code_hash == unbond_hash {
-        let unbond =
-            pos::Unbond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let unbond = pos::Unbond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Unbond 0".to_string();
 
@@ -1058,10 +1070,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", unbond.amount.to_string_native()),
         ]);
     } else if code_hash == withdraw_hash {
-        let withdraw =
-            pos::Withdraw::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let withdraw = pos::Withdraw::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Withdraw 0".to_string();
 
@@ -1083,8 +1098,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Change Commission 0".to_string();
 

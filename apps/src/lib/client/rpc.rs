@@ -48,7 +48,7 @@ use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
-use namada::types::{storage, token};
+use namada::types::{error, storage, token};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
@@ -1822,7 +1822,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
 pub async fn query_wasm_code_hash<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     code_path: impl AsRef<str>,
-) -> Option<Hash> {
+) -> Result<Hash, error::Error> {
     namada::ledger::rpc::query_wasm_code_hash(client, code_path).await
 }
 
