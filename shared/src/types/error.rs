@@ -36,6 +36,9 @@ pub enum Error {
     /// Errors That deal with encoding or decoding data
     #[error("{0}")]
     Encode(#[from] EncodingError),
+    /// Errors that handle querying from storage
+    #[error("Querying error: {0}")]
+    Query(#[from] QueryError),
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
@@ -69,6 +72,23 @@ pub enum EventError {
     /// Missing value in attributes.
     #[error("Attributes missing value: {0}")]
     MissingValue(String),
+}
+
+/// Errors that deal with querying some kind of data
+#[derive(Error, Debug, Clone)]
+pub enum QueryError {
+    /// Error that occurs when no such key exists
+    #[error("Unable to find key: {0}")]
+    NoSuchKey(String),
+    /// Error that corresponds to not receiving any response
+    #[error("No response given in the query: {0}")]
+    NoResponse(String),
+    /// Error that corresponds to a general error
+    #[error("Error in the query: {0}")]
+    General(String),
+    /// Wasm querying failure
+    #[error("Wasm code path {0} does not exist on chain")]
+    Wasm(String),
 }
 
 /// Errors that deal with Decoding, Encoding, or Conversions
