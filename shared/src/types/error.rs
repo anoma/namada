@@ -33,6 +33,9 @@ pub enum Error {
     /// Event Errors
     #[error("{0}")]
     Event(#[from] EventError),
+    /// Errors That deal with encoding or decoding data
+    #[error("{0}")]
+    Encode(#[from] EncodingError),
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
@@ -66,6 +69,23 @@ pub enum EventError {
     /// Missing value in attributes.
     #[error("Attributes missing value: {0}")]
     MissingValue(String),
+}
+
+/// Errors that deal with Decoding, Encoding, or Conversions
+#[derive(Error, Debug, Clone)]
+pub enum EncodingError {
+    /// Error that deals with Serde encoding failures
+    #[error("Serede Error: {0}")]
+    Serde(String),
+    /// Error that occurs when trying to decode a value
+    #[error("Error decoding the value: {0}")]
+    Decoding(String),
+    /// Error that occurs when trying to encode a value
+    #[error("Error encoding the value: {0}")]
+    Encode(String),
+    /// Error that occurs due to a conversion error
+    #[error("{0}")]
+    Conversion(String),
 }
 
 /// Errors to do with transaction events.
