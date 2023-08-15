@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::ledger::governance::parameters::GovernanceParameters;
+use namada::core::ledger::pgf::parameters::PgfParameters;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
@@ -22,7 +23,7 @@ use namada::types::{storage, token};
 /// Genesis configuration file format
 pub mod genesis_config {
     use std::array::TryFromSliceError;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::convert::TryInto;
     use std::path::Path;
     use std::str::FromStr;
@@ -30,6 +31,7 @@ pub mod genesis_config {
     use data_encoding::HEXLOWER;
     use eyre::Context;
     use namada::core::ledger::governance::parameters::GovernanceParameters;
+    use namada::core::ledger::pgf::parameters::PgfParameters;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
     use namada::ledger::parameters::EpochDuration;
@@ -135,6 +137,8 @@ pub mod genesis_config {
         pub pos_params: PosParamsConfig,
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
+        // Pgf parameters
+        pub pgf_params: PgfParametersConfig,
         // Ethereum bridge config
         pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
         // Wasm definitions
@@ -155,6 +159,16 @@ pub mod genesis_config {
         pub max_proposal_content_size: u64,
         // Minimum number of epoch between end and grace epoch
         pub min_proposal_grace_epochs: u64,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PgfParametersConfig {
+        /// The set of stewards
+        pub stewards: BTreeSet<Address>,
+        /// The pgf inflation rate
+        pub pgf_inflation_rate: Dec,
+        /// The stewards inflation rate
+        pub stewards_inflation_rate: Dec,
     }
 
     /// Validator pre-genesis configuration can be created with client utils
@@ -526,6 +540,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            pgf_params,
             wasm,
             ethereum_bridge_params,
         } = config;
@@ -630,6 +645,17 @@ pub mod genesis_config {
             max_proposal_period,
         };
 
+        let PgfParametersConfig {
+            stewards,
+            pgf_inflation_rate,
+            stewards_inflation_rate,
+        } = pgf_params;
+        let pgf_params = PgfParameters {
+            stewards,
+            pgf_inflation_rate,
+            stewards_inflation_rate,
+        };
+
         let PosParamsConfig {
             max_validator_slots,
             pipeline_len,
@@ -644,6 +670,7 @@ pub mod genesis_config {
             cubic_slashing_window_length,
             validator_stake_threshold,
         } = pos_params;
+
         let pos_params = PosParams {
             max_validator_slots,
             pipeline_len,
@@ -673,6 +700,7 @@ pub mod genesis_config {
             parameters,
             pos_params,
             gov_params,
+            pgf_params,
             ethereum_bridge_params,
         };
         genesis.init();
@@ -726,6 +754,7 @@ pub struct Genesis {
     pub parameters: Parameters,
     pub pos_params: PosParams,
     pub gov_params: GovernanceParameters,
+    pub pgf_params: PgfParameters,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
 }
@@ -1084,6 +1113,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         parameters,
         pos_params: PosParams::default(),
         gov_params: GovernanceParameters::default(),
+        pgf_params: PgfParameters::default(),
         ethereum_bridge_params: Some(EthereumBridgeConfig {
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),

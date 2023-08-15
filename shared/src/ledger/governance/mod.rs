@@ -6,7 +6,9 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use namada_core::ledger::governance::storage::keys as gov_storage;
-use namada_core::ledger::governance::storage::proposal::ProposalType;
+use namada_core::ledger::governance::storage::proposal::{
+    AddRemove, ProposalType,
+};
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
 use namada_core::ledger::storage_api::governance::is_proposal_accepted;
@@ -282,7 +284,32 @@ where
 
         match proposal_type {
             ProposalType::PGFSteward(stewards) => {
-                Ok(stewards.len() < MAX_PGF_ACTIONS)
+                let steward_added = stewards
+                    .iter()
+                    .filter_map(|steward| match steward {
+                        AddRemove::Add(address) => Some(address),
+                        AddRemove::Remove(_) => None,
+                    })
+                    .cloned()
+                    .collect::<Vec<Address>>();
+
+                if steward_added.len() > 1 {
+                    Ok(false)
+                } else if steward_added.is_empty() {
+                    return Ok(stewards.len() < MAX_PGF_ACTIONS);
+                } else {
+                    match steward_added.get(0) {
+                        Some(address) => {
+                            let author_key =
+                                gov_storage::get_author_key(proposal_id);
+                            let author =
+                                self.force_read(&author_key, ReadType::Post)?;
+                            return Ok(stewards.len() < MAX_PGF_ACTIONS
+                                && address.eq(&author));
+                        }
+                        None => return Ok(false),
+                    }
+                }
             }
             ProposalType::PGFPayment(payments) => {
                 if payments.len() < MAX_PGF_ACTIONS {
