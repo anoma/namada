@@ -30,6 +30,9 @@ pub enum Error {
     /// Transaction Errors
     #[error("{0}")]
     Tx(#[from] TxError),
+    /// Event Errors
+    #[error("{0}")]
+    Event(#[from] EventError),
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
@@ -46,6 +49,23 @@ pub enum PinnedBalanceError {
         "The supplied viewing key does not recognize payments to given address"
     )]
     InvalidViewingKey,
+}
+
+/// Errors to do with emitting events.
+#[derive(Error, Debug, Clone)]
+pub enum EventError {
+    /// Error when parsing an event type
+    #[error("Invalid event type")]
+    InvalidEventType,
+    /// Error when parsing attributes from an event JSON.
+    #[error("Json missing `attributes` field")]
+    MissingAttributes,
+    /// Missing key in attributes.
+    #[error("Attributes missing key: {0}")]
+    MissingKey(String),
+    /// Missing value in attributes.
+    #[error("Attributes missing value: {0}")]
+    MissingValue(String),
 }
 
 /// Errors to do with transaction events.
