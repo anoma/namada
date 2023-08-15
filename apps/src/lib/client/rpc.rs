@@ -28,8 +28,7 @@ use namada::core::ledger::governance::utils::{
 };
 use namada::ledger::events::Event;
 use namada::ledger::masp::{
-    Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext,
-    ShieldedUtils,
+    Conversions, MaspAmount, MaspChange, ShieldedContext, ShieldedUtils,
 };
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{CommissionPair, PosParams, Slash};
@@ -43,6 +42,7 @@ use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
+use namada::types::error::{is_pinned_error, Error, PinnedBalanceError};
 use namada::types::hash::Hash;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -386,7 +386,7 @@ pub async fn query_pinned_balance<
         .collect();
     let _ = shielded.load().await;
     // Print the token balances by payment address
-    let pinned_error = Err(PinnedBalanceError::InvalidViewingKey);
+    let pinned_error = Err(Error::from(PinnedBalanceError::InvalidViewingKey));
     for owner in owners {
         let mut balance = pinned_error.clone();
         // Find the viewing key that can recognize payments the current payment
@@ -395,12 +395,12 @@ pub async fn query_pinned_balance<
             balance = shielded
                 .compute_exchanged_pinned_balance(client, owner, vk)
                 .await;
-            if balance != pinned_error {
+            if !is_pinned_error(&balance) {
                 break;
             }
         }
         // If a suitable viewing key was not found, then demand it from the user
-        if balance == pinned_error {
+        if is_pinned_error(&balance) {
             let vk_str = prompt!("Enter the viewing key for {}: ", owner);
             let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
                 Ok(fvk) => fvk,
@@ -418,12 +418,20 @@ pub async fn query_pinned_balance<
 
         // Now print out the received quantities according to CLI arguments
         match (balance, args.token.as_ref()) {
-            (Err(PinnedBalanceError::InvalidViewingKey), _) => println!(
-                "Supplied viewing key cannot decode transactions to given \
-                 payment address."
-            ),
-            (Err(PinnedBalanceError::NoTransactionPinned), _) => {
+            (Err(Error::Pinned(PinnedBalanceError::InvalidViewingKey)), _) => {
+                println!(
+                    "Supplied viewing key cannot decode transactions to given \
+                     payment address."
+                )
+            }
+            (
+                Err(Error::Pinned(PinnedBalanceError::NoTransactionPinned)),
+                _,
+            ) => {
                 println!("Payment address {} has not yet been consumed.", owner)
+            }
+            (Err(other), _) => {
+                println!("Error in Querying Pinned balance {}", other)
             }
             (Ok((balance, epoch)), Some(token)) => {
                 let token_alias = wallet.lookup_alias(token);
