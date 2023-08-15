@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -23,6 +24,7 @@ use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
+use namada_core::types::hash::Hash;
 use namada_core::types::token::MaspDenom;
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -247,12 +249,8 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    let tx_code_hash = query_wasm_code_hash(
-        client,
-        args.tx_reveal_code_path.to_str().unwrap(),
-    )
-    .await
-    .unwrap();
+    let tx_code_hash =
+        query_wasm_code_hash_buf(client, &args.tx_reveal_code_path).await?;
 
     let chain_id = args.chain_id.clone().unwrap();
 
@@ -482,10 +480,7 @@ pub async fn build_validator_commission_change<
 ) -> Result<Tx, Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let params: PosParams = rpc::get_pos_params(client).await;
 
@@ -625,10 +620,7 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let _data = validator
         .clone()
@@ -671,10 +663,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
 
     let source = source.clone();
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -742,10 +731,7 @@ pub async fn build_unbond<
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     if !tx_args.force {
         known_validator_or_err(validator.clone(), tx_args.force, client)
@@ -913,10 +899,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
     )
     .await?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let data = pos::Bond {
         validator,
@@ -961,10 +944,7 @@ pub async fn build_default_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let chain_id = tx.chain_id.clone().unwrap();
 
@@ -1054,10 +1034,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
         delegations,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let chain_id = tx.chain_id.clone().unwrap();
 
@@ -1098,10 +1075,7 @@ pub async fn build_pgf_funding_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let chain_id = tx.chain_id.clone().unwrap();
 
@@ -1149,10 +1123,7 @@ pub async fn build_pgf_stewards_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let chain_id = tx.chain_id.clone().unwrap();
 
@@ -1214,10 +1185,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     )
     .await?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let amount = amount
         .to_string_native()
@@ -1426,9 +1394,7 @@ pub async fn build_transfer<
     let is_source_faucet = false;
 
     let tx_code_hash =
-        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+        query_wasm_code_hash_buf(client, &args.tx_code_path).await?;
 
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded
@@ -1525,15 +1491,9 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
     }: args::TxInitAccount,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx, Error> {
-    let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let vp_code_hash = query_wasm_code_hash_buf(client, &vp_code_path).await?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -1592,19 +1552,13 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
 
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
-            let vp_hash =
-                query_wasm_code_hash(client, code_path.to_str().unwrap())
-                    .await
-                    .unwrap();
+            let vp_hash = query_wasm_code_hash_buf(client, &code_path).await?;
             Some(vp_hash)
         }
         None => None,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let tx_code_hash = query_wasm_code_hash_buf(client, &tx_code_path).await?;
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
@@ -1649,10 +1603,12 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
             Error::Other("Invalid tx deserialization.".to_string())
         })?
     } else {
-        let tx_code_hash =
-            query_wasm_code_hash(client, code_path.unwrap().to_str().unwrap())
-                .await
-                .unwrap();
+        let tx_code_hash = query_wasm_code_hash_buf(
+            client,
+            &code_path
+                .ok_or(Error::Other("No code path supplied".to_string()))?,
+        )
+        .await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
         tx.add_code_from_hash(tx_code_hash);
@@ -1848,4 +1804,11 @@ fn validate_untrusted_code_err(
     } else {
         Ok(())
     }
+}
+
+async fn query_wasm_code_hash_buf<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    path: &PathBuf,
+) -> Result<Hash, Error> {
+    query_wasm_code_hash(client, path.to_string_lossy()).await
 }

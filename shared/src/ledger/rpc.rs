@@ -38,10 +38,11 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
+use crate::types::error::{Error, QueryError};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::{storage, token};
+use crate::types::{error, storage, token};
 
 /// Query the status of a given transaction.
 ///
@@ -251,22 +252,22 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     code_path: impl AsRef<str>,
-) -> Option<Hash> {
+) -> Result<Hash, error::Error> {
     let hash_key = Key::wasm_hash(code_path.as_ref());
     match query_storage_value_bytes(client, &hash_key, None, false)
         .await
         .0
     {
-        Some(hash) => {
-            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
-        }
+        Some(hash) => Ok(Hash::try_from(&hash[..]).expect("Invalid code hash")),
         None => {
             eprintln!(
                 "The corresponding wasm code of the code path {} doesn't \
                  exist on chain.",
                 code_path.as_ref(),
             );
-            None
+            Err(Error::from(QueryError::Wasm(
+                code_path.as_ref().to_string(),
+            )))
         }
     }
 }
