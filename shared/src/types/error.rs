@@ -1,6 +1,15 @@
 //! Generic Error Type for all of the Shared Crate
 
+use namada_core::proto::Tx;
+use namada_core::types::address::Address;
+use namada_core::types::dec::Dec;
 use namada_core::types::storage;
+use namada_core::types::storage::Epoch;
+use prost::EncodeError;
+use tendermint_rpc::Error as RpcError;
+use thiserror::Error;
+
+use crate::vm::WasmValidationError;
 
 /// The standard Result type that most code ought to return
 pub type Result<T> = std::result::Result<T, Error>;
@@ -14,7 +23,174 @@ pub enum Error {
     /// Key Retrival Errors
     #[error("Key Error: {0}")]
     KeyRetrival(#[from] storage::Error),
+    /// Transaction Errors
+    #[error("{0}")]
+    Tx(#[from] TxError),
     /// Any Other errors that are uncategorized
+    #[error("{0}")]
+    Other(String),
+}
+
+/// Errors to do with transaction events.
+#[derive(Error, Debug, Clone)]
+pub enum TxError {
+    /// Accepted tx timeout
+    #[error("Timed out waiting for tx to be accepted")]
+    AcceptTimeout,
+    /// Applied tx timeout
+    #[error("Timed out waiting for tx to be applied")]
+    AppliedTimeout,
+    /// Expect a dry running transaction
+    #[error(
+        "Expected a dry-run transaction, received a wrapper transaction \
+         instead: {0:?}"
+    )]
+    ExpectDryRun(Tx),
+    /// Expect a wrapped encrypted running transaction
+    #[error("Cannot broadcast a dry-run transaction")]
+    ExpectWrappedRun(Tx),
+    /// Error during broadcasting a transaction
+    #[error("Encountered error while broadcasting transaction: {0}")]
+    TxBroadcast(RpcError),
+    /// Invalid comission rate set
+    #[error("Invalid new commission rate, received {0}")]
+    InvalidCommissionRate(Dec),
+    /// Invalid validator address
+    #[error("The address {0} doesn't belong to any known validator account.")]
+    InvalidValidatorAddress(Address),
+    /// Not jailed at pipeline epoch
+    #[error(
+        "The validator address {0} is not jailed at epoch when it would be \
+         restored."
+    )]
+    ValidatorNotCurrentlyJailed(Address),
+    /// Validator still frozen and ineligible to be unjailed
+    #[error(
+        "The validator address {0} is currently frozen and ineligible to be \
+         unjailed."
+    )]
+    ValidatorFrozenFromUnjailing(Address),
+    /// Rate of epoch change too large for current epoch
+    #[error(
+        "New rate, {0}, is too large of a change with respect to the \
+         predecessor epoch in which the rate will take effect."
+    )]
+    TooLargeOfChange(Dec),
+    /// Error retrieving from storage
+    #[error("Error retrieving from storage")]
+    Retrieval,
+    /// No unbonded bonds ready to withdraw in the current epoch
+    #[error(
+        "There are no unbonded bonds ready to withdraw in the current epoch \
+         {0}."
+    )]
+    NoUnbondReady(Epoch),
+    /// No unbonded bonds found
+    #[error("No unbonded bonds found")]
+    NoUnbondFound,
+    /// No bonds found
+    #[error("No bonds found")]
+    NoBondFound,
+    /// Lower bond amount than the unbond
+    #[error(
+        "The total bonds of the source {0} is lower than the amount to be \
+         unbonded. Amount to unbond is {1} and the total bonds is {2}."
+    )]
+    LowerBondThanUnbond(Address, String, String),
+    /// Balance is too low
+    #[error(
+        "The balance of the source {0} of token {1} is lower than the amount \
+         to be transferred. Amount to transfer is {2} and the balance is {3}."
+    )]
+    BalanceTooLow(Address, Address, String, String),
+    /// Token Address does not exist on chain
+    #[error("The token address {0} doesn't exist on chain.")]
+    TokenDoesNotExist(Address),
+    /// Source address does not exist on chain
+    #[error("The address {0} doesn't exist on chain.")]
+    LocationDoesNotExist(Address),
+    /// Target Address does not exist on chain
+    #[error("The source address {0} doesn't exist on chain.")]
+    SourceDoesNotExist(Address),
+    /// Source Address does not exist on chain
+    #[error("The target address {0} doesn't exist on chain.")]
+    TargetLocationDoesNotExist(Address),
+    /// No Balance found for token
+    #[error("No balance found for the source {0} of token {1}")]
+    NoBalanceForToken(Address, Address),
+    /// Negative balance after transfer
+    #[error(
+        "The balance of the source {0} is lower than the amount to be \
+         transferred and fees. Amount to transfer is {1} {2} and fees are {3} \
+         {4}."
+    )]
+    NegativeBalanceAfterTransfer(
+        Box<Address>,
+        String,
+        Box<Address>,
+        String,
+        Box<Address>,
+    ),
+    /// No Balance found for token
+    #[error("{0}")]
+    MaspError(String),
+    /// Wasm validation failed
+    #[error("Validity predicate code validation failed with {0}")]
+    WasmValidationFailure(WasmValidationError),
+    /// Encoding transaction failure
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeTxFailure(String),
+    /// Like EncodeTxFailure but for the encode error type
+    #[error("Encoding tx data, {0}, shouldn't fail")]
+    EncodeFailure(EncodeError),
+    /// Failed to deserialize the proposal data from json
+    #[error("Failed to deserialize the proposal data: {0}")]
+    FailedGovernaneProposalDeserialize(String),
+    /// The proposal data are invalid
+    #[error("Proposal data are invalid: {0}")]
+    InvalidProposal(String),
+    /// The proposal vote is not valid
+    #[error("Proposal vote is invalid")]
+    InvalidProposalVote,
+    /// The proposal can't be voted
+    #[error("Proposal {0} can't be voted")]
+    InvalidProposalVotingPeriod(u64),
+    /// The proposal can't be found
+    #[error("Proposal {0} can't be found")]
+    ProposalDoesNotExist(u64),
+    /// Updating an VP of an implicit account
+    #[error(
+        "A validity predicate of an implicit address cannot be directly \
+         updated. You can use an established address for this purpose."
+    )]
+    ImplicitUpdate,
+    // This should be removed? or rather refactored as it communicates
+    // the same information as the ImplicitUpdate
+    /// Updating a VP of an internal implicit address
+    #[error(
+        "A validity predicate of an internal address cannot be directly \
+         updated."
+    )]
+    ImplicitInternalError,
+    /// Unexpected Error
+    #[error("Unexpected behavior reading the unbonds data has occurred")]
+    UnboundError,
+    /// Epoch not in storage
+    #[error("Proposal end epoch is not in the storage.")]
+    EpochNotInStorage,
+    /// Couldn't understand who the fee payer is
+    #[error("Either --signing-keys or --gas-payer must be available.")]
+    InvalidFeePayer,
+    /// Account threshold is not set
+    #[error("Account threshold must be set.")]
+    MissingAccountThreshold,
+    /// Not enough signature
+    #[error("Account threshold is {0} but the valid signatures are {1}.")]
+    MissingSigningKeys(u8, u8),
+    /// Invalid owner account
+    #[error("The source account {0} is not valid or doesn't exist.")]
+    InvalidAccount(String),
+    /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
 }
