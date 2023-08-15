@@ -2683,7 +2683,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.41.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=1797c2b38eb4a718a63a171f59948f08b427bb1f#1797c2b38eb4a718a63a171f59948f08b427bb1f"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=38a827d3901e590b2935ee5b6b81b4d67c399560#38a827d3901e590b2935ee5b6b81b4d67c399560"
 dependencies = [
  "bytes",
  "cfg-if 1.0.0",
@@ -2715,7 +2715,7 @@ dependencies = [
 [[package]]
 name = "ibc-proto"
 version = "0.30.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=349582059c0cf1f4cdce9e93b33552687c9df54a#349582059c0cf1f4cdce9e93b33552687c9df54a"
+source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=31892ee743b2af017d5629b2af419ee20b6100c7#31892ee743b2af017d5629b2af419ee20b6100c7"
 dependencies = [
  "base64 0.21.0",
  "borsh 0.10.3",
@@ -3332,7 +3332,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3392,7 +3392,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "ethers",
@@ -3464,7 +3464,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -3487,7 +3487,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3496,7 +3496,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3526,7 +3526,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3540,7 +3540,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3549,7 +3549,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3562,7 +3562,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm_for_tests"
-version = "0.21.0"
+version = "0.21.1"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
