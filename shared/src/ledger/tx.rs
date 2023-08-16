@@ -571,7 +571,11 @@ pub async fn build_unjail_validator<
     let validator_state_at_pipeline =
         rpc::get_validator_state(client, &validator, Some(pipeline_epoch))
             .await
-            .expect("Validator state should be defined.");
+            .ok_or_else(|| {
+                Error::from(TxError::Other(
+                    "Validator state should be defined.".to_string(),
+                ))
+            })?;
     if validator_state_at_pipeline != ValidatorState::Jailed {
         eprintln!(
             "The given validator address {} is not jailed at the pipeline \
@@ -961,7 +965,11 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
 
     let storage_vote =
         StorageProposalVote::build(&proposal_vote, &proposal.r#type)
-            .expect("Should be able to build the proposal vote");
+            .ok_or_else(|| {
+                Error::from(TxError::Other(
+                    "Should be able to build the proposal vote".to_string(),
+                ))
+            })?;
 
     let is_validator = rpc::is_validator(client, &voter).await;
 
@@ -1319,17 +1327,14 @@ pub async fn build_transfer<
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, args.tx.force)
-            .await
-            .expect("expected to validate amount");
+        validate_amount(client, args.amount, &token, args.tx.force).await?;
     let validate_fee = validate_amount(
         client,
         args.tx.gas_amount,
         &args.tx.gas_token,
         args.tx.force,
     )
-    .await
-    .expect("expected to be able to validate fee");
+    .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
     args.tx.gas_amount = InputAmount::Validated(validate_fee);

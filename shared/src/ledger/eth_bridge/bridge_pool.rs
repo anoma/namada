@@ -51,9 +51,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     gas_payer: common::PublicKey,
 ) -> Result<Tx, Error> {
     let DenominatedAmount { amount, .. } =
-        validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
-            .await
-            .expect("Failed to validate amount");
+        validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force).await?;
 
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {

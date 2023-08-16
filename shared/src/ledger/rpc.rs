@@ -982,46 +982,53 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
     amount: InputAmount,
     token: &Address,
     force: bool,
-) -> Option<token::DenominatedAmount> {
+) -> Result<token::DenominatedAmount, Error> {
     let input_amount = match amount {
         InputAmount::Unvalidated(amt) => amt.canonical(),
-        InputAmount::Validated(amt) => return Some(amt),
+        InputAmount::Validated(amt) => return Ok(amt),
     };
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
+    let denom = match unwrap_client_response::<C, Option<Denomination>>(
         RPC.vp().token().denomination(client, token).await,
-    )
-    .or_else(|| {
-        if force {
-            println!(
-                "No denomination found for token: {token}, but --force was \
-                 passed. Defaulting to the provided denomination."
-            );
-            Some(input_amount.denom)
-        } else {
-            println!(
-                "No denomination found for token: {token}, the input \
-                 arguments could not be parsed."
-            );
-            None
+    ) {
+        Some(denom) => Ok(denom),
+        None => {
+            if force {
+                println!(
+                    "No denomination found for token: {token}, but --force \
+                     was passed. Defaulting to the provided denomination."
+                );
+                Ok(input_amount.denom)
+            } else {
+                println!(
+                    "No denomination found for token: {token}, the input \
+                     arguments could not be parsed."
+                );
+                Err(Error::from(QueryError::General(format!(
+                    "denomination for token {token}"
+                ))))
+            }
         }
-    })?;
+    }?;
     if denom < input_amount.denom && !force {
         println!(
             "The input amount contained a higher precision than allowed by \
              {token}."
         );
-        None
+        Err(Error::from(QueryError::General(format!(
+            "the input amount. It contained a higher precision than allowed \
+             by {token}"
+        ))))
     } else {
-        match input_amount.increase_precision(denom) {
-            Ok(res) => Some(res),
-            Err(_) => {
-                println!(
-                    "The amount provided requires more the 256 bits to \
-                     represent."
-                );
-                None
-            }
-        }
+        input_amount.increase_precision(denom).map_err(|_err| {
+            println!(
+                "The amount provided requires more the 256 bits to represent."
+            );
+            Error::from(QueryError::General(
+                "the amount provided. It requires more than 256 bits to \
+                 represent"
+                    .to_string(),
+            ))
+        })
     }
 }
 
