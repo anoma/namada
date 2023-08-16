@@ -840,10 +840,24 @@ mod recommendations {
         /// Data to pass to the [`test_generate_eligible_aux`] callback.
         struct TestGenerateEligible<'a> {
             pending: &'a PendingTransfer,
-            #[allow(dead_code)]
+            conversion_table:
+                &'a mut HashMap<Address, args::BpConversionTableEntry>,
             in_progress: &'a mut BTreeSet<String>,
             signed_pool: &'a mut HashMap<String, PendingTransfer>,
             expected_eligible: &'a mut Vec<EligibleRecommendation>,
+        }
+
+        impl TestGenerateEligible<'_> {
+            /// Add ETH to a conversion table.
+            fn add_eth_to_conversion_table(&mut self) {
+                self.conversion_table.insert(
+                    namada_core::types::address::eth(),
+                    args::BpConversionTableEntry {
+                        alias: "ETH".into(),
+                        conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
+                    },
+                );
+            }
         }
 
         /// Helper function to test [`generate_eligible`].
@@ -865,29 +879,19 @@ mod recommendations {
                     payer: bertha_address(),
                 },
             };
-            let conversion_table = {
-                let mut table = HashMap::new();
-                table.insert(
-                    namada_core::types::address::eth(),
-                    args::BpConversionTableEntry {
-                        alias: "ETH".into(),
-                        conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
-                    },
-                );
-                table
-            };
+            let mut table = HashMap::new();
             let mut in_progress = BTreeSet::new();
             let mut signed_pool = HashMap::new();
             let mut expected = vec![];
             callback(TestGenerateEligible {
                 pending: &pending,
+                conversion_table: &mut table,
                 in_progress: &mut in_progress,
                 signed_pool: &mut signed_pool,
                 expected_eligible: &mut expected,
             });
             let eligible =
-                generate_eligible(&conversion_table, &in_progress, signed_pool)
-                    .proceed();
+                generate_eligible(&table, &in_progress, signed_pool).proceed();
             assert_eq!(eligible, expected);
         }
 
@@ -895,7 +899,8 @@ mod recommendations {
         /// for Bridge pool relayed transfers.
         #[test]
         fn test_generate_eligible_happy_path() {
-            test_generate_eligible_aux(|ctx| {
+            test_generate_eligible_aux(|mut ctx| {
+                ctx.add_eth_to_conversion_table();
                 ctx.signed_pool.insert(
                     ctx.pending.keccak256().to_string(),
                     ctx.pending.clone(),
@@ -907,6 +912,33 @@ mod recommendations {
                             .expect("Test failed"),
                     pending_transfer: ctx.pending.clone(),
                 });
+            });
+        }
+
+        /// Test that a transfer is not recommended if it
+        /// is in the process of being relayed (has >0 voting
+        /// power behind it).
+        #[test]
+        fn test_generate_eligible_with_in_progress() {
+            test_generate_eligible_aux(|mut ctx| {
+                ctx.add_eth_to_conversion_table();
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
+                ctx.in_progress.insert(ctx.pending.keccak256().to_string());
+            });
+        }
+
+        /// Test that a transfer is not recommended if its gas
+        /// token is not found in the conversion table.
+        #[test]
+        fn test_generate_eligible_no_gas_token() {
+            test_generate_eligible_aux(|ctx| {
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
             });
         }
 
