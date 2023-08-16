@@ -495,6 +495,7 @@ mod recommendations {
     /// been "seen" yet, and that the user provided appropriate
     /// conversion rates to gwei for the gas fee token in
     /// the transfer.
+    #[derive(Debug, Eq, PartialEq)]
     struct EligibleRecommendation {
         /// Pending transfer to Ethereum.
         pending_transfer: PendingTransfer,
@@ -834,6 +835,53 @@ mod recommendations {
                 hot_key_addr: EthAddress([i; 20]),
                 cold_key_addr: EthAddress([i; 20]),
             }
+        }
+
+        /// Test the happy path of generating eligible recommendations
+        /// for Bridge pool relayed transfers.
+        #[test]
+        fn test_generate_eligible_happy_path() {
+            let pending = PendingTransfer {
+                transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
+                    asset: EthAddress([1; 20]),
+                    recipient: EthAddress([2; 20]),
+                    sender: bertha_address(),
+                    amount: Default::default(),
+                },
+                gas_fee: GasFee {
+                    token: namada_core::types::address::eth(),
+                    amount: 1_000_000_000_u64.into(), // 1 GWEI
+                    payer: bertha_address(),
+                },
+            };
+            let conversion_table = {
+                let mut table = HashMap::new();
+                table.insert(
+                    namada_core::types::address::eth(),
+                    args::BpConversionTableEntry {
+                        alias: "ETH".into(),
+                        conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
+                    },
+                );
+                table
+            };
+            let in_progress = BTreeSet::new();
+            let signed_pool = HashMap::from([(
+                pending.keccak256().to_string(),
+                pending.clone(),
+            )]);
+            let eligible =
+                generate_eligible(&conversion_table, &in_progress, signed_pool)
+                    .proceed();
+            let expected = vec![EligibleRecommendation {
+                transfer_hash: pending.keccak256().to_string(),
+                cost: transfer_fee()
+                    - I256::try_from(pending.gas_fee.amount)
+                        .expect("Test failed"),
+                pending_transfer: pending,
+            }];
+            assert_eq!(eligible, expected);
         }
 
         #[test]
