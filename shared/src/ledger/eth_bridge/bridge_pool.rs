@@ -436,6 +436,8 @@ where
 }
 
 mod recommendations {
+    use std::collections::BTreeSet;
+
     use borsh::BorshDeserialize;
     use namada_core::types::uint::{self, Uint, I256};
 
@@ -521,7 +523,8 @@ mod recommendations {
             .await
             .unwrap()
             .into_keys()
-            .collect::<Vec<_>>();
+            .map(|pending| pending.keccak256().to_string())
+            .collect::<BTreeSet<_>>();
 
         // get the signed bridge pool root so we can analyze the signatures
         // the estimate the gas cost of verifying them.
@@ -558,63 +561,17 @@ mod recommendations {
             + valset_fee() * valset_size;
 
         // we don't recommend transfers that have already been relayed
-        let mut contents: Vec<EligibleRecommendation> =
-            query_signed_bridge_pool(client)
-                .await?
-                .into_iter()
-                .filter_map(|(pending_hash, pending)| {
-                    if !in_progress.contains(&pending) {
-                        let conversion_rate =
-                            if let Some(entry) = args
-                                .conversion_table
-                                .get(&pending.gas_fee.token)
-                            {
-                                let rate = entry.conversion_rate;
-                                if rate <= 0.0f64 {
-                                    eprintln!(
-                                        "Ignoring token with an invalid conversion rate: {}",
-                                        pending.gas_fee.token,
-                                    );
-                                    return None;
-                                }
-                                rate
-                            } else {
-                                return None;
-                            };
-                        // This is the amount of gwei a single gas token is worth
-                        let gwei_per_gas_token = Uint::from_u64(
-                            (10u64.pow(9) as f64 / conversion_rate).floor() as u64,
-                        );
-                        Some((
-                            pending_hash,
-                            I256::try_from(pending.gas_fee.amount * gwei_per_gas_token)
-                                .map(|cost| transfer_fee() - cost)
-                                .try_halt(|err| {
-                                    tracing::debug!(%err, "Failed to convert value to I256");
-                                }),
-                            pending,
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .try_fold(Vec::new(), |mut accum, (hash, cost, transf)| {
-                    accum.push(EligibleRecommendation {
-                        cost: cost?,
-                        transfer_hash: hash,
-                        pending_transfer: transf,
-                    });
-                    control_flow::proceed(accum)
-                })?;
-
-        // sort transfers in decreasing amounts of profitability
-        contents.sort_by_key(|EligibleRecommendation { cost, .. }| *cost);
+        let eligible = generate_eligible(
+            &args.conversion_table,
+            &in_progress,
+            query_signed_bridge_pool(client).await?,
+        )?;
 
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
         generate_recommendations(
-            contents,
+            eligible,
             &args.conversion_table,
             validator_gas,
             max_gas,
@@ -656,6 +613,67 @@ mod recommendations {
                 })
                 .count() as u64,
         )
+    }
+
+    /// Generate eligible recommendations.
+    fn generate_eligible(
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
+        in_progress: &BTreeSet<String>,
+        signed_pool: HashMap<String, PendingTransfer>,
+    ) -> Halt<Vec<EligibleRecommendation>> {
+        let mut eligible: Vec<_> = signed_pool
+            .into_iter()
+            .filter_map(|(pending_hash, pending)| {
+                if in_progress.contains(&pending_hash) {
+                    return None;
+                }
+
+                let conversion_rate = if let Some(entry) =
+                    conversion_table.get(&pending.gas_fee.token)
+                {
+                    let rate = entry.conversion_rate;
+                    if rate <= 0.0f64 {
+                        eprintln!(
+                            "Ignoring token with an invalid conversion rate: \
+                             {}",
+                            pending.gas_fee.token,
+                        );
+                        return None;
+                    }
+                    rate
+                } else {
+                    return None;
+                };
+
+                // This is the amount of gwei a single gas token is worth
+                let gwei_per_gas_token = Uint::from_u64(
+                    (10u64.pow(9) as f64 / conversion_rate).floor() as u64,
+                );
+
+                Some(
+                    I256::try_from(pending.gas_fee.amount * gwei_per_gas_token)
+                        .map_err(|err| err.to_string())
+                        .and_then(|cost| {
+                            transfer_fee().checked_sub(&cost).ok_or_else(|| {
+                                "Underflowed calculating relaying cost".into()
+                            })
+                        })
+                        .map(|cost| EligibleRecommendation {
+                            cost,
+                            pending_transfer: pending,
+                            transfer_hash: pending_hash,
+                        }),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .try_halt(|err| {
+                tracing::debug!(%err, "Failed to calculate relaying cost");
+            })?;
+
+        // sort transfers in increasing amounts of profitability
+        eligible.sort_by_key(|EligibleRecommendation { cost, .. }| *cost);
+
+        control_flow::proceed(eligible)
     }
 
     /// Generates the actual recommendation from restrictions given by the
