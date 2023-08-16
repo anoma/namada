@@ -628,22 +628,20 @@ mod recommendations {
                     return None;
                 }
 
-                let conversion_rate = if let Some(entry) =
-                    conversion_table.get(&pending.gas_fee.token)
-                {
-                    let rate = entry.conversion_rate;
-                    if rate <= 0.0f64 {
-                        eprintln!(
-                            "Ignoring token with an invalid conversion rate: \
-                             {}",
-                            pending.gas_fee.token,
-                        );
-                        return None;
-                    }
-                    rate
-                } else {
-                    return None;
-                };
+                let conversion_rate = conversion_table
+                    .get(&pending.gas_fee.token)
+                    .and_then(|entry| {
+                        let rate = entry.conversion_rate;
+                        if rate <= 0.0f64 {
+                            eprintln!(
+                                "Ignoring token with an invalid conversion \
+                                 rate: {}",
+                                pending.gas_fee.token,
+                            );
+                            return None;
+                        }
+                        Some(rate)
+                    })?;
 
                 // This is the amount of gwei a single gas token is worth
                 let gwei_per_gas_token = Uint::from_u64(
