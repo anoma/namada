@@ -613,7 +613,7 @@ mod recommendations {
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
-        generate(
+        generate_recommendations(
             contents,
             &args.conversion_table,
             validator_gas,
@@ -660,7 +660,7 @@ mod recommendations {
 
     /// Generates the actual recommendation from restrictions given by the
     /// input parameters.
-    fn generate(
+    fn generate_recommendations(
         contents: Vec<EligibleRecommendation>,
         conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         validator_gas: Uint,
@@ -791,8 +791,8 @@ mod recommendations {
             }
         }
 
-        /// Convert transfers into a format that the `generate` function
-        /// understands.
+        /// Convert transfers into a format that the
+        /// [`generate_recommendations`] function understands.
         fn process_transfers(
             transfers: Vec<PendingTransfer>,
         ) -> Vec<EligibleRecommendation> {
@@ -851,7 +851,7 @@ mod recommendations {
             let profitable = vec![transfer(100_000); 17];
             let hash = profitable[0].keccak256().to_string();
             let expected = vec![hash; 17];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(profitable),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -869,7 +869,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             transfers.push(transfer(0));
             let expected: Vec<_> = vec![hash; 17];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -886,7 +886,7 @@ mod recommendations {
             let transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 2];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(50_000),
@@ -907,7 +907,7 @@ mod recommendations {
                 .map(|t| t.keccak256().to_string())
                 .take(5)
                 .collect();
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -925,7 +925,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 4];
             transfers.extend([transfer(17_500), transfer(17_500)]);
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -940,7 +940,7 @@ mod recommendations {
         #[test]
         fn test_wholly_infeasible() {
             let transfers = vec![transfer(75_000); 4];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(300_000),
