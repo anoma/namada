@@ -404,21 +404,17 @@ pub trait IbcCommonContext: IbcStorageContext {
                 ),
             })
         })?;
-        match bytes {
-            Some(b) => {
-                let denom =
-                    token::Denomination::try_from_slice(&b).map_err(|_| {
-                        ContextError::ChannelError(ChannelError::Other {
-                            description: format!(
-                                "Decoding the token denom failed: Token {}",
-                                token
-                            ),
-                        })
-                    })?;
-                Ok(Some(denom))
-            }
-            None => Ok(None),
-        }
+        bytes
+            .map(|b| token::Denomination::try_from_slice(&b))
+            .transpose()
+            .map_err(|_| {
+                ContextError::ChannelError(ChannelError::Other {
+                    description: format!(
+                        "Decoding the token denom failed: Token {}",
+                        token
+                    ),
+                })
+            })
     }
 
     /// Write the IBC denom

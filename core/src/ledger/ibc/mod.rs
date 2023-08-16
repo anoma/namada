@@ -142,39 +142,42 @@ where
                     .map_err(|_| {
                         Error::Denom("Reading the IBC event failed".to_string())
                     })?;
-                if let Some(event) = result {
-                    if let (Some(trace_hash), Some(ibc_denom)) = (
-                        event.attributes.get("trace_hash"),
-                        event.attributes.get("denom"),
-                    ) {
-                        // If the denomination trace event has the trace hash
-                        // and the IBC denom, a token has been minted. The raw
-                        // IBC denom including the port ID, the channel ID and
-                        // the base token is stored to be restored from the
-                        // trace hash. The amount denomination is also set for
-                        // the minting.
-                        self.ctx
-                            .borrow_mut()
-                            .store_ibc_denom(trace_hash, ibc_denom)
-                            .map_err(|e| {
-                                Error::Denom(format!(
-                                    "Writing the IBC denom failed: {}",
-                                    e
-                                ))
-                            })?;
-                        let token = storage::ibc_token(ibc_denom);
-                        self.ctx
-                            .borrow_mut()
-                            .store_token_denom(&token)
-                            .map_err(|e| {
-                                Error::Denom(format!(
-                                    "Writing the token denom failed: {}",
-                                    e
-                                ))
-                            })?;
-                    }
+                if let Some((trace_hash, ibc_denom)) = result
+                    .as_ref()
+                    .map(|event| {
+                        event
+                            .attributes
+                            .get("trace_hash")
+                            .zip(event.attributes.get("denom"))
+                    })
+                    .flatten()
+                {
+                    // If the denomination trace event has the trace hash and
+                    // the IBC denom, a token has been minted. The raw IBC denom
+                    // including the port ID, the channel ID and the base token
+                    // is stored to be restored from the trace hash. The amount
+                    // denomination is also set for the minting.
+                    self.ctx
+                        .borrow_mut()
+                        .store_ibc_denom(trace_hash, ibc_denom)
+                        .map_err(|e| {
+                            Error::Denom(format!(
+                                "Writing the IBC denom failed: {}",
+                                e
+                            ))
+                        })?;
+                    let token = storage::ibc_token(ibc_denom);
+                    self.ctx.borrow_mut().store_token_denom(&token).map_err(
+                        |e| {
+                            Error::Denom(format!(
+                                "Writing the token denom failed: {}",
+                                e
+                            ))
+                        },
+                    )
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
             // other messages
             _ => Ok(()),

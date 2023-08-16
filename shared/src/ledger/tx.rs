@@ -1337,7 +1337,7 @@ pub async fn build_pgf_stewards_proposal<
 /// Submit an IBC transfer
 pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-    mut args: args::TxIbcTransfer,
+    args: args::TxIbcTransfer,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx, Error> {
     // Check that the source address exists on chain
@@ -1357,7 +1357,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
             validated_amount
         )));
     }
-    let validate_fee = validate_amount(
+    validate_amount(
         client,
         args.tx.gas_amount,
         &args.tx.gas_token,
@@ -1365,9 +1365,6 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     )
     .await
     .expect("expected to be able to validate fee");
-
-    args.amount = InputAmount::Validated(validated_amount);
-    args.tx.gas_amount = InputAmount::Validated(validate_fee);
 
     // Check source balance
     let balance_key = token::balance_key(&args.token, &source);
