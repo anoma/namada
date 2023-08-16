@@ -18,7 +18,8 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::Amount;
 use namada_core::ledger::governance::cli::onchain::{
-    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+    DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
+    ProposalVote,
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
@@ -52,7 +53,7 @@ use crate::proto::{MaspBuilder, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
-use crate::types::error::{Error, TxError};
+use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
@@ -249,7 +250,7 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    let do_nothing = |_: &mut Tx, _: &mut common::PublicKey| ();
+    let do_nothing = |_: &mut Tx, _: &mut common::PublicKey| Ok(());
     build(
         client,
         args,
@@ -530,7 +531,7 @@ pub async fn build_validator_commission_change<
         new_rate: rate,
     };
 
-    let do_nothing = |_: &mut _, _: &mut pos::CommissionChange| ();
+    let do_nothing = |_: &mut _, _: &mut pos::CommissionChange| Ok(());
     build(
         client,
         &tx_args,
@@ -612,7 +613,7 @@ pub async fn build_unjail_validator<
         .map_err(|err| TxError::EncodeTxFailure(err.to_string()))?;
     let mut data = validator.clone();
 
-    let do_nothing = |_: &mut _, _: &mut Address| ();
+    let do_nothing = |_: &mut _, _: &mut Address| Ok(());
     build(
         client,
         &tx_args,
@@ -673,7 +674,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
 
     let mut data = pos::Withdraw { validator, source };
 
-    let do_nothing = |_: &mut _, _: &mut pos::Withdraw| ();
+    let do_nothing = |_: &mut _, _: &mut pos::Withdraw| Ok(());
     build(
         client,
         &tx_args,
@@ -751,7 +752,7 @@ pub async fn build_unbond<
         source: source.clone(),
     };
 
-    let do_nothing = |_: &mut _, _: &mut pos::Bond| ();
+    let do_nothing = |_: &mut _, _: &mut pos::Bond| Ok(());
     let tx = build(
         client,
         &tx_args,
@@ -873,7 +874,7 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
         source,
     };
 
-    let do_nothing = |_: &mut Tx, _: &mut pos::Bond| ();
+    let do_nothing = |_: &mut Tx, _: &mut pos::Bond| Ok(());
     build(
         client,
         &tx_args,
@@ -908,9 +909,8 @@ pub async fn build_default_proposal<
 
     let push_data =
         |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
-            let (_, extra_section_hash) = tx_builder.add_extra_section(
-                proposal.proposal.content.try_to_vec().unwrap(),
-            );
+            let (_, extra_section_hash) = tx_builder
+                .add_extra_section(proposal_to_vec(proposal.proposal)?);
             init_proposal_data.content = extra_section_hash;
 
             if let Some(init_proposal_code) = proposal.data {
@@ -919,6 +919,7 @@ pub async fn build_default_proposal<
                 init_proposal_data.r#type =
                     ProposalType::Default(Some(extra_section_hash));
             };
+            Ok(())
         };
     build(
         client,
@@ -987,7 +988,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
         delegations,
     };
 
-    let do_nothing = |_: &mut _, _: &mut VoteProposalData| ();
+    let do_nothing = |_: &mut _, _: &mut VoteProposalData| Ok(());
     build(client, &tx, tx_code_path, &mut data, do_nothing, gas_payer).await
 }
 
@@ -1013,9 +1014,10 @@ pub async fn build_pgf_funding_proposal<
             .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
-        let (_, extra_section_hash) = tx
-            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        let (_, extra_section_hash) =
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
         data.content = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1050,9 +1052,10 @@ pub async fn build_pgf_stewards_proposal<
             .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
-        let (_, extra_section_hash) = tx
-            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        let (_, extra_section_hash) =
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
         data.content = extra_section_hash;
+        Ok(())
     };
 
     build(
@@ -1145,7 +1148,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     let mut data = vec![];
     prost::Message::encode(&any_msg, &mut data)
         .map_err(TxError::EncodeFailure)?;
-    let do_nothing = |_: &mut _, _: &mut Vec<u8>| ();
+    let do_nothing = |_: &mut _, _: &mut Vec<u8>| Ok(());
     build(
         client,
         &tx_args,
@@ -1167,7 +1170,7 @@ pub async fn build<C: crate::ledger::queries::Client + Sync, F, D>(
     gas_payer: &common::PublicKey,
 ) -> Result<Tx, Error>
 where
-    F: FnOnce(&mut Tx, &mut D),
+    F: FnOnce(&mut Tx, &mut D) -> Result<(), Error>,
     D: BorshSerialize + Clone,
 {
     build_pow_flag(
@@ -1193,7 +1196,7 @@ async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, F, D>(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Tx, Error>
 where
-    F: FnOnce(&mut Tx, &mut D),
+    F: FnOnce(&mut Tx, &mut D) -> Result<(), Error>,
     D: BorshSerialize + Clone,
 {
     let chain_id = tx_args.chain_id.clone().unwrap();
@@ -1202,7 +1205,7 @@ where
 
     let tx_code_hash = query_wasm_code_hash_buf(client, &path).await?;
 
-    on_tx(&mut tx_builder, data);
+    on_tx(&mut tx_builder, data)?;
 
     tx_builder
         .add_code_from_hash(tx_code_hash)
@@ -1435,6 +1438,7 @@ pub async fn build_transfer<
                 target: masp_tx_hash,
             });
         };
+        Ok(())
     };
     let tx = build_pow_flag(
         client,
@@ -1486,6 +1490,7 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
     let add_code_hash = |tx: &mut Tx, data: &mut InitAccount| {
         let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
         data.vp_code_hash = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1544,6 +1549,7 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
         let extra_section_hash = vp_code_hash
             .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
         data.vp_code_hash = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1781,4 +1787,11 @@ async fn query_wasm_code_hash_buf<C: crate::ledger::queries::Client + Sync>(
     path: &Path,
 ) -> Result<Hash, Error> {
     query_wasm_code_hash(client, path.to_string_lossy()).await
+}
+
+fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>, Error> {
+    proposal
+        .content
+        .try_to_vec()
+        .map_err(|e| Error::from(EncodingError::Conversion(e.to_string())))
 }
