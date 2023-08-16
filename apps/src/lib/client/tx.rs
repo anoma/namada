@@ -65,7 +65,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
                 client,
                 &args,
                 address,
-                &public_key,
+                public_key,
                 &signing_data.gas_payer,
             )
             .await?;
