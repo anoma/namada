@@ -16,6 +16,7 @@ mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
 pub mod testing;
+pub mod utils;
 mod vote_extensions;
 
 use std::collections::{BTreeSet, HashSet};
@@ -1316,38 +1317,6 @@ where
         response
     }
 
-    /// Lookup a validator's keypair for their established account from their
-    /// wallet. If the node is not validator, this function returns None
-    #[allow(dead_code)]
-    fn get_account_keypair(&self) -> Option<common::SecretKey> {
-        let wallet_path = &self.base_dir.join(self.chain_id.as_str());
-        let genesis_path = &self
-            .base_dir
-            .join(format!("{}.toml", self.chain_id.as_str()));
-        let mut wallet = crate::wallet::load_or_new_from_genesis(
-            wallet_path,
-            genesis::genesis_config::open_genesis_config(genesis_path).unwrap(),
-        );
-        self.mode.get_validator_address().map(|addr| {
-            let sk: common::SecretKey = self
-                .wl_storage
-                .read(&pk_key(addr))
-                .expect(
-                    "A validator should have a public key associated with \
-                     it's established account",
-                )
-                .expect(
-                    "A validator should have a public key associated with \
-                     it's established account",
-                );
-            let pk = sk.ref_to();
-            wallet.find_key_by_pk(&pk, None).expect(
-                "A validator's established keypair should be stored in its \
-                 wallet",
-            )
-        })
-    }
-
     #[cfg(not(feature = "mainnet"))]
     /// Check if the tx has a valid PoW solution. Unlike
     /// `apply_pow_solution_if_valid`, this won't invalidate the solution.
@@ -2094,18 +2063,19 @@ mod test_utils {
             .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: Default::default(),
-                token: native_token,
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            300_000.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: Default::default(),
+                    token: native_token,
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                300_000.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2337,10 +2307,11 @@ mod abciplus_mempool_tests {
             ext
         };
         let tx = {
-            let mut tx = Tx::new(TxType::Protocol(Box::new(ProtocolTx {
-                pk: protocol_key.ref_to(),
-                tx: ProtocolTxType::BridgePoolVext,
-            })));
+            let mut tx =
+                Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
+                    pk: protocol_key.ref_to(),
+                    tx: ProtocolTxType::BridgePoolVext,
+                })));
             // invalid tx type, it doesn't match the
             // tx type declared in the header
             tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
@@ -2374,7 +2345,7 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let mut unsigned_wrapper =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: token::Amount::from_uint(100, 0)
                         .expect("This can't fail"),
@@ -2412,7 +2383,7 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let mut invalid_wrapper =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: token::Amount::from_uint(100, 0)
                         .expect("This can't fail"),
@@ -2457,10 +2428,8 @@ mod test_mempool_validate {
     fn test_wrong_tx_type() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        // Test Raw TxType
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.add_code("wasm_code".as_bytes().to_owned());
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2482,19 +2451,20 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: token::Amount::from_uint(100, 0)
-                    .expect("This can't fail"),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: token::Amount::from_uint(100, 0)
+                        .expect("This can't fail"),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2590,14 +2560,10 @@ mod test_mempool_validate {
         let keypair = super::test_utils::gen_keypair();
 
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.chain_id = wrong_chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.sechashes(),
-            &keypair,
-        )));
+        let mut tx = Tx::new(wrong_chain_id.clone(), None);
+        tx.add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .sign_wrapper(keypair);
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2621,15 +2587,11 @@ mod test_mempool_validate {
 
         let keypair = super::test_utils::gen_keypair();
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.header.expiration = Some(DateTimeUtc::default());
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(
-            tx.sechashes(),
-            &keypair,
-        )));
+        let mut tx =
+            Tx::new(shell.chain_id.clone(), Some(DateTimeUtc::default()));
+        tx.add_code("wasm_code".as_bytes().to_owned())
+            .add_data("transaction data".as_bytes().to_owned())
+            .sign_wrapper(keypair);
 
         let result = shell.mempool_validate(
             tx.to_bytes().as_ref(),
@@ -2648,18 +2610,19 @@ mod test_mempool_validate {
                 .unwrap();
         let keypair = super::test_utils::gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 100.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            (block_gas_limit + 1).into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                (block_gas_limit + 1).into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2681,18 +2644,19 @@ mod test_mempool_validate {
         let (shell, _recv, _, _) = test_utils::setup();
         let keypair = super::test_utils::gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 100.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2714,18 +2678,19 @@ mod test_mempool_validate {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 100.into(),
-                token: address::btc(),
-            },
-            crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 100.into(),
+                    token: address::btc(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2747,18 +2712,19 @@ mod test_mempool_validate {
     fn test_fee_wrong_minimum_amount() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2779,18 +2745,19 @@ mod test_mempool_validate {
     fn test_insufficient_balance_for_fee() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 1_000_000_000.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
-            150_000.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 1_000_000_000.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                150_000.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2811,18 +2778,19 @@ mod test_mempool_validate {
     fn test_wrapper_fee_overflow() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: token::Amount::max(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: token::Amount::max(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));

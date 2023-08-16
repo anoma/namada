@@ -1,86 +1,24 @@
-use std::fmt::Display;
+use std::collections::HashSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::types::address::Address;
-use crate::types::governance::{
-    self, Proposal, ProposalError, ProposalVote, VoteType,
+use crate::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+pub use crate::ledger::governance::storage::proposal::ProposalType;
+use crate::ledger::governance::storage::proposal::{AddRemove, PGFAction};
+use crate::ledger::governance::storage::vote::StorageProposalVote;
+use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::storage::Epoch;
 
-/// The type of a Proposal
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    Serialize,
-    Deserialize,
-)]
-pub enum ProposalType {
-    /// Default governance proposal with the optional wasm code
-    Default(Option<Hash>),
-    /// PGF council proposal
-    PGFCouncil,
-    /// ETH proposal
-    ETHBridge,
-}
-
-impl Display for ProposalType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ProposalType::Default(_) => write!(f, "Default"),
-            ProposalType::PGFCouncil => write!(f, "PGF Council"),
-            ProposalType::ETHBridge => write!(f, "ETH Bridge"),
-        }
-    }
-}
-
-impl PartialEq<VoteType> for ProposalType {
-    fn eq(&self, other: &VoteType) -> bool {
-        match self {
-            Self::Default(_) => {
-                matches!(other, VoteType::Default)
-            }
-            Self::PGFCouncil => {
-                matches!(other, VoteType::PGFCouncil(..))
-            }
-            Self::ETHBridge => {
-                matches!(other, VoteType::ETHBridge(_))
-            }
-        }
-    }
-}
-
-impl TryFrom<governance::ProposalType> for (ProposalType, Option<Vec<u8>>) {
-    type Error = ProposalError;
-
-    fn try_from(value: governance::ProposalType) -> Result<Self, Self::Error> {
-        match value {
-            governance::ProposalType::Default(path) => {
-                if let Some(p) = path {
-                    match std::fs::read(p) {
-                        Ok(code) => Ok((
-                            ProposalType::Default(Some(Hash::default())),
-                            Some(code),
-                        )),
-                        Err(_) => Err(Self::Error::InvalidProposalData),
-                    }
-                } else {
-                    Ok((ProposalType::Default(None), None))
-                }
-            }
-            governance::ProposalType::PGFCouncil => {
-                Ok((ProposalType::PGFCouncil, None))
-            }
-            governance::ProposalType::ETHBridge => {
-                Ok((ProposalType::ETHBridge, None))
-            }
-        }
-    }
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum ProposalError {
+    #[error("Invalid proposal data.")]
+    InvalidProposalData,
 }
 
 /// A tx data type to hold proposal data
@@ -110,6 +48,16 @@ pub struct InitProposalData {
     pub grace_epoch: Epoch,
 }
 
+impl InitProposalData {
+    /// Get the hash of the corresponding extra data section
+    pub fn get_section_code_hash(&self) -> Option<Hash> {
+        match self.r#type {
+            ProposalType::Default(hash) => hash,
+            _ => None,
+        }
+    }
+}
+
 /// A tx data type to hold vote proposal data
 #[derive(
     Debug,
@@ -124,30 +72,82 @@ pub struct VoteProposalData {
     /// The proposal id
     pub id: u64,
     /// The proposal vote
-    pub vote: ProposalVote,
+    pub vote: StorageProposalVote,
     /// The proposal author address
     pub voter: Address,
     /// Delegator addreses
     pub delegations: Vec<Address>,
 }
 
-impl TryFrom<Proposal> for (InitProposalData, Vec<u8>, Option<Vec<u8>>) {
+impl TryFrom<DefaultProposal> for InitProposalData {
     type Error = ProposalError;
 
-    fn try_from(proposal: Proposal) -> Result<Self, Self::Error> {
-        let (r#type, code) = proposal.r#type.try_into()?;
-        Ok((
-            InitProposalData {
-                id: proposal.id,
-                content: Hash::default(),
-                author: proposal.author,
-                r#type,
-                voting_start_epoch: proposal.voting_start_epoch,
-                voting_end_epoch: proposal.voting_end_epoch,
-                grace_epoch: proposal.grace_epoch,
-            },
-            proposal.content.try_to_vec().unwrap(),
-            code,
-        ))
+    fn try_from(value: DefaultProposal) -> Result<Self, Self::Error> {
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content: Hash::default(),
+            author: value.proposal.author,
+            r#type: ProposalType::Default(None),
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
+    }
+}
+
+impl TryFrom<PgfStewardProposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(value: PgfStewardProposal) -> Result<Self, Self::Error> {
+        let extra_data = value
+            .data
+            .iter()
+            .cloned()
+            .map(|steward| AddRemove::<Address>::try_from(steward).unwrap())
+            .collect::<HashSet<AddRemove<Address>>>();
+
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content: Hash::default(),
+            author: value.proposal.author,
+            r#type: ProposalType::PGFSteward(extra_data),
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
+    }
+}
+
+impl TryFrom<PgfFundingProposal> for InitProposalData {
+    type Error = ProposalError;
+
+    fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
+        let continous_fundings = value
+            .data
+            .continous
+            .iter()
+            .cloned()
+            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .collect::<Vec<PGFAction>>();
+
+        let retro_fundings = value
+            .data
+            .retro
+            .iter()
+            .cloned()
+            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .collect::<Vec<PGFAction>>();
+
+        let extra_data = [continous_fundings, retro_fundings].concat();
+
+        Ok(InitProposalData {
+            id: value.proposal.id,
+            content: Hash::default(),
+            author: value.proposal.author,
+            r#type: ProposalType::PGFPayment(extra_data),
+            voting_start_epoch: value.proposal.voting_start_epoch,
+            voting_end_epoch: value.proposal.voting_end_epoch,
+            grace_epoch: value.proposal.grace_epoch,
+        })
     }
 }

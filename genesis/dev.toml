@@ -1,150 +1,205 @@
-# Example genesis with dev settings.
-genesis_time = "2021-09-30:10:00.00Z"
+# Developer network
+genesis_time = "2021-12-20T15:00:00.00Z"
 native_token = "NAM"
-
-# A genesis validator with alias "validator".
-[validator.validator]
-# Validator's public key for consensus.
-consensus_public_key = "5e704c4e46265e1ccc87505149f79b9d2e414d01a4e3806dfc65f0a73901c1d0"
-# Public key of the validator's Namada account.
-account_public_key = "5e704c4e46265e1ccc87505149f79b9d2e414d01a4e3806dfc65f0a73901c1d0"
-# Address of the validator.
-address = "a1qq5qqqqqgfqnsd6pxse5zdj9g5crzsf5x4zyzv6yxerr2d2rxpryzwp5g5m5zvfjxv6ygsekjmraj0"
-# Validator's token balance at genesis.
-tokens = 200000
-# Amount of the validator's genesis token balance which is not staked.
-non_staked_balance = 100000
-# VP for the validator account
-validator_vp = "vp_validator"
-# Commission rate for rewards
-commission_rate = "0.05"
-# Maximum change per epoch in the commission rate
-max_commission_rate_change = "0.01"
-# Public IP:port address
-net_address = "127.0.0.1:26656"
+faucet_pow_difficulty = 0
+faucet_withdrawal_limit = "1000"
 
 # Some tokens present at genesis.
 
 [token.NAM]
 address = "atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5"
-denom = 8
+denom = 6
+vp = "vp_token"
 [token.NAM.balances]
-# In token balances, we can use:
-# 1. An address any account
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-# 2. An alias of any account
+Albert = "1000000"
+"Albert.public_key" = "100"
 Bertha = "1000000"
-# 3. A public key of a validator or an established account from which the 
-#    address of the implicit account is derived)
-"bertha.public_key" = 100
-"validator.public_key" = 100
+"Bertha.public_key" = "2000"
+Christel = "1000000"
+"Christel.public_key" = "100"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "922337203685400000000"
+"faucet.public_key" = "100"
+[token.NAM.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
 [token.BTC]
 address = "atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp"
 denom = 8
+vp = "vp_token"
 [token.BTC.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.BTC.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
 denom = 18
+vp = "vp_token"
 [token.ETH.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.ETH.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
 denom = 10
+vp = "vp_token"
 [token.DOT.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.DOT.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
-[token.schnitzel]
+[token.Schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
 denom = 6
-[token.schnitzel.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+vp = "vp_token"
+[token.Schnitzel.balances]
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.Schnitzel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
-[token.apfel]
+[token.Apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
 denom = 6
-[token.apfel.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+vp = "vp_token"
+[token.Apfel.balances]
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.Apfel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
-[token.kartoffel]
+[token.Kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
-denom = 6
 public_key = ""
-[token.kartoffel.balances]
-atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4 = 1000000
-atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p = 1000000
-atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw = 1000000
-a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz = 1000000
+denom = 6
+vp = "vp_token"
+[token.Kartoffel.balances]
+Albert = "1000000"
+Bertha = "1000000"
+Christel = "1000000"
+Daewon = "1000000"
+Ester = "1000000"
+faucet = "9223372036854"
+[token.Kartoffel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target_key = "0.6667"
 
 # Some established accounts present at genesis.
+[established.faucet]
+vp = "vp_testnet_faucet"
 
-[established.albert]
-address = "atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4"
-public_key = "a57281e1dd9fd39ec3e8a162a1643ca7c836c0f2dae3bef1412a3a61a2fde1a7"
+[established.Albert]
 vp = "vp_user"
 
-[established.bertha]
-address = "atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw"
-public_key = "572512a95b190d615b1987f7072572a64951ad50f4f97ef9dbb83545c46ae600"
+[established.Bertha]
 vp = "vp_user"
 
-[established.christel]
-address = "atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p"
-public_key = "d06f8d4f897f329a50fd23ba5d2503bbe22fab2f14d5f625e07a65f617eb2778"
+[established.Christel]
 vp = "vp_user"
 
-# An implicit account present at genesis.
+[established.masp]
+address = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5"
+vp = "vp_masp"
 
-# Daewon (a1qyqzsqqqqqcyvvf5xcu5vd6rg4z5233hg9pn23pjgdryzdjy8pz52wzxxscnvvjxx3rryvzz8y5p6mtz)
-[implicit.daewon]
-public_key = "2b5b8fda66fb6fc4ef0d86f84b21f250034077effc459fc2403a77a35aa95e3f"
+[implicit.Daewon]
+
+[implicit.Ester]
 
 # Wasm VP definitions
 
-# Default user VP
+# Wasm VP definitions
+
+# Implicit VP
+[wasm.vp_implicit]
+filename = "vp_implicit.wasm"
+
+# Default user VP in established accounts
 [wasm.vp_user]
-# filename (relative to wasm path used by the node)
 filename = "vp_user.wasm"
-# SHA-256 hash of the wasm file
-sha256 = "dc7b97f0448f2369bd2401c3c1d8898f53cac8c464a8c1b1f7f81415a658625d"
 
 # Default validator VP
 [wasm.vp_validator]
 # filename (relative to wasm path used by the node)
 filename = "vp_validator.wasm"
 
+# Faucet VP
+[wasm.vp_testnet_faucet]
+filename = "vp_testnet_faucet.wasm"
+
+# MASP VP
+[wasm.vp_masp]
+filename = "vp_masp.wasm"
+
 # General protocol parameters.
 [parameters]
 # Minimum number of blocks in an epoch.
-min_num_of_blocks = 10
+min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).
 max_expected_time_per_block = 30
-# Expected epochs per year (also sets the minimum duration of an epoch in seconds)
-epochs_per_year = 525_600
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
 # Max amount of gas per block
 max_block_gas = 1000000 
+# vp whitelist
+vp_whitelist = []
+# tx whitelist
+tx_whitelist = []
+# Implicit VP WASM name
+implicit_vp = "vp_implicit"
+# Expected number of epochs per year (also sets the min duration of an epoch in seconds)
+epochs_per_year = 105_120 # 5 minute epochs
+# The P gain factor in the Proof of Stake rewards controller
+pos_gain_p = "0.1"
+# The D gain factor in the Proof of Stake rewards controller
+pos_gain_d = "0.1"
+# The maximum number of signatures allowed per transaction
+max_signatures_per_transaction = 15
 
 # Proof of stake parameters.
 [pos_params]
@@ -155,9 +210,9 @@ max_validator_slots = 128
 pipeline_len = 2
 # Unbonding length (in epochs). Validators may have their stake slashed
 # for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
-unbonding_len = 21
+unbonding_len = 3
 # Votes per fundamental staking token (namnam)
-tm_votes_per_token = "1"
+tm_votes_per_token = "0.1"
 # Reward for proposing a block.
 block_proposer_reward = "0.125"
 # Reward for voting on a block.
@@ -175,18 +230,21 @@ light_client_attack_min_slash_rate = "0.001"
 # Number of epochs above and below (separately) the current epoch to
 # consider when doing cubic slashing
 cubic_slashing_window_length = 1
+# The minimum amount of bonded tokens that a validator needs to be in
+# either the `consensus` or `below_capacity` validator sets
+validator_stake_threshold = "1"
 
 # Governance parameters.
 [gov_params]
-# minimum amount of NAM token to lock
+# minimum amount of nam token to lock
 min_proposal_fund = 500
 # proposal code size in bytes
-max_proposal_code_size = 300000
-# min proposal period length in epochs
-min_proposal_period = 3
+max_proposal_code_size = 500000
+# min proposal voting period length in epochs
+min_proposal_voting_period = 3
 # max proposal period length in epochs
 max_proposal_period = 27
 # maximum number of characters in the proposal content
-max_proposal_content_size = 5000
+max_proposal_content_size = 10000
 # minimum epochs between end and grace epoch
 min_proposal_grace_epochs = 6

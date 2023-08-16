@@ -1,7 +1,6 @@
 //! MASP verification wrappers.
 
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
 #[cfg(feature = "masp-tx-gen")]
@@ -79,6 +78,17 @@ use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
 /// the default OS specific path is used.
 pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 
+/// Env var to either "save" proofs into files or to "load" them from
+/// files.
+pub const ENV_VAR_MASP_TEST_PROOFS: &str = "NAMADA_MASP_TEST_PROOFS";
+
+/// Randomness seed for MASP integration tests to build proofs with
+/// deterministic rng.
+pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
+
+/// A directory to save serialized proofs for tests.
+pub const MASP_TEST_PROOFS_DIR: &str = "test_fixtures/masp_proofs";
+
 /// The network to use for MASP
 #[cfg(feature = "mainnet")]
 const NETWORK: MainNetwork = MainNetwork;
@@ -92,6 +102,26 @@ pub const SPEND_NAME: &str = "masp-spend.params";
 pub const OUTPUT_NAME: &str = "masp-output.params";
 /// Convert circuit name
 pub const CONVERT_NAME: &str = "masp-convert.params";
+
+/// Shielded transfer
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct ShieldedTransfer {
+    /// Shielded transfer builder
+    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    /// MASP transaction
+    pub masp_tx: Transaction,
+    /// Metadata
+    pub metadata: SaplingMetadata,
+    /// Epoch in which the transaction was created
+    pub epoch: Epoch,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum LoadOrSaveProofs {
+    Load,
+    Save,
+    Neither,
+}
 
 fn load_pvks() -> (
     PreparedVerifyingKey<Bls12>,
@@ -511,7 +541,7 @@ impl From<MaspAmount> for Amount {
 
 /// Represents the amount used of different conversions
 pub type Conversions =
-    HashMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
+    BTreeMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
 
 /// Represents the changes that were made to a list of transparent accounts
 pub type TransferDelta = HashMap<Address, MaspChange>;
@@ -531,7 +561,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// The commitment tree produced by scanning all transactions up to tx_pos
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to applicable note positions
-    pub pos_map: HashMap<ViewingKey, HashSet<usize>>,
+    pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
     pub nf_map: HashMap<Nullifier, usize>,
     /// Maps note positions to their corresponding notes
@@ -657,7 +687,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 ..Default::default()
             };
             for vk in unknown_keys {
-                tx_ctx.pos_map.entry(vk).or_insert_with(HashSet::new);
+                tx_ctx.pos_map.entry(vk).or_insert_with(BTreeSet::new);
             }
             // Update this unknown shielded context until it is level with self
             while tx_ctx.last_txidx != self.last_txidx {
@@ -931,7 +961,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         asset_type: AssetType,
         conversions: &'a mut Conversions,
     ) {
-        if let Entry::Vacant(conv_entry) = conversions.entry(asset_type) {
+        if let btree_map::Entry::Vacant(conv_entry) =
+            conversions.entry(asset_type)
+        {
             // Query for the ID of the last accepted transaction
             if let Some((addr, denom, ep, conv, path)) =
                 query_conversion(client, asset_type).await
@@ -962,7 +994,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     client,
                     balance,
                     target_epoch,
-                    HashMap::new(),
+                    BTreeMap::new(),
                 )
                 .await
                 .0;
@@ -1142,7 +1174,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         Conversions,
     ) {
         // Establish connection with which to do exchange rate queries
-        let mut conversions = HashMap::new();
+        let mut conversions = BTreeMap::new();
         let mut val_acc = Amount::zero();
         let mut notes = Vec::new();
         // Retrieve the notes that can be spent by this key
@@ -1286,7 +1318,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         println!("Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount(client, amount, ep, HashMap::new())
+            .compute_exchanged_amount(client, amount, ep, BTreeMap::new())
             .await
             .0;
         println!("Exchanged amount: {:?}", computed_amount);
@@ -1356,16 +1388,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         args: args::TxTransfer,
     ) -> Result<
-        Option<(
-            Builder<(), (), ExtendedFullViewingKey, ()>,
-            Transaction,
-            SaplingMetadata,
-            Epoch,
-        )>,
+        Option<ShieldedTransfer>,
         builder::Error<std::convert::Infallible>,
     > {
         // No shielded components are needed when neither source nor destination
         // are shielded
+
+        use std::str::FromStr;
+
+        use rand::rngs::StdRng;
+        use rand_core::SeedableRng;
+
         let spending_key = args.source.spending_key();
         let payment_address = args.target.payment_address();
         // No shielded components are needed when neither source nor
@@ -1387,8 +1420,27 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // possesion
         let memo = MemoBytes::empty();
 
+        // Try to get a seed from env var, if any.
+        let rng = if let Ok(seed) =
+            env::var(ENV_VAR_MASP_TEST_SEED).map(|seed| {
+                let exp_str =
+                    format!("Env var {ENV_VAR_MASP_TEST_SEED} must be a u64.");
+                let parsed_seed: u64 =
+                    FromStr::from_str(&seed).expect(&exp_str);
+                parsed_seed
+            }) {
+            tracing::warn!(
+                "UNSAFE: Using a seed from {ENV_VAR_MASP_TEST_SEED} env var \
+                 to build proofs."
+            );
+            StdRng::seed_from_u64(seed)
+        } else {
+            StdRng::from_rng(OsRng).unwrap()
+        };
+
         // Now we build up the transaction within this object
-        let mut builder = Builder::<TestNetwork, OsRng>::new(NETWORK, 1.into());
+        let mut builder =
+            Builder::<TestNetwork, _>::new_with_rng(NETWORK, 1.into(), rng);
 
         // break up a transfer into a number of transfers with suitable
         // denominations
@@ -1530,17 +1582,82 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             }
         }
 
-        // Build and return the constructed transaction
-        builder
-            .clone()
-            .build(
+        // To speed up integration tests, we can save and load proofs
+        let load_or_save = if let Ok(masp_proofs) =
+            env::var(ENV_VAR_MASP_TEST_PROOFS)
+        {
+            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
+                "load" => LoadOrSaveProofs::Load,
+                "save" => LoadOrSaveProofs::Save,
+                env_var => panic!(
+                    "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
+                     Expecting \"save\" or \"load\", but got \"{env_var}\"."
+                ),
+            };
+            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
+                panic!(
+                    "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
+                     var when using {ENV_VAR_MASP_TEST_PROOFS} for \
+                     deterministic proofs."
+                );
+            }
+            parsed
+        } else {
+            LoadOrSaveProofs::Neither
+        };
+
+        let builder_clone = builder.clone().map_builder(WalletMap);
+        let builder_bytes = BorshSerialize::try_to_vec(&builder_clone).unwrap();
+        let builder_hash =
+            namada_core::types::hash::Hash::sha256(&builder_bytes);
+        let saved_filepath = env::current_dir()
+            .unwrap()
+            // One up from "tests" dir to the root dir
+            .parent()
+            .unwrap()
+            .join(MASP_TEST_PROOFS_DIR)
+            .join(format!("{builder_hash}.bin"));
+
+        if let LoadOrSaveProofs::Load = load_or_save {
+            let recommendation = format!(
+                "Re-run the tests with {ENV_VAR_MASP_TEST_PROOFS}=save to \
+                 re-generate proofs."
+            );
+            let exp_str = format!(
+                "Read saved MASP proofs from {}. {recommendation}",
+                saved_filepath.to_string_lossy()
+            );
+            let loaded_bytes =
+                tokio::fs::read(&saved_filepath).await.expect(&exp_str);
+            let exp_str = format!(
+                "Valid `ShieldedTransfer` bytes in {}. {recommendation}",
+                saved_filepath.to_string_lossy()
+            );
+            let loaded: ShieldedTransfer =
+                BorshDeserialize::try_from_slice(&loaded_bytes)
+                    .expect(&exp_str);
+            Ok(Some(loaded))
+        } else {
+            // Build and return the constructed transaction
+            let (masp_tx, metadata) = builder.build(
                 &self.utils.local_tx_prover(),
                 // Fees are always paid outside of MASP
                 &FeeRule::non_standard(Amount::zero()),
-            )
-            .map(|(tx, metadata)| {
-                Some((builder.map_builder(WalletMap), tx, metadata, epoch))
-            })
+            )?;
+            let built = ShieldedTransfer {
+                builder: builder_clone,
+                masp_tx,
+                metadata,
+                epoch,
+            };
+            if let LoadOrSaveProofs::Save = load_or_save {
+                let built_bytes = BorshSerialize::try_to_vec(&built).unwrap();
+                tokio::fs::write(&saved_filepath, built_bytes)
+                    .await
+                    .unwrap();
+            }
+            Ok(Some(built))
+        }
     }
 
     /// Obtain the known effects of all accepted shielded and transparent

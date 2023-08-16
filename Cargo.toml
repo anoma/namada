@@ -21,6 +21,7 @@ members = [
 exclude = [
   "wasm",
   "wasm_for_tests",
+  "test_fixtures",
 ]
 
 [workspace.package]
@@ -32,7 +33,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.20.1"
+version = "0.21.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -118,7 +119,7 @@ sha2 = "0.9.3"
 signal-hook = "0.3.9"
 slip10_ed25519 = "0.1.3"
 # sysinfo with disabled multithread feature
-sysinfo = {version = "0.29.4", default-features = false}
+sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
 tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}

@@ -6,8 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod key;
-
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;
@@ -74,9 +72,43 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
 /// Checks if a proposal id is being executed
 pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
     let proposal_execution_key =
-        gov_storage::get_proposal_execution_key(proposal_id);
+        gov_storage::keys::get_proposal_execution_key(proposal_id);
 
     ctx.has_key_pre(&proposal_execution_key)
+}
+
+/// Verify section signatures
+pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+    let max_signatures_per_transaction =
+        parameters::max_signatures_per_transaction(&ctx.pre())?;
+
+    let public_keys_index_map =
+        storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
+    let threshold =
+        storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+
+    let targets = [*tx.data_sechash(), *tx.code_sechash()];
+
+    // Serialize parameters
+    let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();
+    let public_keys_map = public_keys_index_map.try_to_vec().unwrap();
+    let targets = targets.try_to_vec().unwrap();
+    let threshold = threshold.try_to_vec().unwrap();
+
+    let valid = unsafe {
+        namada_vp_verify_tx_section_signature(
+            targets.as_ptr() as _,
+            targets.len() as _,
+            public_keys_map.as_ptr() as _,
+            public_keys_map.len() as _,
+            threshold.as_ptr() as _,
+            threshold.len() as _,
+            max_signatures.as_ptr() as _,
+            max_signatures.len() as _,
+        )
+    };
+
+    Ok(HostEnvResult::is_success(valid))
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:
@@ -287,25 +319,6 @@ impl<'view> VpEnv<'view> for Ctx {
             )
         };
         Ok(HostEnvResult::is_success(result))
-    }
-
-    fn verify_tx_section_signature(
-        &self,
-        pk: &crate::key::common::PublicKey,
-        hash_list: [Hash; 2],
-    ) -> Result<bool, Error> {
-        let pk = pk.try_to_vec().unwrap();
-        let hash_list = hash_list.try_to_vec().unwrap();
-        let valid = unsafe {
-            namada_vp_verify_tx_section_signature(
-                pk.as_ptr() as _,
-                pk.len() as _,
-                hash_list.as_ptr() as _,
-                hash_list.len() as _,
-            )
-        };
-
-        Ok(HostEnvResult::is_success(valid))
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {

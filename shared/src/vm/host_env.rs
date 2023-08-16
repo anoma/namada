@@ -5,11 +5,8 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::ledger::gas::{
-    GasMetering, TxGasMeter, VERIFY_TX_SIG_GAS_COST,
-};
+use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
-use namada_core::types::key::common;
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -1758,12 +1755,17 @@ where
 /// TODO: this is just a warkaround to track gas for multiple singature
 /// verifications. When the runtime gas meter is implemented, this funcion can
 /// be removed
+#[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    pk_ptr: u64,
-    pk_len: u64,
     hash_list_ptr: u64,
     hash_list_len: u64,
+    public_keys_map_ptr: u64,
+    public_keys_map_len: u64,
+    threshold_ptr: u64,
+    threshold_len: u64,
+    max_signatures_ptr: u64,
+    max_signatures_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
@@ -1772,33 +1774,56 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    let (pk, gas) = env
-        .memory
-        .read_bytes(pk_ptr, pk_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-
-    let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(gas_meter, gas)?;
-
-    let pk = common::PublicKey::try_from_slice(&pk)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
     let (hash_list, gas) = env
         .memory
         .read_bytes(hash_list_ptr, hash_list_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
 
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
-    let hash_vec = <[Hash; 2]>::try_from_slice(&hash_list)
+    let hashes = <[Hash; 2]>::try_from_slice(&hash_list)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    vp_host_fns::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
+    let (public_keys_map, gas) = env
+        .memory
+        .read_bytes(public_keys_map_ptr, public_keys_map_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let public_keys_map =
+        namada_core::types::account::AccountPublicKeysMap::try_from_slice(
+            &public_keys_map,
+        )
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (threshold, gas) = env
+        .memory
+        .read_bytes(threshold_ptr, threshold_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let threshold = u8::try_from_slice(&threshold)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (max_signatures, gas) = env
+        .memory
+        .read_bytes(max_signatures_ptr, max_signatures_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
     let tx = unsafe { env.ctx.tx.get() };
 
-    Ok(
-        HostEnvResult::from(tx.verify_signature(&pk, &hash_vec).is_ok())
-            .to_i64(),
+    Ok(HostEnvResult::from(
+        tx.verify_section_signatures(
+            &hashes,
+            public_keys_map,
+            threshold,
+            max_signatures,
+            gas_meter,
+        )
+        .is_ok(),
     )
+    .to_i64())
 }
 
 /// Verify a ShieldedTransaction.

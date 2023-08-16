@@ -7,7 +7,6 @@ use super::storage_api::{self, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::key::common::PublicKey;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -93,13 +92,6 @@ where
         &self,
         vp_code: Hash,
         input_data: Tx,
-    ) -> Result<bool, storage_api::Error>;
-
-    /// Verify the signature of a tx section
-    fn verify_tx_section_signature(
-        &self,
-        pk: &PublicKey,
-        hash_list: [Hash; 2],
     ) -> Result<bool, storage_api::Error>;
 
     /// Get a tx hash

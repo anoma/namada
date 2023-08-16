@@ -2,11 +2,9 @@
 //! as the PoS and IBC modules.
 
 pub mod ethereum_bridge;
-pub mod governance;
 pub mod multitoken;
 pub mod parameters;
 pub mod replay_protection;
-pub mod slash_fund;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -14,7 +12,6 @@ use std::collections::BTreeSet;
 use borsh::BorshDeserialize;
 use eyre::WrapErr;
 pub use namada_core::ledger::vp_env::VpEnv;
-use namada_core::types::key::common::PublicKey;
 
 use super::storage_api::{self, ResultExt, StorageRead};
 use super::vp_host_fns;
@@ -524,14 +521,6 @@ where
                  `eval` function."
             )
         }
-    }
-
-    fn verify_tx_section_signature(
-        &self,
-        _pk: &PublicKey,
-        _hash_list: [Hash; 2],
-    ) -> Result<bool, storage_api::Error> {
-        unimplemented!("Native VPs don't validate tx singature")
     }
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {

@@ -19,7 +19,7 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         apply_tx(ctx(), tx).unwrap();
 
         let env = tx_host_env::take();

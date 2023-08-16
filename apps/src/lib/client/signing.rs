@@ -35,10 +35,7 @@ where
 /// signer. Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, panics.
-///
-/// It also return a second, optional key for the wrapper's signer if it differs
-/// from the inner tx's one.
-pub async fn tx_signer<C, U, V>(
+pub async fn tx_signers<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
     _shielded: &mut ShieldedContext<V>,
@@ -58,7 +55,7 @@ where
     U: WalletUtils,
     V: ShieldedUtils,
 {
-    namada::ledger::signing::tx_signer::<C, U>(client, wallet, args, default)
+    namada::ledger::signing::tx_signers::<C, U>(client, wallet, args, default)
         .await
 }
 

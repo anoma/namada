@@ -1,5 +1,6 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
+use namada::ledger::tx::dump_tx;
 use namada::ledger::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 
@@ -76,7 +77,7 @@ impl<IO> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         tx::submit_ibc_transfer(&client, ctx, args).await?;
                     }
-                    Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                    Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
                                 &mut args.tx.ledger_address,
@@ -87,7 +88,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_update_vp(&client, &mut ctx, args).await?;
+                        tx::submit_update_account(&client, &mut ctx, args)
+                            .await?;
                     }
                     Sub::TxInitAccount(TxInitAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -236,39 +238,60 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
-                        let (mut tx, _epoch, addr, pk, wrapper_pk) =
+
+                        let default_signer = Some(args.sender.clone());
+                        let signing_data = signing::aux_signing_data(
+                            &client,
+                            &mut ctx.wallet,
+                            &args.tx,
+                            &Some(args.sender.clone()),
+                            default_signer,
+                        )
+                        .await?;
+
+                        let (mut tx, _epoch) =
                             bridge_pool::build_bridge_pool_tx(
                                 &client,
                                 &mut ctx.wallet,
                                 &mut ctx.shielded,
-                                args,
+                                args.clone(),
+                                signing_data.fee_payer.clone(),
                             )
-                            .await
-                            .unwrap();
-                        tx::submit_reveal_aux(
-                            &client,
-                            &mut ctx,
-                            &tx_args,
-                            addr,
-                            pk.clone(),
-                            &mut tx,
-                        )
-                        .await?;
-                        signing::sign_tx(
-                            &mut ctx.wallet,
-                            &mut tx,
-                            &tx_args,
-                            &pk,
-                            wrapper_pk.as_ref(),
-                        )
-                        .await?;
-                        sdk_tx::process_tx(
+                            .await?;
+
+                        signing::generate_test_vector(
                             &client,
                             &mut ctx.wallet,
-                            &tx_args,
-                            tx,
+                            &tx,
                         )
-                        .await?;
+                        .await;
+
+                        if args.tx.dump_tx {
+                            dump_tx(&args.tx, tx);
+                        } else {
+                            tx::submit_reveal_aux(
+                                &client,
+                                &mut ctx,
+                                tx_args.clone(),
+                                &args.sender,
+                            )
+                            .await?;
+
+                            signing::sign_tx(
+                                &mut ctx.wallet,
+                                &tx_args,
+                                &mut tx,
+                                signing_data,
+                            );
+
+                            sdk_tx::process_tx(
+                                &client,
+                                &mut ctx.wallet,
+                                &tx_args,
+                                tx,
+                            )
+                            .await?;
+                        }
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -528,6 +551,45 @@ impl<IO> CliApi<IO> {
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_protocol_parameters(&client, args).await;
+                    }
+                    Sub::QueryPgf(QueryPgf(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_pgf(&client, args).await;
+                    }
+                    Sub::QueryAccount(QueryAccount(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_account(&client, args).await;
+                    }
+                    Sub::SignTx(SignTx(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::sign_tx(&client, &mut ctx, args).await?;
                     }
                 }
             }

@@ -69,6 +69,9 @@ router! {POS,
     ( "delegations" / [owner: Address] )
         -> HashSet<Address> = delegation_validators,
 
+    ( "delegations_at" / [owner: Address] / [epoch: opt Epoch] )
+        -> HashMap<Address, token::Amount> = delegations,
+
     ( "bond_deltas" / [source: Address] / [validator: Address] )
         -> HashMap<Epoch, token::Change> = bond_deltas,
 
@@ -463,7 +466,6 @@ where
 
 /// Find all the validator addresses to whom the given `owner` address has
 /// some delegation in any epoch
-#[allow(dead_code)]
 fn delegations<D, H>(
     ctx: RequestCtx<'_, D, H>,
     owner: Address,

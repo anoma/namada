@@ -1,32 +1,33 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::ledger::governance::storage::vote::{
+    StorageProposalVote, VoteType,
+};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::Amount;
-use namada::ledger::governance;
+use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
+use namada::core::types::transaction::pos::InitValidator;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, read_pos_params};
 use namada::proto::{Code, Section};
-use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
-use namada::types::key::{ed25519, secp256k1, PublicKey};
+use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Key;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada::types::transaction::pos::{Bond, CommissionChange, Withdraw};
-use namada::types::transaction::{
-    EllipticCurve, InitAccount, InitValidator, UpdateVp,
-};
+use namada::types::transaction::EllipticCurve;
 use namada_apps::wallet::defaults;
 use namada_benches::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_PROPOSAL_WASM,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -314,17 +315,19 @@ fn update_vp(c: &mut Criterion) {
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
-    let data = UpdateVp {
+    let data = UpdateAccount {
         addr: defaults::albert_address(),
-        vp_code_hash: Hash(
+        vp_code_hash: Some(Hash(
             extra_section
                 .hash(&mut sha2::Sha256::new())
                 .finalize_reset()
                 .into(),
-        ),
+        )),
+        public_keys: vec![defaults::albert_keypair().ref_to()],
+        threshold: None,
     };
     let vp = generate_tx(
-        TX_UPDATE_VP_WASM,
+        TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
         Some(vec![extra_section]),
@@ -359,8 +362,9 @@ fn init_account(c: &mut Criterion) {
             .into(),
     );
     let data = InitAccount {
-        public_key: new_account.to_public(),
+        public_keys: vec![new_account.to_public()],
         vp_code_hash: extra_hash,
+        threshold: 1,
     };
     let tx = generate_tx(
         TX_INIT_ACCOUNT_WASM,
@@ -410,9 +414,9 @@ fn init_proposal(c: &mut Criterion) {
                         }
                         "complete_proposal" => {
                             let max_code_size_key =
-        governance::storage::get_max_proposal_code_size_key();
+                namada::core::ledger::governance::storage::keys::get_max_proposal_code_size_key();
                             let max_proposal_content_key =
-        governance::storage::get_max_proposal_content_key();
+                    namada::core::ledger::governance::storage::keys::get_max_proposal_content_key();
                             let max_code_size: u64 = shell
                                 .wl_storage
                                 .read(&max_code_size_key)
@@ -480,7 +484,7 @@ fn vote_proposal(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: ProposalVote::Yay(VoteType::Default),
+            vote: StorageProposalVote::Yay(VoteType::Default),
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
@@ -493,7 +497,7 @@ fn vote_proposal(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: ProposalVote::Nay,
+            vote: StorageProposalVote::Nay,
             voter: defaults::validator_address(),
             delegations: vec![],
         },
@@ -565,7 +569,8 @@ fn init_validator(c: &mut Criterion) {
             .into(),
     );
     let data = InitValidator {
-        account_key: defaults::albert_keypair().to_public(),
+        account_keys: vec![defaults::albert_keypair().to_public()],
+        threshold: 1,
         consensus_key,
         eth_cold_key,
         eth_hot_key,

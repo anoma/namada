@@ -70,7 +70,7 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
@@ -374,6 +374,16 @@ mod native_vp_host_env {
         ) -> i64);
     native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
-    native_host_fn!(vp_verify_tx_section_signature(pk_ptr: u64, pk_len: u64, hash_list_ptr: u64, hash_list_len: u64) -> i64);
+    native_host_fn!(vp_verify_tx_section_signature(
+            hash_list_ptr: u64,
+            hash_list_len: u64,
+            public_keys_map_ptr: u64,
+            public_keys_map_len: u64,
+            threshold_ptr: u64,
+            threshold_len: u64,
+            max_signatures_ptr: u64,
+            max_signatures_len: u64,)
+        -> i64
+    );
     native_host_fn!(vp_charge_gas(used_gas: u64));
 }

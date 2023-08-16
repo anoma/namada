@@ -15,6 +15,7 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
+    use crate::ledger::testnet_pow;
     use crate::proto::{Code, Data, Section, Tx};
     use crate::types::address::{masp, Address};
     use crate::types::hash::Hash;
@@ -207,7 +208,7 @@ pub mod wrapper_tx {
             epoch: Epoch,
             gas_limit: GasLimit,
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
-                crate::ledger::testnet_pow::Solution,
+                testnet_pow::Solution,
             >,
             unshield_hash: Option<Hash>,
         ) -> WrapperTx {
@@ -302,12 +303,13 @@ pub mod wrapper_tx {
             transfer_code_hash: Hash,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
-            let mut tx = Tx::new(crate::types::transaction::TxType::Decrypted(
-                crate::types::transaction::DecryptedTx::Decrypted {
-                    #[cfg(not(feature = "mainnet"))]
-                    has_valid_pow: false,
-                },
-            ));
+            let mut tx =
+                Tx::from_type(crate::types::transaction::TxType::Decrypted(
+                    crate::types::transaction::DecryptedTx::Decrypted {
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    },
+                ));
             let masp_section = tx.add_section(Section::MaspTx(unshield));
             let masp_hash = Hash(
                 masp_section
@@ -447,7 +449,7 @@ pub mod wrapper_tx {
         fn test_encryption_round_trip() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount_per_gas_unit: Amount::from_uint(10, 0)
                             .expect("Test failed"),
@@ -482,7 +484,7 @@ pub mod wrapper_tx {
         fn test_decryption_invalid_hash() {
             let keypair = gen_keypair();
             let mut wrapper =
-                Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
                         amount_per_gas_unit: Amount::from_uint(10, 0)
                             .expect("Test failed"),
@@ -519,19 +521,20 @@ pub mod wrapper_tx {
         fn test_malleability_attack_detection() {
             let keypair = gen_keypair();
             // the signed tx
-            let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: Amount::from_uint(10, 0)
-                        .expect("Test failed"),
-                    token: nam(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-                None,
-            ))));
+            let mut tx =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: Amount::from_uint(10, 0)
+                            .expect("Test failed"),
+                        token: nam(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    Default::default(),
+                    #[cfg(not(feature = "mainnet"))]
+                    None,
+                    None,
+                ))));
 
             tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));

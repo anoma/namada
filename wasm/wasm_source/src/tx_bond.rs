@@ -22,10 +22,8 @@ mod tests {
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake,
     };
-    use namada::proto::{Code, Data, Signature, Tx};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
-    use namada::types::transaction::TxType;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -34,6 +32,7 @@ mod tests {
         arb_established_address, arb_non_internal_address,
     };
     use namada_tx_prelude::address::InternalAddress;
+    use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
@@ -108,14 +107,12 @@ mod tests {
 
         let tx_code = vec![];
         let tx_data = bond.try_to_vec().unwrap();
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(tx_code));
-        tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash(), *tx.code_sechash()],
-            &key,
-        )));
-        let signed_tx = tx.clone();
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(tx_code)
+            .add_serialized_data(tx_data)
+            .sign_wrapper(key);
+
+        let signed_tx = tx;
 
         // Ensure that the initial stake of the sole validator is equal to the
         // PoS account balance

@@ -65,8 +65,9 @@ use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::args::InputAmount;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
-use namada::ledger::masp;
-use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
+use namada::ledger::masp::{
+    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
@@ -104,7 +105,7 @@ use tempfile::TempDir;
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
 pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 pub const TX_VOTE_PROPOSAL_WASM: &str = "tx_vote_proposal.wasm";
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
@@ -403,7 +404,7 @@ pub fn generate_tx(
     extra_section: Option<Vec<Section>>,
     signer: Option<&SecretKey>,
 ) -> Tx {
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: true,
@@ -442,7 +443,7 @@ pub fn generate_tx(
 
 pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
     // This function avoid serializaing the tx data with Borsh
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: true,
@@ -464,7 +465,7 @@ pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let mut tx = Tx::new(namada::types::transaction::TxType::Decrypted(
+    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
         namada::types::transaction::DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: true,
@@ -742,14 +743,15 @@ impl BenchShieldedCtx {
             gas_limit: GasLimit::from(u64::MAX),
             expiration: None,
             disposable_signing_key: false,
-            signing_key: Some(defaults::albert_keypair()),
-            signer: None,
+            signing_keys: vec![defaults::albert_keypair()],
+            signatures: vec![],
             wallet_alias_force: true,
             chain_id: None,
             tx_reveal_code_path: TX_REVEAL_PK_WASM.into(),
             verification_key: None,
             password: None,
             wrapper_fee_payer: None,
+            output_folder: None,
         };
 
         let args = TxTransfer {
@@ -778,7 +780,14 @@ impl BenchShieldedCtx {
         let shielded = async_runtime
             .block_on(self.shielded.gen_shielded_transfer(&self.shell, args))
             .unwrap()
-            .map(|(_, tx, _, _)| tx);
+            .map(
+                |ShieldedTransfer {
+                     builder: _,
+                     masp_tx,
+                     metadata: _,
+                     epoch: _,
+                 }| masp_tx,
+            );
 
         let mut hasher = Sha256::new();
         let shielded_section_hash = shielded.clone().map(|transaction| {

@@ -10,7 +10,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::ledger::native_vp::governance::utils::ProposalEvent;
+use crate::ledger::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
@@ -50,6 +50,8 @@ pub enum EventType {
     Ibc(String),
     /// The proposal that has been executed
     Proposal,
+    /// The pgf payment
+    PgfPayment,
 }
 
 impl Display for EventType {
@@ -59,6 +61,7 @@ impl Display for EventType {
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
+            EventType::PgfPayment => write!(f, "pgf_payment"),
         }?;
         Ok(())
     }
@@ -72,6 +75,7 @@ impl FromStr for EventType {
             "accepted" => Ok(EventType::Accepted),
             "applied" => Ok(EventType::Applied),
             "proposal" => Ok(EventType::Proposal),
+            "pgf_payments" => Ok(EventType::PgfPayment),
             // IBC
             "update_client" => Ok(EventType::Ibc("update_client".to_string())),
             "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),

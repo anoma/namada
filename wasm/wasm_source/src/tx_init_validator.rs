@@ -1,7 +1,7 @@
 //! A tx to initialize a new validator account with a given public keys and a
 //! validity predicates.
 
-use namada_tx_prelude::transaction::InitValidator;
+use namada_tx_prelude::transaction::pos::InitValidator;
 use namada_tx_prelude::*;
 
 #[transaction(gas = 730000)]

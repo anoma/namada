@@ -47,6 +47,7 @@ struct Keys {
     gas_cost: &'static str,
     fee_unshielding_gas_limit: &'static str,
     fee_unshielding_descriptions_limit: &'static str,
+    max_signatures_per_transaction: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -200,4 +201,9 @@ pub fn get_faucet_account_key() -> Key {
 /// Storage key used for the gas cost table
 pub fn get_gas_cost_key() -> Key {
     get_gas_cost_key_at_addr(ADDRESS)
+}
+
+/// Storage key used for the max signatures per transaction key
+pub fn get_max_signatures_per_transaction_key() -> Key {
+    get_max_signatures_per_transaction_key_at_addr(ADDRESS)
 }

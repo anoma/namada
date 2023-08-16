@@ -4,6 +4,7 @@ package = namada
 NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
 NAMADA_E2E_DEBUG ?= true
 RUST_BACKTRACE ?= 1
+NAMADA_MASP_TEST_SEED ?= 0
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -117,12 +118,14 @@ audit:
 
 test: test-unit test-e2e test-wasm
 
-# Unit tests with coverage report
 test-coverage:
+	# Run integration tests with pre-built MASP proofs
+	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
+	NAMADA_MASP_TEST_PROOFS=load \
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e --skip integration -Z unstable-options --report-time
+		-- --skip e2e -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
@@ -138,7 +141,23 @@ test-e2e:
 	--test-threads=1 \
 	-Z unstable-options --report-time
 
+# Run integration tests with pre-built MASP proofs
 test-integration:
+	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
+	NAMADA_MASP_TEST_PROOFS=load \
+	make test-integration-slow
+
+# Clear pre-built proofs, run integration tests and save the new proofs
+test-integration-save-proofs:
+    # Clear old proofs first
+	rm --force test_fixtures/masp_proofs/*.bin || true
+	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
+	NAMADA_MASP_TEST_PROOFS=save \
+	TEST_FILTER=masp \
+	make test-integration-slow
+
+# Run integration tests without specifiying any pre-built MASP proofs option
+test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
 	$(cargo) +$(nightly) test integration::$(TEST_FILTER) \
 	-Z unstable-options \

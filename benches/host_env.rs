@@ -1,38 +1,44 @@
+use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
-use namada::core::types::key::RefTo;
 use namada::core::types::token::{Amount, Transfer};
+use namada::proto::{Data, MultiSignature, Section};
 use namada_apps::wallet::defaults;
-use namada_benches::{generate_tx, TX_TRANSFER_WASM};
 
-fn tx_signature_validation(c: &mut Criterion) {
-    let tx = generate_tx(
-        TX_TRANSFER_WASM,
-        Transfer {
-            source: defaults::albert_address(),
-            target: defaults::bertha_address(),
-            token: address::nam(),
-            amount: Amount::native_whole(500).native_denominated(),
-            key: None,
-            shielded: None,
-        },
-        None,
-        None,
-        Some(&defaults::albert_keypair()),
+/// Benchmarks the validation of a single signature on a single `Section` of a
+/// transaction
+fn tx_section_signature_validation(c: &mut Criterion) {
+    let transfer_data = Transfer {
+        source: defaults::albert_address(),
+        target: defaults::bertha_address(),
+        token: address::nam(),
+        amount: Amount::native_whole(500).native_denominated(),
+        key: None,
+        shielded: None,
+    };
+    let section = Section::Data(Data::new(transfer_data.try_to_vec().unwrap()));
+    let section_hash = section.get_hash();
+
+    let pkim = AccountPublicKeysMap::from_iter([
+        defaults::albert_keypair().to_public()
+    ]);
+
+    let multisig = MultiSignature::new(
+        vec![section_hash],
+        &[defaults::albert_keypair()],
+        &pkim,
     );
+    let signature_index = multisig.signatures.first().unwrap().clone();
 
-    let data_hash = [tx.data_sechash().to_owned()];
-
-    c.bench_function("tx_signature_validation", |b| {
+    c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
-            tx.verify_signature(
-                &defaults::albert_keypair().ref_to(),
-                &data_hash[..],
-            )
-            .unwrap()
+            signature_index
+                .verify(&pkim, &multisig.get_raw_hash())
+                .unwrap()
         })
     });
 }
 
-criterion_group!(host_env, tx_signature_validation);
+criterion_group!(host_env, tx_section_signature_validation);
 criterion_main!(host_env);

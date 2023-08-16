@@ -76,6 +76,11 @@ impl Amount {
         self.raw = self.raw.checked_sub(amount.raw).unwrap();
     }
 
+    /// Check if there are enough funds.
+    pub fn can_spend(&self, amount: &Amount) -> bool {
+        self.raw >= amount.raw
+    }
+
     /// Receive a given amount.
     /// Panics on overflow and when [`uint::MAX_SIGNED_VALUE`] is exceeded.
     pub fn receive(&mut self, amount: &Amount) {
@@ -152,6 +157,20 @@ impl Amount {
     /// Create amount from the absolute value of `Change`.
     pub fn from_change(change: Change) -> Self {
         Self { raw: change.abs() }
+    }
+
+    /// Checked division. Returns `None` on underflow.
+    pub fn checked_div(&self, amount: Amount) -> Option<Self> {
+        self.raw
+            .checked_div(amount.raw)
+            .map(|result| Self { raw: result })
+    }
+
+    /// Checked division. Returns `None` on overflow.
+    pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
+        self.raw
+            .checked_mul(amount.raw)
+            .map(|result| Self { raw: result })
     }
 
     /// Given a string and a denomination, parse an amount from string.

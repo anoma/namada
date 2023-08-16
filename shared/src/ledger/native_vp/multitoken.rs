@@ -165,7 +165,7 @@ mod tests {
     fn dummy_tx(wl_storage: &TestWlStorage) -> Tx {
         let tx_code = vec![];
         let tx_data = vec![];
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         tx.set_code(Code::new(tx_code));
         tx.set_data(Data::new(tx_data));

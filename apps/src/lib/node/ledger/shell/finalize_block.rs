@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::pgf::storage::keys as pgf_storage;
+use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::parameters::storage as params_storage;
@@ -91,8 +93,7 @@ where
                 &mut self.wl_storage,
             )?;
 
-            let _proposals_result =
-                execute_governance_proposals(self, &mut response)?;
+            execute_governance_proposals(self, &mut response)?;
 
             // Copy the new_epoch + pipeline_len - 1 validator set into
             // new_epoch + pipeline_len
@@ -847,6 +848,68 @@ where
                 .remove(&mut self.wl_storage, &address)?;
         }
 
+        // Pgf inflation
+        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
+        let pgf_inflation_rate = self
+            .read_storage_key::<Dec>(&pgf_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_pd_rate = pgf_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
+        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
+
+        credit_tokens(
+            &mut self.wl_storage,
+            &staking_token,
+            &pgf_address,
+            pgf_inflation_amount,
+        )?;
+
+        tracing::info!(
+            "Minting {} tokens for PGF rewards distribution into the PGF \
+             account.",
+            pgf_inflation_amount.to_string_native()
+        );
+
+        // Pgf steward inflation
+        let pgf_stewards_inflation_rate_key =
+            pgf_storage::get_steward_inflation_rate_key();
+        let pgf_stewards_inflation_rate = self
+            .read_storage_key::<Dec>(&pgf_stewards_inflation_rate_key)
+            .unwrap_or_default();
+
+        let pgf_stewards_pd_rate =
+            pgf_stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
+        let pgf_stewards_key = pgf_storage::get_stewards_key();
+        let pgf_stewards: BTreeSet<Address> =
+            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
+
+        let pgf_steward_reward = match pgf_stewards.len() {
+            0 => Dec::zero(),
+            _ => pgf_steward_inflation
+                .trunc_div(&Dec::from(pgf_stewards.len()))
+                .unwrap_or_default(),
+        };
+        let pgf_steward_reward = token::Amount::from(pgf_steward_reward);
+
+        for steward in pgf_stewards {
+            credit_tokens(
+                &mut self.wl_storage,
+                &staking_token,
+                &steward,
+                pgf_steward_reward,
+            )?;
+            tracing::info!(
+                "Minting {} tokens for PGF Steward rewards distribution into \
+                 the steward address {}.",
+                pgf_steward_reward.to_string_native(),
+                steward,
+            );
+        }
+
         Ok(())
     }
 
@@ -971,6 +1034,11 @@ mod test_finalize_block {
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::eth_bridge::storage::wrapped_erc20s;
+    use namada::core::ledger::governance::storage::keys::get_proposal_execution_key;
+    use namada::core::ledger::governance::storage::proposal::ProposalType;
+    use namada::core::ledger::governance::storage::vote::{
+        StorageProposalVote, VoteType,
+    };
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -1002,7 +1070,6 @@ mod test_finalize_block {
     use namada::types::ethereum_events::{
         EthAddress, TransferToEthereum, Uint as ethUint,
     };
-    use namada::types::governance::ProposalVote;
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -1010,7 +1077,7 @@ mod test_finalize_block {
     use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::types::transaction::governance::{
-        InitProposalData, ProposalType, VoteProposalData,
+        InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, WrapperTx};
@@ -1038,7 +1105,7 @@ mod test_finalize_block {
         keypair: &common::SecretKey,
     ) -> (Tx, ProcessedTx) {
         let mut wrapper_tx =
-            Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
@@ -1079,18 +1146,19 @@ mod test_finalize_block {
         keypair: &common::SecretKey,
     ) -> ProcessedTx {
         let tx_code = TestWasms::TxNoOp.read_bytes();
-        let mut outer_tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 1.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 1.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(
@@ -1203,35 +1271,36 @@ mod test_finalize_block {
     fn test_process_proposal_rejected_decrypted_tx() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: Default::default(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper.set_data(Data::new(
+        let mut outer_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: Default::default(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
+        outer_tx.header.chain_id = shell.chain_id.clone();
+        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
         let gas_limit =
-            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
-                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
                 .unwrap();
-        shell.enqueue_tx(wrapper.clone(), gas_limit);
+        shell.enqueue_tx(outer_tx.clone(), gas_limit);
 
-        wrapper.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
+        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
         }));
         let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes(),
+            tx: outer_tx.to_bytes(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
@@ -1262,7 +1331,7 @@ mod test_finalize_block {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         // not valid tx bytes
-        let wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
@@ -1275,7 +1344,7 @@ mod test_finalize_block {
             None,
         ))));
         let processed_tx = ProcessedTx {
-            tx: Tx::new(TxType::Decrypted(DecryptedTx::Undecryptable))
+            tx: Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
                 .to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
@@ -1811,11 +1880,8 @@ mod test_finalize_block {
         };
 
         // Add a proposal to be accepted and one to be rejected.
-        add_proposal(
-            0,
-            ProposalVote::Yay(namada::types::governance::VoteType::Default),
-        );
-        add_proposal(1, ProposalVote::Nay);
+        add_proposal(0, StorageProposalVote::Yay(VoteType::Default));
+        add_proposal(1, StorageProposalVote::Nay);
 
         // Commit the genesis state
         shell.wl_storage.commit_block().unwrap();
@@ -2217,24 +2283,25 @@ mod test_finalize_block {
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: Amount::zero(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new(tx_code));
-        wrapper.set_data(Data::new(
+        let mut wrapper_tx =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: Amount::zero(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new(tx_code));
+        wrapper_tx.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        let mut decrypted_tx = wrapper.clone();
+        let mut decrypted_tx = wrapper_tx.clone();
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -2243,7 +2310,7 @@ mod test_finalize_block {
 
         // Write inner hash in storage
         let inner_hash_key = replay_protection::get_tx_hash_key(
-            &wrapper.clone().update_header(TxType::Raw).header_hash(),
+            &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
             .wl_storage
@@ -2258,7 +2325,7 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper, Gas::default());
+        shell.enqueue_tx(wrapper_tx, Gas::default());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
 
@@ -2294,18 +2361,19 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 0.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new(
@@ -2365,18 +2433,19 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
 
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 100.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.set_data(Data::new(
@@ -2448,18 +2517,19 @@ mod test_finalize_block {
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
-        let mut wrapper = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: 1.into(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
-            5_000_000.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
-            None,
-        ))));
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 1.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                5_000_000.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code));
         wrapper.set_data(Data::new(
@@ -3751,16 +3821,15 @@ mod test_finalize_block {
     /// Test that updating the ethereum bridge params via governance works.
     #[tokio::test]
     async fn test_eth_bridge_param_updates() {
-        use namada::ledger::governance::storage as gov_storage;
         let (mut shell, _broadcaster, _, mut control_receiver) =
             setup_at_height(3u64);
-        let proposal_execution_key = gov_storage::get_proposal_execution_key(0);
+        let proposal_execution_key = get_proposal_execution_key(0);
         shell
             .wl_storage
             .write(&proposal_execution_key, 0u64)
             .expect("Test failed.");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_data(Data::new(0u64.try_to_vec().expect("Test failed")));
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.add_code_from_hash(Hash::default()).add_data(0u64);
         let new_min_confirmations = MinimumConfirmations::from(unsafe {
             NonZeroU64::new_unchecked(42)
         });

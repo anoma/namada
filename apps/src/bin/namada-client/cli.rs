@@ -3,6 +3,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
 use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::ledger::tx::dump_tx;
 use namada::ledger::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 use namada_apps::cli;
@@ -65,7 +66,7 @@ pub async fn main() -> Result<()> {
                     let args = args.to_sdk(&mut ctx);
                     tx::submit_ibc_transfer(&client, ctx, args).await?;
                 }
-                Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
                         &mut args.tx.ledger_address,
                     ))
@@ -200,26 +201,57 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     let tx_args = args.tx.clone();
-                    let (mut tx, addr, pk) = bridge_pool::build_bridge_pool_tx(
+
+                    let default_signer = Some(args.sender.clone());
+                    let signing_data = signing::aux_signing_data(
                         &client,
                         &mut ctx.wallet,
-                        args,
+                        &args.tx,
+                        &args.sender,
+                        default_signer,
                     )
-                    .await
-                    .unwrap();
+                    .await?;
+
                     tx::submit_reveal_aux(
                         &client,
                         &mut ctx,
-                        &tx_args,
-                        addr,
-                        pk.clone(),
-                        &mut tx,
+                        tx_args.clone(),
+                        &args.sender,
                     )
                     .await?;
-                    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk)
+
+                    let tx = bridge_pool::build_bridge_pool_tx(
+                        &client,
+                        args.clone(),
+                        signing_data.fee_payer.clone(),
+                    )
+                    .await?;
+
+                    signing::generate_test_vector(
+                        &client,
+                        &mut ctx.wallet,
+                        &tx,
+                    )
+                    .await;
+
+                    if args.tx.dump_tx {
+                        dump_tx(&args.tx, tx);
+                    } else {
+                        signing::sign_tx(
+                            &mut ctx.wallet,
+                            &tx_args,
+                            &mut tx,
+                            signing_data,
+                        )?;
+
+                        sdk_tx::process_tx(
+                            &client,
+                            &mut ctx.wallet,
+                            &tx_args,
+                            tx,
+                        )
                         .await?;
-                    sdk_tx::process_tx(&client, &mut ctx.wallet, &tx_args, tx)
-                        .await?;
+                    }
                 }
                 Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
                     let client = HttpClient::new(utils::take_config_address(
@@ -449,6 +481,16 @@ pub async fn main() -> Result<()> {
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
                     rpc::query_protocol_parameters(&client, args).await;
+                }
+                Sub::QueryAccount(QueryAccount(args)) => {
+                    let client =
+                        HttpClient::new(args.query.ledger_address.clone())
+                            .unwrap();
+                    wait_until_node_is_synched(&client)
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk(&mut ctx);
+                    rpc::query_account(&client, args).await;
                 }
             }
         }

@@ -30,8 +30,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             Self::Token { owner }
         } else if proof_of_stake::is_pos_key(key) {
             Self::PoS
-        } else if gov_storage::is_vote_key(key) {
-            let voter_address = gov_storage::get_voter_address(key);
+        } else if gov_storage::keys::is_vote_key(key) {
+            let voter_address = gov_storage::keys::get_voter_address(key);
             if let Some(address) = voter_address {
                 Self::GovernanceVote(address)
             } else {
@@ -61,17 +61,7 @@ fn validate_tx(
     );
 
     let valid_sig = Lazy::new(|| {
-        let pk = key::get(ctx, &addr);
-        match pk {
-            Ok(Some(pk)) => matches!(
-                ctx.verify_tx_section_signature(
-                    &pk,
-                    [*tx_data.data_sechash(), *tx_data.code_sechash()],
-                ),
-                Ok(true)
-            ),
-            _ => false,
-        }
+        matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
     });
 
     if !is_valid_tx(ctx, &tx_data)? {
@@ -192,7 +182,7 @@ fn validate_tx(
 mod tests {
     use address::testing::arb_non_internal_address;
     use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::proto::{Code, Data, Signature};
+    use namada::proto::{Code, Data, MultiSignature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
     use namada::types::transaction::TxType;
@@ -204,6 +194,7 @@ mod tests {
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
+    use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
@@ -213,7 +204,7 @@ mod tests {
     /// Test that no-op transaction (i.e. no storage modifications) accepted.
     #[test]
     fn test_no_op_transaction() {
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let addr: Address = address::testing::established_address_1();
         let keys_changed: BTreeSet<storage::Key> = BTreeSet::default();
@@ -273,7 +264,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -331,7 +322,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -358,6 +349,7 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
@@ -370,7 +362,6 @@ mod tests {
         )
         .unwrap();
 
-        tx_env.write_public_key(&vp_owner, &public_key);
         let amount = token::DenominatedAmount {
             amount,
             denom: token::NATIVE_MAX_DECIMAL_PLACES.into(),
@@ -392,13 +383,16 @@ mod tests {
             .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -442,7 +436,7 @@ mod tests {
         let mut tx_env = tx_host_env::take();
 
         let secret_key = key::testing::keypair_1();
-        let _public_key = secret_key.ref_to();
+        let public_key = secret_key.ref_to();
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
         let token = address::nam();
@@ -452,6 +446,7 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
@@ -482,7 +477,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -537,7 +532,8 @@ mod tests {
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
-        tx_env.spawn_accounts([&target, &token]);
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Credit the tokens to the VP owner before running the transaction to
         // be able to transfer from it
@@ -549,8 +545,6 @@ mod tests {
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
         .unwrap();
-
-        tx_env.write_public_key(&vp_owner, &public_key);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -569,13 +563,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &secret_key,
+            &[secret_key],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -630,7 +627,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -686,7 +683,7 @@ mod tests {
             });
 
             let vp_env = vp_host_env::take();
-            let mut tx_data = Tx::new(TxType::Raw);
+            let mut tx_data = Tx::from_type(TxType::Raw);
             tx_data.set_data(Data::new(vec![]));
             let keys_changed: BTreeSet<storage::Key> =
                 vp_env.all_touched_storage_keys();
@@ -716,7 +713,7 @@ mod tests {
             let storage_key_addresses = storage_key.find_addresses();
             tx_env.spawn_accounts(storage_key_addresses);
 
-            tx_env.write_public_key(&vp_owner, &public_key);
+            tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
@@ -728,11 +725,13 @@ mod tests {
                 }
             });
 
+            let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
             let mut vp_env = vp_host_env::take();
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
             tx.set_code(Code::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(vec![*tx.data_sechash(), *tx.code_sechash()], &keypair)));
+            tx.add_section(Section::SectionSignature(MultiSignature::new(vec![*tx.data_sechash(), *tx.code_sechash()], &[keypair], &pks_map)));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
@@ -768,7 +767,7 @@ mod tests {
         });
 
         let vp_env = vp_host_env::take();
-        let mut tx_data = Tx::new(TxType::Raw);
+        let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -786,7 +785,7 @@ mod tests {
     fn test_signed_vp_update_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
-        tx_env.init_parameters(None, None, None);
+        tx_env.init_parameters(None, None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -798,8 +797,7 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
-
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -809,13 +807,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -834,7 +835,12 @@ mod tests {
     fn test_signed_vp_update_not_whitelisted_rejected() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
-        tx_env.init_parameters(None, Some(vec!["some_hash".to_string()]), None);
+        tx_env.init_parameters(
+            None,
+            Some(vec!["some_hash".to_string()]),
+            None,
+            None,
+        );
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -846,8 +852,7 @@ mod tests {
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
-
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -857,13 +862,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -891,12 +899,16 @@ mod tests {
         // for the update
         tx_env.store_wasm_code(vp_code);
 
-        tx_env.init_parameters(None, Some(vec![vp_hash.to_string()]), None);
+        tx_env.init_parameters(
+            None,
+            Some(vec![vp_hash.to_string()]),
+            None,
+            None,
+        );
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
-
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -906,13 +918,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -944,12 +959,12 @@ mod tests {
             None,
             Some(vec![vp_hash.to_string()]),
             Some(vec!["some_hash".to_string()]),
+            None,
         );
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
-
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -959,13 +974,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -992,13 +1010,17 @@ mod tests {
         // for the update
         tx_env.store_wasm_code(vp_code);
 
-        let empty_sha256 = sha256(&[]).to_string();
-        tx_env.init_parameters(None, None, Some(vec![empty_sha256]));
+        // hardcoded hash of VP_ALWAYS_TRUE_WASM
+        tx_env.init_parameters(
+            None,
+            Some(vec![vp_hash.to_string()]),
+            None,
+            None,
+        );
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);
-
-        tx_env.write_public_key(&vp_owner, &public_key);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
@@ -1008,13 +1030,16 @@ mod tests {
                 .unwrap();
         });
 
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
         let mut vp_env = vp_host_env::take();
         let mut tx = vp_env.tx.clone();
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(vec![]));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &keypair,
+            &[keypair],
+            &pks_map,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();

@@ -2,6 +2,9 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::ledger::governance::storage::vote::{
+    StorageProposalVote, VoteType,
+};
 use namada::core::types::address::{self, Address};
 use namada::core::types::token::{Amount, Transfer};
 use namada::ibc::core::ics02_client::client_type::ClientType;
@@ -17,16 +20,14 @@ use namada::ibc::core::ics24_host::identifier::{
 };
 use namada::ibc::signer::Signer;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
-use namada::ledger::governance;
+use namada::ledger::governance::GovernanceVp;
 use namada::ledger::ibc::vp::Ibc;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
-use namada::ledger::native_vp::slash_fund::SlashFundVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
 use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
-use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::storage::TxIndex;
 use namada::types::transaction::governance::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -100,7 +101,7 @@ fn governance(c: &mut Criterion) {
                 TX_VOTE_PROPOSAL_WASM,
                 VoteProposalData {
                     id: 0,
-                    vote: ProposalVote::Yay(VoteType::Default),
+                    vote: StorageProposalVote::Yay(VoteType::Default),
                     voter: defaults::albert_address(),
                     delegations: vec![defaults::validator_address()],
                 },
@@ -112,7 +113,7 @@ fn governance(c: &mut Criterion) {
                 TX_VOTE_PROPOSAL_WASM,
                 VoteProposalData {
                     id: 0,
-                    vote: namada::types::governance::ProposalVote::Nay,
+                    vote: StorageProposalVote::Nay,
                     voter: defaults::validator_address(),
                     delegations: vec![],
                 },
@@ -140,9 +141,9 @@ fn governance(c: &mut Criterion) {
             }
             "complete_proposal" => {
                 let max_code_size_key =
-                    governance::storage::get_max_proposal_code_size_key();
+                namada::core::ledger::governance::storage::keys::get_max_proposal_code_size_key();
                 let max_proposal_content_key =
-                    governance::storage::get_max_proposal_content_key();
+                    namada::core::ledger::governance::storage::keys::get_max_proposal_content_key();
                 let max_code_size: u64 = shell
                     .wl_storage
                     .read(&max_code_size_key)
@@ -192,7 +193,7 @@ fn governance(c: &mut Criterion) {
             .write_log
             .verifiers_and_changed_keys(&BTreeSet::default());
 
-        let governance = SlashFundVp {
+        let governance = GovernanceVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Governance),
                 &shell.wl_storage.storage,
@@ -232,77 +233,78 @@ fn governance(c: &mut Criterion) {
 //    - eth bridge
 //    - eth bridge pool
 
-fn slash_fund(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_slash_fund");
+// TODO: uncomment when SlashFund internal address is brought back
+// fn slash_fund(c: &mut Criterion) {
+//      let mut group = c.benchmark_group("vp_slash_fund");
 
-    // Write a random key under a foreign subspace
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
+//      // Write a random key under a foreign subspace
+//      let foreign_key_write =
+//          generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let content_section = Section::ExtraData(Code::new(vec![]));
-    let governance_proposal = generate_tx(
-        TX_INIT_PROPOSAL_WASM,
-        InitProposalData {
-            id: None,
-            content: content_section.get_hash(),
-            author: defaults::albert_address(),
-            r#type: ProposalType::Default(None),
-            voting_start_epoch: 12.into(),
-            voting_end_epoch: 15.into(),
-            grace_epoch: 18.into(),
-        },
-        None,
-        Some(vec![content_section]),
-        Some(&defaults::albert_keypair()),
-    );
+//      let content_section = Section::ExtraData(Code::new(vec![]));
+//      let governance_proposal = generate_tx(
+//          TX_INIT_PROPOSAL_WASM,
+//          InitProposalData {
+//              id: None,
+//              content: content_section.get_hash(),
+//              author: defaults::albert_address(),
+//              r#type: ProposalType::Default(None),
+//              voting_start_epoch: 12.into(),
+//              voting_end_epoch: 15.into(),
+//              grace_epoch: 18.into(),
+//          },
+//          None,
+//          Some(vec![content_section]),
+//          Some(&defaults::albert_keypair()),
+//      );
 
-    for (tx, bench_name) in [foreign_key_write, governance_proposal]
-        .into_iter()
-        .zip(["foreign_key_write", "governance_proposal"])
-    {
-        let mut shell = BenchShell::default();
+//      for (tx, bench_name) in [foreign_key_write, governance_proposal]
+//          .into_iter()
+//          .zip(["foreign_key_write", "governance_proposal"])
+//      {
+//          let mut shell = BenchShell::default();
 
-        // Run the tx to validate
-        shell.execute_tx(&tx);
+//          // Run the tx to validate
+//          shell.execute_tx(&tx);
 
-        let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
-            .verifiers_and_changed_keys(&BTreeSet::default());
+//          let (verifiers, keys_changed) = shell
+//              .wl_storage
+//              .write_log
+//              .verifiers_and_changed_keys(&BTreeSet::default());
 
-        let slash_fund = SlashFundVp {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::SlashFund),
-                &shell.wl_storage.storage,
-                &shell.wl_storage.write_log,
-                &tx,
-                &TxIndex(0),
-                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                    u64::MAX.into(),
-                )),
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+//          let slash_fund = SlashFundVp {
+//              ctx: Ctx::new(
+//                  &Address::Internal(InternalAddress::SlashFund),
+//                  &shell.wl_storage.storage,
+//                  &shell.wl_storage.write_log,
+//                  &tx,
+//                  &TxIndex(0),
+//
+// VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+// u64::MAX.into(),                  )),
+//                  &keys_changed,
+//                  &verifiers,
+//                  shell.vp_wasm_cache.clone(),
+//              ),
+//          };
 
-        group.bench_function(bench_name, |b| {
-            b.iter(|| {
-                assert!(
-                    slash_fund
-                        .validate_tx(
-                            &tx,
-                            slash_fund.ctx.keys_changed,
-                            slash_fund.ctx.verifiers,
-                        )
-                        .unwrap()
-                )
-            })
-        });
-    }
+//          group.bench_function(bench_name, |b| {
+//              b.iter(|| {
+//                  assert!(
+//                      slash_fund
+//                          .validate_tx(
+//                              &tx,
+//                              slash_fund.ctx.keys_changed,
+//                              slash_fund.ctx.verifiers,
+//                          )
+//                          .unwrap()
+//                  )
+//              })
+//          });
+//      }
 
-    group.finish();
-}
+//      group.finish();
+//  }
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
@@ -458,7 +460,7 @@ criterion_group!(
     native_vps,
     replay_protection,
     governance,
-    slash_fund,
+    // slash_fund,
     ibc,
     vp_multitoken
 );

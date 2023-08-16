@@ -1,29 +1,31 @@
 use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::ledger::governance::storage::vote::{
+    StorageProposalVote, VoteType,
+};
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::{Amount, Transfer};
+use namada::core::types::transaction::account::UpdateAccount;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::proto::{Code, Section};
-use namada::types::governance::{ProposalVote, VoteType};
 use namada::types::hash::Hash;
 use namada::types::key::ed25519;
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Key, TxIndex};
 use namada::types::transaction::governance::VoteProposalData;
 use namada::types::transaction::pos::{Bond, CommissionChange};
-use namada::types::transaction::UpdateVp;
 use namada::vm::wasm::run;
 use namada_apps::wallet::defaults;
 use namada_benches::{
     generate_foreign_key_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
-    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_VP_WASM, TX_VOTE_PROPOSAL_WASM,
-    VP_VALIDATOR_WASM,
+    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
 };
 use sha2::Digest;
 
@@ -75,17 +77,19 @@ fn vp_user(c: &mut Criterion) {
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
     let extra_section = Section::ExtraData(Code::from_hash(vp_validator_hash));
-    let data = UpdateVp {
+    let data = UpdateAccount {
         addr: defaults::albert_address(),
-        vp_code_hash: Hash(
+        vp_code_hash: Some(Hash(
             extra_section
                 .hash(&mut sha2::Sha256::new())
                 .finalize_reset()
                 .into(),
-        ),
+        )),
+        public_keys: vec![defaults::albert_keypair().to_public()],
+        threshold: None,
     };
     let vp = generate_tx(
-        TX_UPDATE_VP_WASM,
+        TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
         Some(vec![extra_section]),
@@ -96,7 +100,7 @@ fn vp_user(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: ProposalVote::Yay(VoteType::Default),
+            vote: StorageProposalVote::Yay(VoteType::Default),
             voter: defaults::albert_address(),
             delegations: vec![defaults::validator_address()],
         },
@@ -235,7 +239,7 @@ fn vp_implicit(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: ProposalVote::Yay(VoteType::Default),
+            vote: StorageProposalVote::Yay(VoteType::Default),
             voter: Address::from(&implicit_account.to_public()),
             delegations: vec![], /* NOTE: no need to bond tokens because the
                                   * implicit vp doesn't check that */
@@ -357,17 +361,19 @@ fn vp_validator(c: &mut Criterion) {
     );
 
     let extra_section = Section::ExtraData(Code::from_hash(vp_code_hash));
-    let data = UpdateVp {
+    let data = UpdateAccount {
         addr: defaults::validator_address(),
-        vp_code_hash: Hash(
+        vp_code_hash: Some(Hash(
             extra_section
                 .hash(&mut sha2::Sha256::new())
                 .finalize_reset()
                 .into(),
-        ),
+        )),
+        public_keys: vec![defaults::validator_keypair().to_public()],
+        threshold: None,
     };
     let vp = generate_tx(
-        TX_UPDATE_VP_WASM,
+        TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
         Some(vec![extra_section]),
@@ -389,7 +395,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
-            vote: ProposalVote::Yay(VoteType::Default),
+            vote: StorageProposalVote::Yay(VoteType::Default),
             voter: defaults::validator_address(),
             delegations: vec![],
         },
