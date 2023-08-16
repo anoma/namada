@@ -837,10 +837,20 @@ mod recommendations {
             }
         }
 
-        /// Test the happy path of generating eligible recommendations
-        /// for Bridge pool relayed transfers.
-        #[test]
-        fn test_generate_eligible_happy_path() {
+        /// Data to pass to the [`test_generate_eligible_aux`] callback.
+        struct TestGenerateEligible<'a> {
+            pending: &'a PendingTransfer,
+            #[allow(dead_code)]
+            in_progress: &'a mut BTreeSet<String>,
+            signed_pool: &'a mut HashMap<String, PendingTransfer>,
+            expected_eligible: &'a mut Vec<EligibleRecommendation>,
+        }
+
+        /// Helper function to test [`generate_eligible`].
+        fn test_generate_eligible_aux<F>(mut callback: F)
+        where
+            F: FnMut(TestGenerateEligible<'_>),
+        {
             let pending = PendingTransfer {
                 transfer: TransferToEthereum {
                     kind: TransferToEthereumKind::Erc20,
@@ -866,22 +876,38 @@ mod recommendations {
                 );
                 table
             };
-            let in_progress = BTreeSet::new();
-            let signed_pool = HashMap::from([(
-                pending.keccak256().to_string(),
-                pending.clone(),
-            )]);
+            let mut in_progress = BTreeSet::new();
+            let mut signed_pool = HashMap::new();
+            let mut expected = vec![];
+            callback(TestGenerateEligible {
+                pending: &pending,
+                in_progress: &mut in_progress,
+                signed_pool: &mut signed_pool,
+                expected_eligible: &mut expected,
+            });
             let eligible =
                 generate_eligible(&conversion_table, &in_progress, signed_pool)
                     .proceed();
-            let expected = vec![EligibleRecommendation {
-                transfer_hash: pending.keccak256().to_string(),
-                cost: transfer_fee()
-                    - I256::try_from(pending.gas_fee.amount)
-                        .expect("Test failed"),
-                pending_transfer: pending,
-            }];
             assert_eq!(eligible, expected);
+        }
+
+        /// Test the happy path of generating eligible recommendations
+        /// for Bridge pool relayed transfers.
+        #[test]
+        fn test_generate_eligible_happy_path() {
+            test_generate_eligible_aux(|ctx| {
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
+                ctx.expected_eligible.push(EligibleRecommendation {
+                    transfer_hash: ctx.pending.keccak256().to_string(),
+                    cost: transfer_fee()
+                        - I256::try_from(ctx.pending.gas_fee.amount)
+                            .expect("Test failed"),
+                    pending_transfer: ctx.pending.clone(),
+                });
+            });
         }
 
         #[test]
