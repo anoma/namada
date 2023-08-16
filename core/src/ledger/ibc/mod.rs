@@ -142,15 +142,13 @@ where
                     .map_err(|_| {
                         Error::Denom("Reading the IBC event failed".to_string())
                     })?;
-                if let Some((trace_hash, ibc_denom)) = result
-                    .as_ref()
-                    .map(|event| {
+                if let Some((trace_hash, ibc_denom)) =
+                    result.as_ref().and_then(|event| {
                         event
                             .attributes
                             .get("trace_hash")
                             .zip(event.attributes.get("denom"))
                     })
-                    .flatten()
                 {
                     // If the denomination trace event has the trace hash and
                     // the IBC denom, a token has been minted. The raw IBC denom
