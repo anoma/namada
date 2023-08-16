@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -23,6 +24,7 @@ use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
+use namada_core::types::hash::Hash;
 use namada_core::types::token::MaspDenom;
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -416,28 +418,16 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    let tx_code_hash = query_wasm_code_hash(
-        client,
-        args.tx_reveal_code_path.to_str().unwrap(),
-    )
-    .await
-    .unwrap();
-
-    let chain_id = args.chain_id.clone().unwrap();
-
-    let mut tx = Tx::new(chain_id, args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(public_key);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut Tx, _: &mut common::PublicKey| ();
+    build(
         client,
         args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        args.tx_reveal_code_path.clone(),
+        &mut public_key.clone(),
+        do_nothing,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -647,11 +637,6 @@ pub async fn build_validator_commission_change<
 ) -> Result<Tx, Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let params: PosParams = rpc::get_pos_params(client).await;
 
     let validator = validator.clone();
@@ -701,25 +686,21 @@ pub async fn build_validator_commission_change<
         }
     }
 
-    let data = pos::CommissionChange {
+    let mut data = pos::CommissionChange {
         validator: validator.clone(),
         new_rate: rate,
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut _, _: &mut pos::CommissionChange| ();
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Submit transaction to unjail a jailed validator
@@ -782,31 +763,22 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let _data = validator
         .clone()
         .try_to_vec()
         .map_err(Error::EncodeTxFailure)?;
+    let mut data = validator.clone();
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash)
-        .add_data(validator.clone());
-
-    prepare_tx(
+    let do_nothing = |_: &mut _, _: &mut Address| ();
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Submit transaction to withdraw an unbond
@@ -827,11 +799,6 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
             .await?;
 
     let source = source.clone();
-
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -861,22 +828,18 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
         println!("Submitting transaction to withdraw them...");
     }
 
-    let data = pos::Withdraw { validator, source };
+    let mut data = pos::Withdraw { validator, source };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut _, _: &mut pos::Withdraw| ();
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Submit a transaction to unbond
@@ -898,11 +861,6 @@ pub async fn build_unbond<
     let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
 
     if !tx_args.force {
         known_validator_or_err(validator.clone(), tx_args.force, client)
@@ -944,26 +902,22 @@ pub async fn build_unbond<
     }
     let latest_withdrawal_pre = withdrawable.into_iter().last();
 
-    let data = pos::Unbond {
+    let mut data = pos::Unbond {
         validator: validator.clone(),
         amount,
         source: source.clone(),
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut _, _: &mut pos::Bond| ();
+    let tx = build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
     )
-    .await;
-
+    .await?;
     Ok((tx, latest_withdrawal_pre))
 }
 
@@ -1070,31 +1024,22 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
     )
     .await?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let data = pos::Bond {
+    let mut data = pos::Bond {
         validator,
         amount,
         source,
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut Tx, _: &mut pos::Bond| ();
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Build a default proposal governance
@@ -1118,41 +1063,29 @@ pub async fn build_default_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| Error::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let push_data =
+        |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
+            let (_, extra_section_hash) = tx_builder.add_extra_section(
+                proposal.proposal.content.try_to_vec().unwrap(),
+            );
+            init_proposal_data.content = extra_section_hash;
 
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    if let Some(init_proposal_code) = proposal.data {
-        let (_, extra_section_hash) =
-            tx_builder.add_extra_section(init_proposal_code);
-        init_proposal_data.r#type =
-            ProposalType::Default(Some(extra_section_hash));
-    };
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    prepare_tx::<C>(
+            if let Some(init_proposal_code) = proposal.data {
+                let (_, extra_section_hash) =
+                    tx_builder.add_extra_section(init_proposal_code);
+                init_proposal_data.r#type =
+                    ProposalType::Default(Some(extra_section_hash));
+            };
+        };
+    build(
         client,
         &tx,
-        &mut tx_builder,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut init_proposal_data,
+        push_data,
+        gas_payer,
     )
-    .await;
-
-    Ok(tx_builder)
+    .await
 }
 
 /// Build a proposal vote
@@ -1202,34 +1135,15 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
     .cloned()
     .collect::<Vec<Address>>();
 
-    let data = VoteProposalData {
+    let mut data = VoteProposalData {
         id: proposal_id,
         vote: storage_vote,
         voter: voter.clone(),
         delegations,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-    tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
-        client,
-        &tx,
-        &mut tx_builder,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
-    )
-    .await;
-
-    Ok(tx_builder)
+    let do_nothing = |_: &mut _, _: &mut VoteProposalData| ();
+    build(client, &tx, tx_code_path, &mut data, do_nothing, gas_payer).await
 }
 
 /// Build a pgf funding proposal governance
@@ -1253,34 +1167,20 @@ pub async fn build_pgf_funding_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| Error::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    prepare_tx::<C>(
+    let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
+        let (_, extra_section_hash) = tx
+            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        data.content = extra_section_hash;
+    };
+    build(
         client,
         &tx,
-        &mut tx_builder,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut init_proposal_data,
+        add_section,
+        gas_payer,
     )
-    .await;
-
-    Ok(tx_builder)
+    .await
 }
 
 /// Build a pgf funding proposal governance
@@ -1304,34 +1204,21 @@ pub async fn build_pgf_stewards_proposal<
         InitProposalData::try_from(proposal.clone())
             .map_err(|e| Error::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
+        let (_, extra_section_hash) = tx
+            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        data.content = extra_section_hash;
+    };
 
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    prepare_tx::<C>(
+    build(
         client,
         &tx,
-        &mut tx_builder,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut init_proposal_data,
+        add_section,
+        gas_payer,
     )
-    .await;
-
-    Ok(tx_builder)
+    .await
 }
 
 /// Submit an IBC transfer
@@ -1368,11 +1255,6 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         client,
     )
     .await?;
-
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
 
     let amount = amount
         .to_string_native()
@@ -1418,22 +1300,81 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     let mut data = vec![];
     prost::Message::encode(&any_msg, &mut data)
         .map_err(Error::EncodeFailure)?;
-
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash)
-        .add_serialized_data(data);
-
-    prepare_tx::<C>(
+    let do_nothing = |_: &mut _, _: &mut Vec<u8>| ();
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
+        tx_code_path,
+        &mut data,
+        do_nothing,
+        gas_payer,
+    )
+    .await
+}
+
+/// Abstraction for helping build transactions
+pub async fn build<C: crate::ledger::queries::Client + Sync, F, D>(
+    client: &C,
+    tx_args: &crate::ledger::args::Tx,
+    path: PathBuf,
+    data: &mut D,
+    on_tx: F,
+    gas_payer: &common::PublicKey,
+) -> Result<Tx, Error>
+where
+    F: FnOnce(&mut Tx, &mut D),
+    D: BorshSerialize + Clone,
+{
+    build_pow_flag(
+        client,
+        tx_args,
+        path,
+        data,
+        on_tx,
+        gas_payer,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
+    .await
+}
+
+async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, F, D>(
+    client: &C,
+    tx_args: &crate::ledger::args::Tx,
+    path: PathBuf,
+    data: &mut D,
+    on_tx: F,
+    gas_payer: &common::PublicKey,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> Result<Tx, Error>
+where
+    F: FnOnce(&mut Tx, &mut D),
+    D: BorshSerialize + Clone,
+{
+    let chain_id = tx_args.chain_id.clone().unwrap();
+
+    let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
+
+    let tx_code_hash = query_wasm_code_hash(client, path.to_str().unwrap())
+        .await
+        .unwrap();
+
+    on_tx(&mut tx_builder, data);
+
+    tx_builder
+        .add_code_from_hash(tx_code_hash)
+        .add_data(data.clone());
+
+    prepare_tx::<C>(
+        client,
+        tx_args,
+        &mut tx_builder,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
     .await;
-    Ok(tx)
+    Ok(tx_builder)
 }
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
@@ -1580,11 +1521,6 @@ pub async fn build_transfer<
     #[cfg(feature = "mainnet")]
     let is_source_faucet = false;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded
         .gen_shielded_transfer(client, &args, shielded_gas)
@@ -1604,66 +1540,70 @@ pub async fn build_transfer<
         Err(err) => Err(Error::MaspError(err)),
     }?;
 
-    let chain_id = args.tx.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, args.tx.expiration);
+    let shielded_tx_epoch = shielded_parts.clone().map(|trans| trans.epoch);
 
-    // Add the MASP Transaction and its Builder to facilitate validation
-    let (masp_hash, shielded_tx_epoch) = if let Some(ShieldedTransfer {
-        builder,
-        masp_tx,
-        metadata,
-        epoch,
-    }) = shielded_parts
-    {
-        // Add a MASP Transaction section to the Tx and get the tx hash
-        let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
-
-        // Get the decoded asset types used in the transaction to give
-        // offline wallet users more information
-        let asset_types = used_asset_types(shielded, client, &builder)
-            .await
-            .unwrap_or_default();
-
-        tx.add_masp_builder(MaspBuilder {
-            asset_types,
-            // Store how the Info objects map to Descriptors/Outputs
-            metadata,
-            // Store the data that was used to construct the Transaction
-            builder,
-            // Link the Builder to the Transaction by hash code
-            target: masp_tx_hash,
-        });
-
-        // The MASP Transaction section hash will be used in Transfer
-        (Some(masp_tx_hash), Some(epoch))
-    } else {
-        (None, None)
+    let asset_types = match shielded_parts.clone() {
+        None => None,
+        Some(transfer) => {
+            // Get the decoded asset types used in the transaction to give
+            // offline wallet users more information
+            let asset_types =
+                used_asset_types(shielded, client, &transfer.builder)
+                    .await
+                    .unwrap_or_default();
+            Some(asset_types)
+        }
     };
+
     // Construct the corresponding transparent Transfer object
-    let transfer = token::Transfer {
+    let mut transfer = token::Transfer {
         source: source.clone(),
         target: target.clone(),
         token: token.clone(),
         amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
-        shielded: masp_hash,
+        shielded: None,
     };
 
-    tracing::debug!("Transfer data {:?}", transfer);
+    let add_shielded = |tx: &mut Tx, transfer: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        if let Some(ShieldedTransfer {
+            builder,
+            masp_tx,
+            metadata,
+            epoch: _,
+        }) = shielded_parts
+        {
+            // Add a MASP Transaction section to the Tx and get the tx hash
+            let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
+            transfer.shielded = Some(masp_tx_hash);
 
-    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
+            tracing::debug!("Transfer data {:?}", transfer);
 
-    // Dry-run/broadcast/submit the transaction
-    prepare_tx::<C>(
+            tx.add_masp_builder(MaspBuilder {
+                // Is safe
+                asset_types: asset_types.unwrap(),
+                // Store how the Info objects map to Descriptors/Outputs
+                metadata,
+                // Store the data that was used to construct the Transaction
+                builder,
+                // Link the Builder to the Transaction by hash code
+                target: masp_tx_hash,
+            });
+        };
+    };
+    let tx = build_pow_flag(
         client,
         &args.tx,
-        &mut tx,
-        gas_payer.clone(),
+        args.tx_code_path,
+        &mut transfer,
+        add_shielded,
+        gas_payer,
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
     )
-    .await;
+    .await?;
 
     Ok((tx, shielded_tx_epoch))
 }
@@ -1685,11 +1625,6 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
             .await
             .unwrap();
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let threshold = match threshold {
         Some(threshold) => threshold,
         None => {
@@ -1701,26 +1636,26 @@ pub async fn build_init_account<C: crate::ledger::queries::Client + Sync>(
         }
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
-    let data = InitAccount {
+    let mut data = InitAccount {
         public_keys,
-        vp_code_hash: extra_section_hash,
+        // We will add the hash inside the add_code_hash function
+        vp_code_hash: Hash::zero(),
         threshold,
     };
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    prepare_tx::<C>(
+    let add_code_hash = |tx: &mut Tx, data: &mut InitAccount| {
+        let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
+        data.vp_code_hash = extra_section_hash;
+    };
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        add_code_hash,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Submit a transaction to update a VP
@@ -1756,35 +1691,32 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
         None => None,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     let extra_section_hash = vp_code_hash
         .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
 
-    let data = UpdateAccount {
+    let mut data = UpdateAccount {
         addr,
         vp_code_hash: extra_section_hash,
         public_keys,
         threshold,
     };
 
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    prepare_tx::<C>(
+    let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
+        let extra_section_hash = vp_code_hash
+            .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
+        data.vp_code_hash = extra_section_hash;
+    };
+    build(
         client,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
-        #[cfg(not(feature = "mainnet"))]
-        false,
+        tx_code_path,
+        &mut data,
+        add_code_hash,
+        gas_payer,
     )
-    .await;
-    Ok(tx)
+    .await
 }
 
 /// Submit a custom transaction
