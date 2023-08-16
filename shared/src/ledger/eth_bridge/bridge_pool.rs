@@ -210,7 +210,7 @@ where
     let warnings: Vec<_> = in_progress
         .into_iter()
         .filter_map(|(ref transfer, voting_power)| {
-            if voting_power > FractionalVotingPower::ONE_THIRD {
+            if voting_power >= FractionalVotingPower::ONE_THIRD {
                 let hash = transfer.keccak256();
                 args.transfers.contains(&hash).then_some(hash)
             } else {
