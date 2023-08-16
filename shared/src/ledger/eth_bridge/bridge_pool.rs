@@ -644,17 +644,24 @@ mod recommendations {
                     })?;
 
                 // This is the amount of gwei a single gas token is worth
-                let gwei_per_gas_token = Uint::from_u64(
-                    (10u64.pow(9) as f64 / conversion_rate).floor() as u64,
-                );
+                let gwei_per_gas_token =
+                    Uint::from_u64((1e9 / conversion_rate).floor() as u64);
 
                 Some(
-                    I256::try_from(pending.gas_fee.amount * gwei_per_gas_token)
+                    Uint::from(pending.gas_fee.amount)
+                        .checked_mul(gwei_per_gas_token)
+                        .ok_or_else(|| {
+                            "Overflowed calculating earned gwei".into()
+                        })
+                        .and_then(I256::try_from)
                         .map_err(|err| err.to_string())
-                        .and_then(|cost| {
-                            transfer_fee().checked_sub(&cost).ok_or_else(|| {
-                                "Underflowed calculating relaying cost".into()
-                            })
+                        .and_then(|amt_of_earned_gwei| {
+                            transfer_fee()
+                                .checked_sub(&amt_of_earned_gwei)
+                                .ok_or_else(|| {
+                                    "Underflowed calculating relaying cost"
+                                        .into()
+                                })
                         })
                         .map(|cost| EligibleRecommendation {
                             cost,
