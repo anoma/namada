@@ -486,6 +486,22 @@ mod recommendations {
         Generous,
     }
 
+    /// Transfer to Ethereum that is eligible to be recommended
+    /// for a relay operation, generating a profit.
+    ///
+    /// This means that the underlying Ethereum event has not
+    /// been "seen" yet, and that the user provided appropriate
+    /// conversion rates to gwei for the gas fee token in
+    /// the transfer.
+    struct EligibleRecommendation {
+        /// Pending transfer to Ethereum.
+        pending_transfer: PendingTransfer,
+        /// Hash of the [`PendingTransfer`].
+        transfer_hash: String,
+        /// Cost of relaying the transfer, in gwei.
+        cost: I256,
+    }
+
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
@@ -542,7 +558,7 @@ mod recommendations {
             + valset_fee() * valset_size;
 
         // we don't recommend transfers that have already been relayed
-        let mut contents: Vec<(String, I256, PendingTransfer)> =
+        let mut contents: Vec<EligibleRecommendation> =
             query_signed_bridge_pool(client)
                 .await?
                 .into_iter()
@@ -583,12 +599,16 @@ mod recommendations {
                     }
                 })
                 .try_fold(Vec::new(), |mut accum, (hash, cost, transf)| {
-                    accum.push((hash, cost?, transf));
+                    accum.push(EligibleRecommendation {
+                        cost: cost?,
+                        transfer_hash: hash,
+                        pending_transfer: transf,
+                    });
                     control_flow::proceed(accum)
                 })?;
 
         // sort transfers in decreasing amounts of profitability
-        contents.sort_by_key(|(_, cost, _)| *cost);
+        contents.sort_by_key(|EligibleRecommendation { cost, .. }| *cost);
 
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
@@ -641,7 +661,7 @@ mod recommendations {
     /// Generates the actual recommendation from restrictions given by the
     /// input parameters.
     fn generate(
-        contents: Vec<(String, I256, PendingTransfer)>,
+        contents: Vec<EligibleRecommendation>,
         conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         validator_gas: Uint,
         max_gas: Uint,
@@ -664,7 +684,12 @@ mod recommendations {
         })?;
         let mut total_fees = HashMap::new();
         let mut recommendation = vec![];
-        for (hash, cost, transfer) in contents.into_iter() {
+        for EligibleRecommendation {
+            cost,
+            transfer_hash: hash,
+            pending_transfer: transfer,
+        } in contents.into_iter()
+        {
             let next_total_gas = total_gas + unsigned_transfer_fee();
             let next_total_cost = total_cost + cost;
             if cost.is_negative() {
@@ -770,15 +795,13 @@ mod recommendations {
         /// understands.
         fn process_transfers(
             transfers: Vec<PendingTransfer>,
-        ) -> Vec<(String, I256, PendingTransfer)> {
+        ) -> Vec<EligibleRecommendation> {
             transfers
                 .into_iter()
-                .map(|t| {
-                    (
-                        t.keccak256().to_string(),
-                        transfer_fee() - t.gas_fee.amount.change(),
-                        t,
-                    )
+                .map(|t| EligibleRecommendation {
+                    cost: transfer_fee() - t.gas_fee.amount.change(),
+                    transfer_hash: t.keccak256().to_string(),
+                    pending_transfer: t,
                 })
                 .collect()
         }
