@@ -1,6 +1,5 @@
 use core::time::Duration;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use namada::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
 use namada::ibc::applications::transfer::coin::PrefixedCoin;
@@ -24,16 +23,11 @@ use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
 use namada::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
-use namada::ibc::core::ics04_channel::msgs::acknowledgement::MsgAcknowledgement;
-use namada::ibc::core::ics04_channel::msgs::chan_close_confirm::MsgChannelCloseConfirm;
-use namada::ibc::core::ics04_channel::msgs::chan_close_init::MsgChannelCloseInit;
-use namada::ibc::core::ics04_channel::msgs::chan_open_ack::MsgChannelOpenAck;
-use namada::ibc::core::ics04_channel::msgs::chan_open_confirm::MsgChannelOpenConfirm;
-use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
-use namada::ibc::core::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
-use namada::ibc::core::ics04_channel::msgs::recv_packet::MsgRecvPacket;
-use namada::ibc::core::ics04_channel::msgs::timeout::MsgTimeout;
-use namada::ibc::core::ics04_channel::msgs::timeout_on_close::MsgTimeoutOnClose;
+use namada::ibc::core::ics04_channel::msgs::{
+    MsgAcknowledgement, MsgChannelCloseConfirm, MsgChannelCloseInit,
+    MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
+    MsgChannelOpenTry, MsgRecvPacket, MsgTimeout, MsgTimeoutOnClose,
+};
 pub use namada::ibc::core::ics04_channel::packet::{Packet, Sequence};
 use namada::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use namada::ibc::core::ics04_channel::Version as ChanVersion;
@@ -41,15 +35,13 @@ use namada::ibc::core::ics23_commitment::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
 pub use namada::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+    ChannelId, ClientId, ConnectionId, PortId,
 };
+use namada::ibc::core::timestamp::Timestamp;
 use namada::ibc::mock::client_state::{MockClientState, MOCK_CLIENT_TYPE};
 use namada::ibc::mock::consensus_state::MockConsensusState;
 use namada::ibc::mock::header::MockHeader;
-use namada::ibc::signer::Signer;
-use namada::ibc::timestamp::Timestamp;
 use namada::ibc::Height;
-use namada::ibc_proto::cosmos::base::v1beta1::Coin;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
@@ -58,9 +50,9 @@ use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
-    client_state_key, client_type_key, client_update_height_key,
-    client_update_timestamp_key, commitment_key, connection_counter_key,
-    connection_key, consensus_state_key, ibc_token, next_sequence_ack_key,
+    client_state_key, client_update_height_key, client_update_timestamp_key,
+    commitment_key, connection_counter_key, connection_key,
+    consensus_state_key, ibc_token, next_sequence_ack_key,
     next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
 use namada::ledger::ibc::vp::{
@@ -301,23 +293,12 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     // client state
     let client_id = client_id();
     let key = client_state_key(&client_id);
-    let bytes = client_state
-        .into_box()
-        .encode_vec()
-        .expect("encoding failed");
-    writes.insert(key, bytes);
-    // client type
-    let key = client_type_key(&client_id);
-    let client_type = client_state.client_type();
-    let bytes = client_type.as_str().as_bytes().to_vec();
+    let bytes = client_state.into_box().encode_vec();
     writes.insert(key, bytes);
     // consensus state
     let height = client_state.latest_height();
     let key = consensus_state_key(&client_id, height);
-    let bytes = consensus_state
-        .into_box()
-        .encode_vec()
-        .expect("encoding failed");
+    let bytes = consensus_state.into_box().encode_vec();
     writes.insert(key, bytes);
     // client update time
     let key = client_update_timestamp_key(&client_id);
@@ -342,7 +323,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
         let height = env.wl_storage.storage.get_block_height().0;
         Height::new(0, height.0).expect("invalid height")
     });
-    let bytes = height.encode_vec().expect("encoding failed");
+    let bytes = height.encode_vec();
     writes.insert(key, bytes);
     // client counter
     let key = client_counter_key();
@@ -371,15 +352,15 @@ pub fn prepare_opened_connection(
 
     let conn_id = ConnectionId::new(0);
     let key = connection_key(&conn_id);
-    let msg = msg_connection_open_init(client_id.clone());
     let conn = ConnectionEnd::new(
         ConnState::Open,
-        msg.client_id_on_a.clone(),
-        msg.counterparty.clone(),
-        vec![msg.version.clone().unwrap_or_default()],
-        msg.delay_period,
-    );
-    let bytes = conn.encode_vec().expect("encoding failed");
+        client_id.clone(),
+        dummy_connection_counterparty(),
+        vec![ConnVersion::default()],
+        Duration::new(0, 0),
+    )
+    .expect("invalid connection");
+    let bytes = conn.encode_vec();
     writes.insert(key, bytes);
     // connection counter
     let key = connection_counter_key();
@@ -401,20 +382,19 @@ pub fn prepare_opened_channel(
     writes.insert(key, 0_u64.to_be_bytes().to_vec());
     // channel
     let channel_id = ChannelId::new(0);
-    let port_channel_id =
-        PortChannelId::new(channel_id.clone(), port_id.clone());
-    let key = channel_key(&port_channel_id);
+    let key = channel_key(&port_id, &channel_id);
     let mut channel = ChannelEnd::new(
         ChanState::Open,
         Order::Unordered,
         dummy_channel_counterparty(),
         vec![conn_id.clone()],
         ChanVersion::new(VERSION.to_string()),
-    );
+    )
+    .expect("invalid channel");
     if is_ordered {
         channel.ordering = Order::Ordered;
     }
-    let bytes = channel.encode_vec().expect("encoding failed");
+    let bytes = channel.encode_vec();
     writes.insert(key, bytes);
 
     (port_id, channel_id, writes)
@@ -425,7 +405,7 @@ pub fn msg_create_client() -> MsgCreateClient {
     MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: consensus_state.into(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -439,7 +419,7 @@ pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
     MsgUpdateClient {
         client_id,
         header,
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -463,17 +443,24 @@ pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
         consensus_state,
         proof_upgrade_client,
         proof_upgrade_consensus_state,
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
+    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string()).unwrap();
+    let counterparty_client_id = ClientId::new(client_type, 42).unwrap();
+    let commitment_prefix =
+        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
+    let counterparty =
+        ConnCounterparty::new(counterparty_client_id, None, commitment_prefix);
+
     MsgConnectionOpenInit {
         client_id_on_a: client_id,
-        counterparty: dummy_connection_counterparty(),
+        counterparty,
         version: None,
         delay_period: Duration::new(0, 0),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -519,7 +506,7 @@ pub fn msg_connection_open_ack(
         proofs_height_on_b: dummy_proof_height(),
         consensus_height_of_a_on_b: consensus_height,
         version: ConnVersion::default(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -530,7 +517,7 @@ pub fn msg_connection_open_confirm(
         conn_id_on_b: connection_id,
         proof_conn_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -543,7 +530,7 @@ fn dummy_proof_height() -> Height {
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
-    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string());
+    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string()).unwrap();
     let client_id = ClientId::new(client_type, 42).expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
     let commitment_prefix =
@@ -561,7 +548,7 @@ pub fn msg_channel_open_init(
         connection_hops_on_a: vec![conn_id],
         port_id_on_b: PortId::transfer(),
         ordering: Order::Unordered,
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
         version_proposal: ChanVersion::new(VERSION.to_string()),
     }
 }
@@ -581,8 +568,7 @@ pub fn msg_channel_open_try(
         proof_chan_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
         ordering: Order::Unordered,
-        signer: Signer::from_str("test").expect("invalid signer"),
-        previous_channel_id: ChannelId::default().to_string(),
+        signer: "test".to_string().into(),
         version_proposal: ChanVersion::default(),
     }
 }
@@ -599,7 +585,7 @@ pub fn msg_channel_open_ack(
         version_on_b: ChanVersion::new(VERSION.to_string()),
         proof_chan_end_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -612,7 +598,7 @@ pub fn msg_channel_open_confirm(
         chan_id_on_b: channel_id,
         proof_chan_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -623,7 +609,7 @@ pub fn msg_channel_close_init(
     MsgChannelCloseInit {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -636,7 +622,7 @@ pub fn msg_channel_close_confirm(
         chan_id_on_b: channel_id,
         proof_chan_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -653,22 +639,24 @@ pub fn unorder_channel(channel: &mut ChannelEnd) {
 pub fn msg_transfer(
     port_id: PortId,
     channel_id: ChannelId,
-    token: String,
+    denom: String,
     sender: &Address,
 ) -> MsgTransfer {
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     MsgTransfer {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
-        token: Coin {
-            denom: token,
-            amount: 100u64.to_string(),
+        packet_data: PacketData {
+            token: PrefixedCoin {
+                denom: denom.parse().expect("invalid denom"),
+                amount: 100.into(),
+            },
+            sender: sender.to_string().into(),
+            receiver: address::testing::gen_established_address()
+                .to_string()
+                .into(),
+            memo: "memo".to_string().into(),
         },
-        sender: Signer::from_str(&sender.to_string()).expect("invalid signer"),
-        receiver: Signer::from_str(
-            &address::testing::gen_established_address().to_string(),
-        )
-        .expect("invalid signer"),
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timestamp,
     }
@@ -684,7 +672,7 @@ pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
         packet,
         proof_commitment_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -695,7 +683,7 @@ pub fn msg_packet_ack(packet: Packet) -> MsgAcknowledgement {
         acknowledgement: packet_ack.into(),
         proof_acked_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -712,12 +700,12 @@ pub fn received_packet(
         denom: token.parse().expect("invalid denom"),
         amount: 100.into(),
     };
-    let sender = address::testing::gen_established_address().to_string();
+    let sender = address::testing::gen_established_address();
     let data = PacketData {
         token: coin,
-        sender: Signer::from_str(&sender).expect("invalid signer"),
-        receiver: Signer::from_str(&receiver.to_string())
-            .expect("invalid signer"),
+        sender: sender.to_string().into(),
+        receiver: receiver.to_string().into(),
+        memo: "memo".to_string().into(),
     };
     Packet {
         seq_on_a: sequence,
@@ -737,7 +725,7 @@ pub fn msg_timeout(packet: Packet, next_sequence_recv: Sequence) -> MsgTimeout {
         next_seq_recv_on_b: next_sequence_recv,
         proof_unreceived_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -751,7 +739,7 @@ pub fn msg_timeout_on_close(
         proof_unreceived_on_b: dummy_proof(),
         proof_close_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
-        signer: Signer::from_str("test").expect("invalid signer"),
+        signer: "test".to_string().into(),
     }
 }
 
@@ -760,11 +748,11 @@ pub fn packet_from_message(
     sequence: Sequence,
     counterparty: &ChanCounterparty,
 ) -> Packet {
-    let coin = PrefixedCoin::try_from(msg.token.clone()).expect("invalid coin");
     let packet_data = PacketData {
-        token: coin,
-        sender: msg.sender.clone(),
-        receiver: msg.receiver.clone(),
+        token: msg.packet_data.token.clone(),
+        sender: msg.packet_data.sender.clone(),
+        receiver: msg.packet_data.receiver.clone(),
+        memo: "memo".to_string().into(),
     };
     let data =
         serde_json::to_vec(&packet_data).expect("Encoding PacketData failed");

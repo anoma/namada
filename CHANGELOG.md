@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.21.1
+
+Namada 0.21.0 is a patch release addressing some minor changes to the PGF and IBC components.
+
+### BUG FIXES
+
+- Introduce a new genesis section to control PGF storage at chain start.
+  ([\#1816](https://github.com/anoma/namada/pull/1816))
+
+### FEATURES
+
+- Support the memo field of IBC transfer
+  ([\#1635](https://github.com/anoma/namada/issues/1635))
+
 ## v0.21.0
 
 Namada 0.21.0 is a minor release introducing a first version of the PGF mechanism, addressing several 

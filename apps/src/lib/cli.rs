@@ -2478,6 +2478,7 @@ pub mod args {
     pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
         HD_WALLET_DERIVATION_PATH.opt();
     pub const HISTORIC: ArgFlag = flag("historic");
+    pub const IBC_TRANSFER_MEMO: ArgOpt<String> = arg_opt("memo");
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -3315,6 +3316,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                memo: self.memo,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -3331,6 +3333,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let memo = IBC_TRANSFER_MEMO.parse(matches);
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -3342,6 +3345,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                memo,
                 tx_code_path,
             }
         }
@@ -3365,6 +3369,11 @@ pub mod args {
                         .help("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
+                .arg(
+                    IBC_TRANSFER_MEMO
+                        .def()
+                        .help("Memo field of ICS20 transfer."),
+                )
         }
     }
 

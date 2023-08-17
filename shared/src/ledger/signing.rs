@@ -26,9 +26,7 @@ use zeroize::Zeroizing;
 
 use super::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use super::rpc::validate_amount;
-use crate::ibc::applications::transfer::msgs::transfer::{
-    MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
-};
+use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
@@ -1277,7 +1275,7 @@ pub async fn to_ledger_vector<
         )
         .await;
     } else if code_hash == ibc_hash {
-        let msg = Any::decode(
+        let any_msg = Any::decode(
             tx.data()
                 .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?
                 .as_ref(),
@@ -1287,21 +1285,19 @@ pub async fn to_ledger_vector<
         tv.name = "IBC 0".to_string();
         tv.output.push("Type : IBC".to_string());
 
-        match msg.type_url.as_str() {
-            MSG_TRANSFER_TYPE_URL => {
-                let transfer = MsgTransfer::try_from(msg).map_err(|_| {
-                    std::io::Error::from(ErrorKind::InvalidData)
-                })?;
+        match MsgTransfer::try_from(any_msg.clone()) {
+            Ok(transfer) => {
                 let transfer_token = format!(
                     "{} {}",
-                    transfer.token.amount, transfer.token.denom
+                    transfer.packet_data.token.amount,
+                    transfer.packet_data.token.denom
                 );
                 tv.output.extend(vec![
                     format!("Source port : {}", transfer.port_id_on_a),
                     format!("Source channel : {}", transfer.chan_id_on_a),
                     format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.sender),
-                    format!("Receiver : {}", transfer.receiver),
+                    format!("Sender : {}", transfer.packet_data.sender),
+                    format!("Receiver : {}", transfer.packet_data.receiver),
                     format!(
                         "Timeout height : {}",
                         transfer.timeout_height_on_b
@@ -1315,8 +1311,8 @@ pub async fn to_ledger_vector<
                     format!("Source port : {}", transfer.port_id_on_a),
                     format!("Source channel : {}", transfer.chan_id_on_a),
                     format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.sender),
-                    format!("Receiver : {}", transfer.receiver),
+                    format!("Sender : {}", transfer.packet_data.sender),
+                    format!("Receiver : {}", transfer.packet_data.receiver),
                     format!(
                         "Timeout height : {}",
                         transfer.timeout_height_on_b
@@ -1328,7 +1324,7 @@ pub async fn to_ledger_vector<
                 ]);
             }
             _ => {
-                for line in format!("{:#?}", msg).split('\n') {
+                for line in format!("{:#?}", any_msg).split('\n') {
                     let stripped = line.trim_start();
                     tv.output.push(format!("Part : {}", stripped));
                     tv.output_expert.push(format!("Part : {}", stripped));

@@ -40,7 +40,6 @@ abciplus = [
 
 ibc-mocks = [
   "ibc/mocks",
-  "ibc/std",
 ]
 
 ethers-derive = [
@@ -73,8 +72,8 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "634f4ede136d045dd6f1ff8f4984dd0006aa15f0", default-features = false, features = ["serde"], optional = true}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "bb16e17a4d9260d5f20516a8eda43fa52377fad2", default-features = false, optional = true}
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "38a827d3901e590b2935ee5b6b81b4d67c399560", features = ["serde"], optional = true}
+ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "31892ee743b2af017d5629b2af419ee20b6100c7", default-features = false, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true

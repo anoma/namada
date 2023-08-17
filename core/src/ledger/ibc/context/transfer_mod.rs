@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 use super::common::IbcCommonContext;
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
@@ -22,6 +21,7 @@ use crate::ibc::applications::transfer::context::{
 use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::MODULE_ID_STR;
+use crate::ibc::core::events::IbcEvent;
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -33,9 +33,9 @@ use crate::ibc::core::ics04_channel::context::{
     SendPacketExecutionContext, SendPacketValidationContext,
 };
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::handler::ModuleExtras;
-use crate::ibc::core::ics04_channel::msgs::acknowledgement::Acknowledgement;
-use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use crate::ibc::core::ics04_channel::packet::{
+    Acknowledgement, Packet, Sequence,
+};
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
@@ -43,10 +43,9 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
-use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
+use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
 use crate::ibc::core::ContextError;
-use crate::ibc::events::IbcEvent;
-use crate::ibc::signer::Signer;
+use crate::ibc::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
@@ -81,7 +80,7 @@ where
 
     /// Get the module ID
     pub fn module_id(&self) -> ModuleId {
-        ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+        ModuleId::new(MODULE_ID_STR.to_string())
     }
 }
 
@@ -593,7 +592,7 @@ pub mod testing {
     impl DummyTransferModule {
         /// Get the module ID
         pub fn module_id(&self) -> ModuleId {
-            ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+            ModuleId::new(MODULE_ID_STR.to_string())
         }
     }
 

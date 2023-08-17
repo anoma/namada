@@ -159,6 +159,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub timeout_height: Option<u64>,
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
+    /// Memo
+    pub memo: Option<String>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }

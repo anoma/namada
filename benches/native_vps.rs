@@ -12,13 +12,12 @@ use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
 use namada::ibc::core::ics03_connection::version::Version;
 use namada::ibc::core::ics04_channel::channel::Order;
-use namada::ibc::core::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
+use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
 use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use namada::ibc::core::ics24_host::identifier::{
     ClientId, ConnectionId, PortId,
 };
-use namada::ibc::signer::Signer;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
 use namada::ledger::ibc::vp::Ibc;
@@ -312,7 +311,7 @@ fn ibc(c: &mut Criterion) {
     // Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint".to_string()),
+            ClientType::new("01-tendermint".to_string()).unwrap(),
             1,
         )
         .unwrap(),
@@ -323,8 +322,7 @@ fn ibc(c: &mut Criterion) {
         ),
         version: Some(Version::default()),
         delay_period: std::time::Duration::new(100, 0),
-        signer: Signer::from_str(&defaults::albert_address().to_string())
-            .unwrap(),
+        signer: defaults::albert_address().to_string().into(),
     };
     let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
 
@@ -334,8 +332,7 @@ fn ibc(c: &mut Criterion) {
         connection_hops_on_a: vec![ConnectionId::new(1)],
         port_id_on_b: PortId::transfer(),
         ordering: Order::Unordered,
-        signer: Signer::from_str(&defaults::albert_address().to_string())
-            .unwrap(),
+        signer: defaults::albert_address().to_string().into(),
         version_proposal: ChannelVersion::new("ics20-1".to_string()),
     };
 
