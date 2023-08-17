@@ -1,31 +1,85 @@
 use namada_macros::StorageKeys;
 
+use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::pgf::ADDRESS;
+use crate::ledger::storage_api::collections::{
+    lazy_map, LazyCollection, LazyMap,
+};
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
+
+use super::steward::StewardDetail;
 
 /// Storage keys for pgf internal address.
 #[derive(StorageKeys)]
 struct Keys {
     stewards: &'static str,
-    payments: &'static str,
+    fundings: &'static str,
     pgf_inflation_rate: &'static str,
     steward_inflation_rate: &'static str,
+}
+
+/// Obtain a storage key for user's public key.
+pub fn stewards_key_prefix() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS.to_owned()),
+            DbKeySeg::StringSeg(Keys::VALUES.stewards.to_string()),
+        ],
+    }
+}
+
+/// LazyMap handler for the stewards subspace
+pub fn stewards_handle() -> LazyMap<Address, StewardDetail> {
+    LazyMap::open(stewards_key_prefix())
+}
+
+/// Check if the given storage key is a steward key. If it is, returns the steward address.
+pub fn is_stewards_key(key: &Key) -> Option<&Address> {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(steward)]
+            if pgf.eq(&ADDRESS)
+                && prefix.as_str() == Keys::VALUES.stewards
+                && data.as_str() == lazy_map::DATA_SUBKEY =>
+        {
+            Some(steward)
+        }
+        _ => None,
+    }
+}
+
+/// Obtain a storage key for pgf fundings.
+pub fn fundings_key_prefix() -> Key {
+    Key {
+        segments: vec![
+            DbKeySeg::AddressSeg(ADDRESS.to_owned()),
+            DbKeySeg::StringSeg(Keys::VALUES.fundings.to_string()),
+        ],
+    }
+}
+
+/// LazyMap handler for the pgf fundings substorage
+pub fn fundings_handle() -> LazyMap<u64, PGFTarget> {
+    LazyMap::open(fundings_key_prefix())
+}
+
+/// Check if the given storage key is a pgf funding key.
+pub fn is_fundings_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(id)]
+            if pgf.eq(&ADDRESS)
+                && prefix.as_str() == Keys::VALUES.fundings
+                && data.as_str() == lazy_map::DATA_SUBKEY =>
+        {
+            id.parse::<u64>().is_ok()
+        }
+        _ => false
+    }
 }
 
 /// Check if key is inside governance address space
 pub fn is_pgf_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
-}
-
-/// Check if key is a steward key
-pub fn is_stewards_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] if addr == &ADDRESS && prefix == Keys::VALUES.stewards)
-}
-
-/// Check if key is a payments key
-pub fn is_payments_key(key: &Key) -> bool {
-    matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] if addr == &ADDRESS && prefix == Keys::VALUES.payments)
 }
 
 /// Check if key is a pgf inflation rate key
@@ -36,20 +90,6 @@ pub fn is_pgf_inflation_rate_key(key: &Key) -> bool {
 /// Check if key is a steward inflation rate key
 pub fn is_steward_inflation_rate_key(key: &Key) -> bool {
     matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] if addr == &ADDRESS && prefix == Keys::VALUES.steward_inflation_rate)
-}
-
-/// Get key for stewards key
-pub fn get_stewards_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&Keys::VALUES.stewards.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Get key for payments key
-pub fn get_payments_key() -> Key {
-    Key::from(ADDRESS.to_db_key())
-        .push(&Keys::VALUES.payments.to_owned())
-        .expect("Cannot obtain a storage key")
 }
 
 /// Get key for inflation rate key

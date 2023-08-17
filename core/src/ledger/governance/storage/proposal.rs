@@ -195,8 +195,8 @@ impl StorageProposal {
     }
 
     /// Return the type of tally for the proposal
-    pub fn get_tally_type(&self) -> TallyType {
-        TallyType::from(self.r#type.clone())
+    pub fn get_tally_type(&self, is_steward: bool) -> TallyType {
+        TallyType::from(self.r#type.clone(), is_steward)
     }
 
     /// Return the status of a proposal

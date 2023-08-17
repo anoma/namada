@@ -12,8 +12,9 @@ use namada_core::ledger::governance::storage::proposal::{
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
 use namada_core::ledger::storage_api::governance::is_proposal_accepted;
+use namada_core::ledger::storage_api::account;
 use namada_core::ledger::vp_env::VpEnv;
-use namada_core::ledger::{pgf, storage};
+use namada_core::ledger::storage;
 use namada_core::proto::Tx;
 use namada_proof_of_stake::is_validator;
 use thiserror::Error;
@@ -312,20 +313,10 @@ where
                 }
             }
             ProposalType::PGFPayment(payments) => {
-                if payments.len() < MAX_PGF_ACTIONS {
-                    return Ok(true);
-                }
-                let stewards_key = pgf::storage::keys::get_stewards_key();
-                let author_key = gov_storage::get_author_key(proposal_id);
-
-                let author: Option<Address> =
-                    self.ctx.pre().read(&author_key)?;
-                let stewards: BTreeSet<Address> =
-                    self.force_read(&stewards_key, ReadType::Pre)?;
-
-                match author {
-                    Some(address) => Ok(stewards.contains(&address)),
-                    None => Ok(false),
+                if payments.len() > MAX_PGF_ACTIONS {
+                    return Ok(false);
+                } else {
+                    Ok(true)
                 }
             }
             _ => Ok(true), // default proposal
@@ -534,18 +525,9 @@ where
         }
 
         let author = self.force_read(&author_key, ReadType::Post)?;
+        let author_exists = account::exists(&self.ctx.pre(), &author).unwrap_or(false);
 
-        match author {
-            Address::Established(_) => {
-                let address_exist_key = Key::validity_predicate(&author);
-                let address_exist =
-                    self.ctx.has_key_post(&address_exist_key)?;
-
-                Ok(address_exist && verifiers.contains(&author))
-            }
-            Address::Implicit(_) => Ok(verifiers.contains(&author)),
-            Address::Internal(_) => Ok(false),
-        }
+        Ok(author_exists && verifiers.contains(&author))
     }
 
     /// Validate a counter key

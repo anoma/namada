@@ -27,6 +27,7 @@ use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
 use namada::core::ledger::pgf::parameters::PgfParameters;
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
 use namada::ledger::masp::{
     Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext,
@@ -905,7 +906,11 @@ pub async fn query_proposal_result<
             return;
         };
 
-        let tally_type = proposal.get_tally_type();
+        let is_author_steward = query_pgf_stewards(client)
+            .await
+            .iter()
+            .any(|steward| steward.address.eq(&proposal.author));
+        let tally_type = proposal.get_tally_type(is_author_steward);
         let total_voting_power =
             get_total_staked_tokens(client, proposal.voting_end_epoch).await;
 
@@ -1015,19 +1020,28 @@ pub async fn query_pgf<C: namada::ledger::queries::Client + Sync>(
     let stewards = query_pgf_stewards(client).await;
     let fundings = query_pgf_fundings(client).await;
 
-    match stewards.len() {
-        0 => println!("Pgf stewards: no stewards are currectly set."),
-        _ => {
+    match stewards.is_empty() {
+        true => println!("Pgf stewards: no stewards are currectly set."),
+        false => {
             println!("Pgf stewards:");
             for steward in stewards {
-                println!("{:4}- {}", "", steward);
+                println!("{:4}- {}", "", steward.address);
+                println!("{:4}  {}", "", "Reward distribution:");
+                for (address, percentage) in steward.reward_distribution {
+                    println!(
+                        "{:6}- {} to {}",
+                        "",
+                        percentage.to_string(),
+                        address
+                    );
+                }
             }
         }
     }
 
-    match fundings.len() {
-        0 => println!("Pgf fundings: no fundings are currently set."),
-        _ => {
+    match fundings.is_empty() {
+        true => println!("Pgf fundings: no fundings are currently set."),
+        false => {
             println!("Pgf fundings:");
             for payment in fundings {
                 println!("{:4}- {}", "", payment.target);
@@ -1177,13 +1191,13 @@ pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
 
 pub async fn query_pgf_stewards<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> BTreeSet<Address> {
+) -> Vec<StewardDetail> {
     unwrap_client_response::<C, _>(RPC.vp().pgf().stewards(client).await)
 }
 
 pub async fn query_pgf_fundings<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> BTreeSet<PGFTarget> {
+) -> Vec<PGFTarget> {
     unwrap_client_response::<C, _>(RPC.vp().pgf().funding(client).await)
 }
 

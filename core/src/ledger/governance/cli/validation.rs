@@ -141,8 +141,8 @@ pub fn is_valid_grace_epoch(
         Ok(())
     } else {
         Err(ProposalValidation::InvalidEndGraceDifference(
-            grace_period,
             min_proposal_grace_epoch,
+            grace_period,
         ))
     }
 }

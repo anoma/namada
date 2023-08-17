@@ -870,6 +870,7 @@ where
             signing_data,
         )
     };
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
@@ -956,6 +957,7 @@ where
         )
         .await?
     };
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);

@@ -1,34 +1,63 @@
 //! Pgf
 
-use std::collections::BTreeSet;
-
 use crate::ledger::governance::storage::proposal::PGFTarget;
 use crate::ledger::pgf::parameters::PgfParameters;
 use crate::ledger::pgf::storage::keys as pgf_keys;
+use crate::ledger::pgf::storage::steward::StewardDetail;
 use crate::ledger::storage_api::{self};
 use crate::types::address::Address;
 use crate::types::dec::Dec;
 
 /// Query the current pgf steward set
-pub fn get_stewards<S>(storage: &S) -> storage_api::Result<BTreeSet<Address>>
+pub fn get_stewards<S>(storage: &S) -> storage_api::Result<Vec<StewardDetail>>
 where
     S: storage_api::StorageRead,
 {
-    let stewards_key = pgf_keys::get_stewards_key();
-    let stewards: Option<BTreeSet<Address>> = storage.read(&stewards_key)?;
+    let stewards = pgf_keys::stewards_handle()
+        .iter(storage)?
+        .filter_map(|data| match data {
+            Ok((_, steward)) => Some(steward),
+            Err(_) => None,
+        })
+        .collect::<Vec<StewardDetail>>();
 
-    Ok(stewards.unwrap_or_default())
+    Ok(stewards)
+}
+
+/// Check if an address is a steward
+pub fn is_steward<S>(storage: &S, address: &Address) -> storage_api::Result<bool>
+where
+    S: storage_api::StorageRead,
+{
+    let is_steward = pgf_keys::stewards_handle().contains(storage, &address)?;
+
+    Ok(is_steward)
+}
+
+/// Remove a steward
+pub fn remove_steward<S>(storage: &mut S, address: &Address) -> storage_api::Result<()>
+where
+    S: storage_api::StorageRead + storage_api::StorageWrite,
+{
+    pgf_keys::stewards_handle().remove(storage, &address)?;
+
+    Ok(())
 }
 
 /// Query the current pgf continous payments
-pub fn get_payments<S>(storage: &S) -> storage_api::Result<BTreeSet<PGFTarget>>
+pub fn get_payments<S>(storage: &S) -> storage_api::Result<Vec<PGFTarget>>
 where
     S: storage_api::StorageRead,
 {
-    let payment_key = pgf_keys::get_payments_key();
-    let payments: Option<BTreeSet<PGFTarget>> = storage.read(&payment_key)?;
+    let fundings = pgf_keys::fundings_handle()
+        .iter(storage)?
+        .filter_map(|data| match data {
+            Ok((_, funding)) => Some(funding),
+            Err(_) => None,
+        })
+        .collect::<Vec<PGFTarget>>();
 
-    Ok(payments.unwrap_or_default())
+    Ok(fundings)
 }
 
 /// Query the pgf parameters

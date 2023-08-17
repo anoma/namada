@@ -3,13 +3,12 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
-use namada::core::ledger::pgf::storage::keys as pgf_storage;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
 use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
@@ -819,12 +818,10 @@ where
         }
 
         // Pgf inflation
-        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
-        let pgf_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_inflation_rate_key)
-            .unwrap_or_default();
+        let pgf_parameters = pgf::get_parameters(&self.wl_storage)?;
 
-        let pgf_pd_rate = pgf_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_pd_rate =
+            pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
         let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
         let pgf_inflation_amount = token::Amount::from(pgf_inflation);
 
@@ -841,43 +838,68 @@ where
             pgf_inflation_amount.to_string_native()
         );
 
-        // Pgf steward inflation
-        let pgf_stewards_inflation_rate_key =
-            pgf_storage::get_steward_inflation_rate_key();
-        let pgf_stewards_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_stewards_inflation_rate_key)
-            .unwrap_or_default();
+        let pgf_fundings = pgf::get_payments(&self.wl_storage)?;
+        for funding in pgf_fundings {
+            if let Ok(_) = credit_tokens(
+                &mut self.wl_storage,
+                &staking_token,
+                &funding.target,
+                funding.amount,
+            ) {
+                tracing::info!(
+                    "Minted {} tokens for {} project.",
+                    funding.amount.to_string_native(),
+                    &funding.target,
+                );
+            } else {
+                tracing::info!(
+                    "Failed Minting {} tokens for {} project.",
+                    funding.amount.to_string_native(),
+                    &funding.target,
+                );
+            }
+        }
 
+        // Pgf steward inflation
         let pgf_stewards_pd_rate =
-            pgf_stewards_inflation_rate / Dec::from(epochs_per_year);
+            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
         let pgf_steward_inflation =
             Dec::from(total_tokens) * pgf_stewards_pd_rate;
 
-        let pgf_stewards_key = pgf_storage::get_stewards_key();
-        let pgf_stewards: BTreeSet<Address> =
-            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
+        let stewards = pgf::get_stewards(&self.wl_storage)?;
 
-        let pgf_steward_reward = match pgf_stewards.len() {
+        let pgf_steward_reward = match stewards.len() {
             0 => Dec::zero(),
             _ => pgf_steward_inflation
-                .trunc_div(&Dec::from(pgf_stewards.len()))
+                .trunc_div(&Dec::from(stewards.len()))
                 .unwrap_or_default(),
         };
-        let pgf_steward_reward = token::Amount::from(pgf_steward_reward);
 
-        for steward in pgf_stewards {
-            credit_tokens(
-                &mut self.wl_storage,
-                &staking_token,
-                &steward,
-                pgf_steward_reward,
-            )?;
-            tracing::info!(
-                "Minting {} tokens for PGF Steward rewards distribution into \
-                 the steward address {}.",
-                pgf_steward_reward.to_string_native(),
-                steward,
-            );
+        for steward in stewards {
+            for (address, percentage) in steward.reward_distribution {
+                let pgf_steward_reward = pgf_steward_reward
+                    .checked_mul(&percentage)
+                    .unwrap_or_default();
+                let reward_amount = token::Amount::from(pgf_steward_reward);
+                if let Ok(_) = credit_tokens(
+                    &mut self.wl_storage,
+                    &staking_token,
+                    &address,
+                    reward_amount,
+                ) {
+                    tracing::info!(
+                        "Minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                } else {
+                    tracing::info!(
+                        "Failed minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -2034,11 +2056,9 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -2048,11 +2068,9 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(
-            !rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(!rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -2166,11 +2184,9 @@ mod test_finalize_block {
                 None,
             );
         }
-        assert!(
-            rewards_accumulator_handle()
-                .is_empty(&shell.wl_storage)
-                .unwrap()
-        );
+        assert!(rewards_accumulator_handle()
+            .is_empty(&shell.wl_storage)
+            .unwrap());
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -2442,11 +2458,9 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(
-            enqueued_slashes_handle()
-                .at(&Epoch::default())
-                .is_empty(&shell.wl_storage)?
-        );
+        assert!(enqueued_slashes_handle()
+            .at(&Epoch::default())
+            .is_empty(&shell.wl_storage)?);
         assert_eq!(
             get_num_consensus_validators(&shell.wl_storage, Epoch::default())
                 .unwrap(),
@@ -2465,21 +2479,17 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(
-                enqueued_slashes_handle()
-                    .at(&epoch)
-                    .is_empty(&shell.wl_storage)?
-            );
+            assert!(enqueued_slashes_handle()
+                .at(&epoch)
+                .is_empty(&shell.wl_storage)?);
             assert_eq!(
                 get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(
-            !enqueued_slashes_handle()
-                .at(&processing_epoch)
-                .is_empty(&shell.wl_storage)?
-        );
+        assert!(!enqueued_slashes_handle()
+            .at(&processing_epoch)
+            .is_empty(&shell.wl_storage)?);
 
         // Advance to the processing epoch
         loop {
@@ -2502,11 +2512,9 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(
-                    enqueued_slashes_handle()
-                        .at(&shell.wl_storage.storage.block.epoch)
-                        .is_empty(&shell.wl_storage)?
-                );
+                assert!(enqueued_slashes_handle()
+                    .at(&shell.wl_storage.storage.block.epoch)
+                    .is_empty(&shell.wl_storage)?);
                 let stake1 = read_validator_stake(
                     &shell.wl_storage,
                     &params,
@@ -3052,15 +3060,13 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(
-            namada_proof_of_stake::is_validator_frozen(
-                &shell.wl_storage,
-                &val1.address,
-                current_epoch,
-                &params
-            )
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::is_validator_frozen(
+            &shell.wl_storage,
+            &val1.address,
+            current_epoch,
+            &params
+        )
+        .unwrap());
         assert!(
             namada_proof_of_stake::validator_slashes_handle(&val1.address)
                 .is_empty(&shell.wl_storage)

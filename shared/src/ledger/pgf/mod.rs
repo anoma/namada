@@ -109,9 +109,9 @@ enum KeyType {
 
 impl From<&Key> for KeyType {
     fn from(key: &Key) -> Self {
-        if pgf_storage::is_stewards_key(key) {
+        if pgf_storage::is_stewards_key(key).is_some() {
             Self::STEWARDS
-        } else if pgf_storage::is_payments_key(key) {
+        } else if pgf_storage::is_fundings_key(key) {
             KeyType::PAYMENTS
         } else if pgf_storage::is_pgf_inflation_rate_key(key) {
             Self::PGF_INFLATION_RATE
