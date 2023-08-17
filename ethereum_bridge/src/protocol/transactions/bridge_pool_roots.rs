@@ -45,6 +45,7 @@ where
          bridge pool root and nonce."
     );
     let voting_powers = utils::get_voting_powers(wl_storage, &vext)?;
+    let root_height = vext.iter().next().unwrap().data.block_height;
     let (partial_proof, seen_by) = parse_vexts(wl_storage, vext);
 
     // apply updates to the bridge pool root.
@@ -65,7 +66,7 @@ where
         wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (proof, wl_storage.storage.get_last_block_height())
+                (proof, root_height)
                     .try_to_vec()
                     .expect("Serializing a Bridge pool root shouldn't fail."),
             )

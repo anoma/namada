@@ -220,7 +220,7 @@ where
     /// root and nonce.
     ///
     /// Also returns the block height at which the
-    /// a quorum of signatures was collected.
+    /// Bridge pool root was originally signed.
     ///
     /// No value exists when the bridge if first
     /// started.
