@@ -53,7 +53,7 @@ use crate::proto::{MaspBuilder, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
-use crate::types::error::{EncodingError, Error, Result, TxError};
+use crate::types::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
@@ -480,7 +480,7 @@ pub async fn build_validator_commission_change<
     let params: PosParams = rpc::get_pos_params(client).await;
 
     let validator = validator.clone();
-    if rpc::is_validator(client, &validator).await {
+    if rpc::is_validator(client, &validator).await? {
         if rate < Dec::zero() || rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
             return Err(Error::from(TxError::InvalidCommissionRate(rate)));
@@ -559,7 +559,7 @@ pub async fn build_unjail_validator<
     }: args::TxUnjailValidator,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx> {
-    if !rpc::is_validator(client, &validator).await {
+    if !rpc::is_validator(client, &validator).await? {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
@@ -598,21 +598,27 @@ pub async fn build_unjail_validator<
     let last_slash_epoch =
         rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
             .await;
-    if let Some(last_slash_epoch) = last_slash_epoch {
-        let eligible_epoch =
-            last_slash_epoch + params.slash_processing_epoch_offset();
-        if current_epoch < eligible_epoch {
-            eprintln!(
-                "The given validator address {} is currently frozen and not \
-                 yet eligible to be unjailed.",
-                &validator
-            );
-            if !tx_args.force {
-                return Err(Error::from(TxError::ValidatorNotCurrentlyJailed(
-                    validator.clone(),
-                )));
+    match last_slash_epoch {
+        Ok(last_slash_epoch) => {
+            let eligible_epoch =
+                last_slash_epoch + params.slash_processing_epoch_offset();
+            if current_epoch < eligible_epoch {
+                eprintln!(
+                    "The given validator address {} is currently frozen and \
+                     not yet eligible to be unjailed.",
+                    &validator
+                );
+                if !tx_args.force {
+                    return Err(Error::from(
+                        TxError::ValidatorNotCurrentlyJailed(validator.clone()),
+                    ));
+                }
             }
         }
+        Err(Error::Query(
+            QueryError::NoSuchKey(_) | QueryError::General(_),
+        )) => (),
+        Err(err) => return Err(err),
     }
 
     let _data = validator
@@ -979,7 +985,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
                 ))
             })?;
 
-    let is_validator = rpc::is_validator(client, &voter).await;
+    let is_validator = rpc::is_validator(client, &voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::from(TxError::InvalidProposalVotingPeriod(
@@ -1659,7 +1665,7 @@ async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Result<Address> {
     // Check that the validator address exists on chain
-    let is_validator = rpc::is_validator(client, &validator).await;
+    let is_validator = rpc::is_validator(client, &validator).await?;
     if !is_validator {
         if force {
             eprintln!(
@@ -1689,7 +1695,7 @@ where
     C: crate::ledger::queries::Client + Sync,
     F: FnOnce(Address) -> Error,
 {
-    let addr_exists = rpc::known_address::<C>(client, &addr).await;
+    let addr_exists = rpc::known_address::<C>(client, &addr).await?;
     if !addr_exists {
         if force {
             eprintln!("{}", message);
@@ -1748,7 +1754,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     match rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
         .await
     {
-        Some(balance) => {
+        Ok(balance) => {
             if balance < amount {
                 if force {
                     eprintln!(
@@ -1773,7 +1779,9 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 Ok(())
             }
         }
-        None => {
+        Err(Error::Query(
+            QueryError::General(_) | QueryError::NoSuchKey(_),
+        )) => {
             if force {
                 eprintln!(
                     "No balance found for the source {} of token {}",
@@ -1787,6 +1795,9 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 )))
             }
         }
+        // We're either facing a no response or a conversion error
+        // either way propigate it up
+        Err(err) => Err(err),
     }
 }
 

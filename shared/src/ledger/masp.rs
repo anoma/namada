@@ -1249,9 +1249,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
             .expect("Cannot obtain a storage key");
         // Obtain the transaction pointer at the key
-        let txidx = rpc::query_storage_value::<C, u64>(client, &pin_key)
-            .await
-            .ok_or(PinnedBalanceError::NoTransactionPinned)?;
+        let txidx =
+            rpc::query_storage_value::<C, u64>(client, &pin_key).await?;
         // Construct the key for where the pinned transaction is stored
         let tx_key = Key::from(masp_addr.to_db_key())
             .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
@@ -1697,7 +1696,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
-        let block_results = rpc::query_results(client).await;
+        let block_results = rpc::query_results(client).await.unwrap(); // FIXME
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
         let relevant_addrs = match &query_owner {

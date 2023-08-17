@@ -1711,7 +1711,9 @@ pub async fn is_validator<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    namada::ledger::rpc::is_validator(client, address).await
+    namada::ledger::rpc::is_validator(client, address)
+        .await
+        .unwrap()
 }
 
 /// Check if a given address is a known delegator
@@ -1737,7 +1739,9 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    namada::ledger::rpc::known_address(client, address).await
+    namada::ledger::rpc::known_address(client, address)
+        .await
+        .unwrap()
 }
 
 /// Query for all conversions.
@@ -1834,7 +1838,9 @@ pub async fn query_storage_value<C: namada::ledger::queries::Client + Sync, T>(
 where
     T: BorshDeserialize,
 {
-    namada::ledger::rpc::query_storage_value(client, key).await
+    namada::ledger::rpc::query_storage_value(client, key)
+        .await
+        .unwrap()
 }
 
 /// Query a storage value and the proof without decoding.
@@ -1873,7 +1879,9 @@ pub async fn query_has_storage_key<
     client: &C,
     key: &storage::Key,
 ) -> bool {
-    namada::ledger::rpc::query_has_storage_key(client, key).await
+    namada::ledger::rpc::query_has_storage_key(client, key)
+        .await
+        .unwrap()
 }
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch

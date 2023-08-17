@@ -38,7 +38,7 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
-use crate::types::error::{Error, QueryError};
+use crate::types::error::{EncodingError, Error, QueryError};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
@@ -130,11 +130,20 @@ fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
     })
 }
 
+/// A helper to turn client's response into an error type that can be used with
+/// ? The exact error type is a `QueryError::NoResponse`, and thus should be
+/// seen as getting no response back from a query.
+fn convert_response<C: crate::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> Result<T, Error> {
+    response.map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
+
 /// Query the results of the last committed block
 pub async fn query_results<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> Vec<BlockResults> {
-    unwrap_client_response::<C, _>(RPC.shell().read_results(client).await)
+) -> Result<Vec<BlockResults>, Error> {
+    convert_response::<C, _>(RPC.shell().read_results(client).await)
 }
 
 /// Query token amount of owner.
@@ -152,10 +161,8 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
 pub async fn is_validator<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
-    unwrap_client_response::<C, _>(
-        RPC.vp().pos().is_validator(client, address).await,
-    )
+) -> Result<bool, Error> {
+    convert_response::<C, _>(RPC.vp().pos().is_validator(client, address).await)
 }
 
 /// Check if a given address is a known delegator
@@ -188,14 +195,14 @@ pub async fn is_delegator_at<C: crate::ledger::queries::Client + Sync>(
 pub async fn known_address<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
+) -> Result<bool, Error> {
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = storage::Key::validity_predicate(address);
             query_has_storage_key(client, &key).await
         }
-        Address::Implicit(_) | Address::Internal(_) => true,
+        Address::Implicit(_) | Address::Internal(_) => Ok(true),
     }
 }
 
@@ -276,7 +283,7 @@ pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_storage_value<C, T>(
     client: &C,
     key: &storage::Key,
-) -> Option<T>
+) -> Result<T, Error>
 where
     T: BorshDeserialize,
     C: crate::ledger::queries::Client + Sync,
@@ -286,28 +293,27 @@ where
     // returns 0 bytes when the key is not found.
     let maybe_unit = T::try_from_slice(&[]);
     if let Ok(unit) = maybe_unit {
-        return if unwrap_client_response::<C, _>(
+        return if convert_response::<C, _>(
             RPC.shell().storage_has_key(client, key).await,
-        ) {
-            Some(unit)
+        )? {
+            Ok(unit)
         } else {
-            None
+            Err(Error::from(QueryError::NoSuchKey(key.to_string())))
         };
     }
 
-    let response = unwrap_client_response::<C, _>(
+    let response = convert_response::<C, _>(
         RPC.shell()
             .storage_value(client, None, None, false, key)
             .await,
-    );
+    )?;
     if response.data.is_empty() {
-        return None;
+        return Err(Error::from(QueryError::General(format!(
+            "No data found in {key}"
+        ))));
     }
     T::try_from_slice(&response.data[..])
-        .map(Some)
-        .unwrap_or_else(|err| {
-            panic!("Error decoding the value: {}", err);
-        })
+        .map_err(|err| Error::from(EncodingError::Decoding(err.to_string())))
 }
 
 /// Query a storage value and the proof without decoding.
@@ -371,10 +377,8 @@ where
 pub async fn query_has_storage_key<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     key: &storage::Key,
-) -> bool {
-    unwrap_client_response::<C, _>(
-        RPC.shell().storage_has_key(client, key).await,
-    )
+) -> Result<bool, Error> {
+    convert_response::<C, _>(RPC.shell().storage_has_key(client, key).await)
 }
 
 /// Represents a query for an event pertaining to the specified transaction
