@@ -150,7 +150,7 @@ test-integration:
 # Clear pre-built proofs, run integration tests and save the new proofs
 test-integration-save-proofs:
     # Clear old proofs first
-	rm --force test_fixtures/masp_proofs/*.bin || true
+	rm -f test_fixtures/masp_proofs/*.bin || true
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
 	NAMADA_MASP_TEST_PROOFS=save \
 	TEST_FILTER=masp \
