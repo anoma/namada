@@ -196,11 +196,17 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::ledger::storage_api::StorageRead;
     use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
+    use namada_core::types::dec::Dec;
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
+    use namada_core::types::key::RefTo;
     use namada_core::types::storage::Key;
     use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots;
+    use namada_proof_of_stake::parameters::PosParams;
+    use namada_proof_of_stake::{
+        become_validator, bond_tokens, write_pos_params, BecomeValidator,
+    };
 
     use super::*;
     use crate::protocol::transactions::votes::{
@@ -687,5 +693,128 @@ mod test_apply_bp_roots_to_storage {
         expected.attach_signature_batch(sigs);
         assert_eq!(proof.signatures, expected.signatures);
         assert_eq!(proof.data, expected.data);
+    }
+
+    /// Test that when we acquire a complete BP roots proof,
+    /// the block height stored in storage is that of the
+    /// tree root that was decided.
+    #[test]
+    fn test_bp_roots_across_epoch_boundaries() {
+        // the validators that will vote in the tally
+        let validator_1 = address::testing::established_address_1();
+        let validator_1_stake = Amount::native_whole(100);
+
+        let validator_2 = address::testing::established_address_2();
+        let validator_2_stake = Amount::native_whole(100);
+
+        let validator_3 = address::testing::established_address_3();
+        let validator_3_stake = Amount::native_whole(100);
+
+        // start epoch 0 with validator 1
+        let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
+            HashMap::from([(validator_1.clone(), validator_1_stake)]),
+        );
+
+        // update the pos params
+        let params = PosParams {
+            pipeline_len: 1,
+            ..Default::default()
+        };
+        write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
+
+        // insert validators 2 and 3 at epoch 1
+        for (validator, stake) in [
+            (&validator_2, validator_2_stake),
+            (&validator_3, validator_3_stake),
+        ] {
+            let keys = test_utils::TestValidatorKeys::generate();
+            let consensus_key = &keys.consensus.ref_to();
+            let eth_cold_key = &keys.eth_gov.ref_to();
+            let eth_hot_key = &keys.eth_bridge.ref_to();
+            become_validator(BecomeValidator {
+                storage: &mut wl_storage,
+                params: &params,
+                address: validator,
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                current_epoch: 0.into(),
+                commission_rate: Dec::new(5, 2).unwrap(),
+                max_commission_rate_change: Dec::new(1, 2).unwrap(),
+            })
+            .expect("Test failed");
+            bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
+                .expect("Test failed");
+        }
+
+        // query validators to make sure they were inserted correctly
+        macro_rules! query_validators {
+            () => {
+                |epoch: u64| {
+                    wl_storage
+                        .pos_queries()
+                        .get_consensus_validators(Some(epoch.into()))
+                        .iter()
+                        .map(|validator| {
+                            (validator.address, validator.bonded_stake)
+                        })
+                        .collect::<HashMap<_, _>>()
+                }
+            };
+        }
+        let query_validators = query_validators!();
+        let epoch_0_validators = query_validators(0);
+        let epoch_1_validators = query_validators(1);
+        _ = query_validators;
+        assert_eq!(
+            epoch_0_validators,
+            HashMap::from([(validator_1.clone(), validator_1_stake)])
+        );
+        assert_eq!(
+            epoch_1_validators,
+            HashMap::from([
+                (validator_1.clone(), validator_1_stake),
+                (validator_2, validator_2_stake),
+                (validator_3, validator_3_stake),
+            ])
+        );
+
+        // set up the bridge pool's storage
+        bridge_pool_vp::init_storage(&mut wl_storage);
+        test_utils::commit_bridge_pool_root_at_height(
+            &mut wl_storage.storage,
+            &KeccakHash([1; 32]),
+            3.into(),
+        );
+
+        // construct proof
+        let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
+        let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
+        let hot_key = &keys[&validator_1].eth_bridge;
+        let vext = bridge_pool_roots::Vext {
+            validator_addr: validator_1.clone(),
+            block_height: 3.into(),
+            sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
+        }
+        .sign(&keys[&validator_1].protocol);
+
+        _ = apply_derived_tx(&mut wl_storage, vext.into())
+            .expect("Test failed");
+
+        // query validator set of the proof
+        // (should be the one from epoch 0)
+        let (_, root_height) = wl_storage
+            .ethbridge_queries()
+            .get_signed_bridge_pool_root()
+            .expect("Test failed");
+        let root_epoch = wl_storage
+            .pos_queries()
+            .get_epoch(root_height)
+            .expect("Test failed");
+
+        let query_validators = query_validators!();
+        let root_epoch_validators = query_validators(root_epoch.0);
+        assert_eq!(epoch_0_validators, root_epoch_validators);
     }
 }
