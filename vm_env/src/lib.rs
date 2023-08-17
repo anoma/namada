@@ -103,7 +103,7 @@ pub mod tx {
         pub fn namada_tx_log_string(str_ptr: u64, str_len: u64);
 
         /// Charge the provided amount of gas for the current tx
-        pub fn gas(used_gas: u64);
+        pub fn namada_tx_charge_gas(used_gas: u64);
     }
 }
 
@@ -214,7 +214,7 @@ pub mod vp {
         pub fn namada_vp_has_valid_pow() -> i64;
 
         /// Charge the provided amount of gas for the current vp
-        pub fn gas(used_gas: u64);
+        pub fn namada_vp_charge_gas(used_gas: u64);
     }
 }
 
