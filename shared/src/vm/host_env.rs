@@ -1755,15 +1755,13 @@ where
 /// TODO: this is just a warkaround to track gas for multiple singature
 /// verifications. When the runtime gas meter is implemented, this funcion can
 /// be removed
-#[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     hash_list_ptr: u64,
     hash_list_len: u64,
     public_keys_map_ptr: u64,
     public_keys_map_len: u64,
-    threshold_ptr: u64,
-    threshold_len: u64,
+    threshold: u8,
     max_signatures_ptr: u64,
     max_signatures_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1793,14 +1791,6 @@ where
         namada_core::types::account::AccountPublicKeysMap::try_from_slice(
             &public_keys_map,
         )
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
-    let (threshold, gas) = env
-        .memory
-        .read_bytes(threshold_ptr, threshold_len as _)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let threshold = u8::try_from_slice(&threshold)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     let (max_signatures, gas) = env
