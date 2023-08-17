@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType,
+    AddRemove, PGFAction, ProposalType, StoragePgfFunding,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
@@ -122,8 +122,8 @@ where
                         let result = execute_pgf_payment_proposal(
                             &mut shell.wl_storage,
                             native_token,
-                            id,
                             payments,
+                            id
                         )?;
                         tracing::info!(
                             "Governance proposal (pgf funding) {} has been \
@@ -336,8 +336,8 @@ where
 fn execute_pgf_payment_proposal<S>(
     storage: &mut S,
     token: &Address,
-    proposal_id: u64,
     payments: Vec<PGFAction>,
+    proposal_id: u64
 ) -> Result<bool>
 where
     S: StorageRead + StorageWrite,
@@ -346,10 +346,10 @@ where
         match payment {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
-                    pgf_storage::fundings_handle().insert(storage, proposal_id, target)?;
+                    pgf_storage::fundings_handle().insert(storage, target.target.clone(), StoragePgfFunding::new(target, proposal_id))?;
                 }
-                AddRemove::Remove(_target) => {
-                    pgf_storage::fundings_handle().remove(storage, &proposal_id)?;
+                AddRemove::Remove(target) => {
+                    pgf_storage::fundings_handle().remove(storage, &target.target)?;
                 }
             },
             PGFAction::Retro(target) => {

@@ -838,24 +838,27 @@ where
             pgf_inflation_amount.to_string_native()
         );
 
-        let pgf_fundings = pgf::get_payments(&self.wl_storage)?;
+        let mut pgf_fundings = pgf::get_payments(&self.wl_storage)?;
+        // we want to pay first the oldest fundings
+        pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
+
         for funding in pgf_fundings {
             if let Ok(_) = credit_tokens(
                 &mut self.wl_storage,
                 &staking_token,
-                &funding.target,
-                funding.amount,
+                &funding.detail.target,
+                funding.detail.amount,
             ) {
                 tracing::info!(
                     "Minted {} tokens for {} project.",
-                    funding.amount.to_string_native(),
-                    &funding.target,
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
                 );
             } else {
                 tracing::info!(
                     "Failed Minting {} tokens for {} project.",
-                    funding.amount.to_string_native(),
-                    &funding.target,
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
                 );
             }
         }
@@ -881,6 +884,7 @@ where
                     .checked_mul(&percentage)
                     .unwrap_or_default();
                 let reward_amount = token::Amount::from(pgf_steward_reward);
+
                 if let Ok(_) = credit_tokens(
                     &mut self.wl_storage,
                     &staking_token,

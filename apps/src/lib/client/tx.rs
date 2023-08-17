@@ -637,6 +637,7 @@ pub async fn submit_transfer<C: Client + Sync>(
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
+            continue;
         } else {
             signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
             let result =

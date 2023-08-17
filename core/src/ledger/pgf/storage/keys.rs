@@ -1,6 +1,6 @@
 use namada_macros::StorageKeys;
 
-use crate::ledger::governance::storage::proposal::PGFTarget;
+use crate::ledger::governance::storage::proposal::StoragePgfFunding;
 use crate::ledger::pgf::ADDRESS;
 use crate::ledger::storage_api::collections::{
     lazy_map, LazyCollection, LazyMap,
@@ -59,19 +59,19 @@ pub fn fundings_key_prefix() -> Key {
 }
 
 /// LazyMap handler for the pgf fundings substorage
-pub fn fundings_handle() -> LazyMap<u64, PGFTarget> {
+pub fn fundings_handle() -> LazyMap<Address, StoragePgfFunding> {
     LazyMap::open(fundings_key_prefix())
 }
 
 /// Check if the given storage key is a pgf funding key.
 pub fn is_fundings_key(key: &Key) -> bool {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::StringSeg(id)]
+        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(_)]
             if pgf.eq(&ADDRESS)
                 && prefix.as_str() == Keys::VALUES.fundings
                 && data.as_str() == lazy_map::DATA_SUBKEY =>
         {
-            id.parse::<u64>().is_ok()
+            true
         }
         _ => false
     }

@@ -1,6 +1,6 @@
 //! Pgf
 
-use crate::ledger::governance::storage::proposal::PGFTarget;
+use crate::ledger::governance::storage::proposal::StoragePgfFunding;
 use crate::ledger::pgf::parameters::PgfParameters;
 use crate::ledger::pgf::storage::keys as pgf_keys;
 use crate::ledger::pgf::storage::steward::StewardDetail;
@@ -45,7 +45,7 @@ where
 }
 
 /// Query the current pgf continous payments
-pub fn get_payments<S>(storage: &S) -> storage_api::Result<Vec<PGFTarget>>
+pub fn get_payments<S>(storage: &S) -> storage_api::Result<Vec<StoragePgfFunding>>
 where
     S: storage_api::StorageRead,
 {
@@ -55,7 +55,7 @@ where
             Ok((_, funding)) => Some(funding),
             Err(_) => None,
         })
-        .collect::<Vec<PGFTarget>>();
+        .collect::<Vec<StoragePgfFunding>>();
 
     Ok(fundings)
 }

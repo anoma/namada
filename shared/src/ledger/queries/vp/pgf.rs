@@ -1,4 +1,4 @@
-use namada_core::ledger::governance::storage::proposal::PGFTarget;
+use namada_core::ledger::governance::storage::proposal::{PGFTarget, StoragePgfFunding};
 use namada_core::ledger::pgf::storage::steward::StewardDetail;
 
 use crate::core::ledger::pgf::parameters::PgfParameters;
@@ -27,7 +27,7 @@ where
 /// Query the continous pgf fundings
 fn funding<D, H>(
     ctx: RequestCtx<'_, D, H>,
-) -> storage_api::Result<Vec<PGFTarget>>
+) -> storage_api::Result<Vec<StoragePgfFunding>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

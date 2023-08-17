@@ -21,6 +21,35 @@ pub enum ProposalTypeError {
     InvalidProposalType,
 }
 
+/// Storage struture for pgf fundings
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct StoragePgfFunding {
+    /// The data about the pgf funding
+    pub detail: PGFTarget,
+    /// The id of the proposal that added this funding
+    pub id: u64
+}
+
+impl StoragePgfFunding {
+    /// Init a new pgf funding struct
+    pub fn new(detail: PGFTarget, id: u64) -> Self {
+        Self {
+            detail,
+            id
+        }
+    }
+}
+
 /// An add or remove action for PGF
 #[derive(
     Debug,
