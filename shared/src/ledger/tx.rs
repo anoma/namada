@@ -140,9 +140,9 @@ pub async fn prepare_tx<C: crate::ledger::queries::Client + Sync>(
     tx: &mut Tx,
     gas_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) {
+) -> Result<()> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(client).await;
+        let epoch = rpc::query_epoch(client).await?;
         signing::wrap_tx(
             client,
             tx,
@@ -154,6 +154,7 @@ pub async fn prepare_tx<C: crate::ledger::queries::Client + Sync>(
         )
         .await
     }
+    Ok(())
 }
 
 /// Submit transaction and wait for result. Returns a list of addresses
@@ -227,14 +228,14 @@ where
     C: crate::ledger::queries::Client + Sync,
 {
     // Check if PK revealed
-    Ok(force || !has_revealed_pk(client, address).await)
+    Ok(force || !has_revealed_pk(client, address).await?)
 }
 
 /// Check if the public key for the given address has been revealed
 pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
+) -> Result<bool> {
     rpc::is_public_key_revealed(client, address).await
 }
 
@@ -474,12 +475,12 @@ pub async fn build_validator_commission_change<
     }: args::CommissionRateChange,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx> {
-    let epoch = rpc::query_epoch(client).await;
+    let epoch = rpc::query_epoch(client).await?;
 
-    let params: PosParams = rpc::get_pos_params(client).await;
+    let params: PosParams = rpc::get_pos_params(client).await?;
 
     let validator = validator.clone();
-    if rpc::is_validator(client, &validator).await {
+    if rpc::is_validator(client, &validator).await? {
         if rate < Dec::zero() || rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
             return Err(Error::from(TxError::InvalidCommissionRate(rate)));
@@ -492,7 +493,7 @@ pub async fn build_validator_commission_change<
             &validator,
             Some(pipeline_epoch_minus_one),
         )
-        .await
+        .await?
         {
             Some(CommissionPair {
                 commission_rate,
@@ -549,7 +550,7 @@ pub async fn build_unjail_validator<
     }: args::TxUnjailValidator,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx> {
-    if !rpc::is_validator(client, &validator).await {
+    if !rpc::is_validator(client, &validator).await? {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
@@ -558,13 +559,13 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let params: PosParams = rpc::get_pos_params(client).await;
-    let current_epoch = rpc::query_epoch(client).await;
+    let params: PosParams = rpc::get_pos_params(client).await?;
+    let current_epoch = rpc::query_epoch(client).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     let validator_state_at_pipeline =
         rpc::get_validator_state(client, &validator, Some(pipeline_epoch))
-            .await
+            .await?
             .ok_or_else(|| {
                 Error::from(TxError::Other(
                     "Validator state should be defined.".to_string(),
@@ -588,21 +589,27 @@ pub async fn build_unjail_validator<
     let last_slash_epoch =
         rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
             .await;
-    if let Some(last_slash_epoch) = last_slash_epoch {
-        let eligible_epoch =
-            last_slash_epoch + params.slash_processing_epoch_offset();
-        if current_epoch < eligible_epoch {
-            eprintln!(
-                "The given validator address {} is currently frozen and not \
-                 yet eligible to be unjailed.",
-                &validator
-            );
-            if !tx_args.force {
-                return Err(Error::from(TxError::ValidatorNotCurrentlyJailed(
-                    validator.clone(),
-                )));
+    match last_slash_epoch {
+        Ok(last_slash_epoch) => {
+            let eligible_epoch =
+                last_slash_epoch + params.slash_processing_epoch_offset();
+            if current_epoch < eligible_epoch {
+                eprintln!(
+                    "The given validator address {} is currently frozen and \
+                     not yet eligible to be unjailed.",
+                    &validator
+                );
+                if !tx_args.force {
+                    return Err(Error::from(
+                        TxError::ValidatorNotCurrentlyJailed(validator.clone()),
+                    ));
+                }
             }
         }
+        Err(Error::Query(
+            QueryError::NoSuchKey(_) | QueryError::General(_),
+        )) => (),
+        Err(err) => return Err(err),
     }
 
     build(
@@ -627,7 +634,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
     }: args::Withdraw,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx> {
-    let epoch = rpc::query_epoch(client).await;
+    let epoch = rpc::query_epoch(client).await?;
 
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, client)
@@ -643,7 +650,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
         &validator,
         Some(epoch),
     )
-    .await;
+    .await?;
 
     if tokens.is_zero() {
         eprintln!(
@@ -651,7 +658,7 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
              epoch {}.",
             epoch
         );
-        rpc::query_and_print_unbonds(client, &bond_source, &validator).await;
+        rpc::query_and_print_unbonds(client, &bond_source, &validator).await?;
         if !tx_args.force {
             return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
@@ -693,7 +700,7 @@ pub async fn build_unbond<
             .await?;
 
         let bond_amount =
-            rpc::query_bond(client, &bond_source, &validator, None).await;
+            rpc::query_bond(client, &bond_source, &validator, None).await?;
         println!(
             "Bond amount available for unbonding: {} NAM",
             bond_amount.to_string_native()
@@ -720,7 +727,8 @@ pub async fn build_unbond<
 
     // Query the unbonds before submitting the tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &validator)
+            .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -752,7 +760,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
     // Query the unbonds post-tx
     let unbonds =
         rpc::query_unbond_with_slashing(client, &bond_source, &args.validator)
-            .await;
+            .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -920,7 +928,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
         Error::Other("Proposal id must be defined.".to_string())
     })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(client, proposal_id).await
+        rpc::query_proposal_by_id(client, proposal_id).await?
     {
         proposal
     } else {
@@ -935,7 +943,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
                 ))
             })?;
 
-    let is_validator = rpc::is_validator(client, &voter).await;
+    let is_validator = rpc::is_validator(client, &voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::from(TxError::InvalidProposalVotingPeriod(
@@ -948,7 +956,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
         &voter,
         proposal.voting_start_epoch,
     )
-    .await
+    .await?
     .keys()
     .cloned()
     .collect::<Vec<Address>>();
@@ -1148,7 +1156,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
     Ok(tx)
 }
 
@@ -1211,7 +1219,7 @@ where
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
-    .await;
+    .await?;
     Ok(tx_builder)
 }
 
@@ -1505,14 +1513,14 @@ pub async fn build_update_account<C: crate::ledger::queries::Client + Sync>(
     }: args::TxUpdateAccount,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx> {
-    let addr = if let Some(account) = rpc::get_account_info(client, &addr).await
-    {
-        account.address
-    } else if tx_args.force {
-        addr
-    } else {
-        return Err(Error::from(TxError::LocationDoesNotExist(addr)));
-    };
+    let addr =
+        if let Some(account) = rpc::get_account_info(client, &addr).await? {
+            account.address
+        } else if tx_args.force {
+            addr
+        } else {
+            return Err(Error::from(TxError::LocationDoesNotExist(addr)));
+        };
 
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
@@ -1589,7 +1597,7 @@ pub async fn build_custom<C: crate::ledger::queries::Client + Sync>(
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
     Ok(tx)
 }
 
@@ -1599,7 +1607,7 @@ async fn expect_dry_broadcast<C: crate::ledger::queries::Client + Sync>(
 ) -> Result<ProcessTxResponse> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
+            rpc::dry_run_tx(client, tx.to_bytes()).await?;
             Ok(ProcessTxResponse::DryRun)
         }
         TxBroadcastData::Wrapper {
@@ -1623,7 +1631,7 @@ async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Result<Address> {
     // Check that the validator address exists on chain
-    let is_validator = rpc::is_validator(client, &validator).await;
+    let is_validator = rpc::is_validator(client, &validator).await?;
     if !is_validator {
         if force {
             eprintln!(
@@ -1653,7 +1661,7 @@ where
     C: crate::ledger::queries::Client + Sync,
     F: FnOnce(Address) -> Error,
 {
-    let addr_exists = rpc::known_address::<C>(client, &addr).await;
+    let addr_exists = rpc::known_address::<C>(client, &addr).await?;
     if !addr_exists {
         if force {
             eprintln!("{}", message);
@@ -1712,7 +1720,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     match rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
         .await
     {
-        Some(balance) => {
+        Ok(balance) => {
             if balance < amount {
                 if force {
                     eprintln!(
@@ -1737,7 +1745,9 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 Ok(())
             }
         }
-        None => {
+        Err(Error::Query(
+            QueryError::General(_) | QueryError::NoSuchKey(_),
+        )) => {
             if force {
                 eprintln!(
                     "No balance found for the source {} of token {}",
@@ -1751,6 +1761,9 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 )))
             }
         }
+        // We're either facing a no response or a conversion error
+        // either way propigate it up
+        Err(err) => Err(err),
     }
 }
 

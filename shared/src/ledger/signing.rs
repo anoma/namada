@@ -90,7 +90,7 @@ pub async fn find_pk<
                 addr.encode()
             );
             rpc::get_public_key_at(client, addr, 0)
-                .await
+                .await?
                 .ok_or(Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
@@ -240,7 +240,7 @@ pub async fn aux_signing_data<
 
     let (account_public_keys_map, threshold) = match owner {
         Some(owner @ Address::Established(_)) => {
-            let account = rpc::get_account_info::<C>(client, owner).await;
+            let account = rpc::get_account_info::<C>(client, owner).await?;
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {

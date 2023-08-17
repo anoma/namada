@@ -83,7 +83,7 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
     Ok(tx)
 }
 

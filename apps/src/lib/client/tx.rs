@@ -409,7 +409,7 @@ where
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
