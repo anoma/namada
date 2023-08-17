@@ -7,6 +7,7 @@ use std::ops::ControlFlow;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(any(unix, windows))]
 use futures::future::FutureExt;
 #[cfg(any(unix, windows))]
 use tokio::sync::oneshot;
