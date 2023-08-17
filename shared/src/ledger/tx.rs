@@ -302,7 +302,9 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
         Ok(response)
     } else {
         Err(Error::from(TxError::TxBroadcast(RpcError::server(
-            serde_json::to_string(&response).unwrap(),
+            serde_json::to_string(&response).map_err(|err| {
+                Error::from(EncodingError::Serde(err.to_string()))
+            })?,
         ))))
     }
 }
@@ -355,10 +357,12 @@ where
             .proceed_or(TxError::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
-        println!(
-            "Transaction accepted with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
+        let tx_to_str = |parsed| {
+            serde_json::to_string_pretty(parsed).map_err(|err| {
+                Error::from(EncodingError::Serde(err.to_string()))
+            })
+        };
+        println!("Transaction accepted with result: {}", tx_to_str(&parsed)?);
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
@@ -372,7 +376,7 @@ where
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
-                serde_json::to_string_pretty(&parsed).unwrap()
+                tx_to_str(&parsed)?
             );
             Ok(parsed)
         } else {
@@ -755,7 +759,9 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
         *to_withdraw += amount;
     }
     let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
-        withdrawable.into_iter().last().unwrap();
+        withdrawable.into_iter().last().ok_or_else(|| {
+            Error::Other("No withdrawable amount".to_string())
+        })?;
 
     if let Some((latest_withdraw_epoch_pre, latest_withdraw_amount_pre)) =
         latest_withdrawal_pre
@@ -910,7 +916,9 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
     let proposal_vote = ProposalVote::try_from(vote)
         .map_err(|_| TxError::InvalidProposalVote)?;
 
-    let proposal_id = proposal_id.expect("Proposal id must be defined.");
+    let proposal_id = proposal_id.ok_or_else(|| {
+        Error::Other("Proposal id must be defined.".to_string())
+    })?;
     let proposal = if let Some(proposal) =
         rpc::query_proposal_by_id(client, proposal_id).await
     {
@@ -1074,7 +1082,7 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         .to_string_native()
         .split('.')
         .next()
-        .expect("invalid amount")
+        .ok_or_else(|| Error::Other("Invalid amount".to_string()))?
         .to_string();
     let token = Coin {
         denom: token.to_string(),
@@ -1084,18 +1092,24 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
     // this height should be that of the destination chain, not this chain
     let timeout_height = match timeout_height {
         Some(h) => {
-            TimeoutHeight::At(IbcHeight::new(0, h).expect("invalid height"))
+            TimeoutHeight::At(IbcHeight::new(0, h).map_err(|err| {
+                Error::Other(format!("Invalid height: {err}"))
+            })?)
         }
         None => TimeoutHeight::Never,
     };
 
-    let now: crate::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: Result<crate::tendermint::Time, namada_core::tendermint::Error> =
+        DateTimeUtc::now().try_into();
+    let now = now.map_err(|e| Error::Other(e.to_string()))?;
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = timeout_sec_offset {
-        (now + Duration::new(offset, 0)).unwrap()
+        (now + Duration::new(offset, 0))
+            .map_err(|e| Error::Other(e.to_string()))?
     } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
-        (now + Duration::new(3600, 0)).unwrap()
+        (now + Duration::new(3600, 0))
+            .map_err(|e| Error::Other(e.to_string()))?
     } else {
         IbcTimestamp::none()
     };
@@ -1104,8 +1118,12 @@ pub async fn build_ibc_transfer<C: crate::ledger::queries::Client + Sync>(
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
         token,
-        sender: Signer::from_str(&source.to_string()).expect("invalid signer"),
-        receiver: Signer::from_str(&receiver).expect("invalid signer"),
+        sender: Signer::from_str(&source.to_string()).map_err(|err| {
+            Error::from(TxError::Other(format!("Invalid signer: {err}")))
+        })?,
+        receiver: Signer::from_str(&receiver).map_err(|err| {
+            Error::from(TxError::Other(format!("Invalid signer: {err}")))
+        })?,
         timeout_height_on_b: timeout_height,
         timeout_timestamp_on_b: timeout_timestamp,
     };
