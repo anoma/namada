@@ -442,8 +442,11 @@ mod recommendations {
     use namada_core::types::uint::{self, Uint, I256};
 
     use super::*;
-    use crate::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use crate::eth_bridge::storage::bridge_pool::{
+        get_nonce_key, get_signed_root_key,
+    };
     use crate::eth_bridge::storage::proof::BridgePoolRootProof;
+    use crate::types::ethereum_events::Uint as EthUint;
     use crate::types::storage::BlockHeight;
     use crate::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
@@ -535,15 +538,41 @@ mod recommendations {
                     .storage_value(
                         client,
                         None,
-                        Some(0.into()),
+                        None,
                         false,
                         &get_signed_root_key(),
                     )
                     .await
-                    .unwrap()
+                    .try_halt(|err| {
+                        eprintln!("Failed to query Bridge pool proof: {err}");
+                    })?
                     .data,
             )
-            .unwrap();
+            .try_halt(|err| {
+                eprintln!("Failed to decode Bridge pool proof: {err}");
+            })?;
+
+        // get the latest bridge pool nonce
+        let latest_bp_nonce = EthUint::try_from_slice(
+            &RPC.shell()
+                .storage_value(client, None, None, false, &get_nonce_key())
+                .await
+                .try_halt(|err| {
+                    eprintln!("Failed to query Bridge pool nonce: {err}");
+                })?
+                .data,
+        )
+        .try_halt(|err| {
+            eprintln!("Failed to decode Bridge pool nonce: {err}");
+        })?;
+
+        if latest_bp_nonce != bp_root.data.1 {
+            eprintln!(
+                "The signed Bridge pool nonce is not up to date, repeat this \
+                 query at a later time"
+            );
+            return control_flow::halt();
+        }
 
         // Get the voting powers of each of validator who signed
         // the above root.
