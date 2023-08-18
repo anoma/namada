@@ -208,7 +208,6 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 #[derive(
     Copy,
     Clone,
-    Debug,
     Default,
     PartialEq,
     Eq,
@@ -218,6 +217,13 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
     BorshSchema,
 )]
 pub struct I256(pub Uint);
+
+impl fmt::Debug for I256 {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        <Self as fmt::Display>::fmt(self, f)
+    }
+}
 
 impl fmt::Display for I256 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
