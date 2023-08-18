@@ -775,7 +775,7 @@ pub async fn build_unjail_validator<
                 &validator
             );
             if !tx_args.force {
-                return Err(Error::ValidatorNotCurrentlyJailed(
+                return Err(Error::ValidatorFrozenFromUnjailing(
                     validator.clone(),
                 ));
             }
