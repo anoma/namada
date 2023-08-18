@@ -508,6 +508,23 @@ mod recommendations {
         cost: I256,
     }
 
+    /// Batch of recommended transfers to Ethereum that generate
+    /// a profit after a relay operation.
+    #[derive(Debug, Eq, PartialEq)]
+    struct RecommendedBatch {
+        /// Hashes of the recommended transfers to be relayed.
+        transfer_hashes: Vec<String>,
+        /// Estimate of the total fees, measured in gwei, that will be paid
+        /// on Ethereum.
+        ethereum_gas_fees: Uint,
+        /// Net profitt in gwei, based on the conversion rates provided
+        /// to the algorithm.
+        net_profit: I256,
+        /// Gas fees paid by the transfers considered for relaying,
+        /// paid in various token types.
+        bridge_pool_gas_fees: HashMap<String, Uint>,
+    }
+
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
@@ -600,13 +617,36 @@ mod recommendations {
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
+
         generate_recommendations(
             eligible,
             &args.conversion_table,
             validator_gas,
             max_gas,
             max_cost,
-        )?;
+        )?
+        .map(
+            |RecommendedBatch {
+                 transfer_hashes,
+                 ethereum_gas_fees,
+                 net_profit,
+                 bridge_pool_gas_fees,
+             }| {
+                println!("Recommended batch: {transfer_hashes:#?}");
+                println!(
+                    "Estimated Ethereum transaction gas (in gwei): \
+                     {ethereum_gas_fees}",
+                );
+                println!("Estimated net profit (in gwei): {net_profit}");
+                println!("Total fees: {bridge_pool_gas_fees:#?}");
+            },
+        )
+        .unwrap_or_else(|| {
+            println!(
+                "Unable to find a recommendation satisfying the input \
+                 parameters."
+            );
+        });
 
         control_flow::proceed(())
     }
@@ -719,7 +759,7 @@ mod recommendations {
         validator_gas: Uint,
         max_gas: Uint,
         max_cost: I256,
-    ) -> Halt<Option<Vec<String>>> {
+    ) -> Halt<Option<RecommendedBatch>> {
         let mut state = AlgorithState {
             profitable: true,
             feasible_region: false,
@@ -774,19 +814,13 @@ mod recommendations {
 
         control_flow::proceed(
             if state.feasible_region && !recommendation.is_empty() {
-                println!("Recommended batch: {:#?}", recommendation);
-                println!(
-                    "Estimated Ethereum transaction gas (in gwei): {}",
-                    total_gas
-                );
-                println!("Estimated net profit (in gwei): {}", -total_cost);
-                println!("Total fees: {total_fees:#?}");
-                Some(recommendation)
+                Some(RecommendedBatch {
+                    transfer_hashes: recommendation,
+                    ethereum_gas_fees: total_gas,
+                    net_profit: -total_cost,
+                    bridge_pool_gas_fees: total_fees,
+                })
             } else {
-                println!(
-                    "Unable to find a recommendation satisfying the input \
-                     parameters."
-                );
                 None
             },
         )
@@ -1017,7 +1051,8 @@ mod recommendations {
                 I256::zero(),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -1035,7 +1070,8 @@ mod recommendations {
                 I256::zero(),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -1052,7 +1088,8 @@ mod recommendations {
                 I256(uint::MAX_SIGNED_VALUE),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -1073,7 +1110,8 @@ mod recommendations {
                 I256::from(20_000),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -1091,7 +1129,8 @@ mod recommendations {
                 I256::from(20_000),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
