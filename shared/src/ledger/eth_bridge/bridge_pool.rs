@@ -700,17 +700,30 @@ mod recommendations {
 
                 let conversion_rate = conversion_table
                     .get(&pending.gas_fee.token)
-                    .and_then(|entry| {
-                        let rate = entry.conversion_rate;
-                        if rate <= 0.0f64 {
+                    .and_then(|entry| match entry.conversion_rate {
+                        r if r == 0.0f64 => {
                             eprintln!(
-                                "Ignoring token with an invalid conversion \
-                                 rate: {}",
+                                "{}: Ignoring null conversion rate",
                                 pending.gas_fee.token,
                             );
-                            return None;
+                            None
                         }
-                        Some(rate)
+                        r if r < 0.0f64 => {
+                            eprintln!(
+                                "{}: Ignoring negative conversion rate: {r:.1}",
+                                pending.gas_fee.token,
+                            );
+                            None
+                        }
+                        r if r > 1e9 => {
+                            eprintln!(
+                                "{}: Ignoring high conversion rate: {r:.1} > \
+                                 10^9",
+                                pending.gas_fee.token,
+                            );
+                            None
+                        }
+                        r => Some(r),
                     })?;
 
                 // This is the amount of gwei a single gas token is worth
