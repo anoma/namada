@@ -765,19 +765,28 @@ pub async fn build_unjail_validator<
     let last_slash_epoch =
         rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
             .await;
-    if let Some(last_slash_epoch) = last_slash_epoch {
-        let eligible_epoch =
-            last_slash_epoch + params.slash_processing_epoch_offset();
-        if current_epoch < eligible_epoch {
-            eprintln!(
-                "The given validator address {} is currently frozen and not \
-                 yet eligible to be unjailed.",
+    match last_slash_epoch {
+        None => {
+            panic!(
+                "No slash found for validator address {} and thus can't be \
+                 unjailed.",
                 &validator
-            );
-            if !tx_args.force {
-                return Err(Error::ValidatorFrozenFromUnjailing(
-                    validator.clone(),
-                ));
+            )
+        }
+        Some(last_slash_epoch) => {
+            let eligible_epoch =
+                last_slash_epoch + params.slash_processing_epoch_offset();
+            if current_epoch < eligible_epoch {
+                eprintln!(
+                    "The given validator address {} is currently frozen and \
+                     not yet eligible to be unjailed.",
+                    &validator
+                );
+                if !tx_args.force {
+                    return Err(Error::ValidatorFrozenFromUnjailing(
+                        validator.clone(),
+                    ));
+                }
             }
         }
     }
