@@ -310,19 +310,28 @@ impl VpGasMeter {
 }
 
 impl VpsGas {
-    /// Set the gas cost from a single VP run. It consumes the [`VpGasMeter`]
+    /// Set the gas cost from a VP run. It consumes the [`VpGasMeter`]
     /// instance which shouldn't be accessed passed this point.
     pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
-        debug_assert_eq!(self.max, None);
-        debug_assert!(self.rest.is_empty());
-        self.max = Some(vp_gas_meter.current_gas);
+        match self.max {
+            Some(previous_max) => {
+                if vp_gas_meter.current_gas > previous_max {
+                    self.rest.push(previous_max);
+                    self.max = Some(vp_gas_meter.current_gas);
+                } else {
+                    self.rest.push(vp_gas_meter.current_gas);
+                }
+            }
+            None => self.max = Some(vp_gas_meter.current_gas),
+        }
         self.check_limit(&vp_gas_meter)
     }
 
-    /// Merge validity predicates gas meters from parallelized runs.
+    /// Merge validity predicates gas meters from parallelized runs. Consumes
+    /// the other 'VpsGas' instance which shouldn't be used passed this point.
     pub fn merge(
         &mut self,
-        other: &mut VpsGas,
+        mut other: VpsGas,
         tx_gas_meter: &TxGasMeter,
     ) -> Result<()> {
         match (self.max, other.max) {
@@ -344,6 +353,8 @@ impl VpsGas {
         self.check_limit(tx_gas_meter)
     }
 
+    /// Check if the vp went out of gas. Starts from the gas consumed by the
+    /// transaction.
     fn check_limit(&self, gas_meter: &impl GasMetering) -> Result<()> {
         let total = gas_meter
             .get_tx_consumed_gas()
