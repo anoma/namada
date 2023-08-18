@@ -924,7 +924,9 @@ mod recommendations {
         }
 
         /// Helper function to test [`generate_eligible`].
-        fn test_generate_eligible_aux<F>(mut callback: F)
+        fn test_generate_eligible_aux<F>(
+            mut callback: F,
+        ) -> Vec<EligibleRecommendation>
         where
             F: FnMut(TestGenerateEligible<'_>),
         {
@@ -956,6 +958,7 @@ mod recommendations {
             let eligible =
                 generate_eligible(&table, &in_progress, signed_pool).proceed();
             assert_eq!(eligible, expected);
+            eligible
         }
 
         /// Test the happy path of generating eligible recommendations
@@ -1146,6 +1149,97 @@ mod recommendations {
             )
             .proceed();
             assert!(recommendation.is_none())
+        }
+
+        /// Test the profit margin obtained from relaying two
+        /// Bridge pool transfers with two distinct token types,
+        /// whose relation is 1:2 in value.
+        #[test]
+        fn test_conversion_table_profit_margin() {
+            // apfel is worth twice as much as schnitzel
+            const APF_RATE: f64 = 5e8;
+            const SCH_RATE: f64 = 1e9;
+            const APFEL: &str = "APF";
+            const SCHNITZEL: &str = "SCH";
+
+            let conversion_table = {
+                let mut t = HashMap::new();
+                t.insert(
+                    namada_core::types::address::apfel(),
+                    args::BpConversionTableEntry {
+                        alias: APFEL.into(),
+                        conversion_rate: APF_RATE,
+                    },
+                );
+                t.insert(
+                    namada_core::types::address::schnitzel(),
+                    args::BpConversionTableEntry {
+                        alias: SCHNITZEL.into(),
+                        conversion_rate: SCH_RATE,
+                    },
+                );
+                t
+            };
+
+            let eligible = test_generate_eligible_aux(|ctx| {
+                ctx.conversion_table.clone_from(&conversion_table);
+                // tune the pending transfer provided by the ctx
+                let transfer_paid_in_apfel = {
+                    let mut pending = ctx.pending.clone();
+                    pending.transfer.amount = 1.into();
+                    pending.gas_fee.token =
+                        namada_core::types::address::apfel();
+                    pending
+                };
+                let transfer_paid_in_schnitzel = {
+                    let mut pending = ctx.pending.clone();
+                    pending.transfer.amount = 2.into();
+                    pending.gas_fee.token =
+                        namada_core::types::address::schnitzel();
+                    pending
+                };
+                // add the transfers to the pool, and expect them to
+                // be eligible transfers
+                for (pending, rate) in [
+                    (transfer_paid_in_apfel, APF_RATE),
+                    (transfer_paid_in_schnitzel, SCH_RATE),
+                ] {
+                    ctx.signed_pool.insert(
+                        pending.keccak256().to_string(),
+                        pending.clone(),
+                    );
+                    ctx.expected_eligible.push(EligibleRecommendation {
+                        transfer_hash: pending.keccak256().to_string(),
+                        cost: transfer_fee()
+                            - I256::from((1e9 / rate).floor() as u64)
+                                * I256::try_from(pending.gas_fee.amount)
+                                    .expect("Test failed"),
+                        pending_transfer: pending,
+                    });
+                }
+            });
+
+            const VALIDATOR_GAS_FEE: Uint = Uint::from_u64(100_000);
+
+            let recommended_batch = generate_recommendations(
+                eligible,
+                &conversion_table,
+                // gas spent by validator signature checks
+                VALIDATOR_GAS_FEE,
+                // unlimited amount of gas
+                uint::MAX_VALUE,
+                // only profitable
+                I256::zero(),
+            )
+            .proceed()
+            .expect("Test failed");
+
+            assert_eq!(
+                recommended_batch.net_profit,
+                I256::from(1_000_000_000_u64) + I256::from(2_000_000_000_u64)
+                    - I256(VALIDATOR_GAS_FEE)
+                    - transfer_fee() * I256::from(2_u64)
+            );
         }
     }
 }
