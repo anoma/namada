@@ -610,14 +610,22 @@ pub async fn build_unjail_validator<
                 );
                 if !tx_args.force {
                     return Err(Error::from(
-                        TxError::ValidatorNotCurrentlyJailed(validator.clone()),
+                        TxError::ValidatorFrozenFromUnjailing(
+                            validator.clone(),
+                        ),
                     ));
                 }
             }
         }
         Err(Error::Query(
             QueryError::NoSuchKey(_) | QueryError::General(_),
-        )) => (),
+        )) => {
+            return Err(Error::from(TxError::Other(format!(
+                "The given validator address {} is currently frozen and not \
+                 yet eligible to be unjailed.",
+                &validator
+            ))));
+        }
         Err(err) => return Err(err),
     }
 
