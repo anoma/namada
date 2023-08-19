@@ -227,6 +227,10 @@ where
     {
         let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
 
+        if tx.header.chain_id != self.chain_id {
+            return Err(());
+        }
+
         // If tx doesn't have an expiration it is valid. If time cannot be
         // retrieved from block default to last block datetime which has
         // already been checked by mempool_validate, so it's valid
@@ -239,7 +243,7 @@ where
         }
 
         tx.validate_tx().map_err(|_| ())?;
-        if let TxType::Wrapper(wrapper) = tx.header().tx_type {
+        if let Some(wrapper) = tx.header.wrapper() {
             // Check tx gas limit for tx size
             let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
