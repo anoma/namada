@@ -313,9 +313,14 @@ mod test_vote_extensions {
     };
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::consensus_validator_set_handle;
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, Epoch,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
+    use namada::tendermint_proto::abci::VoteInfo;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     #[cfg(feature = "abcipp")]
@@ -337,7 +342,8 @@ mod test_vote_extensions {
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
-    use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shell::test_utils::{self, get_pkh_from_address};
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
@@ -582,7 +588,37 @@ mod test_vote_extensions {
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
-        assert_eq!(shell.start_new_epoch().0, 1);
+        let params = shell.wl_storage.pos_queries().get_pos_params();
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+        let votes = vec![VoteInfo {
+            validator: Some(namada::tendermint_proto::abci::Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()
+        };
+        assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
             shell
                 .wl_storage
