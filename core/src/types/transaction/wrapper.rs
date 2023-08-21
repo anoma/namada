@@ -2,34 +2,30 @@
 /// to enable encrypted txs inside of normal txs.
 /// *Not wasm compatible*
 pub mod wrapper_tx {
-    use std::fmt::Formatter;
+
+    use std::num::ParseIntError;
+    use std::str::FromStr;
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use masp_primitives::transaction::Transaction;
+    use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
     use crate::ledger::testnet_pow;
-    use crate::types::address::Address;
+    use crate::proto::{Code, Data, Section, Tx};
+    use crate::types::address::{masp, Address};
+    use crate::types::hash::Hash;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
-    use crate::types::token::Amount;
+    use crate::types::token::{Amount, DenominatedAmount, Transfer};
     use crate::types::uint::Uint;
 
-    /// Minimum fee amount in micro NAMs, repesented
-    /// with a [`u64`] type.
-    pub const MIN_FEE: u64 = 100;
-
-    /// Minimum fee amount in micro NAMs, repesented
-    /// with an [`Amount`] type.
-    pub const MIN_FEE_AMOUNT: Amount = Amount::from_u64(MIN_FEE);
-
-    // TODO: Determine a sane number for this
-    const GAS_LIMIT_RESOLUTION: u64 = 1_000_000;
+    /// TODO: Determine a sane number for this
+    const GAS_LIMIT_RESOLUTION: u64 = 1;
 
     /// Errors relating to decrypting a wrapper tx and its
     /// encrypted payload from a Tx type
@@ -49,6 +45,12 @@ pub mod wrapper_tx {
              differs from that in the WrapperTx"
         )]
         InvalidKeyPair,
+        #[error("The provided unshielding tx is invalid: {0}")]
+        InvalidUnshield(String),
+        #[error("The given Tx fee amount overflowed")]
+        OverflowingFee,
+        #[error("Error while converting the denominated fee amount")]
+        DenominatedFeeConversion,
     }
 
     /// A fee is an amount of a specified token
@@ -64,8 +66,8 @@ pub mod wrapper_tx {
         Eq,
     )]
     pub struct Fee {
-        /// amount of the fee
-        pub amount: Amount,
+        /// amount of fee per gas unit
+        pub amount_per_gas_unit: Amount,
         /// address of the token
         /// TODO: This should support multi-tokens
         pub token: Address,
@@ -82,73 +84,32 @@ pub mod wrapper_tx {
         Default,
         Debug,
         Clone,
+        Copy,
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
         BorshSchema,
+        Serialize,
+        Deserialize,
         Eq,
     )]
     pub struct GasLimit {
-        multiplier: Uint,
-    }
-
-    impl Serialize for GasLimit {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            let limit = Uint::from(self).to_string();
-            Serialize::serialize(&limit, serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for GasLimit {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            struct GasLimitVisitor;
-
-            impl<'a> serde::de::Visitor<'a> for GasLimitVisitor {
-                type Value = GasLimit;
-
-                fn expecting(
-                    &self,
-                    formatter: &mut Formatter,
-                ) -> std::fmt::Result {
-                    formatter.write_str(
-                        "A string representing 256-bit unsigned integer",
-                    )
-                }
-
-                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                where
-                    E: Error,
-                {
-                    let uint = Uint::from_dec_str(v)
-                        .map_err(|e| E::custom(e.to_string()))?;
-                    Ok(GasLimit::from(uint))
-                }
-            }
-            deserializer.deserialize_any(GasLimitVisitor)
-        }
+        multiplier: u64,
     }
 
     impl GasLimit {
         /// We refund unused gas up to GAS_LIMIT_RESOLUTION
-        pub fn refund_amount(&self, used_gas: Uint) -> Amount {
+        pub fn refund_amount(self, used_gas: u64) -> Amount {
             Amount::from_uint(
-                if used_gas
-                    < (Uint::from(self) - Uint::from(GAS_LIMIT_RESOLUTION))
-                {
+                if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
                     // we refund only up to GAS_LIMIT_RESOLUTION
                     Uint::from(GAS_LIMIT_RESOLUTION)
-                } else if used_gas >= Uint::from(self) {
+                } else if used_gas >= u64::from(self) {
                     // Gas limit was under estimated, no refund
-                    Uint::from(0)
+                    Uint::zero()
                 } else {
                     // compute refund
-                    Uint::from(self) - used_gas
+                    Uint::from(u64::from(self)) - used_gas
                 },
                 0,
             )
@@ -158,40 +119,41 @@ pub mod wrapper_tx {
 
     /// Round the input number up to the next highest multiple
     /// of GAS_LIMIT_RESOLUTION
-    impl From<Uint> for GasLimit {
-        fn from(amount: Uint) -> GasLimit {
-            let gas_limit_resolution = Uint::from(GAS_LIMIT_RESOLUTION);
-            if gas_limit_resolution * (amount / gas_limit_resolution) < amount {
+    impl From<u64> for GasLimit {
+        fn from(amount: u64) -> GasLimit {
+            if GAS_LIMIT_RESOLUTION * (amount / GAS_LIMIT_RESOLUTION) < amount {
                 GasLimit {
-                    multiplier: (amount / gas_limit_resolution) + 1,
+                    multiplier: (amount / GAS_LIMIT_RESOLUTION) + 1,
                 }
             } else {
                 GasLimit {
-                    multiplier: (amount / gas_limit_resolution),
+                    multiplier: (amount / GAS_LIMIT_RESOLUTION),
                 }
             }
         }
     }
 
-    /// Round the input number up to the next highest multiple
-    /// of GAS_LIMIT_RESOLUTION
-    impl From<Amount> for GasLimit {
-        fn from(amount: Amount) -> GasLimit {
-            GasLimit::from(Uint::from(amount))
-        }
-    }
-
     /// Get back the gas limit as a raw number
-    impl From<&GasLimit> for Uint {
-        fn from(limit: &GasLimit) -> Uint {
+    impl From<GasLimit> for u64 {
+        fn from(limit: GasLimit) -> u64 {
             limit.multiplier * GAS_LIMIT_RESOLUTION
         }
     }
 
-    /// Get back the gas limit as a raw number
     impl From<GasLimit> for Uint {
-        fn from(limit: GasLimit) -> Uint {
-            limit.multiplier * GAS_LIMIT_RESOLUTION
+        fn from(limit: GasLimit) -> Self {
+            Uint::from_u64(limit.into())
+        }
+    }
+
+    impl FromStr for GasLimit {
+        type Err = ParseIntError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            // Expect input to be the multiplier
+            Ok(Self {
+                multiplier: s.parse()?,
+            })
         }
     }
 
@@ -203,9 +165,9 @@ pub mod wrapper_tx {
         }
     }
 
-    /// A transaction with an encrypted payload as well
-    /// as some non-encrypted metadata for inclusion
-    /// and / or verification purposes
+    /// A transaction with an encrypted payload, an optional shielded pool
+    /// unshielding tx for fee payment and some non-encrypted metadata for
+    /// inclusion and / or verification purposes
     #[derive(
         Debug,
         Clone,
@@ -218,13 +180,17 @@ pub mod wrapper_tx {
     pub struct WrapperTx {
         /// The fee to be payed for including the tx
         pub fee: Fee,
-        /// Used to determine an implicit account of the fee payer
+        /// Used for signature verification and to determine an implicit
+        /// account of the fee payer
         pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
+        /// The hash of the optional, unencrypted, unshielding transaction for
+        /// fee payment
+        pub unshield_section_hash: Option<Hash>,
         #[cfg(not(feature = "mainnet"))]
         /// A PoW solution can be used to allow zero-fee testnet transactions
         pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
@@ -232,9 +198,10 @@ pub mod wrapper_tx {
 
     impl WrapperTx {
         /// Create a new wrapper tx from unencrypted tx, the personal keypair,
-        /// and the metadata surrounding the inclusion of the tx. This method
-        /// constructs the signature of relevant data and encrypts the
-        /// transaction
+        /// an optional unshielding tx, and the metadata surrounding the
+        /// inclusion of the tx. This method constructs the signature of
+        /// relevant data and encrypts the transaction
+        #[allow(clippy::too_many_arguments)]
         pub fn new(
             fee: Fee,
             pk: common::PublicKey,
@@ -243,12 +210,14 @@ pub mod wrapper_tx {
             #[cfg(not(feature = "mainnet"))] pow_solution: Option<
                 testnet_pow::Solution,
             >,
+            unshield_hash: Option<Hash>,
         ) -> WrapperTx {
             Self {
                 fee,
                 pk,
                 epoch,
                 gas_limit,
+                unshield_section_hash: unshield_hash,
                 #[cfg(not(feature = "mainnet"))]
                 pow_solution,
             }
@@ -256,7 +225,7 @@ pub mod wrapper_tx {
 
         /// Get the address of the implicit account associated
         /// with the public key
-        pub fn gas_payer(&self) -> Address {
+        pub fn fee_payer(&self) -> Address {
             Address::from(&self.pk)
         }
 
@@ -266,6 +235,124 @@ pub mod wrapper_tx {
                 self.try_to_vec().expect("unable to serialize wrapper"),
             );
             hasher
+        }
+
+        /// Performs validation on the optional fee unshielding data carried by
+        /// the wrapper and generates the tx for execution.
+        pub fn check_and_generate_fee_unshielding(
+            &self,
+            transparent_balance: Amount,
+            transfer_code_hash: Hash,
+            descriptions_limit: u64,
+            unshield: Transaction,
+        ) -> Result<Tx, WrapperTxErr> {
+            // Check that the unshield operation is actually needed
+            let amount = self
+                .get_tx_fee()?
+                .checked_sub(transparent_balance)
+                .and_then(|v| if v.is_zero() { None } else { Some(v) })
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "The transparent balance of the fee payer is enough \
+                         to pay fees, no need for unshielding"
+                            .to_string(),
+                    )
+                })?;
+
+            // Check that the number of descriptions is within a certain limit
+            // to avoid a possible DoS vector
+            let sapling_bundle = unshield.sapling_bundle().ok_or(
+                WrapperTxErr::InvalidUnshield(
+                    "Missing required sapling bundle".to_string(),
+                ),
+            )?;
+            let spends = sapling_bundle.shielded_spends.len();
+            let converts = sapling_bundle.shielded_converts.len();
+            let outs = sapling_bundle.shielded_outputs.len();
+
+            let descriptions = spends
+                .checked_add(converts)
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    )
+                })?
+                .checked_add(outs)
+                .ok_or_else(|| {
+                    WrapperTxErr::InvalidUnshield(
+                        "Descriptions overflow".to_string(),
+                    )
+                })?;
+
+            if u64::try_from(descriptions)
+                .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
+                > descriptions_limit
+            {
+                return Err(WrapperTxErr::InvalidUnshield(
+                    "Descriptions exceed the maximum amount allowed"
+                        .to_string(),
+                ));
+            }
+            self.generate_fee_unshielding(amount, transfer_code_hash, unshield)
+        }
+
+        /// Generates the fee unshielding tx for execution.
+        pub fn generate_fee_unshielding(
+            &self,
+            unshield_amount: Amount,
+            transfer_code_hash: Hash,
+            unshield: Transaction,
+        ) -> Result<Tx, WrapperTxErr> {
+            let mut tx =
+                Tx::from_type(crate::types::transaction::TxType::Decrypted(
+                    crate::types::transaction::DecryptedTx::Decrypted {
+                        #[cfg(not(feature = "mainnet"))]
+                        has_valid_pow: false,
+                    },
+                ));
+            let masp_section = tx.add_section(Section::MaspTx(unshield));
+            let masp_hash = Hash(
+                masp_section
+                    .hash(&mut Sha256::new())
+                    .finalize_reset()
+                    .into(),
+            );
+
+            let transfer = Transfer {
+                source: masp(),
+                target: self.fee_payer(),
+                token: self.fee.token.clone(),
+                amount: DenominatedAmount {
+                    amount: unshield_amount,
+                    denom: 0.into(),
+                },
+                key: None,
+                shielded: Some(masp_hash),
+            };
+            let data = transfer.try_to_vec().map_err(|_| {
+                WrapperTxErr::InvalidUnshield(
+                    "Error while serializing the unshield transfer data"
+                        .to_string(),
+                )
+            })?;
+            tx.set_data(Data::new(data));
+            tx.set_code(Code::from_hash(transfer_code_hash));
+
+            Ok(tx)
+        }
+
+        /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
+        /// an error if the amount overflows or if failure during denomination
+        /// conversion
+        pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
+            let fees = Uint::checked_mul(
+                self.gas_limit.into(),
+                self.fee.amount_per_gas_unit.into(),
+            )
+            .ok_or(WrapperTxErr::OverflowingFee)?;
+
+            Amount::from_uint(fees, 0)
+                .map_err(|_| WrapperTxErr::DenominatedFeeConversion)
         }
     }
 
@@ -277,15 +364,18 @@ pub mod wrapper_tx {
         /// Test that serializing converts GasLimit to u64 correctly
         #[test]
         fn test_gas_limit_roundtrip() {
-            let limit = GasLimit {
-                multiplier: 1.into(),
-            };
+            let limit = GasLimit { multiplier: 1 };
             // Test serde roundtrip
-            let js = serde_json::to_string(&limit).expect("Test failed");
-            assert_eq!(js, format!(r#""{}""#, GAS_LIMIT_RESOLUTION));
-            let new_limit: GasLimit =
+            let js = serde_json::to_string(&1).expect("Test failed");
+            assert_eq!(js, format!(r#"{}"#, GAS_LIMIT_RESOLUTION));
+            let new_limit: u64 =
                 serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(new_limit, limit);
+            assert_eq!(
+                GasLimit {
+                    multiplier: new_limit
+                },
+                limit
+            );
 
             // Test borsh roundtrip
             let borsh = limit.try_to_vec().expect("Test failed");
@@ -301,36 +391,27 @@ pub mod wrapper_tx {
         /// multiple
         #[test]
         fn test_deserialize_not_multiple_of_resolution() {
-            let js = format!(r#""{}""#, &(GAS_LIMIT_RESOLUTION + 1));
-            let limit: GasLimit =
-                serde_json::from_str(&js).expect("Test failed");
+            let js = format!(r#"{}"#, &(GAS_LIMIT_RESOLUTION + 1));
+            let limit: u64 = serde_json::from_str(&js).expect("Test failed");
             assert_eq!(
-                limit,
-                GasLimit {
-                    multiplier: 2.into()
-                }
+                GasLimit { multiplier: limit },
+                GasLimit { multiplier: 2 }
             );
         }
 
         /// Test that refund is calculated correctly
         #[test]
         fn test_gas_limit_refund() {
-            let limit = GasLimit {
-                multiplier: 1.into(),
-            };
-            let refund =
-                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            let limit = GasLimit { multiplier: 1 };
+            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
             assert_eq!(refund, Amount::from_uint(1, 0).expect("Test failed"));
         }
 
         /// Test that we don't refund more than GAS_LIMIT_RESOLUTION
         #[test]
         fn test_gas_limit_too_high_no_refund() {
-            let limit = GasLimit {
-                multiplier: 2.into(),
-            };
-            let refund =
-                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION - 1));
+            let limit = GasLimit { multiplier: 2 };
+            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
             assert_eq!(
                 refund,
                 Amount::from_uint(GAS_LIMIT_RESOLUTION, 0)
@@ -341,11 +422,8 @@ pub mod wrapper_tx {
         /// Test that if gas usage was underestimated, we issue no refund
         #[test]
         fn test_gas_limit_too_low_no_refund() {
-            let limit = GasLimit {
-                multiplier: 1.into(),
-            };
-            let refund =
-                limit.refund_amount(Uint::from(GAS_LIMIT_RESOLUTION + 1));
+            let limit = GasLimit { multiplier: 1 };
+            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION + 1);
             assert_eq!(refund, Amount::default());
         }
     }
@@ -373,13 +451,15 @@ pub mod wrapper_tx {
             let mut wrapper =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: Amount::from_uint(10, 0).expect("Test failed"),
+                        amount_per_gas_unit: Amount::from_uint(10, 0)
+                            .expect("Test failed"),
                         token: nam(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
+                    None,
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -406,13 +486,15 @@ pub mod wrapper_tx {
             let mut wrapper =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: Amount::from_uint(10, 0).expect("Test failed"),
+                        amount_per_gas_unit: Amount::from_uint(10, 0)
+                            .expect("Test failed"),
                         token: nam(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
+                    None,
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -442,13 +524,15 @@ pub mod wrapper_tx {
             let mut tx =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: Amount::from_uint(10, 0).expect("Test failed"),
+                        amount_per_gas_unit: Amount::from_uint(10, 0)
+                            .expect("Test failed"),
                         token: nam(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
                     #[cfg(not(feature = "mainnet"))]
+                    None,
                     None,
                 ))));
 
