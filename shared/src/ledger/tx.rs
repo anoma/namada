@@ -43,6 +43,7 @@ use crate::ibc::tx_msg::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ibc_proto::cosmos::base::v1beta1::Coin;
 use crate::ledger::args::{self, InputAmount};
+use crate::ledger::masp::TransferErr::Build;
 use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
@@ -1371,7 +1372,7 @@ pub async fn build_transfer<
 
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),
-        Err(builder::Error::InsufficientFunds(_)) => {
+        Err(Build(builder::Error::InsufficientFunds(_))) => {
             Err(TxError::NegativeBalanceAfterTransfer(
                 Box::new(source.clone()),
                 validated_amount.amount.to_string_native(),

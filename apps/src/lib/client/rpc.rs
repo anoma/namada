@@ -134,7 +134,8 @@ pub async fn query_transfers<
             &query_token,
             &wallet.get_viewing_keys(),
         )
-        .await;
+        .await
+        .unwrap();
     // To facilitate lookups of human-readable token names
     let vks = wallet.get_viewing_keys();
     // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
@@ -167,6 +168,7 @@ pub async fn query_transfers<
                     Conversions::new(),
                 )
                 .await
+                .unwrap()
                 .0;
             let dec = shielded.decode_amount(client, amt, epoch).await;
             shielded_accounts.insert(acc, dec);
@@ -651,7 +653,7 @@ pub async fn query_shielded_balance<
         .iter()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
-    shielded.fetch(client, &[], &fvks).await;
+    shielded.fetch(client, &[], &fvks).await.unwrap();
     // Save the update state so that future fetches can be short-circuited
     let _ = shielded.save().await;
     // The epoch is required to identify timestamped tokens
@@ -668,11 +670,13 @@ pub async fn query_shielded_balance<
                 shielded
                     .compute_shielded_balance(client, &viewing_key)
                     .await
+                    .unwrap()
                     .expect("context should contain viewing key")
             } else {
                 shielded
                     .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
+                    .unwrap()
                     .expect("context should contain viewing key")
             };
 
@@ -711,11 +715,13 @@ pub async fn query_shielded_balance<
                     shielded
                         .compute_shielded_balance(client, &viewing_key)
                         .await
+                        .unwrap()
                         .expect("context should contain viewing key")
                 } else {
                     shielded
                         .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
+                        .unwrap()
                         .expect("context should contain viewing key")
                 };
                 for (key, value) in balance.iter() {
@@ -785,11 +791,13 @@ pub async fn query_shielded_balance<
                     shielded
                         .compute_shielded_balance(client, &viewing_key)
                         .await
+                        .unwrap()
                         .expect("context should contain viewing key")
                 } else {
                     shielded
                         .compute_exchanged_balance(client, &viewing_key, epoch)
                         .await
+                        .unwrap()
                         .expect("context should contain viewing key")
                 };
 
@@ -822,6 +830,7 @@ pub async fn query_shielded_balance<
                 let balance = shielded
                     .compute_shielded_balance(client, &viewing_key)
                     .await
+                    .unwrap()
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
                 print_decoded_balance_with_epoch(client, wallet, balance).await;
@@ -829,6 +838,7 @@ pub async fn query_shielded_balance<
                 let balance = shielded
                     .compute_exchanged_balance(client, &viewing_key, epoch)
                     .await
+                    .unwrap()
                     .expect("context should contain viewing key");
                 // Print balances by human-readable token names
                 print_decoded_balance(client, wallet, balance, epoch).await;

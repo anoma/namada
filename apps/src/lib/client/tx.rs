@@ -1329,9 +1329,12 @@ mod test_tx {
         let epoch = Epoch::default();
         let _masp_amount = MaspAmount::default();
 
-        let asset_base = make_asset_type(Some(epoch), &address_1, denom_1);
-        let _asset_denom = make_asset_type(Some(epoch), &address_1, denom_2);
-        let _asset_prefix = make_asset_type(Some(epoch), &address_1, denom_1);
+        let asset_base =
+            make_asset_type(Some(epoch), &address_1, denom_1).unwrap();
+        let _asset_denom =
+            make_asset_type(Some(epoch), &address_1, denom_2).unwrap();
+        let _asset_prefix =
+            make_asset_type(Some(epoch), &address_1, denom_1).unwrap();
 
         let _amount_base =
             Amount::from_pair(asset_base, 16).expect("Test failed");

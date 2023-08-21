@@ -918,10 +918,16 @@ pub async fn to_ledger_vector<
                     if builder.target == shielded_hash =>
                 {
                     for (addr, denom, epoch) in &builder.asset_types {
-                        asset_types.insert(
-                            make_asset_type(Some(*epoch), addr, *denom),
-                            (addr.clone(), *denom, *epoch),
-                        );
+                        match make_asset_type(Some(*epoch), addr, *denom) {
+                            Err(_) => None,
+                            Ok(asset) => {
+                                asset_types.insert(
+                                    asset,
+                                    (addr.clone(), *denom, *epoch),
+                                );
+                                Some(builder)
+                            }
+                        }?;
                     }
                     Some(builder)
                 }
