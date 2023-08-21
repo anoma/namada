@@ -2468,7 +2468,7 @@ pub mod args {
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".parse().unwrap()));
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
+    pub const BRIDGE_FEE_PAYER: Arg<WalletAddress> = arg("bridge-fee-payer");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2570,8 +2570,7 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
-    pub const WRAPPER_FEE_PAYER_OPT: ArgOpt<WalletKeypair> =
-        arg_opt("wrapper-fee-payer");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("fee-payer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
@@ -2799,7 +2798,7 @@ pub mod args {
                 .map_or_else(token::Amount::default, |denom_amount| {
                     denom_amount.amount
                 });
-            let fee_payer = FEE_PAYER.parse(matches);
+            let fee_payer = BRIDGE_FEE_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
@@ -2839,11 +2838,10 @@ pub mod args {
                     "The amount of NAM you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
-                .arg(
-                    FEE_PAYER.def().help(
-                        "The Namada address of the account paying the fee.",
-                    ),
-                )
+                .arg(BRIDGE_FEE_PAYER.def().help(
+                    "The Namada address of the account paying the fee for the \
+                     Ethereum transaction.",
+                ))
         }
     }
 
@@ -4711,7 +4709,7 @@ pub mod args {
                         SIGNING_KEYS.name,
                         VERIFICATION_KEY.name,
                     ])
-                    .requires(WRAPPER_FEE_PAYER_OPT.name),
+                    .requires(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
@@ -4728,7 +4726,7 @@ pub mod args {
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
             .arg(
-                WRAPPER_FEE_PAYER_OPT
+                FEE_PAYER_OPT
                     .def()
                     .help(
                         "The implicit address of the gas payer. It defaults \
@@ -4762,7 +4760,7 @@ pub mod args {
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
-            let wrapper_fee_payer = WRAPPER_FEE_PAYER_OPT.parse(matches);
+            let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             Self {
                 dry_run,
