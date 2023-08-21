@@ -42,7 +42,7 @@ crates += namada_vm_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build $(jobs)
+	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
@@ -64,7 +64,8 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check && \
+	$(cargo) check --workspace --exclude namada_benchmarks && \
+	$(cargo) +$(nightly) check --benches && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
@@ -149,7 +150,7 @@ test-integration:
 # Clear pre-built proofs, run integration tests and save the new proofs
 test-integration-save-proofs:
     # Clear old proofs first
-	rm --force test_fixtures/masp_proofs/*.bin || true
+	rm -f test_fixtures/masp_proofs/*.bin || true
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
 	NAMADA_MASP_TEST_PROOFS=save \
 	TEST_FILTER=masp \
@@ -220,6 +221,9 @@ watch:
 clean:
 	$(cargo) clean
 
+bench:
+	$(cargo) bench
+
 build-doc:
 	$(cargo) doc --no-deps
 
@@ -273,4 +277,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit bench
