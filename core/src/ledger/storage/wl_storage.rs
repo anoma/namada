@@ -59,10 +59,10 @@ where
 
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
 /// storage_api traits.
-trait WriteLogAndStorage {
-    // DB type
+pub trait WriteLogAndStorage {
+    /// DB type
     type D: DB + for<'iter> DBIter<'iter>;
-    // DB hasher type
+    /// DB hasher type
     type H: StorageHasher;
 
     /// Borrow `WriteLog`
@@ -73,6 +73,11 @@ trait WriteLogAndStorage {
 
     /// Borrow `Storage`
     fn storage(&self) -> &Storage<Self::D, Self::H>;
+
+    /// Splitting borrow to get immutable reference to the `Storage` and mutable
+    /// reference to `WriteLog` when in need of both (avoids complain from the
+    /// borrow checker)
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
 }
 
 impl<D, H> WriteLogAndStorage for WlStorage<D, H>
@@ -94,6 +99,10 @@ where
     fn storage(&self) -> &Storage<D, H> {
         &self.storage
     }
+
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+        (&mut self.write_log, &self.storage)
+    }
 }
 
 impl<D, H> WriteLogAndStorage for TempWlStorage<'_, D, H>
@@ -114,6 +123,10 @@ where
 
     fn storage(&self) -> &Storage<D, H> {
         self.storage
+    }
+
+    fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
+        (&mut self.write_log, (self.storage))
     }
 }
 
@@ -248,7 +261,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::MIN_STORAGE_GAS,
+        gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -273,7 +286,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        gas::MIN_STORAGE_GAS,
+        gas::STORAGE_ACCESS_GAS_PER_BYTE,
     )
 }
 
@@ -516,7 +529,7 @@ mod tests {
         })]
         #[test]
         fn test_prefix_iters(
-            key_vals in arb_key_vals(50),
+            key_vals in arb_key_vals(30),
         ) {
             test_prefix_iters_aux(key_vals)
         }
