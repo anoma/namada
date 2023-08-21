@@ -9,6 +9,7 @@
 pub mod account;
 pub mod ibc;
 pub mod key;
+pub mod pgf;
 pub mod proof_of_stake;
 pub mod token;
 

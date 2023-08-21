@@ -156,6 +156,16 @@ pub async fn is_validator<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Check if the given address is a pgf steward.
+pub async fn is_steward<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    address: &Address,
+) -> bool {
+    unwrap_client_response::<C, _>(
+        RPC.vp().pgf().is_steward(client, address).await,
+    )
+}
+
 /// Check if a given address is a known delegator
 pub async fn is_delegator<C: crate::ledger::queries::Client + Sync>(
     client: &C,

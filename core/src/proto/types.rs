@@ -1329,7 +1329,8 @@ impl Tx {
 
     /// Get the inner section hashes
     pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
-        let mut sections_hashes = self.sections
+        let mut sections_hashes = self
+            .sections
             .iter()
             .filter_map(|section| match section {
                 Section::Data(_) | Section::Code(_) => Some(section.get_hash()),

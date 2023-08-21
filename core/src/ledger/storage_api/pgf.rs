@@ -1,5 +1,7 @@
 //! Pgf
 
+use std::collections::HashMap;
+
 use crate::ledger::governance::storage::proposal::StoragePgfFunding;
 use crate::ledger::pgf::parameters::PgfParameters;
 use crate::ledger::pgf::storage::keys as pgf_keys;
@@ -25,27 +27,35 @@ where
 }
 
 /// Check if an address is a steward
-pub fn is_steward<S>(storage: &S, address: &Address) -> storage_api::Result<bool>
+pub fn is_steward<S>(
+    storage: &S,
+    address: &Address,
+) -> storage_api::Result<bool>
 where
     S: storage_api::StorageRead,
 {
-    let is_steward = pgf_keys::stewards_handle().contains(storage, &address)?;
+    let is_steward = pgf_keys::stewards_handle().contains(storage, address)?;
 
     Ok(is_steward)
 }
 
 /// Remove a steward
-pub fn remove_steward<S>(storage: &mut S, address: &Address) -> storage_api::Result<()>
+pub fn remove_steward<S>(
+    storage: &mut S,
+    address: &Address,
+) -> storage_api::Result<()>
 where
     S: storage_api::StorageRead + storage_api::StorageWrite,
 {
-    pgf_keys::stewards_handle().remove(storage, &address)?;
+    pgf_keys::stewards_handle().remove(storage, address)?;
 
     Ok(())
 }
 
 /// Query the current pgf continous payments
-pub fn get_payments<S>(storage: &S) -> storage_api::Result<Vec<StoragePgfFunding>>
+pub fn get_payments<S>(
+    storage: &S,
+) -> storage_api::Result<Vec<StoragePgfFunding>>
 where
     S: storage_api::StorageRead,
 {
@@ -81,4 +91,25 @@ where
         stewards_inflation_rate,
         ..Default::default()
     })
+}
+
+/// Update the commission for a steward
+pub fn update_commission<S>(
+    storage: &mut S,
+    address: Address,
+    reward_distribution: HashMap<Address, Dec>,
+) -> storage_api::Result<()>
+where
+    S: storage_api::StorageRead + storage_api::StorageWrite,
+{
+    pgf_keys::stewards_handle().insert(
+        storage,
+        address.clone(),
+        StewardDetail {
+            address,
+            reward_distribution,
+        },
+    )?;
+
+    Ok(())
 }

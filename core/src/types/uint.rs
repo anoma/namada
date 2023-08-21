@@ -233,7 +233,7 @@ impl I256 {
     /// Check if the amount is not negative (greater
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
-        self.0 .0[3].leading_zeros() > 0
+        self.0.0[3].leading_zeros() > 0
     }
 
     /// Check if the amount is negative (less than zero)
@@ -282,13 +282,9 @@ impl I256 {
     pub fn checked_add(&self, other: &Self) -> Option<Self> {
         if self.non_negative() == other.non_negative() {
             self.abs().checked_add(other.abs()).and_then(|val| {
-                Self::try_from(val).ok().map(|val| {
-                    if !self.non_negative() {
-                        -val
-                    } else {
-                        val
-                    }
-                })
+                Self::try_from(val)
+                    .ok()
+                    .map(|val| if !self.non_negative() { -val } else { val })
             })
         } else {
             Some(*self + *other)
@@ -444,11 +440,7 @@ impl Mul<Uint> for I256 {
     fn mul(self, rhs: Uint) -> Self::Output {
         let is_neg = self.is_negative();
         let prod = self.abs() * rhs;
-        if is_neg {
-            -Self(prod)
-        } else {
-            Self(prod)
-        }
+        if is_neg { -Self(prod) } else { Self(prod) }
     }
 }
 
@@ -487,11 +479,7 @@ impl Div<Uint> for I256 {
             .abs()
             .fixed_precision_div(&rhs, 0u8)
             .unwrap_or_default();
-        if is_neg {
-            -Self(quot)
-        } else {
-            Self(quot)
-        }
+        if is_neg { -Self(quot) } else { Self(quot) }
     }
 }
 

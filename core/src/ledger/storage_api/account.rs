@@ -76,7 +76,7 @@ where
             storage.has_key(&vp_key)
         }
         Address::Implicit(_) => Ok(true),
-        Address::Internal(_) => Ok(false)
+        Address::Internal(_) => Ok(false),
     }
 }
 

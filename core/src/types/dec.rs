@@ -152,8 +152,14 @@ impl Dec {
         }
     }
 
+    /// Do addition of two [`Dec`]s
+    pub fn add(&self, other: &Self) -> Self {
+        Dec(self.0 + other.0)
+    }
+
     /// Do multiply two [`Dec`]s. Return `None` if overflow.
-    /// This methods will overflow incorretly if both arguments are greater than 128bit.
+    /// This methods will overflow incorretly if both arguments are greater than
+    /// 128bit.
     pub fn checked_mul(&self, other: &Self) -> Option<Self> {
         let result = self.0.checked_mul(&other.0)?;
         Some(Dec(result / Uint::exp10(POS_DECIMAL_PRECISION as usize)))

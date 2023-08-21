@@ -101,14 +101,21 @@ impl TryFrom<&[u8]> for DefaultProposal {
 }
 
 /// Pgf stewards proposal
-#[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PgfStewardProposal {
     /// The proposal data
     pub proposal: OnChainProposal,
     /// The Pgf steward proposal extra data
-    pub data: Vec<PgfSteward>,
+    pub data: StewardsUpdate,
+}
+
+/// Pgf steward proposal extra data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StewardsUpdate {
+    /// The optional steward to add
+    pub add: Option<Address>,
+    /// The stewards to remove
+    pub remove: Vec<Address>,
 }
 
 impl PgfStewardProposal {
@@ -258,9 +265,9 @@ impl PgfAction {
 )]
 pub struct PgfFunding {
     /// Pgf continous funding
-    pub continous: Vec<PgfContinous>,
+    pub continous: Vec<PgfFundingTarget>,
     /// pgf retro fundings
-    pub retro: Vec<PgfRetro>,
+    pub retro: Vec<PgfFundingTarget>,
 }
 
 /// Pgf continous funding

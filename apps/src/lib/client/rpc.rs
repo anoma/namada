@@ -1026,14 +1026,9 @@ pub async fn query_pgf<C: namada::ledger::queries::Client + Sync>(
             println!("Pgf stewards:");
             for steward in stewards {
                 println!("{:4}- {}", "", steward.address);
-                println!("{:4}  {}", "", "Reward distribution:");
+                println!("{:4}  Reward distribution:", "");
                 for (address, percentage) in steward.reward_distribution {
-                    println!(
-                        "{:6}- {} to {}",
-                        "",
-                        percentage.to_string(),
-                        address
-                    );
+                    println!("{:6}- {} to {}", "", percentage, address);
                 }
             }
         }

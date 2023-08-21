@@ -9,6 +9,8 @@ pub mod decrypted;
 pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
+/// txs to manage pgf
+pub mod pgf;
 /// txs to manage pos
 pub mod pos;
 /// transaction protocols made by validators

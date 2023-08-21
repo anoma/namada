@@ -29,7 +29,7 @@ use namada_apps::config::genesis::genesis_config::{
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::ledger::governance::cli::onchain::{PgfAction, PgfSteward};
+use namada_core::ledger::governance::cli::onchain::StewardsUpdate;
 use namada_test_utils::TestWasms;
 use namada_vp_prelude::testnet_pow;
 use serde_json::json;
@@ -2293,13 +2293,13 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 1 - Submit proposal
     let albert = find_address(&test, ALBERT)?;
-    let pgf_stewards = PgfSteward {
-        action: PgfAction::Add,
-        address: albert.clone(),
+    let pgf_stewards = StewardsUpdate {
+        add: Some(albert.clone()),
+        remove: vec![],
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, vec![pgf_stewards], 12);
+        prepare_proposal_data(&test, albert, pgf_stewards, 12);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![

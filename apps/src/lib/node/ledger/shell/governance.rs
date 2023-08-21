@@ -10,15 +10,15 @@ use namada::core::ledger::governance::utils::{
 };
 use namada::core::ledger::governance::ADDRESS as gov_address;
 use namada::core::ledger::pgf::storage::keys as pgf_storage;
-use namada::core::ledger::pgf::ADDRESS;
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
+use namada::core::ledger::pgf::ADDRESS;
 use namada::core::ledger::storage_api::governance as gov_api;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::ledger::pos::BondId;
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::storage_api::{token, StorageWrite, pgf};
+use namada::ledger::storage_api::{pgf, token, StorageWrite};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::{bond_amount, read_total_stake};
 use namada::proto::{Code, Data};
@@ -58,7 +58,7 @@ where
             force_read(&shell.wl_storage, &proposal_type_key)?;
         let proposal_author: Address =
             force_read(&shell.wl_storage, &proposal_author_key)?;
-        
+
         let is_steward = pgf::is_steward(&shell.wl_storage, &proposal_author)?;
 
         let params = read_pos_params(&shell.wl_storage)?;
@@ -123,7 +123,7 @@ where
                             &mut shell.wl_storage,
                             native_token,
                             payments,
-                            id
+                            id,
                         )?;
                         tracing::info!(
                             "Governance proposal (pgf funding) {} has been \
@@ -145,7 +145,10 @@ where
                 if let ProposalType::PGFPayment(_) = proposal_type {
                     let two_third_nay = proposal_result.two_third_nay();
                     if two_third_nay {
-                        pgf::remove_steward(&mut shell.wl_storage, &proposal_author)?;
+                        pgf::remove_steward(
+                            &mut shell.wl_storage,
+                            &proposal_author,
+                        )?;
 
                         tracing::info!(
                             "Governance proposal {} was rejected with 2/3 of \
@@ -322,11 +325,15 @@ where
     for action in stewards {
         match action {
             AddRemove::Add(address) => {
-                pgf_storage::stewards_handle().insert(storage, address.to_owned(), StewardDetail::base(address))?;
-            },
+                pgf_storage::stewards_handle().insert(
+                    storage,
+                    address.to_owned(),
+                    StewardDetail::base(address),
+                )?;
+            }
             AddRemove::Remove(address) => {
                 pgf_storage::stewards_handle().remove(storage, &address)?;
-            },
+            }
         }
     }
 
@@ -337,7 +344,7 @@ fn execute_pgf_payment_proposal<S>(
     storage: &mut S,
     token: &Address,
     payments: Vec<PGFAction>,
-    proposal_id: u64
+    proposal_id: u64,
 ) -> Result<bool>
 where
     S: StorageRead + StorageWrite,
@@ -346,10 +353,15 @@ where
         match payment {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
-                    pgf_storage::fundings_handle().insert(storage, target.target.clone(), StoragePgfFunding::new(target, proposal_id))?;
+                    pgf_storage::fundings_handle().insert(
+                        storage,
+                        target.target.clone(),
+                        StoragePgfFunding::new(target, proposal_id),
+                    )?;
                 }
                 AddRemove::Remove(target) => {
-                    pgf_storage::fundings_handle().remove(storage, &target.target)?;
+                    pgf_storage::fundings_handle()
+                        .remove(storage, &target.target)?;
                 }
             },
             PGFAction::Retro(target) => {

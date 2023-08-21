@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ledger::governance::cli::onchain::{
-    PgfAction, PgfContinous, PgfRetro, PgfSteward,
+    PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
 };
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
 use crate::ledger::storage_api::token::Amount;
@@ -37,16 +37,13 @@ pub struct StoragePgfFunding {
     /// The data about the pgf funding
     pub detail: PGFTarget,
     /// The id of the proposal that added this funding
-    pub id: u64
+    pub id: u64,
 }
 
 impl StoragePgfFunding {
     /// Init a new pgf funding struct
     pub fn new(detail: PGFTarget, id: u64) -> Self {
-        Self {
-            detail,
-            id
-        }
+        Self { detail, id }
     }
 }
 
@@ -140,6 +137,22 @@ impl Display for ProposalType {
             ProposalType::PGFSteward(_) => write!(f, "Pgf steward"),
             ProposalType::PGFPayment(_) => write!(f, "Pgf funding"),
         }
+    }
+}
+
+impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
+    type Error = ProposalTypeError;
+
+    fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
+        let mut data = HashSet::default();
+
+        if value.add.is_some() {
+            data.insert(AddRemove::Add(value.add.unwrap()));
+        }
+        for steward in value.remove {
+            data.insert(AddRemove::Remove(steward));
+        }
+        Ok(data)
     }
 }
 

@@ -11,10 +11,10 @@ use namada_core::ledger::governance::storage::proposal::{
 };
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::governance::utils::is_valid_validator_voting_period;
-use namada_core::ledger::storage_api::governance::is_proposal_accepted;
-use namada_core::ledger::storage_api::account;
-use namada_core::ledger::vp_env::VpEnv;
 use namada_core::ledger::storage;
+use namada_core::ledger::storage_api::account;
+use namada_core::ledger::storage_api::governance::is_proposal_accepted;
+use namada_core::ledger::vp_env::VpEnv;
 use namada_core::proto::Tx;
 use namada_proof_of_stake::is_validator;
 use thiserror::Error;
@@ -314,7 +314,7 @@ where
             }
             ProposalType::PGFPayment(payments) => {
                 if payments.len() > MAX_PGF_ACTIONS {
-                    return Ok(false);
+                    Ok(false)
                 } else {
                     Ok(true)
                 }
@@ -525,7 +525,8 @@ where
         }
 
         let author = self.force_read(&author_key, ReadType::Post)?;
-        let author_exists = account::exists(&self.ctx.pre(), &author).unwrap_or(false);
+        let author_exists =
+            account::exists(&self.ctx.pre(), &author).unwrap_or(false);
 
         Ok(author_exists && verifiers.contains(&author))
     }

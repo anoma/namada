@@ -1,5 +1,6 @@
 use namada_macros::StorageKeys;
 
+use super::steward::StewardDetail;
 use crate::ledger::governance::storage::proposal::StoragePgfFunding;
 use crate::ledger::pgf::ADDRESS;
 use crate::ledger::storage_api::collections::{
@@ -7,8 +8,6 @@ use crate::ledger::storage_api::collections::{
 };
 use crate::types::address::Address;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
-
-use super::steward::StewardDetail;
 
 /// Storage keys for pgf internal address.
 #[derive(StorageKeys)]
@@ -19,7 +18,7 @@ struct Keys {
     steward_inflation_rate: &'static str,
 }
 
-/// Obtain a storage key for user's public key.
+/// Obtain a storage key for stewards key
 pub fn stewards_key_prefix() -> Key {
     Key {
         segments: vec![
@@ -34,13 +33,18 @@ pub fn stewards_handle() -> LazyMap<Address, StewardDetail> {
     LazyMap::open(stewards_key_prefix())
 }
 
-/// Check if the given storage key is a steward key. If it is, returns the steward address.
+/// Check if the given storage key is a steward key. If it is, returns the
+/// steward address.
 pub fn is_stewards_key(key: &Key) -> Option<&Address> {
     match &key.segments[..] {
-        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(steward)]
-            if pgf.eq(&ADDRESS)
-                && prefix.as_str() == Keys::VALUES.stewards
-                && data.as_str() == lazy_map::DATA_SUBKEY =>
+        [
+            DbKeySeg::AddressSeg(pgf),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(data),
+            DbKeySeg::AddressSeg(steward),
+        ] if pgf.eq(&ADDRESS)
+            && prefix.as_str() == Keys::VALUES.stewards
+            && data.as_str() == lazy_map::DATA_SUBKEY =>
         {
             Some(steward)
         }
@@ -65,16 +69,9 @@ pub fn fundings_handle() -> LazyMap<Address, StoragePgfFunding> {
 
 /// Check if the given storage key is a pgf funding key.
 pub fn is_fundings_key(key: &Key) -> bool {
-    match &key.segments[..] {
-        [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(_)]
-            if pgf.eq(&ADDRESS)
-                && prefix.as_str() == Keys::VALUES.fundings
-                && data.as_str() == lazy_map::DATA_SUBKEY =>
-        {
-            true
-        }
-        _ => false
-    }
+    matches!(&key.segments[..], [DbKeySeg::AddressSeg(pgf), DbKeySeg::StringSeg(prefix), DbKeySeg::StringSeg(data), DbKeySeg::AddressSeg(_)] if pgf.eq(&ADDRESS)
+               && prefix.as_str() == Keys::VALUES.fundings
+                && data.as_str() == lazy_map::DATA_SUBKEY)
 }
 
 /// Check if key is inside governance address space
