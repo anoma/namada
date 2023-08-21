@@ -13,12 +13,12 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
+use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::key::{self, *};
@@ -61,12 +61,14 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
             )
             .await?;
 
-            let mut tx = tx::build_reveal_pk::<C>(
+            let (mut tx, _epoch) = tx::build_reveal_pk(
                 client,
+                &mut ctx.wallet,
+                &mut ctx.shielded,
                 &args,
                 address,
                 &public_key,
-                &signing_data.gas_payer,
+                &signing_data.fee_payer,
             )
             .await?;
 
@@ -81,13 +83,12 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
     Ok(())
 }
 
-pub async fn submit_custom<C>(
+pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxCustom,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.owner.clone());
@@ -102,8 +103,14 @@ where
 
     submit_reveal_aux(client, ctx, args.tx.clone(), &args.owner).await?;
 
-    let mut tx =
-        tx::build_custom(client, args.clone(), &signing_data.gas_payer).await?;
+    let (mut tx, _epoch) = tx::build_custom(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -136,9 +143,14 @@ where
     )
     .await?;
 
-    let mut tx =
-        tx::build_update_account(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _epoch) = tx::build_update_account(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        signing_data.fee_payer.clone(),
+    )
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -152,13 +164,12 @@ where
     Ok(())
 }
 
-pub async fn submit_init_account<C>(
+pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxInitAccount,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let signing_data = signing::aux_signing_data(
@@ -170,9 +181,14 @@ where
     )
     .await?;
 
-    let mut tx =
-        tx::build_init_account(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _epoch) = tx::build_init_account(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -186,7 +202,9 @@ where
     Ok(())
 }
 
-pub async fn submit_init_validator<C>(
+pub async fn submit_init_validator<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     mut ctx: Context,
     args::TxInitValidator {
@@ -204,11 +222,7 @@ pub async fn submit_init_validator<C>(
         unsafe_dont_encrypt,
         tx_code_path: _,
     }: args::TxInitValidator,
-) -> Result<(), tx::Error>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
+) -> Result<(), tx::Error> {
     let tx_args = args::Tx {
         chain_id: tx_args
             .clone()
@@ -336,12 +350,10 @@ where
         .expect("DKG sessions keys should have been created")
         .public();
 
-    let validator_vp_code_hash = query_wasm_code_hash::<C>(
-        client,
-        validator_vp_code_path.to_str().unwrap(),
-    )
-    .await
-    .unwrap();
+    let validator_vp_code_hash =
+        query_wasm_code_hash(client, validator_vp_code_path.to_str().unwrap())
+            .await
+            .unwrap();
 
     // Validate the commission rate data
     if commission_rate > Dec::one() || commission_rate < Dec::zero() {
@@ -402,13 +414,16 @@ where
 
     tx::prepare_tx(
         client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
         &tx_args,
         &mut tx,
-        signing_data.gas_payer.clone(),
+        signing_data.fee_payer.clone(),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
@@ -601,7 +616,7 @@ impl masp::ShieldedUtils for CLIShieldedUtils {
     }
 }
 
-pub async fn submit_transfer<C: Client + Sync>(
+pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
@@ -628,9 +643,10 @@ pub async fn submit_transfer<C: Client + Sync>(
         let arg = args.clone();
         let (mut tx, tx_epoch) = tx::build_transfer(
             client,
+            &mut ctx.wallet,
             &mut ctx.shielded,
             arg,
-            &signing_data.gas_payer,
+            signing_data.fee_payer.clone(),
         )
         .await?;
         signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
@@ -670,13 +686,12 @@ pub async fn submit_transfer<C: Client + Sync>(
     Ok(())
 }
 
-pub async fn submit_ibc_transfer<C>(
+pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::TxIbcTransfer,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.source.clone());
@@ -691,9 +706,14 @@ where
 
     submit_reveal_aux(client, &mut ctx, args.tx.clone(), &args.source).await?;
 
-    let mut tx =
-        tx::build_ibc_transfer(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _epoch) = tx::build_ibc_transfer(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        signing_data.fee_payer.clone(),
+    )
+    .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -706,19 +726,20 @@ where
     Ok(())
 }
 
-pub async fn submit_init_proposal<C>(
+pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let current_epoch = rpc::query_and_print_epoch(client).await;
     let governance_parameters = rpc::query_governance_parameters(client).await;
 
-    let (mut tx_builder, signing_data) = if args.is_offline {
+    let ((mut tx_builder, _fee_unshield_epoch), signing_data) = if args
+        .is_offline
+    {
         let proposal = namada::core::ledger::governance::cli::offline::OfflineProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?.validate(current_epoch)
         .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
@@ -774,9 +795,11 @@ where
         (
             tx::build_pgf_funding_proposal(
                 client,
+                &mut ctx.wallet,
+                &mut ctx.shielded,
                 args.clone(),
                 proposal,
-                &signing_data.gas_payer,
+                signing_data.fee_payer.clone(),
             )
             .await?,
             signing_data,
@@ -819,9 +842,11 @@ where
         (
             tx::build_pgf_stewards_proposal(
                 client,
+                &mut ctx.wallet,
+                &mut ctx.shielded,
                 args.clone(),
                 proposal,
-                &signing_data.gas_payer,
+                signing_data.fee_payer.clone(),
             )
             .await?,
             signing_data,
@@ -862,9 +887,11 @@ where
         (
             tx::build_default_proposal(
                 client,
+                &mut ctx.wallet,
+                &mut ctx.shielded,
                 args.clone(),
                 proposal,
-                &signing_data.gas_payer,
+                signing_data.fee_payer.clone(),
             )
             .await?,
             signing_data,
@@ -886,7 +913,7 @@ where
     Ok(())
 }
 
-pub async fn submit_vote_proposal<C>(
+pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::VoteProposal,
@@ -907,7 +934,7 @@ where
     )
     .await?;
 
-    let mut tx_builder = if args.is_offline {
+    let (mut tx_builder, _fee_unshield_epoch) = if args.is_offline {
         let proposal_vote = ProposalVote::try_from(args.vote)
             .map_err(|_| tx::Error::InvalidProposalVote)?;
 
@@ -950,9 +977,11 @@ where
     } else {
         tx::build_vote_proposal(
             client,
+            &mut ctx.wallet,
+            &mut ctx.shielded,
             args.clone(),
             current_epoch,
-            &signing_data.gas_payer,
+            signing_data.fee_payer.clone(),
         )
         .await?
     };
@@ -1057,13 +1086,12 @@ where
     Ok(())
 }
 
-pub async fn submit_reveal_pk<C>(
+pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::RevealPk,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     submit_reveal_aux(client, ctx, args.tx, &(&args.public_key).into()).await?;
@@ -1093,9 +1121,14 @@ where
 
     submit_reveal_aux(client, ctx, args.tx.clone(), &default_address).await?;
 
-    let mut tx =
-        tx::build_bond::<C>(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _fee_unshield_epoch) = tx::build_bond(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        signing_data.fee_payer.clone(),
+    )
+    .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1109,13 +1142,12 @@ where
     Ok(())
 }
 
-pub async fn submit_unbond<C>(
+pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::Unbond,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
@@ -1129,13 +1161,15 @@ where
     )
     .await?;
 
-    let (mut tx, latest_withdrawal_pre) = tx::build_unbond(
-        client,
-        &mut ctx.wallet,
-        args.clone(),
-        &signing_data.gas_payer,
-    )
-    .await?;
+    let (mut tx, _fee_unshield_epoch, latest_withdrawal_pre) =
+        tx::build_unbond(
+            client,
+            &mut ctx.wallet,
+            &mut ctx.shielded,
+            args.clone(),
+            signing_data.fee_payer.clone(),
+        )
+        .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1151,13 +1185,12 @@ where
     Ok(())
 }
 
-pub async fn submit_withdraw<C>(
+pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::Withdraw,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
@@ -1171,9 +1204,14 @@ where
     )
     .await?;
 
-    let mut tx =
-        tx::build_withdraw(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _fee_unshield_epoch) = tx::build_withdraw(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        signing_data.fee_payer.clone(),
+    )
+    .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 
     if args.tx.dump_tx {
@@ -1187,13 +1225,14 @@ where
     Ok(())
 }
 
-pub async fn submit_validator_commission_change<C>(
+pub async fn submit_validator_commission_change<
+    C: namada::ledger::queries::Client + Sync,
+>(
     client: &C,
     mut ctx: Context,
     args: args::CommissionRateChange,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.validator.clone());
@@ -1206,10 +1245,12 @@ where
     )
     .await?;
 
-    let mut tx = tx::build_validator_commission_change(
+    let (mut tx, _fee_unshield_epoch) = tx::build_validator_commission_change(
         client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
         args.clone(),
-        &signing_data.gas_payer,
+        signing_data.fee_payer.clone(),
     )
     .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
@@ -1233,7 +1274,6 @@ pub async fn submit_unjail_validator<
     args: args::TxUnjailValidator,
 ) -> Result<(), tx::Error>
 where
-    C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.validator.clone());
@@ -1246,10 +1286,12 @@ where
     )
     .await?;
 
-    let mut tx = tx::build_unjail_validator(
+    let (mut tx, _fee_unshield_epoch) = tx::build_unjail_validator(
         client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
         args.clone(),
-        &signing_data.gas_payer,
+        signing_data.fee_payer.clone(),
     )
     .await?;
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
@@ -1278,14 +1320,10 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C>(
-    rpc_cli: &C,
+pub async fn broadcast_tx(
+    rpc_cli: &HttpClient,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, tx::Error>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
+) -> Result<Response, tx::Error> {
     tx::broadcast_tx(rpc_cli, to_broadcast).await
 }
 
@@ -1297,14 +1335,10 @@ where
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C>(
-    client: &C,
+pub async fn submit_tx(
+    client: &HttpClient,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, tx::Error>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
+) -> Result<TxResponse, tx::Error> {
     tx::submit_tx(client, to_broadcast).await
 }
 
