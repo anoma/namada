@@ -355,13 +355,10 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
             let validated_fee_amount =
                 validate_amount(client, amount, &args.fee_token, args.force)
                     .await
-                    .expect("Expected to be ablo to validate fee");
+                    .expect("Expected to be able to validate fee");
 
-            let amount = Amount::from_uint(
-                validated_fee_amount.amount,
-                validated_fee_amount.denom,
-            )
-            .unwrap();
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
 
             amount.max(minimum_fee)
         }
@@ -451,11 +448,8 @@ pub async fn wrap_tx<
                     .await
                     .expect("Expected to be able to validate fee");
 
-            let amount = Amount::from_uint(
-                validated_fee_amount.amount,
-                validated_fee_amount.denom,
-            )
-            .unwrap();
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
 
             amount.max(minimum_fee)
         }
