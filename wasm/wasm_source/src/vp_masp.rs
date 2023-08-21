@@ -72,7 +72,7 @@ fn convert_amount(
     (asset_type, amount)
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 8030000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -255,6 +255,12 @@ fn validate_tx(
                 );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
+                return reject();
+            }
+            Some(Ordering::Greater) => {
+                debug_log!(
+                    "Transaction fees cannot be paid inside MASP transaction."
+                );
                 return reject();
             }
             _ => {}
