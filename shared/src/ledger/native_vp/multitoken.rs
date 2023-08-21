@@ -140,6 +140,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use borsh::BorshSerialize;
+    use namada_core::ledger::gas::TxGasMeter;
 
     use super::*;
     use crate::core::ledger::storage::testing::TestWlStorage;
@@ -206,7 +207,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(sender);
@@ -261,7 +264,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
@@ -319,7 +324,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -377,7 +384,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -430,7 +439,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
@@ -488,7 +499,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -528,7 +541,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -571,7 +586,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&wl_storage);
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(

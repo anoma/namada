@@ -292,6 +292,7 @@ mod tests {
     use std::str::FromStr;
 
     use borsh::BorshSerialize;
+    use namada_core::ledger::gas::TxGasMeter;
     use prost::Message;
     use sha2::Digest;
 
@@ -396,6 +397,7 @@ mod tests {
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
     const COMMITMENT_PREFIX: &[u8] = b"ibc";
+    const TX_GAS_LIMIT: u64 = 1_000_000;
 
     fn get_client_id() -> ClientId {
         let id = format!("{}-0", MOCK_CLIENT_TYPE);
@@ -710,7 +712,9 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -746,6 +750,7 @@ mod tests {
     #[test]
     fn test_create_client_fail() {
         let mut wl_storage = TestWlStorage::default();
+
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
@@ -793,7 +798,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -922,7 +929,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1030,7 +1039,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1124,7 +1135,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1244,13 +1257,14 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(wl_storage.storage.chain_id.clone(), None);
         tx.add_code(tx_code)
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1358,7 +1372,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1443,7 +1459,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1565,7 +1583,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1686,7 +1706,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1792,7 +1814,9 @@ mod tests {
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
             &keypair_1(),
         )));
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -1894,7 +1918,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2034,7 +2060,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2220,7 +2248,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2365,7 +2395,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2514,7 +2546,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
@@ -2664,7 +2698,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        );
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
 
