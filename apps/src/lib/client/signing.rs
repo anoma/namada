@@ -1,6 +1,10 @@
 //! Helpers for making digital signatures using cryptographic keys from the
 //! wallet.
 
+use std::borrow::Cow;
+
+use namada::core::types::token::Amount;
+use namada::ledger::masp::{ShieldedContext, ShieldedUtils};
 use namada::ledger::rpc::TxBroadcastData;
 use namada::ledger::signing::TxSigningKey;
 use namada::ledger::tx;
@@ -34,13 +38,22 @@ where
 pub async fn tx_signers<C, U>(
     client: &C,
     wallet: &mut Wallet<U>,
+    _shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     default: TxSigningKey,
-) -> Result<(Option<Address>, common::PublicKey), tx::Error>
+) -> Result<
+    (
+        Option<Address>,
+        common::PublicKey,
+        Option<common::PublicKey>,
+    ),
+    tx::Error,
+>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
+    V: ShieldedUtils,
 {
     namada::ledger::signing::tx_signers::<C, U>(client, wallet, args, default)
         .await
@@ -54,44 +67,55 @@ where
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
+///
+/// If the tx fee is to be unshielded, it also returns the unshielding epoch.
 pub async fn sign_tx<C, U>(
     wallet: &mut Wallet<U>,
     tx: &mut Tx,
     args: &args::Tx,
     default: &common::PublicKey,
+    wrapper_signer: Option<&common::PublicKey>,
 ) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
 {
-    namada::ledger::signing::sign_tx(wallet, tx, args, default).await
+    namada::ledger::signing::sign_tx(wallet, tx, args, default, wrapper_signer)
+        .await
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
-/// progress on chain.
-pub async fn sign_wrapper<C, U>(
+/// progress on chain. Accepts an optional balance reflecting any modification
+/// applied to it by the inner tx for a correct fee validation.
+#[allow(clippy::too_many_arguments)]
+pub async fn sign_wrapper<'key, C, U, V>(
     client: &C,
     wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args: &args::Tx,
     epoch: Epoch,
     tx: Tx,
-    keypair: &common::SecretKey,
+    keypair: Cow<'key, common::SecretKey>,
+    updated_balance: Option<Amount>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> TxBroadcastData
+) -> (TxBroadcastData, Option<Epoch>)
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
     U: WalletUtils,
+    V: ShieldedUtils,
 {
     namada::ledger::signing::sign_wrapper(
         client,
         wallet,
+        shielded,
         args,
         epoch,
         tx,
         keypair,
+        updated_balance,
         #[cfg(not(feature = "mainnet"))]
         requires_pow,
     )
