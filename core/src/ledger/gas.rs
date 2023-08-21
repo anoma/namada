@@ -43,7 +43,7 @@ pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-const SCALE: u64 = 10_000;
+const SCALE: u64 = 1_000;
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from
 /// storage

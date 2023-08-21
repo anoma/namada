@@ -878,7 +878,7 @@ fn masp_txs_and_queries() -> Result<()> {
 /// 1. Test that a tx requesting a disposable signer with a correct unshielding
 /// operation is succesful
 /// 2. Test that a tx requesting a disposable signer
-/// providing an insufficient unshielding is rejected
+/// providing an insufficient unshielding goes through the PoW
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -958,27 +958,26 @@ fn wrapper_disposable_signer() -> Result<()> {
                 "--amount",
                 "1",
                 "--fee-amount",
-                "1",
+                "90000000",
                 "--fee-spending-key",
                 A_SPENDING_KEY,
                 "--disposable-signing-key",
                 "--ledger-address",
                 &validator_one_rpc,
             ],
-            "Transaction failed",
+            // Not enough funds for fee payment, will use PoW
+            "Looking for a solution with difficulty",
         ),
     ];
 
     for (tx_args, tx_result) in &txs_args {
-        for &dry_run in &[true, false] {
-            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-            if *tx_result == "Transaction is valid" && !dry_run {
-                client.exp_string("Transaction accepted")?;
-                client.exp_string("Transaction applied")?;
-            }
-            client.exp_string(tx_result)?;
+        if *tx_result == "Transaction is valid" {
+            client.exp_string("Transaction accepted")?;
+            client.exp_string("Transaction applied")?;
         }
+        client.exp_string(tx_result)?;
     }
 
     Ok(())
@@ -1952,6 +1951,8 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
         "--node",
         &validator_one_rpc,
     ];
@@ -3413,6 +3414,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 valid_proposal_json_path.to_str().unwrap(),
                 "--signing-keys",
                 source,
+                "--gas-limit",
+                "2000000",
                 "--node",
                 &validator_0_rpc,
             ]

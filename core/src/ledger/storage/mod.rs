@@ -1241,7 +1241,7 @@ mod tests {
             };
             let mut parameters = Parameters {
                 max_proposal_bytes: Default::default(),
-                max_block_gas: 0,
+                max_block_gas: 20_000_000,
                 epoch_duration: epoch_duration.clone(),
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
@@ -1255,7 +1255,7 @@ mod tests {
                 pos_inflation_amount: token::Amount::zero(),
                 #[cfg(not(feature = "mainnet"))]
                 faucet_account: None,
-                fee_unshielding_gas_limit: 1000000,
+                fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
                 gas_cost: BTreeMap::default(),
             };
