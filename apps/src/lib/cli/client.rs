@@ -249,12 +249,15 @@ impl<IO> CliApi<IO> {
                         )
                         .await?;
 
-                        let mut tx = bridge_pool::build_bridge_pool_tx(
-                            &client,
-                            args.clone(),
-                            signing_data.gas_payer.clone(),
-                        )
-                        .await?;
+                        let (mut tx, _epoch) =
+                            bridge_pool::build_bridge_pool_tx(
+                                &client,
+                                &mut ctx.wallet,
+                                &mut ctx.shielded,
+                                args.clone(),
+                                signing_data.fee_payer.clone(),
+                            )
+                            .await?;
 
                         signing::generate_test_vector(
                             &client,
