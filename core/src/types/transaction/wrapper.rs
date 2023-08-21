@@ -345,14 +345,10 @@ pub mod wrapper_tx {
         /// an error if the amount overflows or if failure during denomination
         /// conversion
         pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
-            let fees = Uint::checked_mul(
-                self.gas_limit.into(),
-                self.fee.amount_per_gas_unit.into(),
-            )
-            .ok_or(WrapperTxErr::OverflowingFee)?;
-
-            Amount::from_uint(fees, 0)
-                .map_err(|_| WrapperTxErr::DenominatedFeeConversion)
+            self.fee
+                .amount_per_gas_unit
+                .checked_mul(self.gas_limit.into())
+                .ok_or(WrapperTxErr::OverflowingFee)
         }
     }
 
