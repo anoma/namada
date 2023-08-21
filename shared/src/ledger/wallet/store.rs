@@ -444,7 +444,7 @@ impl Store {
     }
 
     /// Check if any map of the wallet contains the given alias
-    fn contains_alias(&self, alias: &Alias) -> bool {
+    pub fn contains_alias(&self, alias: &Alias) -> bool {
         self.payment_addrs.contains_key(alias)
             || self.view_keys.contains_key(alias)
             || self.spend_keys.contains_key(alias)
