@@ -1,8 +1,10 @@
 pub mod eth_bridge_pool;
 pub mod pos;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
+use namada::ledger::gas::VpGasMeter;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -49,7 +51,9 @@ impl TestNativeVpEnv {
     {
         let ctx = Ctx {
             iterators: Default::default(),
-            gas_meter: Default::default(),
+            gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
+                &self.tx_env.gas_meter,
+            )),
             storage: &self.tx_env.wl_storage.storage,
             write_log: &self.tx_env.wl_storage.write_log,
             tx: &self.tx_env.tx,
