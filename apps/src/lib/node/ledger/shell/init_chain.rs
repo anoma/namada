@@ -84,6 +84,7 @@ where
         let genesis::Parameters {
             epoch_duration,
             max_proposal_bytes,
+            max_block_gas,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
@@ -95,7 +96,9 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
-            wrapper_tx_fees,
+            gas_cost,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         } = genesis.parameters;
         #[cfg(not(feature = "mainnet"))]
         // Try to find a faucet account
@@ -121,6 +124,8 @@ where
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
+            let code_len = u64::try_from(code.len())
+                .map_err(|e| Error::LoadingWasm(e.to_string()))?;
 
             let elements = full_name.split('.').collect::<Vec<&str>>();
             let checksum = elements.get(1).ok_or_else(|| {
@@ -145,10 +150,14 @@ where
                 }
 
                 let code_key = Key::wasm_code(&code_hash);
-                self.wl_storage.write_bytes(&code_key, code)?;
-
+                let code_len_key = Key::wasm_code_len(&code_hash);
                 let hash_key = Key::wasm_hash(name);
+                let code_name_key = Key::wasm_code_name(name.to_owned());
+
+                self.wl_storage.write_bytes(&code_key, code)?;
+                self.wl_storage.write(&code_len_key, code_len)?;
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
+                self.wl_storage.write_bytes(&code_name_key, code_hash)?;
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
             }
@@ -178,6 +187,7 @@ where
         let parameters = Parameters {
             epoch_duration,
             max_proposal_bytes,
+            max_block_gas,
             max_expected_time_per_block,
             vp_whitelist,
             tx_whitelist,
@@ -190,8 +200,9 @@ where
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees,
+            gas_cost,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         };
         parameters
             .init_storage(&mut self.wl_storage)

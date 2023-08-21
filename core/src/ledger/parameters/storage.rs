@@ -42,8 +42,11 @@ struct Keys {
     tx_whitelist: &'static str,
     vp_whitelist: &'static str,
     max_proposal_bytes: &'static str,
+    max_block_gas: &'static str,
     faucet_account: &'static str,
-    wrapper_tx_fees: &'static str,
+    gas_cost: &'static str,
+    fee_unshielding_gas_limit: &'static str,
+    fee_unshielding_descriptions_limit: &'static str,
     max_signatures_per_transaction: &'static str,
 }
 
@@ -135,6 +138,16 @@ pub fn get_tx_whitelist_storage_key() -> Key {
     get_tx_whitelist_key_at_addr(ADDRESS)
 }
 
+/// Storage key used for the fee unshielding gas limit
+pub fn get_fee_unshielding_gas_limit_key() -> Key {
+    get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
+}
+
+/// Storage key used for the fee unshielding descriptions limit
+pub fn get_fee_unshielding_descriptions_limit_key() -> Key {
+    get_fee_unshielding_descriptions_limit_key_at_addr(ADDRESS)
+}
+
 /// Storage key used for max_epected_time_per_block parameter.
 pub fn get_max_expected_time_per_block_key() -> Key {
     get_max_expected_time_per_block_key_at_addr(ADDRESS)
@@ -175,14 +188,19 @@ pub fn get_max_proposal_bytes_key() -> Key {
     get_max_proposal_bytes_key_at_addr(ADDRESS)
 }
 
+/// Storage key used for the max block gas.
+pub fn get_max_block_gas_key() -> Key {
+    get_max_block_gas_key_at_addr(ADDRESS)
+}
+
 /// Storage key used for faucet account.
 pub fn get_faucet_account_key() -> Key {
     get_faucet_account_key_at_addr(ADDRESS)
 }
 
-/// Storage key used for staked ratio parameter.
-pub fn get_wrapper_tx_fees_key() -> Key {
-    get_wrapper_tx_fees_key_at_addr(ADDRESS)
+/// Storage key used for the gas cost table
+pub fn get_gas_cost_key() -> Key {
+    get_gas_cost_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the max signatures per transaction key
