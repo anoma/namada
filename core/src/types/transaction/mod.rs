@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::ledger::gas::VpsGas;
+use crate::ledger::gas::{Gas, VpsGas};
 use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
@@ -47,7 +47,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
-    pub gas_used: u64,
+    pub gas_used: Gas,
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction
@@ -156,7 +156,7 @@ pub enum TxType {
 }
 
 impl TxType {
-    /// Produce a SHA-256 hash of this header
+    /// Produce a SHA-256 hash of this header  
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.try_to_vec().expect("unable to serialize header"));
         hasher
@@ -254,13 +254,15 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                amount_per_gas_unit: Amount::from_uint(10, 0)
+                    .expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -289,13 +291,15 @@ mod test_process_tx {
         // the signed tx
         let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                amount_per_gas_unit: Amount::from_uint(10, 0)
+                    .expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
             #[cfg(not(feature = "mainnet"))]
+            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
