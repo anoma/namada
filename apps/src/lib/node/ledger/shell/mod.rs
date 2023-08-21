@@ -2335,7 +2335,7 @@ mod test_mempool_validate {
 
     use super::*;
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 1;
+    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]

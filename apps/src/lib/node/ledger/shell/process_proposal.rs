@@ -1029,6 +1029,8 @@ mod test_process_proposal {
     use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
+    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+
     #[cfg(feature = "abcipp")]
     fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
@@ -1579,8 +1581,6 @@ mod test_process_proposal {
             check_rejected_eth_events(&mut shell, ext, protocol_key);
         }
     }
-
-    const GAS_LIMIT_MULTIPLIER: u64 = 1;
 
     /// Test that if a wrapper tx is not signed, the block is rejected
     /// by [`process_proposal`].
