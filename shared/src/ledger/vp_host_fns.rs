@@ -9,9 +9,9 @@ use namada_core::types::storage::{
 };
 use thiserror::Error;
 
-use super::gas::MIN_STORAGE_GAS;
+use super::gas::STORAGE_ACCESS_GAS_PER_BYTE;
 use crate::ledger::gas;
-use crate::ledger::gas::VpGasMeter;
+use crate::ledger::gas::{GasMetering, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::proto::{Section, Tx};
@@ -45,7 +45,7 @@ pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
 pub fn add_gas(gas_meter: &mut VpGasMeter, used_gas: u64) -> EnvResult<()> {
-    let result = gas_meter.add(used_gas).map_err(RuntimeError::OutOfGas);
+    let result = gas_meter.consume(used_gas).map_err(RuntimeError::OutOfGas);
     if let Err(err) = &result {
         tracing::info!("Stopping VP execution because of gas error: {}", err);
     }
@@ -291,7 +291,7 @@ pub fn get_tx_code_hash(
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .map(|x| x.code.hash());
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(hash)
 }
 
@@ -316,7 +316,7 @@ pub fn get_tx_index(
     gas_meter: &mut VpGasMeter,
     tx_index: &TxIndex,
 ) -> EnvResult<TxIndex> {
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(*tx_index)
 }
 
@@ -329,7 +329,7 @@ where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
     H: StorageHasher,
 {
-    add_gas(gas_meter, MIN_STORAGE_GAS)?;
+    add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(storage.native_token.clone())
 }
 
