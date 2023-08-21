@@ -7,6 +7,9 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::ledger;
+use crate::ledger::gas::{
+    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
@@ -73,6 +76,15 @@ pub struct WriteLog {
     block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     tx_write_log: HashMap<storage::Key, StorageModification>,
+    /// A precommit bucket for the `tx_write_log`. This is useful for
+    /// validation when a clean `tx_write_log` is needed without committing any
+    /// modification already in there. These modifications can be temporarely
+    /// stored here and then discarded or committed to the `block_write_log`,
+    /// together with th content of `tx_write_log`. No direct key
+    /// write/update/delete should ever happen on this field, this log should
+    /// only be populated through a dump of the `tx_write_log` and should be
+    /// cleaned either when committing or dumping the `tx_write_log`
+    tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
     ibc_events: BTreeSet<IbcEvent>,
 }
@@ -99,6 +111,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
+            tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
         }
     }
@@ -112,10 +125,17 @@ impl WriteLog {
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
         // try to read from tx write log first
-        match self.tx_write_log.get(key).or_else(|| {
-            // if not found, then try to read from block write log
-            self.block_write_log.get(key)
-        }) {
+        match self
+            .tx_write_log
+            .get(key)
+            .or_else(|| {
+                // If not found, then try to read from tx precommit write log
+                self.tx_precommit_write_log.get(key)
+            })
+            .or_else(|| {
+                // if not found, then try to read from block write log
+                self.block_write_log.get(key)
+            }) {
             Some(v) => {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
@@ -129,9 +149,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as _)
+                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as _),
+            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -157,9 +177,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as _)
+                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as _),
+            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -195,7 +215,7 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
-        Ok((gas as _, size_diff))
+        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
     /// Write a key and a value.
@@ -260,7 +280,9 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
-        Ok((gas as _, size_diff))
+        // Temp writes are not propagated to db so just charge the cost of
+        // accessing storage
+        Ok((gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
@@ -288,7 +310,7 @@ impl WriteLog {
             None => 0,
         };
         let gas = key.len() + size_diff as usize;
-        Ok((gas as _, -size_diff))
+        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
 
     /// Delete a key and its value.
@@ -327,7 +349,8 @@ impl WriteLog {
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
         let key = storage::Key::validity_predicate(&addr);
-        let gas = (key.len() + vp_code_hash.len()) as _;
+        let gas = (key.len() + vp_code_hash.len()) as u64
+            * STORAGE_WRITE_GAS_PER_BYTE;
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)
@@ -340,14 +363,26 @@ impl WriteLog {
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
         self.ibc_events.insert(event);
-        len as _
+        len as u64 * STORAGE_ACCESS_GAS_PER_BYTE
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
     /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts.
+    /// of the newly created accounts. The keys in the precommit are not
+    /// included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log.keys().cloned().collect()
+    }
+
+    /// Get the storage keys changed and accounts keys initialized in the
+    /// current transaction and precommit. The account keys point to the
+    /// validity predicates of the newly created accounts.
+    pub fn get_keys_with_precommit(&self) -> BTreeSet<storage::Key> {
+        self.tx_precommit_write_log
+            .keys()
+            .chain(self.tx_write_log.keys())
+            .cloned()
+            .collect()
     }
 
     /// Get the storage keys changed in the current transaction (left) and
@@ -395,24 +430,42 @@ impl WriteLog {
         &self.ibc_events
     }
 
-    /// Commit the current transaction's write log to the block when it's
-    /// accepted by all the triggered validity predicates. Starts a new
-    /// transaction write log.
-    pub fn commit_tx(&mut self) {
-        self.tx_write_log.retain(|_, v| {
-            !matches!(v, StorageModification::Temp { value: _ })
-        });
-        let tx_write_log = std::mem::replace(
+    /// Add the entire content of the tx write log to the precommit one. The tx
+    /// log gets reset in the process.
+    pub fn precommit_tx(&mut self) {
+        let tx_log = std::mem::replace(
             &mut self.tx_write_log,
             HashMap::with_capacity(100),
         );
-        self.block_write_log.extend(tx_write_log);
+
+        self.tx_precommit_write_log.extend(tx_log)
+    }
+
+    /// Commit the current transaction's write log and precommit log to the
+    /// block when it's accepted by all the triggered validity predicates.
+    /// Starts a new transaction write log.
+    pub fn commit_tx(&mut self) {
+        // First precommit everything
+        self.precommit_tx();
+
+        // Then commit to block
+        self.tx_precommit_write_log.retain(|_, v| {
+            !matches!(v, StorageModification::Temp { value: _ })
+        });
+        let tx_precommit_write_log = std::mem::replace(
+            &mut self.tx_precommit_write_log,
+            HashMap::with_capacity(100),
+        );
+
+        self.block_write_log.extend(tx_precommit_write_log);
         self.take_ibc_events();
     }
 
-    /// Drop the current transaction's write log when it's declined by any of
-    /// the triggered validity predicates. Starts a new transaction write log.
+    /// Drop the current transaction's write log and precommit when it's
+    /// declined by any of the triggered validity predicates. Starts a new
+    /// transaction write log.
     pub fn drop_tx(&mut self) {
+        self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();
     }
 
@@ -563,13 +616,16 @@ mod tests {
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // insert a value
         let inserted = "inserted".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, inserted.clone()).unwrap();
-        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + inserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, inserted.len() as i64);
 
         // read the value
@@ -585,17 +641,23 @@ mod tests {
         // update the value
         let updated = "updated".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, updated.clone()).unwrap();
-        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, updated.len() as i64 - inserted.len() as i64);
 
         // delete the key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, (key.len() + updated.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // read the deleted key
@@ -604,12 +666,15 @@ mod tests {
             StorageModification::Delete => {}
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, reinserted.clone()).unwrap();
-        assert_eq!(gas, (key.len() + reinserted.len()) as u64);
+        assert_eq!(
+            gas,
+            (key.len() + reinserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
         assert_eq!(diff, reinserted.len() as i64);
     }
 
@@ -623,7 +688,10 @@ mod tests {
         let vp_hash = Hash::sha256(init_vp);
         let (addr, gas) = write_log.init_account(&address_gen, vp_hash);
         let vp_key = storage::Key::validity_predicate(&addr);
-        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
+        assert_eq!(
+            gas,
+            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+        );
 
         // read
         let (value, gas) = write_log.read(&vp_key);
@@ -633,7 +701,10 @@ mod tests {
             }
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, (vp_key.len() + vp_hash.len()) as u64);
+        assert_eq!(
+            gas,
+            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE
+        );
 
         // get all
         let (_changed_keys, init_accounts) = write_log.get_partitioned_keys();
