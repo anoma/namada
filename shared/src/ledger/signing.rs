@@ -191,7 +191,7 @@ pub fn sign_tx<U: WalletUtils>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-) {
+) -> Result<(), Error> {
     if !args.signatures.is_empty() {
         let signatures = args
             .signatures
@@ -216,8 +216,9 @@ pub fn sign_tx<U: WalletUtils>(
     }
 
     let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
+        find_key_by_pk(wallet, args, &signing_data.gas_payer)?;
     tx.sign_wrapper(fee_payer_keypair);
+    Ok(())
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -586,7 +587,7 @@ pub async fn generate_test_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) {
+) -> Result<(), Error> {
     use std::env;
     use std::fs::File;
     use std::io::Write;
@@ -596,19 +597,20 @@ pub async fn generate_test_vector<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
+        let decoding = to_ledger_vector(client, wallet, &tx).await?;
         let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
+            .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
         let mut f = File::options()
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
+            .map_err(|e| {
+                Error::Other(format!("failed to open test vector file: {}", e))
+            })?;
+        writeln!(f, "{},", output).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
 
     // Attempt to decode the construction
@@ -621,9 +623,14 @@ pub async fn generate_test_vector<
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
+            .map_err(|_| {
+                Error::Other("unable to write test vector to file".to_string())
+            })?;
+        writeln!(f, "{:x?},", tx).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
+    Ok(())
 }
 
 /// Converts the given transaction to the form that is displayed on the Ledger
@@ -670,8 +677,9 @@ pub async fn to_ledger_vector<
         .collect();
 
     let mut tv = LedgerVector {
-        blob: HEXLOWER
-            .encode(&tx.try_to_vec().expect("unable to serialize transaction")),
+        blob: HEXLOWER.encode(&tx.try_to_vec().map_err(|_| {
+            Error::Other("unable to serialize transaction".to_string())
+        })?),
         index: 0,
         valid: true,
         name: "Custom 0".to_string(),
@@ -680,9 +688,13 @@ pub async fn to_ledger_vector<
 
     let code_hash = tx
         .get_section(tx.code_sechash())
-        .expect("expected tx code section to be present")
+        .ok_or_else(|| {
+            Error::Other("expected tx code section to be present".to_string())
+        })?
         .code_sec()
-        .expect("expected section to have code tag")
+        .ok_or_else(|| {
+            Error::Other("expected section to have code tag".to_string())
+        })?
         .code
         .hash();
     tv.output_expert
@@ -701,7 +713,7 @@ pub async fn to_ledger_vector<
         let extra = tx
             .get_section(&init_account.vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -734,7 +746,7 @@ pub async fn to_ledger_vector<
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -881,7 +893,9 @@ pub async fn to_ledger_vector<
                 let extra = tx
                     .get_section(hash)
                     .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .expect("unable to load vp code")
+                    .ok_or_else(|| {
+                        Error::Other("unable to load vp code".to_string())
+                    })?
                     .code
                     .hash();
                 let vp_code = if extra == user_hash {
