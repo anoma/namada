@@ -1677,8 +1677,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.22.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.22.0#1c1028a823a7c2148b3efacea800bfc6c8969c20"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -1688,8 +1688,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.22.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.22.0#1c1028a823a7c2148b3efacea800bfc6c8969c20"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -1699,8 +1699,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-contract"
-version = "0.22.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.22.0#1c1028a823a7c2148b3efacea800bfc6c8969c20"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-governance-events",
  "ethbridge-structs",
@@ -1710,8 +1710,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-events"
-version = "0.22.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.22.0#1c1028a823a7c2148b3efacea800bfc6c8969c20"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -1721,8 +1721,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.22.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.22.0#1c1028a823a7c2148b3efacea800bfc6c8969c20"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethers",
