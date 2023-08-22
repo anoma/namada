@@ -39,7 +39,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_custom(&client, &mut ctx, args).await?;
                         if !dry_run {
                             crate::wallet::save(&ctx.wallet)
@@ -102,7 +103,8 @@ impl<IO> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_init_account(&client, &mut ctx, args)
                             .await?;
                         if !dry_run {
@@ -240,7 +242,7 @@ impl<IO> CliApi<IO> {
                         let tx_args = args.tx.clone();
 
                         let default_signer = Some(args.sender.clone());
-                        let signing_data = signing::aux_signing_data(
+                        let signing_data = tx::aux_signing_data(
                             &client,
                             &mut ctx.wallet,
                             &args.tx,

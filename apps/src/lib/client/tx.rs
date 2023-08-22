@@ -38,8 +38,6 @@ use crate::wallet::{
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
 pub async fn aux_signing_data<C: namada::ledger::queries::Client + Sync>(
-    // TODO: maybe better to implement save function directly on the Wallet
-    // struct?
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: &args::Tx,
@@ -88,14 +86,9 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
         let public_key = key.ref_to();
 
         if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
-            let signing_data = signing::aux_signing_data(
-                client,
-                &mut ctx.wallet,
-                &args,
-                &None,
-                None,
-            )
-            .await?;
+            let signing_data =
+                aux_signing_data(client, &mut ctx.wallet, &args, &None, None)
+                    .await?;
 
             let (mut tx, _epoch) = tx::build_reveal_pk(
                 client,
@@ -128,7 +121,7 @@ where
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.owner.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -170,7 +163,7 @@ where
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.addr.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -208,14 +201,9 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let signing_data = signing::aux_signing_data(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        &None,
-        None,
-    )
-    .await?;
+    let signing_data =
+        aux_signing_data(client, &mut ctx.wallet, &args.tx, &None, None)
+            .await?;
 
     let (mut tx, _epoch) = tx::build_init_account(
         client,
@@ -439,14 +427,9 @@ pub async fn submit_init_validator<
 
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let signing_data = signing::aux_signing_data(
-        client,
-        &mut ctx.wallet,
-        &tx_args,
-        &None,
-        None,
-    )
-    .await?;
+    let signing_data =
+        aux_signing_data(client, &mut ctx.wallet, &tx_args, &None, None)
+            .await?;
 
     tx::prepare_tx(
         client,
@@ -659,7 +642,7 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
 ) -> Result<(), tx::Error> {
     for _ in 0..2 {
         let default_signer = Some(args.source.effective_address());
-        let signing_data = signing::aux_signing_data(
+        let signing_data = aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -731,7 +714,7 @@ where
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.source.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -780,7 +763,7 @@ where
         .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.author.clone());
-        let signing_data = signing::aux_signing_data(
+        let signing_data = aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -811,7 +794,7 @@ where
                 .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = signing::aux_signing_data(
+        let signing_data = aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -858,7 +841,7 @@ where
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = signing::aux_signing_data(
+        let signing_data = aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -903,7 +886,7 @@ where
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = signing::aux_signing_data(
+        let signing_data = aux_signing_data(
             client,
             &mut ctx.wallet,
             &args.tx,
@@ -961,7 +944,7 @@ where
     let current_epoch = rpc::query_and_print_epoch(client).await;
 
     let default_signer = Some(args.voter.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -1058,7 +1041,7 @@ where
     };
 
     let default_signer = Some(owner.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &tx_args,
@@ -1146,7 +1129,7 @@ where
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     let default_signer = Some(default_address.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -1188,7 +1171,7 @@ where
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     let default_signer = Some(default_address.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -1231,7 +1214,7 @@ where
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     let default_signer = Some(default_address.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -1272,7 +1255,7 @@ where
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.validator.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
@@ -1313,7 +1296,7 @@ where
     C::Error: std::fmt::Display,
 {
     let default_signer = Some(args.validator.clone());
-    let signing_data = signing::aux_signing_data(
+    let signing_data = aux_signing_data(
         client,
         &mut ctx.wallet,
         &args.tx,
