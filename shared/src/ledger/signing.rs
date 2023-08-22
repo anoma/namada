@@ -340,11 +340,12 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     {
         Some(amount) => amount,
         None => {
-            if !args.force && cfg!(feature = "mainnet") {
-                panic!(
-                    "Could not retrieve the gas cost for token {}",
-                    args.fee_token
-                );
+            eprintln!(
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
             } else {
                 token::Amount::default()
             }
@@ -360,7 +361,20 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
 
-            amount.max(minimum_fee)
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                println!(
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
         }
         None => minimum_fee,
     };
@@ -431,11 +445,12 @@ pub async fn wrap_tx<
     {
         Some(amount) => amount,
         None => {
-            if !args.force && cfg!(feature = "mainnet") {
-                panic!(
-                    "Could not retrieve the gas cost for token {}",
-                    args.fee_token
-                );
+            eprintln!(
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
             } else {
                 token::Amount::default()
             }
@@ -451,7 +466,20 @@ pub async fn wrap_tx<
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
 
-            amount.max(minimum_fee)
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                println!(
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
         }
         None => minimum_fee,
     };
@@ -532,30 +560,7 @@ pub async fn wrap_tx<
                             .shielded_outputs
                             .len();
 
-                        let mut descriptions =
-                            spends.checked_add(converts).unwrap_or_else(|| {
-                                if !args.force && cfg!(feature = "mainnet") {
-                                    panic!(
-                                        "Overflow in fee unshielding \
-                                         descriptions"
-                                    );
-                                } else {
-                                    usize::MAX
-                                }
-                            });
-
-                        descriptions = descriptions
-                            .checked_add(outs)
-                            .unwrap_or_else(|| {
-                                if !args.force && cfg!(feature = "mainnet") {
-                                    panic!(
-                                        "Overflow in fee unshielding \
-                                         descriptions"
-                                    );
-                                } else {
-                                    usize::MAX
-                                }
-                            });
+                        let descriptions = spends + converts + outs;
 
                         let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
                         let descriptions_limit =
@@ -566,15 +571,8 @@ pub async fn wrap_tx<
                             .await
                             .unwrap();
 
-                        if u64::try_from(descriptions).unwrap_or_else(|_| {
-                            if !args.force && cfg!(feature = "mainnet") {
-                                panic!(
-                                    "Overflow in fee unshielding descriptions"
-                                );
-                            } else {
-                                u64::MAX
-                            }
-                        }) > descriptions_limit
+                        if u64::try_from(descriptions).unwrap()
+                            > descriptions_limit
                             && !args.force
                             && cfg!(feature = "mainnet")
                         {
@@ -625,7 +623,15 @@ pub async fn wrap_tx<
                 (None, None)
             }
         }
-        _ => (None, None),
+        _ => {
+            if args.fee_unshield.is_some() {
+                println!(
+                    "Enough transparent balance to pay fees: the fee \
+                     unshielding spending key will be ignored"
+                );
+            }
+            (None, None)
+        }
     };
 
     let unshield_section_hash = unshield.map(|masp_tx| {
@@ -671,13 +677,12 @@ where
     U: WalletUtils,
 {
     // Create the alias
-    let alias_prefix = "disposable_";
     let mut ctr = 1;
-    let mut alias = format!("{alias_prefix}_{ctr}");
+    let mut alias = format!("disposable_{ctr}");
 
     while wallet.store().contains_alias(&Alias::from(&alias)) {
         ctr += 1;
-        alias = format!("{alias_prefix}_{ctr}");
+        alias = format!("disposable_{ctr}");
     }
     // Generate a disposable keypair to sign the wrapper if requested
     // TODO: once the wrapper transaction has been accepted, this key can be

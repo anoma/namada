@@ -31,7 +31,43 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
+};
+
+/// Wrapper around `signing::aux_signing_data` that stores the optional
+/// disposable address to the wallet
+pub async fn aux_signing_data<C: namada::ledger::queries::Client + Sync>(
+    // TODO: maybe better to implement save function directly on the Wallet
+    // struct?
+    client: &C,
+    wallet: &mut Wallet<CliWalletUtils>,
+    args: &args::Tx,
+    owner: &Option<Address>,
+    default_signer: Option<Address>,
+) -> Result<signing::SigningTxData, tx::Error> {
+    let signing_data =
+        signing::aux_signing_data(client, wallet, args, owner, default_signer)
+            .await?;
+
+    if args.disposable_signing_key {
+        if !(args.dry_run || args.dry_run_wrapper) {
+            // Store the generated signing key to wallet in case of need
+            crate::wallet::save(wallet).map_err(|_| {
+                tx::Error::Other(
+                    "Failed to save disposable address to wallet".to_string(),
+                )
+            })?;
+        } else {
+            println!(
+                "Transaction dry run. The disposable address will not be \
+                 saved to wallet."
+            )
+        }
+    }
+
+    Ok(signing_data)
+}
 
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
