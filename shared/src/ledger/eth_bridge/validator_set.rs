@@ -165,6 +165,9 @@ trait ShouldRelay {
     where
         E: Middleware,
         E::Error: std::fmt::Display;
+
+    /// Try to recover from an error that has happened.
+    fn try_recover(err: String) -> Error;
 }
 
 impl ShouldRelay for DoNotCheckNonce {
@@ -178,6 +181,11 @@ impl ShouldRelay for DoNotCheckNonce {
         E::Error: std::fmt::Display,
     {
         std::future::ready(Ok(()))
+    }
+
+    #[inline]
+    fn try_recover(err: String) -> Error {
+        Error::recoverable(err)
     }
 }
 
@@ -215,6 +223,11 @@ impl ShouldRelay for CheckNonce {
                 })
             }
         })
+    }
+
+    #[inline]
+    fn try_recover(err: String) -> Error {
+        Error::critical(err)
     }
 }
 
@@ -582,7 +595,7 @@ where
             encoded_validator_set_args_fut,
             governance_address_fut
         )
-        .map_err(|err| Error::recoverable(err.to_string()))?;
+        .map_err(|err| R::try_recover(err.to_string()))?;
 
     let (bridge_hash, gov_hash, signatures): (
         [u8; 32],
