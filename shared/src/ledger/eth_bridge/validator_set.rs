@@ -460,16 +460,18 @@ where
                             "Failed to fetch latest validator set nonce: {err}"
                         );
                     })
-                    .map(|e| Epoch(e.as_u64()))
+                    .map(|e| e.as_u64() as i128)
             });
 
         let shell = RPC.shell();
         let nam_current_epoch_fut = shell.epoch(nam_client).map(|result| {
-            result.map_err(|err| {
-                tracing::error!(
-                    "Failed to fetch the latest epoch in Namada: {err}"
-                );
-            })
+            result
+                .map_err(|err| {
+                    tracing::error!(
+                        "Failed to fetch the latest epoch in Namada: {err}"
+                    );
+                })
+                .map(|Epoch(e)| e as i128)
         });
 
         let (nam_current_epoch, gov_current_epoch) =
@@ -482,8 +484,11 @@ where
             "Fetched the latest epochs"
         );
 
-        match nam_current_epoch.cmp(&gov_current_epoch) {
-            Ordering::Equal => {
+        let new_epoch = match nam_current_epoch - gov_current_epoch {
+            // NB: a namada epoch should always be one behind the nonce
+            // in the governance contract, for the latter to be considered
+            // up to date
+            -1 => {
                 tracing::debug!(
                     "Nothing to do, since the validator set in the Governance \
                      contract is up to date",
@@ -491,16 +496,21 @@ where
                 last_call_succeeded = false;
                 continue;
             }
-            Ordering::Less => {
+            0.. => {
+                let e = gov_current_epoch + 1;
+                // consider only the lower 64-bits
+                Epoch((e & (u64::MAX as i128)) as u64)
+            }
+            // NB: if the nonce difference is lower than 0, somehow the state
+            // of namada managed to fall behind the state of the smart contract
+            _ => {
                 tracing::error!("The Governance contract is ahead of Namada!");
                 last_call_succeeded = false;
                 continue;
             }
-            Ordering::Greater => {}
-        }
+        };
 
         // update epoch in the contract
-        let new_epoch = gov_current_epoch + 1u64;
         args.epoch = Some(new_epoch);
 
         let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
