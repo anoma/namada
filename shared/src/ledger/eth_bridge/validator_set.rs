@@ -373,7 +373,7 @@ where
                 }
                 RelayResult::Receipt { receipt } => {
                     if receipt.is_successful() {
-                        tracing::info!(?receipt, "Ethereum transfer succeded");
+                        tracing::info!(?receipt, "Ethereum transfer succeeded");
                     } else {
                         tracing::error!(?receipt, "Ethereum transfer failed");
                     }
@@ -525,7 +525,7 @@ where
                 };
                 last_call_succeeded = receipt.is_successful();
                 if last_call_succeeded {
-                    tracing::info!(?receipt, "Ethereum transfer succeded");
+                    tracing::info!(?receipt, "Ethereum transfer succeeded");
                     tracing::info!(?new_epoch, "Updated the validator set");
                 } else {
                     tracing::error!(?receipt, "Ethereum transfer failed");
