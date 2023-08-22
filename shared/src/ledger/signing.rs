@@ -37,7 +37,6 @@ use crate::ledger::tx::{
     TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
-use crate::ledger::wallet::alias::Alias;
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
@@ -265,7 +264,7 @@ pub async fn aux_signing_data<
     };
 
     let fee_payer = if args.disposable_signing_key {
-        generate_disposable_signing_key(wallet).to_public()
+        wallet.generate_disposable_signing_key().to_public()
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.to_public(),
@@ -668,32 +667,6 @@ pub async fn wrap_tx<
     );
 
     unshielding_epoch
-}
-
-fn generate_disposable_signing_key<U>(
-    wallet: &mut Wallet<U>,
-) -> common::SecretKey
-where
-    U: WalletUtils,
-{
-    // Create the alias
-    let mut ctr = 1;
-    let mut alias = format!("disposable_{ctr}");
-
-    while wallet.store().contains_alias(&Alias::from(&alias)) {
-        ctr += 1;
-        alias = format!("disposable_{ctr}");
-    }
-    // Generate a disposable keypair to sign the wrapper if requested
-    // TODO: once the wrapper transaction has been accepted, this key can be
-    // deleted from wallet
-    let (alias, disposable_keypair) = wallet
-        .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
-        .expect("Failed to initialize disposable keypair")
-        .expect("Missing alias and secret key");
-
-    tracing::info!("Created disposable keypair with alias {alias}");
-    disposable_keypair
 }
 
 #[allow(clippy::result_large_err)]
