@@ -557,11 +557,18 @@ where
             .map_err(|e| Error::critical(e.to_string()))?
             .next()
     };
+
+    if hints::unlikely(epoch_to_relay == Epoch(0)) {
+        return Err(Error::critical(
+            "There is no validator set update proof for epoch 0",
+        ));
+    }
+
     let shell = RPC.shell().eth_bridge();
     let encoded_proof_fut =
         shell.read_valset_upd_proof(nam_client, &epoch_to_relay);
 
-    let bridge_current_epoch = Epoch(epoch_to_relay.0.saturating_sub(2));
+    let bridge_current_epoch = epoch_to_relay - 1;
     let shell = RPC.shell().eth_bridge();
     let encoded_validator_set_args_fut =
         shell.read_consensus_valset(nam_client, &bridge_current_epoch);
