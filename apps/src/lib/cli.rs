@@ -2440,7 +2440,7 @@ pub mod args {
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DECRYPT: ArgFlag = flag("decrypt");
-    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-signing-key");
+    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
@@ -2460,15 +2460,16 @@ pub mod args {
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
-        arg_opt("fee-spending-key");
+        arg_opt("gas-spending-key");
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
-        arg_opt("fee-amount");
+        arg_opt("gas-price");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
-        arg_default_from_ctx("fee-token", DefaultFn(|| "NAM".parse().unwrap()));
-    pub const BRIDGE_FEE_PAYER: Arg<WalletAddress> = arg("bridge-fee-payer");
+        arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const BRIDGE_GAS_PAYER: Arg<WalletAddress> = arg("bridge-gas-payer");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2570,7 +2571,6 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
-    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("fee-payer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
@@ -2798,7 +2798,7 @@ pub mod args {
                 .map_or_else(token::Amount::default, |denom_amount| {
                     denom_amount.amount
                 });
-            let fee_payer = BRIDGE_FEE_PAYER.parse(matches);
+            let fee_payer = BRIDGE_GAS_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
@@ -2838,7 +2838,7 @@ pub mod args {
                     "The amount of NAM you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
-                .arg(BRIDGE_FEE_PAYER.def().help(
+                .arg(BRIDGE_GAS_PAYER.def().help(
                     "The Namada address of the account paying the fee for the \
                      Ethereum transaction.",
                 ))
@@ -4678,7 +4678,7 @@ pub mod args {
                 DISPOSABLE_SIGNING_KEY
                     .def()
                     .help(
-                        "Generates an ephimeral, disposable keypair to sign \
+                        "Generates an ephemeral, disposable keypair to sign \
                          the wrapper transaction. This keypair will be \
                          immediately discarded after use.",
                     )

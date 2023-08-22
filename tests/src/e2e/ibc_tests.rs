@@ -710,7 +710,7 @@ fn transfer_received_token(
         &ibc_token,
         "--amount",
         &amount,
-        "--fee-token",
+        "--gas-token",
         NAM,
         "--node",
         &rpc,
@@ -913,7 +913,7 @@ fn submit_ibc_tx(
             owner,
             "--signing-keys",
             signer,
-            "--fee-token",
+            "--gas-token",
             NAM,
             "--node",
             &rpc
