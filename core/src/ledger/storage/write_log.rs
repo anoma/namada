@@ -484,7 +484,7 @@ impl WriteLog {
                 verifiers
                     .insert(Address::Internal(InternalAddress::Multitoken));
             } else {
-                for addr in &key.find_addresses() {
+                for addr in key.iter_addresses() {
                     if verifiers_from_tx.contains(addr)
                         || initialized_accounts.contains(addr)
                     {
