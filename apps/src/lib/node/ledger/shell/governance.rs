@@ -356,12 +356,26 @@ where
                     pgf_storage::fundings_handle().insert(
                         storage,
                         target.target.clone(),
-                        StoragePgfFunding::new(target, proposal_id),
+                        StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
+                    tracing::info!(
+                        "Execute ContinousPgf from proposal id {}: set {} to \
+                         {}.",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target
+                    );
                 }
                 AddRemove::Remove(target) => {
                     pgf_storage::fundings_handle()
                         .remove(storage, &target.target)?;
+                    tracing::info!(
+                        "Execute ContinousPgf from proposal id {}: set {} to \
+                         {}.",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target
+                    );
                 }
             },
             PGFAction::Retro(target) => {
@@ -372,6 +386,12 @@ where
                     &target.target,
                     target.amount,
                 )?;
+                tracing::info!(
+                    "Execute RetroPgf from proposal id {}: sent {} to {}.",
+                    proposal_id,
+                    target.amount.to_string_native(),
+                    target.target
+                );
             }
         }
     }

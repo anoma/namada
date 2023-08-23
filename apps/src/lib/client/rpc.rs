@@ -21,7 +21,7 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    PGFTarget, StorageProposal,
+    StoragePgfFunding, StorageProposal,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
@@ -1038,9 +1038,13 @@ pub async fn query_pgf<C: namada::ledger::queries::Client + Sync>(
         true => println!("Pgf fundings: no fundings are currently set."),
         false => {
             println!("Pgf fundings:");
-            for payment in fundings {
-                println!("{:4}- {}", "", payment.target);
-                println!("{:6}{}", "", payment.amount.to_string_native());
+            for funding in fundings {
+                println!(
+                    "{:4}- {} for {}",
+                    "",
+                    funding.detail.target,
+                    funding.detail.amount.to_string_native()
+                );
             }
         }
     }
@@ -1192,7 +1196,7 @@ pub async fn query_pgf_stewards<C: namada::ledger::queries::Client + Sync>(
 
 pub async fn query_pgf_fundings<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> Vec<PGFTarget> {
+) -> Vec<StoragePgfFunding> {
     unwrap_client_response::<C, _>(RPC.vp().pgf().funding(client).await)
 }
 

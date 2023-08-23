@@ -1,6 +1,4 @@
-use namada_core::ledger::governance::storage::proposal::{
-    PGFTarget, StoragePgfFunding,
-};
+use namada_core::ledger::governance::storage::proposal::StoragePgfFunding;
 use namada_core::ledger::pgf::storage::steward::StewardDetail;
 use namada_core::types::address::Address;
 
@@ -13,7 +11,7 @@ use crate::ledger::storage_api;
 router! {PGF,
     ( "stewards" ) -> Vec<StewardDetail> = stewards,
     ( "stewards" / [ address: Address ] ) -> bool = is_steward,
-    ( "fundings" ) -> Vec<PGFTarget> = funding,
+    ( "fundings" ) -> Vec<StoragePgfFunding> = funding,
     ( "parameters" ) -> PgfParameters = parameters,
 }
 
