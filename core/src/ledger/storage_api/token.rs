@@ -2,7 +2,7 @@
 
 use super::{StorageRead, StorageWrite};
 use crate::ledger::storage_api;
-use crate::types::address::Address;
+use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
 pub use crate::types::token::{
     balance_key, is_any_minted_balance_key, is_balance_key, minted_balance_key,
@@ -46,12 +46,29 @@ pub fn read_denom<S>(
 where
     S: StorageRead,
 {
-    let key = token::denom_key(token);
+    let (key, nut) = match token {
+        Address::Internal(InternalAddress::Nut(erc20)) => {
+            let token = Address::Internal(InternalAddress::Erc20(*erc20));
+            (token::denom_key(&token), true)
+        }
+        token => (token::denom_key(token), false),
+    };
     storage.read(&key).map(|opt_denom| {
-        Some(
-            opt_denom
-                .unwrap_or_else(|| token::NATIVE_MAX_DECIMAL_PLACES.into()),
-        )
+        Some(opt_denom.unwrap_or_else(|| {
+            if nut {
+                // NB: always use the equivalent ERC20's smallest
+                // denomination to specify amounts, if we cannot
+                // find a denom in storage
+                0u8.into()
+            } else {
+                // FIXME: perhaps when we take this branch, we should
+                // assume the same behavior as NUTs? maybe this branch
+                // is unreachable, anyway. when would regular tokens
+                // ever not be denominated?
+                crate::hints::cold();
+                token::NATIVE_MAX_DECIMAL_PLACES.into()
+            }
+        }))
     })
 }
 
