@@ -295,7 +295,6 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
 /// to it.
 #[allow(clippy::too_many_arguments)]
 pub async fn prepare_tx<
-    's,
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -306,7 +305,7 @@ pub async fn prepare_tx<
     args: &args::Tx,
     tx: &mut Tx,
     fee_payer: common::PublicKey,
-    tx_source_balance: Option<TxSourcePostBalance<'s>>,
+    tx_source_balance: Option<TxSourcePostBalance>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Option<Epoch>, Error> {
     if !args.dry_run {
@@ -1125,8 +1124,8 @@ pub async fn build_bond<
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
-        source: Cow::Owned(bond_source.clone()),
-        token: Cow::Borrowed(&native_token),
+        source: bond_source.clone(),
+        token: native_token,
     });
 
     let tx_code_hash =
@@ -1470,8 +1469,8 @@ pub async fn build_ibc_transfer<
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
-        source: Cow::Borrowed(&source),
-        token: Cow::Borrowed(&token),
+        source: source.clone(),
+        token: token.clone(),
     });
 
     let tx_code_hash =
@@ -1672,8 +1671,8 @@ pub async fn build_transfer<
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
-        source: Cow::Borrowed(&source),
-        token: Cow::Owned(token.clone()),
+        source: source.clone(),
+        token: token.clone(),
     });
 
     let masp_addr = masp();

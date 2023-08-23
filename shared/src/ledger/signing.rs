@@ -1,5 +1,5 @@
 //! Functions to sign transactions
-use std::borrow::Cow;
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -405,13 +405,13 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
 /// Informations about the post-tx balance of the tx's source. Used to correctly
 /// handle fee validation in the wrapper tx
-pub struct TxSourcePostBalance<'s> {
+pub struct TxSourcePostBalance {
     /// The balance of the tx source after the tx has been applied
     pub post_balance: Amount,
     /// The source address of the tx
-    pub source: Cow<'s, Address>,
+    pub source: Address,
     /// The token of the tx
-    pub token: Cow<'s, Address>,
+    pub token: Address,
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -419,7 +419,6 @@ pub struct TxSourcePostBalance<'s> {
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
 pub async fn wrap_tx<
-    's,
     C: crate::ledger::queries::Client + Sync,
     V: ShieldedUtils,
 >(
@@ -427,7 +426,7 @@ pub async fn wrap_tx<
     shielded: &mut ShieldedContext<V>,
     tx: &mut Tx,
     args: &args::Tx,
-    tx_source_balance: Option<TxSourcePostBalance<'s>>,
+    tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
     fee_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
@@ -488,11 +487,7 @@ pub async fn wrap_tx<
             post_balance: balance,
             source,
             token,
-        }) if token.as_ref() == &args.fee_token
-            && source.as_ref() == &fee_payer_address =>
-        {
-            balance
-        }
+        }) if token == args.fee_token && source == fee_payer_address => balance,
         _ => {
             let balance_key =
                 token::balance_key(&args.fee_token, &fee_payer_address);
@@ -511,20 +506,20 @@ pub async fn wrap_tx<
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
-                let tx_args = args::Tx {
-                    fee_amount: None,
-                    fee_unshield: None,
-                    ..args.to_owned()
-                };
                 let transfer_args = args::TxTransfer {
-                    tx: tx_args,
+                    tx: args.to_owned(),
                     source: spending_key,
                     target: namada_core::types::masp::TransferTarget::Address(
                         fee_payer_address.clone(),
                     ),
                     token: args.fee_token.clone(),
                     amount: args::InputAmount::Validated(DenominatedAmount {
-                        amount: diff,
+                        // NOTE: must unshield the total fee amount, not the
+                        // diff, because the ledger evaluates the transaction in
+                        // reverse (wrapper first, inner second) and cannot know
+                        // ahead of time if the inner will modify the balance of
+                        // the gas payer
+                        amount: total_fee,
                         denom: 0.into(),
                     }),
                     // These last two fields are not used in the function, mock
@@ -580,7 +575,7 @@ pub async fn wrap_tx<
                             );
                         }
 
-                        updated_balance += diff;
+                        updated_balance += total_fee;
                         (Some(transaction), Some(unshielding_epoch))
                     }
                     Ok(None) => {

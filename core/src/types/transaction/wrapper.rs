@@ -241,24 +241,10 @@ pub mod wrapper_tx {
         /// the wrapper and generates the tx for execution.
         pub fn check_and_generate_fee_unshielding(
             &self,
-            transparent_balance: Amount,
             transfer_code_hash: Hash,
             descriptions_limit: u64,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
-            // Check that the unshield operation is actually needed
-            let amount = self
-                .get_tx_fee()?
-                .checked_sub(transparent_balance)
-                .and_then(|v| if v.is_zero() { None } else { Some(v) })
-                .ok_or_else(|| {
-                    WrapperTxErr::InvalidUnshield(
-                        "The transparent balance of the fee payer is enough \
-                         to pay fees, no need for unshielding"
-                            .to_string(),
-                    )
-                })?;
-
             // Check that the number of descriptions is within a certain limit
             // to avoid a possible DoS vector
             let sapling_bundle = unshield.sapling_bundle().ok_or(
@@ -293,13 +279,12 @@ pub mod wrapper_tx {
                         .to_string(),
                 ));
             }
-            self.generate_fee_unshielding(amount, transfer_code_hash, unshield)
+            self.generate_fee_unshielding(transfer_code_hash, unshield)
         }
 
         /// Generates the fee unshielding tx for execution.
         pub fn generate_fee_unshielding(
             &self,
-            unshield_amount: Amount,
             transfer_code_hash: Hash,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
@@ -323,7 +308,7 @@ pub mod wrapper_tx {
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
                 amount: DenominatedAmount {
-                    amount: unshield_amount,
+                    amount: self.get_tx_fee()?,
                     denom: 0.into(),
                 },
                 key: None,
@@ -342,8 +327,7 @@ pub mod wrapper_tx {
         }
 
         /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
-        /// an error if the amount overflows or if failure during denomination
-        /// conversion
+        /// an error if the amount overflows
         pub fn get_tx_fee(&self) -> Result<Amount, WrapperTxErr> {
             self.fee
                 .amount_per_gas_unit

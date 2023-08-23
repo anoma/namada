@@ -315,8 +315,7 @@ where
     } = shell_params;
 
     // Unshield funds if requested
-    let unexpected_unshielding_tx = if let Some(transaction) = masp_transaction
-    {
+    if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let mut tx_gas_meter =
@@ -330,75 +329,55 @@ where
                     .expect("Missing fee unshielding gas limit in storage").into(),
             );
 
-        let transparent_balance = storage_api::token::read_balance(
-            *wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-        )
-        .map_err(|e| Error::FeeError(e.to_string()))?;
-        let unshield_amount = wrapper
-            .get_tx_fee()
-            .map_err(Error::FeeUnshieldingError)?
-            .checked_sub(transparent_balance)
-            .and_then(|v| if v.is_zero() { None } else { Some(v) });
-
         // If it fails, do not return early
         // from this function but try to take the funds from the unshielded
         // balance
-        if let Some(unshield_amount) = unshield_amount {
-            match wrapper.generate_fee_unshielding(
-                unshield_amount,
-                get_transfer_hash_from_storage(*wl_storage),
-                transaction,
-            ) {
-                Ok(fee_unshielding_tx) => {
-                    // NOTE: A clean tx write log must be provided to this call
-                    // for a correct vp validation. Block write log, instead,
-                    // should contain any prior changes (if any)
-                    wl_storage.write_log_mut().precommit_tx();
-                    match apply_wasm_tx(
-                        fee_unshielding_tx,
-                        &TxIndex::default(),
-                        ShellParams {
-                            tx_gas_meter: &mut tx_gas_meter,
-                            wl_storage: *wl_storage,
-                            vp_wasm_cache,
-                            tx_wasm_cache,
-                        },
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
-                    ) {
-                        Ok(result) => {
-                            // NOTE: do not commit yet cause this could be
-                            // exploited to get free unshieldings
-                            if !result.is_accepted() {
-                                wl_storage.write_log_mut().drop_tx();
-                                tracing::error!(
-                                    "The unshielding tx is invalid, some VPs \
-                                     rejected it: {:#?}",
-                                    result.vps_result.rejected_vps
-                                );
-                            }
-                        }
-                        Err(e) => {
+        match wrapper.generate_fee_unshielding(
+            get_transfer_hash_from_storage(*wl_storage),
+            transaction,
+        ) {
+            Ok(fee_unshielding_tx) => {
+                // NOTE: A clean tx write log must be provided to this call
+                // for a correct vp validation. Block write log, instead,
+                // should contain any prior changes (if any)
+                wl_storage.write_log_mut().precommit_tx();
+                match apply_wasm_tx(
+                    fee_unshielding_tx,
+                    &TxIndex::default(),
+                    ShellParams {
+                        tx_gas_meter: &mut tx_gas_meter,
+                        wl_storage: *wl_storage,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    },
+                    #[cfg(not(feature = "mainnet"))]
+                    false,
+                ) {
+                    Ok(result) => {
+                        // NOTE: do not commit yet cause this could be
+                        // exploited to get free unshieldings
+                        if !result.is_accepted() {
                             wl_storage.write_log_mut().drop_tx();
                             tracing::error!(
-                                "The unshielding tx is invalid, wasm run \
-                                 failed: {}",
-                                e
+                                "The unshielding tx is invalid, some VPs \
+                                 rejected it: {:#?}",
+                                result.vps_result.rejected_vps
                             );
                         }
                     }
+                    Err(e) => {
+                        wl_storage.write_log_mut().drop_tx();
+                        tracing::error!(
+                            "The unshielding tx is invalid, wasm run failed: \
+                             {}",
+                            e
+                        );
+                    }
                 }
-                Err(e) => tracing::error!("{}", e),
             }
-            false
-        } else {
-            true
+            Err(e) => tracing::error!("{}", e),
         }
-    } else {
-        false
-    };
+    }
 
     // Charge or check fees
     match block_proposer {
@@ -422,15 +401,7 @@ where
     // Commit tx write log even in case of subsequent errors
     wl_storage.write_log_mut().commit_tx();
 
-    if unexpected_unshielding_tx {
-        Err(Error::FeeUnshieldingError(
-            namada_core::types::transaction::WrapperTxErr::InvalidUnshield(
-                "Found unnecessary unshielding tx attached".to_string(),
-            ),
-        ))
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Perform the actual transfer of fess from the fee payer to the block

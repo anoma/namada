@@ -1402,13 +1402,6 @@ where
             ))));
         }
 
-        let balance = storage_api::token::read_balance(
-            temp_wl_storage,
-            &wrapper.fee.token,
-            &wrapper.fee_payer(),
-        )
-        .expect("Token balance read in the protocol must not fail");
-
         if let Some(transaction) = masp_transaction {
             // Validation of the commitment to this section is done when
             // checking the aggregated signature of the wrapper, no need for
@@ -1422,7 +1415,6 @@ where
 
             let unshield = wrapper
                 .check_and_generate_fee_unshielding(
-                    balance,
                     transfer_code_hash,
                     descriptions_limit,
                     transaction,
