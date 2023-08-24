@@ -153,11 +153,10 @@ fn validate_changed_keys(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
-    Ok(keys_changed.len() == 2
+    Ok(keys_changed.contains(&escrow_key(nam_addr))
         && keys_changed
             .iter()
-            .all(|key| is_balance_key(nam_addr, key).is_some())
-        && keys_changed.contains(&escrow_key(nam_addr)))
+            .all(|key| is_balance_key(nam_addr, key).is_some()))
 }
 
 #[cfg(test)]
