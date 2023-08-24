@@ -225,6 +225,9 @@ pub mod wrapper_tx {
 
         /// Get the address of the implicit account associated
         /// with the public key
+        /// NOTE: this is safe in case someone tried to use the masp address to
+        /// pay fees. All of the masp funds are kept in the established address,
+        /// while the implicit one has no funds leading to a tx failure
         pub fn fee_payer(&self) -> Address {
             Address::from(&self.pk)
         }

@@ -272,6 +272,13 @@ pub async fn aux_signing_data<
         }
     };
 
+    if fee_payer == masp_tx_key().to_public() {
+        panic!(
+            "The gas payer cannot be the MASP, please provide a different gas \
+             payer."
+        );
+    }
+
     Ok(SigningTxData {
         public_keys,
         threshold,
