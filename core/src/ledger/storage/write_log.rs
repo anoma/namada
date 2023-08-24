@@ -469,6 +469,14 @@ impl WriteLog {
         self.tx_write_log.clear();
     }
 
+    /// Drop the current transaction's write log but keep the precommit one.
+    /// This is useful only when a part of a transaction failed but it can still
+    /// be valid and we want to keep the changes applied before the failed
+    /// section.
+    pub fn drop_tx_keep_precommit(&mut self) {
+        self.tx_write_log.clear();
+    }
+
     /// Commit the current block's write log to the storage. Starts a new block
     /// write log.
     pub fn commit_block<DB, H>(

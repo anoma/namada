@@ -357,7 +357,7 @@ where
                         // NOTE: do not commit yet cause this could be
                         // exploited to get free unshieldings
                         if !result.is_accepted() {
-                            wl_storage.write_log_mut().drop_tx();
+                            wl_storage.write_log_mut().drop_tx_keep_precommit();
                             tracing::error!(
                                 "The unshielding tx is invalid, some VPs \
                                  rejected it: {:#?}",
@@ -366,7 +366,7 @@ where
                         }
                     }
                     Err(e) => {
-                        wl_storage.write_log_mut().drop_tx();
+                        wl_storage.write_log_mut().drop_tx_keep_precommit();
                         tracing::error!(
                             "The unshielding tx is invalid, wasm run failed: \
                              {}",
