@@ -9,8 +9,8 @@ use crate::ledger::storage_api;
 
 // PoS validity predicate queries
 router! {PGF,
-    ( "stewards" ) -> Vec<StewardDetail> = stewards,
     ( "stewards" / [ address: Address ] ) -> bool = is_steward,
+    ( "stewards" ) -> Vec<StewardDetail> = stewards,
     ( "fundings" ) -> Vec<StoragePgfFunding> = funding,
     ( "parameters" ) -> PgfParameters = parameters,
 }

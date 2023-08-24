@@ -3945,7 +3945,6 @@ pub mod args {
                 voter: ctx.get(&self.voter),
                 is_offline: self.is_offline,
                 proposal_data: self.proposal_data.map(|path| {
-                    println!("Not able to read {}.", path.to_string_lossy());
                     std::fs::read(path)
                         .expect("Should be able to read the file.")
                 }),

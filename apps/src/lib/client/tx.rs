@@ -637,7 +637,7 @@ pub async fn submit_transfer<C: Client + Sync>(
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
-            continue;
+            break;
         } else {
             signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
             let result =
@@ -717,18 +717,14 @@ where
     C::Error: std::fmt::Display,
 {
     let current_epoch = rpc::query_and_print_epoch(client).await;
-    println!("disco di piscio");
     let governance_parameters = rpc::query_governance_parameters(client).await;
 
-    println!("11111");
-
     let (mut tx_builder, signing_data) = if args.is_offline {
-        println!("2222");
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
                 tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
             })?
-            .validate(current_epoch)
+            .validate(current_epoch, args.tx.force)
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.author.clone());
@@ -754,13 +750,12 @@ where
         println!("Proposal serialized to: {}", output_file_path);
         return Ok(());
     } else if args.is_pgf_funding {
-        println!("3333");
         let proposal =
             PgfFundingProposal::try_from(args.proposal_data.as_ref())
                 .map_err(|e| {
                     tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
                 })?
-                .validate(&governance_parameters, current_epoch)
+                .validate(&governance_parameters, current_epoch, args.tx.force)
                 .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -792,7 +787,6 @@ where
             signing_data,
         )
     } else if args.is_pgf_stewards {
-        println!("44444");
         let proposal = PgfStewardProposal::try_from(
             args.proposal_data.as_ref(),
         )
@@ -806,7 +800,12 @@ where
         )
         .await;
         let proposal = proposal
-            .validate(&governance_parameters, current_epoch, author_balance)
+            .validate(
+                &governance_parameters,
+                current_epoch,
+                author_balance,
+                args.tx.force,
+            )
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -838,7 +837,6 @@ where
             signing_data,
         )
     } else {
-        println!("5555");
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
             tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
@@ -850,7 +848,12 @@ where
         )
         .await;
         let proposal = proposal
-            .validate(&governance_parameters, current_epoch, author_balane)
+            .validate(
+                &governance_parameters,
+                current_epoch,
+                author_balane,
+                args.tx.force,
+            )
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -882,7 +885,6 @@ where
             signing_data,
         )
     };
-    println!("6666");
     signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
 
     if args.tx.dump_tx {
@@ -932,6 +934,7 @@ where
         .validate(
             &signing_data.account_public_keys_map.clone().unwrap(),
             signing_data.threshold,
+            args.tx.force,
         )
         .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
         let delegations = rpc::get_delegators_delegation_at(

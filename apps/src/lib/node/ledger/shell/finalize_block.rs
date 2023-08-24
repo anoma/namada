@@ -864,7 +864,7 @@ where
                     &funding.detail.target,
                 );
             } else {
-                tracing::info!(
+                tracing::warn!(
                     "Failed Minting {} tokens for {} project.",
                     funding.detail.amount.to_string_native(),
                     &funding.detail.target,
@@ -903,7 +903,7 @@ where
                         address,
                     );
                 } else {
-                    tracing::info!(
+                    tracing::warn!(
                         "Failed minting {} tokens for steward {}.",
                         reward_amount.to_string_native(),
                         address,

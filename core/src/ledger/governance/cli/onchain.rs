@@ -51,7 +51,11 @@ impl DefaultProposal {
         governance_parameters: &GovernanceParameters,
         current_epoch: Epoch,
         balance: token::Amount,
+        force: bool,
     ) -> Result<Self, ProposalValidation> {
+        if force {
+            return Ok(self);
+        }
         is_valid_start_epoch(
             self.proposal.voting_start_epoch,
             current_epoch,
@@ -125,7 +129,11 @@ impl PgfStewardProposal {
         governance_parameters: &GovernanceParameters,
         current_epoch: Epoch,
         balance: token::Amount,
+        force: bool,
     ) -> Result<Self, ProposalValidation> {
+        if force {
+            return Ok(self);
+        }
         is_valid_start_epoch(
             self.proposal.voting_start_epoch,
             current_epoch,
@@ -188,7 +196,11 @@ impl PgfFundingProposal {
         self,
         governance_parameters: &GovernanceParameters,
         current_epoch: Epoch,
+        force: bool,
     ) -> Result<Self, ProposalValidation> {
+        if force {
+            return Ok(self);
+        }
         is_valid_start_epoch(
             self.proposal.voting_start_epoch,
             current_epoch,

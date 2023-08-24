@@ -446,8 +446,7 @@ impl Mul<Uint> for I256 {
 
 impl CheckedMul for I256 {
     fn checked_mul(&self, v: &Self) -> Option<Self> {
-        let is_negative = (self.is_negative() || v.is_negative())
-            && !(self.is_negative() && v.is_negative());
+        let is_negative = self.is_negative() != v.is_negative();
         let unsigned_res =
             I256::try_from(self.abs().checked_mul(v.abs())?).ok()?;
         Some(if is_negative {

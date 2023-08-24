@@ -298,11 +298,19 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
     match args.output_folder.to_owned() {
         Some(path) => {
             let tx_filename = format!("{}.tx", tx_id);
-            let out = File::create(path.join(tx_filename)).unwrap();
+            let tx_path = path.join(tx_filename);
+            let out = File::create(&tx_path).unwrap();
             serde_json::to_writer_pretty(out, &serialized_tx)
-                .expect("Should be able to write to file.")
+                .expect("Should be able to write to file.");
+            println!(
+                "Transaction serialized to {}.",
+                tx_path.to_string_lossy()
+            );
         }
-        None => println!("{}", serialized_tx),
+        None => {
+            println!("Below the serialized transaction: \n");
+            println!("{}", serialized_tx)
+        }
     }
 }
 
@@ -795,10 +803,10 @@ pub async fn build_resign_steward<C: crate::ledger::queries::Client + Sync>(
     }: args::ResignSteward,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx, Error> {
-    // if !rpc::is_steward(client, &steward).await && !tx_args.force {
-    //     eprintln!("The given address {} is not a steward.", &steward);
-    //     return Err(Error::InvalidSteward(steward.clone()));
-    // };
+    if !rpc::is_steward(client, &steward).await && !tx_args.force {
+        eprintln!("The given address {} is not a steward.", &steward);
+        return Err(Error::InvalidSteward(steward.clone()));
+    };
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())

@@ -954,6 +954,7 @@ pub async fn query_proposal_result<
             let proposal = proposal.validate(
                 &author_account.public_keys_map,
                 author_account.threshold,
+                false,
             );
 
             if proposal.is_ok() {

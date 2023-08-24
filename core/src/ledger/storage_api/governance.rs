@@ -21,7 +21,6 @@ use crate::types::transaction::governance::{
 };
 
 /// A proposal creation transaction.
-/// A proposal creation transaction.
 pub fn init_proposal<S>(
     storage: &mut S,
     data: InitProposalData,
@@ -219,7 +218,7 @@ where
     }
 }
 
-/// Get governane parameters
+/// Get governance parameters
 pub fn get_parameters<S>(
     storage: &S,
 ) -> storage_api::Result<GovernanceParameters>
