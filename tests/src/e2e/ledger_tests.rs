@@ -2540,7 +2540,7 @@ fn pgf_governance_proposal() -> Result<()> {
     client.exp_string(&format!(
         "{} for {}",
         bertha,
-        token::Amount::from_u64(11).to_string_native()
+        token::Amount::from_u64(10).to_string_native()
     ))?;
     client.assert_success();
 
