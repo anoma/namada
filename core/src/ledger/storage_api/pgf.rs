@@ -26,6 +26,17 @@ where
     Ok(stewards)
 }
 
+/// Query the a steward by address
+pub fn get_steward<S>(
+    storage: &S,
+    address: &Address,
+) -> storage_api::Result<Option<StewardDetail>>
+where
+    S: storage_api::StorageRead,
+{
+    pgf_keys::stewards_handle().get(storage, address)
+}
+
 /// Check if an address is a steward
 pub fn is_steward<S>(
     storage: &S,
@@ -34,9 +45,7 @@ pub fn is_steward<S>(
 where
     S: storage_api::StorageRead,
 {
-    let is_steward = pgf_keys::stewards_handle().contains(storage, address)?;
-
-    Ok(is_steward)
+    pgf_keys::stewards_handle().contains(storage, address)
 }
 
 /// Remove a steward

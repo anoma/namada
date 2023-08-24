@@ -22,4 +22,16 @@ impl StewardDetail {
             reward_distribution: HashMap::from_iter([(address, Dec::one())]),
         }
     }
+
+    /// Check if reward distribution is valid
+    pub fn is_valid_reward_distribution(&self) -> bool {
+        let mut sum = Dec::zero();
+        for percentage in self.reward_distribution.values().cloned() {
+            if percentage < Dec::zero() || percentage > Dec::one() {
+                return false;
+            }
+            sum += percentage;
+        }
+        sum <= Dec::one()
+    }
 }

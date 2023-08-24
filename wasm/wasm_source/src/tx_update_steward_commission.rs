@@ -9,8 +9,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let data = signed.data().ok_or_err_msg("Missing data")?;
     let steward_commission = UpdateStewardCommission::try_from_slice(&data[..])
         .wrap_err("failed to decode an UpdateStewardCommission")?;
-    
-    update_steward_commission(ctx, steward_commission)?;
+
+    pgf::update_steward_commission(ctx, steward_commission)?;
 
     Ok(())
 }

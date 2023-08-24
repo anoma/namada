@@ -6,11 +6,6 @@ pub fn update_steward_commission(
     ctx: &mut Ctx,
     data: UpdateStewardCommission,
 ) -> EnvResult<()> {
-    let is_steward = storage_api::pgf::is_steward(ctx, &data.steward)?;
-    if !is_steward {
-        return Ok(());
-    }
-
     storage_api::pgf::update_commission(ctx, data.steward, data.commission)?;
 
     Ok(())

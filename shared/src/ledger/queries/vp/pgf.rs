@@ -26,7 +26,7 @@ where
     storage_api::pgf::get_stewards(ctx.wl_storage)
 }
 
-/// Checkmif th
+/// Check if an address is a pgf steward
 fn is_steward<D, H>(
     ctx: RequestCtx<'_, D, H>,
     address: Address,

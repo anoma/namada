@@ -795,10 +795,10 @@ pub async fn build_resign_steward<C: crate::ledger::queries::Client + Sync>(
     }: args::ResignSteward,
     gas_payer: &common::PublicKey,
 ) -> Result<Tx, Error> {
-    if !rpc::is_steward(client, &steward).await && !tx_args.force {
-        eprintln!("The given address {} is not a steward.", &steward);
-        return Err(Error::InvalidSteward(steward.clone()));
-    };
+    // if !rpc::is_steward(client, &steward).await && !tx_args.force {
+    //     eprintln!("The given address {} is not a steward.", &steward);
+    //     return Err(Error::InvalidSteward(steward.clone()));
+    // };
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
