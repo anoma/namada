@@ -115,9 +115,9 @@ impl Context {
                 genesis.native_token,
             ) // If the WASM dir specified, put it in the config
         } else {
-            #[cfg(not(any(test, feature = "dev")))]
+            #[cfg(not(any(test, feature = "testing")))]
             panic!("Missing genesis file");
-            #[cfg(any(test, feature = "dev"))]
+            #[cfg(any(test, feature = "testing"))]
             {
                 let default_genesis = genesis::genesis(1);
                 (
