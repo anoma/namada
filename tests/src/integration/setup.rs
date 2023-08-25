@@ -123,7 +123,7 @@ fn create_node(
             config::Ledger::new(
                 base_dir.path(),
                 chain_id.clone(),
-                TendermintMode::Validator
+                TendermintMode::Validator,
             ),
             wasm_dir,
             sender,

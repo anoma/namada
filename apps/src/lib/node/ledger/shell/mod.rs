@@ -516,7 +516,8 @@ where
                         crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
                         data: ValidatorData {
-                            address: crate::wallet::defaults::validator_address(),
+                            address: crate::wallet::defaults::validator_address(
+                            ),
                             keys: ValidatorKeys {
                                 protocol_keypair,
                                 eth_bridge_keypair,

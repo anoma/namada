@@ -387,7 +387,7 @@ mod tests {
         let epoch_1_validators = query_validators(1);
         assert_eq!(
             epoch_0_validators,
-            HashMap::from([(validator_1.clone(), validator_1_stake)])
+            HashMap::from([(validator_1, validator_1_stake)])
         );
         assert_eq!(
             epoch_1_validators,

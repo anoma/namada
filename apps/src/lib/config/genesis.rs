@@ -915,33 +915,27 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
             },
         },
     });
-    genesis
-        .transactions
-        .validator_account
-        .as_mut()
-        .map(|vals| vals[0].address = defaults::validator_address());
+    if let Some(vals) = genesis.transactions.validator_account.as_mut() {
+        vals[0].address = defaults::validator_address();
+    }
     let default_addresses: HashMap<Alias, Address> =
         defaults::addresses().into_iter().collect();
-    genesis
-        .transactions
-        .established_account
-        .as_mut()
-        .map(|accs| {
-            for acc in accs {
-                if let Some(addr) = default_addresses.get(&acc.tx.alias) {
-                    acc.address = addr.clone();
-                }
+    if let Some(accs) = genesis.transactions.established_account.as_mut() {
+        for acc in accs {
+            if let Some(addr) = default_addresses.get(&acc.tx.alias) {
+                acc.address = addr.clone();
             }
-        });
+        }
+    }
     // remove Albert's bond since it messes up existing unit test math
-    genesis.transactions.bond.as_mut().map(|bonds| {
+    if let Some(bonds) = genesis.transactions.bond.as_mut() {
         bonds.retain(|bond| {
             bond.data.source
                 != transactions::AliasOrPk::Alias(
                     Alias::from_str("albert").unwrap(),
                 )
         })
-    });
+    };
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
         90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
         65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
@@ -973,7 +967,7 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
         let alias = Alias::from_str(&format!("validator-{}", val + 1))
             .expect("infallible");
         // add the validator
-        genesis.transactions.validator_account.as_mut().map(|vals| {
+        if let Some(vals) = genesis.transactions.validator_account.as_mut() {
             vals.push(chain::FinalizedValidatorAccountTx {
                 address,
                 tx: transactions::ValidatorAccountTx {
@@ -997,22 +991,22 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                     eth_cold_key: sign_pk(&eth_cold_keypair),
                 },
             })
-        });
+        };
         // add the balance to validators implicit key
-        genesis
+        if let Some(bals) = genesis
             .balances
             .token
             .get_mut(&Alias::from_str("nam").unwrap())
-            .map(|bals| {
-                bals.0.insert(
-                    StringEncoded {
-                        raw: account_keypair.ref_to(),
-                    },
-                    token::Amount::native_whole(200_000),
-                )
-            });
+        {
+            bals.0.insert(
+                StringEncoded {
+                    raw: account_keypair.ref_to(),
+                },
+                token::Amount::native_whole(200_000),
+            );
+        }
         // transfer funds from implicit key to validator
-        genesis.transactions.transfer.as_mut().map(|trans| {
+        if let Some(trans) = genesis.transactions.transfer.as_mut() {
             trans.push(transactions::SignedTransferTx {
                 data: transactions::TransferTx {
                     token: Alias::from_str("nam").expect("infallible"),
@@ -1026,9 +1020,9 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                 // here
                 signature: sign_pk(&account_keypair).authorization,
             })
-        });
+        }
         // self bond
-        genesis.transactions.bond.as_mut().map(|bonds| {
+        if let Some(bonds) = genesis.transactions.bond.as_mut() {
             bonds.push(transactions::SignedBondTx {
                 data: transactions::BondTx {
                     source: transactions::AliasOrPk::Alias(alias.clone()),
@@ -1039,7 +1033,7 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                 // here
                 signature: sign_pk(&account_keypair).authorization,
             })
-        });
+        }
     }
 
     genesis
