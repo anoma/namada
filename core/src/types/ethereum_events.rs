@@ -51,11 +51,14 @@ impl Ord for Uint {
 }
 
 impl Uint {
-    /// Convert to a little endian byte representation of
-    /// a uint256.
+    /// Convert to an Ethereum-compatible byte representation.
+    ///
+    /// The Ethereum virtual machine employs big-endian integers
+    /// (Wood, 2014), therefore the returned byte array has the
+    /// same endianness.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
-        ethUint(self.0).to_little_endian(&mut bytes);
+        ethUint(self.0).to_big_endian(&mut bytes);
         bytes
     }
 
