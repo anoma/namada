@@ -418,7 +418,6 @@ pub async fn build_reveal_pk<C: crate::ledger::queries::Client + Sync>(
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    let do_nothing = |_: &mut Tx, _: &mut common::PublicKey| ();
     build(
         client,
         args,
@@ -691,7 +690,6 @@ pub async fn build_validator_commission_change<
         new_rate: rate,
     };
 
-    let do_nothing = |_: &mut _, _: &mut pos::CommissionChange| ();
     build(client, &tx_args, tx_code_path, data, do_nothing, gas_payer).await
 }
 
@@ -755,7 +753,6 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let do_nothing = |_: &mut _, _: &mut Address| ();
     build(
         client,
         &tx_args,
@@ -816,7 +813,6 @@ pub async fn build_withdraw<C: crate::ledger::queries::Client + Sync>(
 
     let data = pos::Withdraw { validator, source };
 
-    let do_nothing = |_: &mut _, _: &mut pos::Withdraw| ();
     build(client, &tx_args, tx_code_path, data, do_nothing, gas_payer).await
 }
 
@@ -886,7 +882,6 @@ pub async fn build_unbond<
         source: source.clone(),
     };
 
-    let do_nothing = |_: &mut _, _: &mut pos::Bond| ();
     let tx = build(client, &tx_args, tx_code_path, data, do_nothing, gas_payer)
         .await?;
     Ok((tx, latest_withdrawal_pre))
@@ -1001,7 +996,6 @@ pub async fn build_bond<C: crate::ledger::queries::Client + Sync>(
         source,
     };
 
-    let do_nothing = |_: &mut Tx, _: &mut pos::Bond| ();
     build(client, &tx_args, tx_code_path, data, do_nothing, gas_payer).await
 }
 
@@ -1104,7 +1098,6 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
         delegations,
     };
 
-    let do_nothing = |_: &mut _, _: &mut VoteProposalData| ();
     build(client, &tx, tx_code_path, data, do_nothing, gas_payer).await
 }
 
@@ -1909,4 +1902,11 @@ fn validate_untrusted_code_err(
     } else {
         Ok(())
     }
+}
+
+/// A helper for [`fn build`] that can be used for `on_tx` arg that does nothing
+fn do_nothing<D>(_tx: &mut Tx, _data: &mut D)
+where
+    D: BorshSerialize,
+{
 }
