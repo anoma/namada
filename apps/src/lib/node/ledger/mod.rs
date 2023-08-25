@@ -33,7 +33,6 @@ use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint_proto::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
-use crate::node::ledger::config::genesis;
 use crate::node::ledger::ethereum_oracle as oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
 use crate::node::ledger::shims::abcipp_shim::AbcippShim;
@@ -98,7 +97,7 @@ impl Shell {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
                     init,
-                    #[cfg(any(test, feature = "dev"))]
+                    #[cfg(test)]
                     1,
                 )
                 .map(Response::InitChain)
@@ -469,10 +468,7 @@ fn start_abci_broadcaster_shell(
     let tendermint_mode = config.shell.tendermint_mode.clone();
     let proxy_app_address =
         convert_tm_addr_to_socket_addr(&config.cometbft.proxy_app);
-    #[cfg(not(any(test, feature = "dev")))]
-    let genesis = genesis::genesis(&config.shell.base_dir, &config.chain_id);
-    #[cfg(any(test, feature = "dev"))]
-    let genesis = genesis::genesis(1);
+
     let (shell, abci_service, service_handle) = AbcippShim::new(
         config,
         wasm_dir,
@@ -481,7 +477,6 @@ fn start_abci_broadcaster_shell(
         &db_cache,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
-        genesis.native_token,
     );
 
     // Channel for signalling shut down to ABCI server

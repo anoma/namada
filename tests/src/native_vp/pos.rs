@@ -95,7 +95,7 @@
 //! - add slashes
 //! - add rewards
 
-use namada::ledger::pos::namada_proof_of_stake::init_genesis;
+use namada::ledger::pos::namada_proof_of_stake;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::GenesisValidator;
 use namada::types::storage::Epoch;
@@ -125,7 +125,7 @@ pub fn init_pos(
         //     .storage
         //     .init_genesis(params, genesis_validators.iter(), start_epoch)
         //     .unwrap();
-        init_genesis(
+        namada_proof_of_stake::test_utils::init_genesis_helper(
             &mut tx_env.wl_storage,
             params,
             genesis_validators.iter().cloned(),

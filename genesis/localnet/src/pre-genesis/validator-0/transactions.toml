@@ -1,0 +1,44 @@
+[[validator_account]]
+alias = "validator-0"
+dkg_key = "dpktest1vqqqqqpgmxyeqqyxpnsvjjmgzznedu7p5pj8hqm63tch8s450qlkeyrxgrrlduk4f5jkm2v0cw4j0kkn4cyas978purkw5j6l8yduvg5xtcj9klp8scv3jz7mvh7dm7csay759xkq9cn9hkuw0c2kajwrmn599qvkwwlvs"
+vp = "vp_validator"
+commission_rate = "0.05"
+max_commission_rate_change = "0.01"
+net_address = "127.0.0.1:27656"
+
+[validator_account.account_key]
+pk = "pktest1qqr7u9ckzc6t86nm28clm6devgukzqpvfqfngqy84uxtnwuag6mtktq58zn"
+authorization = "sigtest1qz0wjgw9rjmy3asnwendqwlxehlpgjw08e0dc08zspq40lgu36938md0rqgxqr4k87utvxr92kt9lluz75u7rpfu2tzt46exs0a22scq75u02d"
+
+[validator_account.consensus_key]
+pk = "pktest1qqhd0s5xyq2hl4g5sy8r6zap5duqal4kafgny72dmg748w4yr0qn7xka482"
+authorization = "sigtest1qznplqnc4nqejkycaalf8x3sszgqyewesfmn4uhuu20pa4mqd93td6untfplnej802398mmsawe2se4f8q6mv4lhd9ddarkajzu0afcdazkfet"
+
+[validator_account.protocol_key]
+pk = "pktest1qq6a47unql7zwwk7w8dwf7pwzz7p7g9expnh5p6lxj70nfahp78wcahft99"
+authorization = "sigtest1qqfe2zhh595rnu6jhlncgvy5h28tpwvay4ch59qzsxjtnsj993td0lwv4n6n7x8x26nds80u38vc50nvxjjhw95sj585cv0pfut8a3cxg4xdj2"
+
+[validator_account.tendermint_node_key]
+pk = "pktest1qrsc90u65t8j7dx0722k3k2l074g6wffry5hpt9hmjh58qhl9ur7kdcyqfx"
+authorization = "sigtest1qr4ghhefkcx0t0zw7gfdx9aa5na5769sy5acy357cm86ta9fuj27zgc2gxah9c89eha43q55hce6560pnr9cklkt7kppymllsme66aqx9xkekq"
+
+[validator_account.eth_hot_key]
+pk = "pktest1qyp93c7g30qr8u6nqap3q0vxwuv90k4rks4858euu2xheud0nzexpvqq9ka73"
+authorization = "sigtest1qyquurgz9e5pmrv0vtwvz6urg40kx29360drua8f6knpc2uewqmvyvyvj9esrcrsw8ktp78qaw5w0wnlrxy2jxm5df2yhz7tvd0rpaecqyvgx236"
+
+[validator_account.eth_cold_key]
+pk = "pktest1qyp2hrg69ycv6mw3r6lllwt27a9lnjp25dty7lqmz2mzddghlkltgtctnnun4"
+authorization = "sigtest1q9ex7dwjjf6n47a5e59ueeuxszps7ns7ndljq56h3lzdnhwmwsxdcd9hrszeat25mur8u7se9szp4x7vaqlajq7fvz283jqa6nh9fv5wqqg6wghw"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup"
+target = "validator-0"
+amount = "200000000000"
+signature = "sigtest1qpjdke7x7rtjmhslekpdt0n48l2cmv50xpxgn5wm7p0hfy8fsu599yuxv0663tm2e2r94ya6epju59wv69uerfnh074egqeepaymv9gqvv73qn"
+
+[[bond]]
+source = "validator-0"
+validator = "validator-0"
+amount = "100000000000"
+signature = "sigtest1qpzctepzngcjvfz0swvzy2mv7nvzxyxf8fvrynczh5cpncue7ll5prcth8j2cjr02a5aphr3vxld37nhk9fu0yav48y8rhdj68twwusq82mjn8"

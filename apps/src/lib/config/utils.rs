@@ -65,6 +65,30 @@ pub fn convert_tm_addr_to_socket_addr(
     }
 }
 
+/// Set the IP address of a [`TendermintAddress`]
+pub fn set_ip(tm_addr: &mut TendermintAddress, new_host: impl Into<String>) {
+    match tm_addr {
+        TendermintAddress::Tcp { host, .. } => {
+            *host = new_host.into();
+        }
+        TendermintAddress::Unix { path: _ } => {
+            panic!("Unix addresses aren't currently supported.")
+        }
+    }
+}
+
+/// Set the port of a [`TendermintAddress`]
+pub fn set_port(tm_addr: &mut TendermintAddress, new_port: impl Into<u16>) {
+    match tm_addr {
+        TendermintAddress::Tcp { port, .. } => {
+            *port = new_port.into();
+        }
+        TendermintAddress::Unix { path: _ } => {
+            panic!("Unix addresses aren't currently supported.")
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::panic;

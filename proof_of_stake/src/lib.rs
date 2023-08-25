@@ -34,7 +34,6 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
     NestedSubKey, SubKey,
 };
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
-use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
     self, ResultExt, StorageRead, StorageWrite,
 };
@@ -64,12 +63,14 @@ use thiserror::Error;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
-    SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorEthColdKeys, ValidatorEthHotKeys,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
+    ConsensusValidatorSets, Position, RewardsProducts, Slash, SlashType,
+    Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys, ValidatorDeltas,
+    ValidatorEthColdKeys, ValidatorEthHotKeys, ValidatorPositionAddresses,
+    ValidatorSetPositions, ValidatorSetUpdate, ValidatorState, ValidatorStates,
+    VoteInfo, WeightedValidator,
 };
+
+use crate::epoched::{EpochOffset, OffsetPipelineLen};
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -398,7 +399,6 @@ pub fn delegator_rewards_products_handle(
 pub fn init_genesis<S>(
     storage: &mut S,
     params: &PosParams,
-    validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
 where
@@ -406,109 +406,28 @@ where
 {
     tracing::debug!("Initializing PoS genesis");
     write_pos_params(storage, params.clone())?;
-
-    let mut total_bonded = token::Amount::default();
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
     validator_addresses_handle().init(storage, current_epoch)?;
+    tracing::debug!("Finished genesis");
+    Ok(())
+}
 
-    for GenesisValidator {
-        address,
-        tokens,
-        consensus_key,
-        eth_cold_key,
-        eth_hot_key,
-        commission_rate,
-        max_commission_rate_change,
-    } in validators
-    {
-        // This will fail if the key is already being used - the uniqueness must
-        // be enforced in the genesis configuration to prevent it
-        try_insert_consensus_key(storage, &consensus_key)?;
-
-        total_bonded += tokens;
-
-        // Insert the validator into a validator set and write its epoched
-        // validator data
-        insert_validator_into_validator_set(
-            storage,
-            params,
-            &address,
-            tokens,
-            current_epoch,
-            0,
-        )?;
-
-        validator_addresses_handle()
-            .at(&current_epoch)
-            .insert(storage, address.clone())?;
-
-        // Write other validator data to storage
-        write_validator_address_raw_hash(storage, &address, &consensus_key)?;
-        write_validator_max_commission_rate_change(
-            storage,
-            &address,
-            max_commission_rate_change,
-        )?;
-        validator_consensus_key_handle(&address).init_at_genesis(
-            storage,
-            consensus_key,
-            current_epoch,
-        )?;
-        validator_eth_hot_key_handle(&address).init_at_genesis(
-            storage,
-            eth_hot_key,
-            current_epoch,
-        )?;
-        validator_eth_cold_key_handle(&address).init_at_genesis(
-            storage,
-            eth_cold_key,
-            current_epoch,
-        )?;
-        let delta = token::Change::from(tokens);
-        validator_deltas_handle(&address).init_at_genesis(
-            storage,
-            delta,
-            current_epoch,
-        )?;
-        bond_handle(&address, &address).init_at_genesis(
-            storage,
-            delta,
-            current_epoch,
-        )?;
-        total_bonded_handle(&address).init_at_genesis(
-            storage,
-            delta,
-            current_epoch,
-        )?;
-        validator_commission_rate_handle(&address).init_at_genesis(
-            storage,
-            commission_rate,
-            current_epoch,
-        )?;
-    }
-
-    // Store the total consensus validator stake to storage
-    store_total_consensus_stake(storage, current_epoch)?;
-
-    // Write total deltas to storage
-    total_deltas_handle().init_at_genesis(
-        storage,
-        token::Change::from(total_bonded),
-        current_epoch,
-    )?;
-
-    // Credit bonded token amount to the PoS account
-    let staking_token = staking_token_address(storage);
-    credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
-    // Copy the genesis validator set into the pipeline epoch as well
+/// new init genesis
+pub fn copy_genesis_validator_sets<S>(
+    storage: &mut S,
+    params: &PosParams,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Copy the genesis validator sets up to the pipeline epoch
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
         copy_validator_sets_and_positions(storage, current_epoch, epoch)?;
+        store_total_consensus_stake(storage, epoch)?;
     }
-
-    tracing::debug!("Genesis initialized");
-
     Ok(())
 }
 
@@ -673,12 +592,13 @@ pub fn update_validator_deltas<S>(
     validator: &Address,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
-    offset: u64,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = validator_deltas_handle(validator);
+    let offset = offset_opt.unwrap_or_else(|| OffsetPipelineLen::value(params));
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -851,12 +771,13 @@ pub fn update_total_deltas<S>(
     params: &PosParams,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
-    offset: u64,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
     let handle = total_deltas_handle();
+    let offset = offset_opt.unwrap_or_else(|| OffsetPipelineLen::value(params));
     let val = handle
         .get_delta_val(storage, current_epoch + offset, params)?
         .unwrap_or_default();
@@ -916,6 +837,7 @@ pub fn bond_tokens<S>(
     validator: &Address,
     amount: token::Amount,
     current_epoch: Epoch,
+    offset_opt: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -926,7 +848,8 @@ where
         amount.to_string_native()
     );
     let params = read_pos_params(storage)?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = current_epoch + offset;
     if let Some(source) = source {
         if source != validator && is_validator(storage, source)? {
             return Err(
@@ -935,7 +858,7 @@ where
         }
     }
     let validator_state_handle = validator_state_handle(validator);
-    let state = validator_state_handle.get(storage, pipeline_epoch, &params)?;
+    let state = validator_state_handle.get(storage, offset_epoch, &params)?;
     if state.is_none() {
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
@@ -947,7 +870,7 @@ where
 
     // Check that validator is not inactive at anywhere between the current
     // epoch and pipeline offset
-    for epoch in current_epoch.iter_range(params.pipeline_len) {
+    for epoch in current_epoch.iter_range(offset) {
         if let Some(ValidatorState::Inactive) =
             validator_state_handle.get(storage, epoch, &params)?
         {
@@ -970,7 +893,6 @@ where
     }
 
     // Initialize or update the bond at the pipeline offset
-    let offset = params.pipeline_len;
     let cur_remain = bond_handle
         .get_delta_val(storage, current_epoch + offset, &params)?
         .unwrap_or_default();
@@ -1004,7 +926,7 @@ where
     // must be no changes to the validator set. Check at the pipeline epoch.
     let is_jailed_at_pipeline = matches!(
         validator_state_handle
-            .get(storage, pipeline_epoch, &params)?
+            .get(storage, offset_epoch, &params)?
             .unwrap(),
         ValidatorState::Jailed
     );
@@ -1015,6 +937,7 @@ where
             validator,
             amount,
             current_epoch,
+            offset_opt,
         )?;
     }
 
@@ -1025,16 +948,15 @@ where
         validator,
         amount,
         current_epoch,
-        offset,
+        offset_opt,
     )?;
 
-    update_total_deltas(storage, &params, amount, current_epoch, offset)?;
+    update_total_deltas(storage, &params, amount, current_epoch, offset_opt)?;
 
     // Transfer the bonded tokens from the source to PoS
-    let staking_token = staking_token_address(storage);
     transfer_tokens(
         storage,
-        &staking_token,
+        &staking_token_address(storage),
         token::Amount::from_change(amount),
         source,
         &ADDRESS,
@@ -1156,6 +1078,7 @@ fn update_validator_set<S>(
     validator: &Address,
     token_change: token::Change,
     current_epoch: Epoch,
+    offset: Option<u64>,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1163,22 +1086,20 @@ where
     if token_change.is_zero() {
         return Ok(());
     }
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let offset = offset.unwrap_or(params.pipeline_len);
+    let epoch = current_epoch + offset;
     tracing::debug!(
-        "Update epoch for validator set: {pipeline_epoch}, validator: \
-         {validator}"
+        "Update epoch for validator set: {epoch}, validator: {validator}"
     );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
     // Validator sets at the pipeline offset
-    let consensus_val_handle = consensus_validator_set.at(&pipeline_epoch);
-    let below_capacity_val_handle =
-        below_capacity_validator_set.at(&pipeline_epoch);
+    let consensus_val_handle = consensus_validator_set.at(&epoch);
+    let below_capacity_val_handle = below_capacity_validator_set.at(&epoch);
 
-    let tokens_pre =
-        read_validator_stake(storage, params, validator, pipeline_epoch)?
-            .unwrap_or_default();
+    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?
+        .unwrap_or_default();
 
     // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
@@ -1195,12 +1116,8 @@ where
 
     // The position is only set when the validator is in consensus or
     // below_capacity set (not in below_threshold set)
-    let position = read_validator_set_position(
-        storage,
-        validator,
-        pipeline_epoch,
-        params,
-    )?;
+    let position =
+        read_validator_set_position(storage, validator, epoch, params)?;
     if let Some(position) = position {
         let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
@@ -1235,12 +1152,12 @@ where
                     storage,
                     ValidatorState::BelowThreshold,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
 
                 // Remove the validator's position from storage
                 validator_set_positions_handle()
-                    .at(&pipeline_epoch)
+                    .at(&epoch)
                     .remove(storage, validator)?;
 
                 // Promote the next below-cap validator if there is one
@@ -1265,14 +1182,14 @@ where
                     insert_validator_into_set(
                         &consensus_val_handle.at(&max_bc_amount),
                         storage,
-                        &pipeline_epoch,
+                        &epoch,
                         &removed_max_below_capacity,
                     )?;
                     validator_state_handle(&removed_max_below_capacity).set(
                         storage,
                         ValidatorState::Consensus,
                         current_epoch,
-                        params.pipeline_len,
+                        offset,
                     )?;
                 }
             } else if tokens_post < max_below_capacity_validator_amount {
@@ -1300,28 +1217,28 @@ where
                     &consensus_val_handle
                         .at(&max_below_capacity_validator_amount),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     &removed_max_below_capacity,
                 )?;
                 validator_state_handle(&removed_max_below_capacity).set(
                     storage,
                     ValidatorState::Consensus,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
 
                 // Insert the current validator into the below-capacity set
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
             } else {
                 tracing::debug!("Validator remains in consensus set");
@@ -1330,7 +1247,7 @@ where
                 insert_validator_into_set(
                     &consensus_val_handle.at(&tokens_post),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
             }
@@ -1375,14 +1292,14 @@ where
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
             } else {
                 // The current validator is demoted to the below-threshold set
@@ -1394,12 +1311,12 @@ where
                     storage,
                     ValidatorState::BelowThreshold,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
 
                 // Remove the validator's position from storage
                 validator_set_positions_handle()
-                    .at(&pipeline_epoch)
+                    .at(&epoch)
                     .remove(storage, validator)?;
             }
         }
@@ -1411,7 +1328,7 @@ where
 
         // Move the validator into the appropriate set
         let num_consensus_validators =
-            get_num_consensus_validators(storage, pipeline_epoch)?;
+            get_num_consensus_validators(storage, epoch)?;
         if num_consensus_validators < params.max_validator_slots {
             // Just insert into the consensus set
             tracing::debug!("Inserting validator into the consensus set");
@@ -1419,14 +1336,14 @@ where
             insert_validator_into_set(
                 &consensus_val_handle.at(&tokens_post),
                 storage,
-                &pipeline_epoch,
+                &epoch,
                 validator,
             )?;
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
-                params.pipeline_len,
+                offset,
             )?;
         } else {
             let min_consensus_validator_amount =
@@ -1461,14 +1378,14 @@ where
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
-                    params.pipeline_len,
+                    offset,
                 )?;
             }
         }
@@ -2035,6 +1952,7 @@ where
             validator,
             -amount_after_slashing,
             current_epoch,
+            None,
         )?;
     }
 
@@ -2045,14 +1963,14 @@ where
         validator,
         -amount_after_slashing,
         current_epoch,
-        params.pipeline_len,
+        None,
     )?;
     update_total_deltas(
         storage,
         &params,
         -amount_after_slashing,
         current_epoch,
-        params.pipeline_len,
+        None,
     )?;
 
     Ok(())
@@ -2157,6 +2075,8 @@ pub struct BecomeValidator<'a, S> {
     pub commission_rate: Dec,
     /// Max commission rate change.
     pub max_commission_rate_change: Dec,
+    /// Optional offset to use instead of pipeline offset
+    pub offset_opt: Option<u64>,
 }
 
 /// Initialize data for a new validator.
@@ -2176,12 +2096,14 @@ where
         current_epoch,
         commission_rate,
         max_commission_rate_change,
+        offset_opt,
     } = args;
+    let offset = offset_opt.unwrap_or(params.pipeline_len);
 
     // This will fail if the key is already being used
     try_insert_consensus_key(storage, consensus_key)?;
 
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch + offset;
     validator_addresses_handle()
         .at(&pipeline_epoch)
         .insert(storage, address.clone())?;
@@ -2199,31 +2121,31 @@ where
         storage,
         consensus_key.clone(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_eth_hot_key_handle(address).set(
         storage,
         eth_hot_key.clone(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_eth_cold_key_handle(address).set(
         storage,
         eth_cold_key.clone(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_commission_rate_handle(address).set(
         storage,
         commission_rate,
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
     validator_deltas_handle(address).set(
         storage,
         token::Change::default(),
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
 
     // The validator's stake at initialization is 0, so its state is immediately
@@ -2232,7 +2154,7 @@ where
         storage,
         ValidatorState::BelowThreshold,
         current_epoch,
-        params.pipeline_len,
+        offset,
     )?;
 
     Ok(())
@@ -2447,7 +2369,9 @@ where
             .write(&dest_key, dest_balance)
             .expect("Unable to write token balance for PoS system");
     } else {
-        tracing::error!("PoS system transfer error, the source has no balance");
+        tracing::error!(
+            "PoS system transfer error, the source {src} has no balance"
+        );
     }
     Ok(())
 }
@@ -3887,14 +3811,14 @@ where
                 &validator,
                 delta,
                 current_epoch,
-                offset,
+                Some(offset),
             )?;
             update_total_deltas(
                 storage,
                 &params,
                 delta,
                 current_epoch,
-                offset,
+                Some(offset),
             )?;
         }
     }
@@ -4042,4 +3966,60 @@ where
         }
     }
     Ok(slashes)
+}
+
+/// PoS related utility functions to help set up tests.
+pub mod test_utils {
+    use namada_core::ledger::storage_api;
+    use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+
+    use crate::parameters::PosParams;
+    use crate::types::GenesisValidator;
+    use crate::{become_validator, bond_tokens, init_genesis, BecomeValidator};
+
+    /// Helper function to intialize storage with PoS data
+    /// about validators for tests.
+    pub fn init_genesis_helper<S>(
+        storage: &mut S,
+        params: &PosParams,
+        validators: impl Iterator<Item = GenesisValidator>,
+        current_epoch: namada_core::types::storage::Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        init_genesis(storage, params, current_epoch)?;
+        for GenesisValidator {
+            address,
+            consensus_key,
+            eth_cold_key,
+            eth_hot_key,
+            commission_rate,
+            max_commission_rate_change,
+            tokens,
+        } in validators
+        {
+            become_validator(BecomeValidator {
+                storage,
+                params,
+                address: &address,
+                consensus_key: &consensus_key,
+                eth_cold_key: &eth_cold_key,
+                eth_hot_key: &eth_hot_key,
+                current_epoch,
+                commission_rate,
+                max_commission_rate_change,
+                offset_opt: Some(0),
+            })?;
+            bond_tokens(
+                storage,
+                None,
+                &address,
+                tokens,
+                current_epoch,
+                Some(0),
+            )?;
+        }
+        Ok(())
+    }
 }

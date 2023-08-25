@@ -1,0 +1,5 @@
+# Token accounts with their validity predicates
+
+[token.NAM]
+vp = "vp_token"
+denom = 6

@@ -41,7 +41,7 @@ pub struct Config {
     pub ledger: Ledger,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TendermintMode {
     Full,
     Validator,

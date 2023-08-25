@@ -336,7 +336,7 @@ mod tests {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_ethereum_bridge::parameters::{
-        Contracts, EthereumBridgeConfig, UpgradeableContract,
+        Contracts, EthereumBridgeParams, UpgradeableContract,
     };
     use rand::Rng;
 
@@ -392,7 +392,7 @@ mod tests {
             .expect("Test failed");
 
         // a dummy config for testing
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {

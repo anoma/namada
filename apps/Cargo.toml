@@ -54,10 +54,9 @@ default = ["std", "abciplus"]
 mainnet = [
   "namada/mainnet",
 ]
-dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std"]
 # for integration tests and test utilies
-testing = ["dev"]
+testing = []
 
 abciplus = [
     "namada/abciplus",
@@ -109,6 +108,7 @@ num-rational.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 orion.workspace = true
+pretty_assertions.workspace = true
 prost-types.workspace = true
 prost.workspace = true
 rand_core.workspace = true

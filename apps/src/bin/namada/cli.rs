@@ -63,7 +63,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
 fn handle_subcommand(program: &str, mut sub_args: Vec<String>) -> Result<()> {
     let env_vars = env::vars_os();
 
-    let cmd_name = if cfg!(feature = "dev") && env::var("CARGO").is_ok() {
+    let cmd_name = if env::var("CARGO").is_ok() {
         // When the command is ran from inside `cargo run`, we also want to
         // call the sub-command via `cargo run` to rebuild if necessary.
         // We do this by prepending the arguments with `cargo run` arguments.

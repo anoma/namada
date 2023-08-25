@@ -47,16 +47,16 @@ build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
+	$(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
 
 build-debug:
-	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
+	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 
 install-release:
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 check-release:
-	NAMADA_DEV=false $(cargo) check --release --package namada_apps
+	$(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
@@ -79,7 +79,7 @@ check-crates:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -94,7 +94,7 @@ tendermint:
 	./scripts/get_tendermint.sh
 
 install: cometbft
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 cometbft:
 	./scripts/get_cometbft.sh

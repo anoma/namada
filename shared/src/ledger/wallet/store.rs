@@ -1,10 +1,10 @@
 //! Wallet Store information
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::str::FromStr;
 
-use bimap::BiHashMap;
+use bimap::BiBTreeMap;
 use bip39::Seed;
 use itertools::Itertools;
 use masp_primitives::zip32::ExtendedFullViewingKey;
@@ -67,26 +67,26 @@ pub struct ValidatorData {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
-    view_keys: HashMap<Alias, ExtendedViewingKey>,
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
     /// Known spending keys
-    spend_keys: HashMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
+    spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
     /// Known payment addresses
-    payment_addrs: HashMap<Alias, PaymentAddress>,
+    payment_addrs: BTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
-    keys: HashMap<Alias, StoredKeypair<common::SecretKey>>,
+    keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Namada address book
-    addresses: BiHashMap<Alias, Address>,
+    addresses: BiBTreeMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
-    pkhs: HashMap<PublicKeyHash, Alias>,
+    pkhs: BTreeMap<PublicKeyHash, Alias>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
     /// Namada address vp type
-    address_vp_types: HashMap<AddressVpType, HashSet<Address>>,
+    address_vp_types: BTreeMap<AddressVpType, HashSet<Address>>,
 }
 
 /// Grouping of addresses by validity predicate.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, PartialOrd, Ord)]
 pub enum AddressVpType {
     /// The Token
     Token,
@@ -174,11 +174,11 @@ impl Store {
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_keys(
         &self,
-    ) -> HashMap<
+    ) -> BTreeMap<
         Alias,
         (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
     > {
-        let mut keys: HashMap<
+        let mut keys: BTreeMap<
             Alias,
             (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
         > = self
@@ -198,24 +198,24 @@ impl Store {
     }
 
     /// Get all known addresses by their alias.
-    pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
+    pub fn get_addresses(&self) -> &BiBTreeMap<Alias, Address> {
         &self.addresses
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &HashMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(&self) -> &BTreeMap<Alias, PaymentAddress> {
         &self.payment_addrs
     }
 
     /// Get all known viewing keys by their alias.
-    pub fn get_viewing_keys(&self) -> &HashMap<Alias, ExtendedViewingKey> {
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
-    ) -> &HashMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
+    ) -> &BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
         &self.spend_keys
     }
 
@@ -571,6 +571,28 @@ impl Store {
         Some(alias)
     }
 
+    /// Extend this store from another store (typically pre-genesis).
+    /// Note that this method ignores `validator_data` if any.
+    pub fn extend(&mut self, store: Store) {
+        let Self {
+            view_keys,
+            spend_keys,
+            payment_addrs,
+            keys,
+            addresses,
+            pkhs,
+            validator_data: _,
+            address_vp_types,
+        } = self;
+        view_keys.extend(store.view_keys);
+        spend_keys.extend(store.spend_keys);
+        payment_addrs.extend(store.payment_addrs);
+        keys.extend(store.keys);
+        addresses.extend(store.addresses);
+        pkhs.extend(store.pkhs);
+        address_vp_types.extend(store.address_vp_types);
+    }
+
     /// Extend this store from pre-genesis validator wallet.
     pub fn extend_from_pre_genesis_validator(
         &mut self,
@@ -750,7 +772,7 @@ impl<'de> Deserialize<'de> for AddressVpType {
     }
 }
 
-#[cfg(all(test, feature = "dev"))]
+#[cfg(test)]
 mod test_wallet {
     use base58::{self, FromBase58};
     use bip39::{Language, Mnemonic};

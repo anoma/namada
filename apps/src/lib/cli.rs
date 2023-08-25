@@ -1769,6 +1769,8 @@ pub mod cmds {
         PkToTmAddress(PkToTmAddress),
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
+        ValidateGenesisTemplates(ValidateGenesisTemplates),
+        SignGenesisTx(SignGenesisTx),
     }
 
     impl SubCmd for Utils {
@@ -1788,6 +1790,10 @@ pub mod cmds {
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
+                let validate_genesis_templates =
+                    SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
+                let genesis_tx =
+                    SubCmd::parse(matches).map(Self::SignGenesisTx);
                 join_network
                     .or(fetch_wasms)
                     .or(init_network)
@@ -1795,6 +1801,8 @@ pub mod cmds {
                     .or(pk_to_tm_address)
                     .or(default_base_dir)
                     .or(epoch_sleep)
+                    .or(validate_genesis_templates)
+                    .or(genesis_tx)
             })
         }
 
@@ -1808,6 +1816,8 @@ pub mod cmds {
                 .subcommand(PkToTmAddress::def())
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
+                .subcommand(ValidateGenesisTemplates::def())
+                .subcommand(SignGenesisTx::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -1890,6 +1900,44 @@ pub mod cmds {
                      node.",
                 )
                 .add_args::<args::InitGenesisValidator>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateGenesisTemplates(pub args::ValidateGenesisTemplates);
+
+    impl SubCmd for ValidateGenesisTemplates {
+        const CMD: &'static str = "validate-genesis-templates";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::ValidateGenesisTemplates::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Validate genesis templates.")
+                .add_args::<args::ValidateGenesisTemplates>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignGenesisTx(pub args::SignGenesisTx);
+
+    impl SubCmd for SignGenesisTx {
+        const CMD: &'static str = "sign-genesis-tx";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::SignGenesisTx::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Sign genesis transaction(s).")
+                .add_args::<args::SignGenesisTx>()
         }
     }
 
@@ -2408,6 +2456,7 @@ pub mod args {
     pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
+    pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
     pub const HALT_ACTION: ArgFlag = flag("halt");
@@ -2437,8 +2486,10 @@ pub mod args {
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
+    pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
+    pub const PATH: Arg<PathBuf> = arg("path");
     pub const PIN: ArgFlag = flag("pin");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
@@ -2459,11 +2510,14 @@ pub mod args {
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
         arg_opt("public-key");
+    pub const RAW_SOURCE: Arg<String> = arg("source");
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
+    pub const SELF_BOND_AMOUNT: Arg<token::DenominatedAmount> =
+        arg("self-bond-amount");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEY_OPT: ArgOpt<WalletKeypair> = SIGNING_KEY.opt();
     pub const SIGNING_KEY: Arg<WalletKeypair> = arg("signing-key");
@@ -2471,11 +2525,14 @@ pub mod args {
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
+    pub const TRANSFER_FROM_SOURCE_AMOUNT: Arg<token::DenominatedAmount> =
+        arg("transfer-from-source-amount");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
@@ -5044,6 +5101,7 @@ pub mod args {
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
+        pub allow_duplicate_ip: bool,
     }
 
     impl Args for JoinNetwork {
@@ -5052,11 +5110,13 @@ pub mod args {
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
+            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
                 dont_prefetch_wasm,
+                allow_duplicate_ip,
             }
         }
 
@@ -5067,6 +5127,10 @@ pub mod args {
                 .arg(PRE_GENESIS_PATH.def().help("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\"."))
             .arg(DONT_PREFETCH_WASM.def().help(
                 "Do not pre-fetch WASM.",
+            ))
+            .arg(ALLOW_DUPLICATE_IP.def().help(
+                "Toggle to disable guard against peers connecting from the \
+                 same IP. This option shouldn't be used in mainnet.",
             ))
         }
     }
@@ -5121,48 +5185,41 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitNetwork {
-        pub genesis_path: PathBuf,
+        pub templates_path: PathBuf,
         pub wasm_checksums_path: PathBuf,
         pub chain_id_prefix: ChainIdPrefix,
-        pub unsafe_dont_encrypt: bool,
+        pub genesis_time: DateTimeUtc,
         pub consensus_timeout_commit: Timeout,
-        pub localhost: bool,
-        pub allow_duplicate_ip: bool,
         pub dont_archive: bool,
         pub archive_dir: Option<PathBuf>,
     }
 
     impl Args for InitNetwork {
         fn parse(matches: &ArgMatches) -> Self {
-            let genesis_path = GENESIS_PATH.parse(matches);
+            let templates_path = TEMPLATES_PATH.parse(matches);
             let wasm_checksums_path = WASM_CHECKSUMS_PATH.parse(matches);
             let chain_id_prefix = CHAIN_ID_PREFIX.parse(matches);
-            let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
+            let genesis_time = GENESIS_TIME.parse(matches);
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
-            let localhost = LOCALHOST.parse(matches);
-            let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             let dont_archive = DONT_ARCHIVE.parse(matches);
             let archive_dir = ARCHIVE_DIR.parse(matches);
             Self {
-                genesis_path,
+                templates_path,
                 wasm_checksums_path,
                 chain_id_prefix,
-                unsafe_dont_encrypt,
+                genesis_time,
                 consensus_timeout_commit,
-                localhost,
-                allow_duplicate_ip,
                 dont_archive,
                 archive_dir,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(
-                GENESIS_PATH.def().help(
-                    "Path to the preliminary genesis configuration file.",
-                ),
-            )
+            app.arg(TEMPLATES_PATH.def().help(
+                "Path to the directory with genesis templates to be used to \
+                 initialize the network.",
+            ))
             .arg(
                 WASM_CHECKSUMS_PATH
                     .def()
@@ -5172,21 +5229,13 @@ pub mod args {
                 "The chain ID prefix. Up to 19 alphanumeric, '.', '-' or '_' \
                  characters.",
             ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
-                 this for keys used in a live network.",
+            .arg(GENESIS_TIME.def().help(
+                "The start time of the network in RFC 3339 and ISO 8601 \
+                 format. For example: \"2021-12-31T00:00:00Z\".",
             ))
             .arg(CONSENSUS_TIMEOUT_COMMIT.def().help(
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
-            ))
-            .arg(LOCALHOST.def().help(
-                "Use localhost address for P2P and RPC connections for the \
-                 validators ledger",
-            ))
-            .arg(ALLOW_DUPLICATE_IP.def().help(
-                "Toggle to disable guard against peers connecting from the \
-                 same IP. This option shouldn't be used in mainnet.",
             ))
             .arg(
                 DONT_ARCHIVE
@@ -5202,16 +5251,20 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
+        pub source: String,
         pub alias: String,
         pub commission_rate: Dec,
         pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
+        pub transfer_from_source_amount: token::Amount,
+        pub self_bond_amount: token::Amount,
     }
 
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
+            let source = RAW_SOURCE.parse(matches);
             let alias = ALIAS.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
@@ -5219,40 +5272,121 @@ pub mod args {
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
+            // this must be an amount of native tokens
+            let transfer_from_source_amount = TRANSFER_FROM_SOURCE_AMOUNT
+                .parse(matches)
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap()
+                .amount;
+            // this must be an amount of native tokens
+            let self_bond_amount = SELF_BOND_AMOUNT
+                .parse(matches)
+                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+                .unwrap()
+                .amount;
             Self {
+                source,
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
                 commission_rate,
                 max_commission_rate_change,
+                transfer_from_source_amount,
+                self_bond_amount,
             }
         }
 
         fn def(app: App) -> App {
-            app.arg(ALIAS.def().help("The validator address alias."))
-                .arg(NET_ADDRESS.def().help(
-                    "Static {host:port} of your validator node's P2P address. \
-                     Namada uses port `26656` for P2P connections by default, \
-                     but you can configure a different value.",
-                ))
-                .arg(COMMISSION_RATE.def().help(
-                    "The commission rate charged by the validator for \
-                     delegation rewards. This is a required parameter.",
-                ))
-                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                    "The maximum change per epoch in the commission rate \
-                     charged by the validator for delegation rewards. This is \
-                     a required parameter.",
-                ))
-                .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
-                     use this for keys used in a live network.",
-                ))
-                .arg(SCHEME.def().help(
-                    "The key scheme/type used for the validator keys. \
-                     Currently supports ed25519 and secp256k1.",
-                ))
+            app.arg(RAW_SOURCE.def().help(
+                "The source key for native token transfer from the \
+                 `balances.toml` genesis template.",
+            ))
+            .arg(ALIAS.def().help("The validator address alias."))
+            .arg(NET_ADDRESS.def().help(
+                "Static {host:port} of your validator node's P2P address. \
+                 Namada uses port `26656` for P2P connections by default, but \
+                 you can configure a different value.",
+            ))
+            .arg(COMMISSION_RATE.def().help(
+                "The commission rate charged by the validator for delegation \
+                 rewards. This is a required parameter.",
+            ))
+            .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
+                "The maximum change per epoch in the commission rate charged \
+                 by the validator for delegation rewards. This is a required \
+                 parameter.",
+            ))
+            .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
+                 this for keys used in a live network.",
+            ))
+            .arg(SCHEME.def().help(
+                "The key scheme/type used for the validator keys. Currently \
+                 supports ed25519 and secp256k1.",
+            ))
+            .arg(TRANSFER_FROM_SOURCE_AMOUNT.def().help(
+                "The amount of native token to transfer into the validator \
+                 account from the `--source`. To self-bond some tokens to the \
+                 validator at genesis, specify `--self-bond-amount`.",
+            ))
+            .arg(
+                SELF_BOND_AMOUNT
+                    .def()
+                    .help(
+                        "The amount of native token to self-bond in PoS. \
+                         Because this amount will be bonded from the \
+                         validator's account, it must be lower or equal to \
+                         the amount specified in \
+                         `--transfer-from-source-amount`.",
+                    )
+                    .requires(TRANSFER_FROM_SOURCE_AMOUNT.name),
+            )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateGenesisTemplates {
+        /// Templates dir
+        pub path: PathBuf,
+    }
+
+    impl Args for ValidateGenesisTemplates {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            Self { path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .help("Path to the directory with the template files."),
+            )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignGenesisTx {
+        pub path: PathBuf,
+        pub output: Option<PathBuf>,
+    }
+
+    impl Args for SignGenesisTx {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            let output = OUTPUT.parse(matches);
+            Self { path, output }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .help("Path to the unsigned transactions TOML file."),
+            )
+            .arg(OUTPUT.def().help(
+                "Save the output to a TOML file. When not supplied, the \
+                 signed transactions will be printed to stdout instead.",
+            ))
         }
     }
 }

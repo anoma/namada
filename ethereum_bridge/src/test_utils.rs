@@ -19,7 +19,7 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::GenesisValidator;
 
 use crate::parameters::{
-    ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+    ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };
 
@@ -85,12 +85,12 @@ pub fn init_default_storage(
     )
 }
 
-/// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestWlStorage`], and
+/// Writes a dummy [`EthereumBridgeParams`] to the given [`TestWlStorage`], and
 /// returns it.
 pub fn bootstrap_ethereum_bridge(
     wl_storage: &mut TestWlStorage,
-) -> EthereumBridgeConfig {
-    let config = EthereumBridgeConfig {
+) -> EthereumBridgeParams {
+    let config = EthereumBridgeParams {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
@@ -164,14 +164,14 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
-    namada_proof_of_stake::init_genesis(
+    namada_proof_of_stake::test_utils::init_genesis_helper(
         wl_storage,
         &PosParams::default(),
         validators.into_iter(),
         0.into(),
     )
     .expect("Test failed");
-    let config = EthereumBridgeConfig {
+    let config = EthereumBridgeParams {
         eth_start_height: Default::default(),
         min_confirmations: Default::default(),
         contracts: Contracts {

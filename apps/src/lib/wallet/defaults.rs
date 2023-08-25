@@ -1,6 +1,6 @@
 //! Default addresses and keys.
 
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test, feature = "testing"))]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
@@ -69,7 +69,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
     addresses
 }
 
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test, feature = "testing"))]
 mod dev {
     use std::collections::HashMap;
 
@@ -88,16 +88,12 @@ mod dev {
     {
         // ed25519 bytes
         let bytes: [u8; 33] = [
-            0, 200, 107, 23, 252, 78, 80, 8, 164, 142, 3, 194, 33, 12, 250,
-            169, 211, 127, 47, 13, 194, 54, 199, 81, 102, 246, 189, 119, 144,
-            25, 27, 113, 222,
+            0, 8, 203, 15, 23, 132, 124, 51, 134, 5, 59, 100, 182, 229, 242,
+            248, 42, 82, 32, 229, 208, 110, 21, 83, 200, 145, 217, 174, 52,
+            242, 221, 204, 183,
         ];
         // secp256k1 bytes
-        let eth_bridge_key_bytes = [
-            1, 117, 93, 118, 129, 202, 67, 51, 62, 202, 196, 130, 244, 5, 44,
-            88, 200, 121, 169, 11, 227, 79, 223, 74, 88, 49, 132, 213, 59, 64,
-            20, 13, 82,
-        ];
+        let eth_bridge_key_bytes = [1, 73, 128, 64, 124, 81, 68, 131, 194, 58, 72, 213, 51, 85, 192, 160, 120, 101, 179, 206, 202, 93, 240, 14, 184, 137, 132, 252, 137, 33, 146, 68, 77];
         // DkgKeypair
         let dkg_bytes = [
             32, 0, 0, 0, 210, 193, 55, 24, 92, 233, 23, 2, 73, 204, 221, 107,

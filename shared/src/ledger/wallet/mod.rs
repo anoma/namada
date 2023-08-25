@@ -641,6 +641,12 @@ impl<U: WalletUtils> Wallet<U> {
             .map(Into::into)
     }
 
+    /// Extend this wallet from another wallet (typically pre-genesis).
+    /// Note that this method ignores `store.validator_data` if any.
+    pub fn extend(&mut self, wallet: Self) {
+        self.store.extend(wallet.store)
+    }
+
     /// Extend this wallet from pre-genesis validator wallet.
     pub fn extend_from_pre_genesis_validator(
         &mut self,

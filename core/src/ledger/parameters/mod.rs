@@ -125,6 +125,7 @@ impl Parameters {
             faucet_account,
             #[cfg(not(feature = "mainnet"))]
             wrapper_tx_fees,
+            ..
         } = self;
 
         // write max proposal bytes parameter

@@ -129,7 +129,7 @@ pub struct Contracts {
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct EthereumBridgeConfig {
+pub struct EthereumBridgeParams {
     /// Initial Ethereum block height when events will first be extracted from.
     pub eth_start_height: ethereum_structs::BlockHeight,
     /// Minimum number of confirmations needed to trust an Ethereum branch.
@@ -140,7 +140,7 @@ pub struct EthereumBridgeConfig {
     pub contracts: Contracts,
 }
 
-impl EthereumBridgeConfig {
+impl EthereumBridgeParams {
     /// Initialize the Ethereum bridge parameters in storage.
     ///
     /// If these parameters are initialized, the storage subspaces
@@ -193,7 +193,7 @@ impl EthereumBridgeConfig {
         bridge_pool_vp::init_storage(wl_storage);
     }
 
-    /// Reads the latest [`EthereumBridgeConfig`] from storage. If it is not
+    /// Reads the latest [`EthereumBridgeParams`] from storage. If it is not
     /// present, `None` will be returned - this could be the case if the bridge
     /// has not been bootstrapped yet. Panics if the storage appears to be
     /// corrupt.
@@ -289,7 +289,7 @@ mod tests {
 
     use super::*;
     use crate::parameters::{
-        ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+        ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
         UpgradeableContract,
     };
 
@@ -298,7 +298,7 @@ mod tests {
     /// in any of the config structs.
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -314,7 +314,7 @@ mod tests {
             },
         };
         let serialized = toml::to_string(&config)?;
-        let deserialized: EthereumBridgeConfig = toml::from_str(&serialized)?;
+        let deserialized: EthereumBridgeParams = toml::from_str(&serialized)?;
 
         assert_eq!(config, deserialized);
         Ok(())
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
         let mut wl_storage = TestWlStorage::default();
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -340,7 +340,7 @@ mod tests {
         };
         config.init_storage(&mut wl_storage);
 
-        let read = EthereumBridgeConfig::read(&wl_storage).unwrap();
+        let read = EthereumBridgeParams::read(&wl_storage).unwrap();
 
         assert_eq!(config, read);
     }
@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn test_ethereum_bridge_config_uninitialized() {
         let wl_storage = TestWlStorage::default();
-        let read = EthereumBridgeConfig::read(&wl_storage);
+        let read = EthereumBridgeParams::read(&wl_storage);
 
         assert!(read.is_none());
     }
@@ -357,7 +357,7 @@ mod tests {
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut wl_storage = TestWlStorage::default();
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
             contracts: Contracts {
@@ -379,7 +379,7 @@ mod tests {
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
-        EthereumBridgeConfig::read(&wl_storage);
+        EthereumBridgeParams::read(&wl_storage);
     }
 
     #[test]
@@ -398,6 +398,6 @@ mod tests {
             .unwrap();
 
         // This should panic as the other config values are not written
-        EthereumBridgeConfig::read(&wl_storage);
+        EthereumBridgeParams::read(&wl_storage);
     }
 }

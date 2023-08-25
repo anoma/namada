@@ -8,7 +8,7 @@ use eyre::{eyre, Context, Result};
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Method, Request, StatusCode};
 use namada::ledger::eth_bridge::{
-    wrapped_erc20s, ContractVersion, Contracts, EthereumBridgeConfig,
+    wrapped_erc20s, ContractVersion, Contracts, EthereumBridgeParams,
     MinimumConfirmations, UpgradeableContract,
 };
 use namada::types::address::{wnam, Address};
@@ -80,7 +80,7 @@ impl EventsEndpointClient {
 /// validator that is exposing an endpoint for submission of fake Ethereum
 /// events.
 pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
-    let ethereum_bridge_params = EthereumBridgeConfig {
+    let ethereum_bridge_params = EthereumBridgeParams {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can

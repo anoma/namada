@@ -4357,6 +4357,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "orion",
+ "pretty_assertions",
  "proptest",
  "prost",
  "prost-types",

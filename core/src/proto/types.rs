@@ -223,6 +223,30 @@ impl<T, S: Signable<T>> Signed<T, S> {
     }
 }
 
+/// Get a signature for data
+pub fn standalone_signature<T, S: Signable<T>>(
+    keypair: &common::SecretKey,
+    data: &T,
+) -> common::Signature {
+    let to_sign = S::as_signable(data);
+    common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign)
+}
+
+/// Verify that the input data has been signed by the secret key
+/// counterpart of the given public key.
+pub fn verify_standalone_sig<T, S: Signable<T>>(
+    data: &T,
+    pk: &common::PublicKey,
+    sig: &common::Signature,
+) -> std::result::Result<(), VerifySigError> {
+    let signed_data = S::as_signable(data);
+    common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+        pk,
+        &signed_data,
+        sig,
+    )
+}
+
 /// A section representing transaction data
 #[derive(
     Clone,

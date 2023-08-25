@@ -5,7 +5,7 @@ mod test_bridge_pool_vp {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::{
-        wrapped_erc20s, Contracts, EthereumBridgeConfig, UpgradeableContract,
+        wrapped_erc20s, Contracts, EthereumBridgeParams, UpgradeableContract,
     };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::proto::{Code, Data, Section, Signature, Tx};
@@ -63,7 +63,7 @@ mod test_bridge_pool_vp {
             tx,
             ..Default::default()
         };
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {

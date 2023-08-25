@@ -701,6 +701,7 @@ impl EpochOffset for OffsetZero {
     Ord,
 )]
 pub struct OffsetPipelineLen;
+
 impl EpochOffset for OffsetPipelineLen {
     fn value(params: &PosParams) -> u64 {
         params.pipeline_len

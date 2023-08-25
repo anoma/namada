@@ -1,0 +1,114 @@
+# Genesis balances.
+#
+# This files contains the genesis balances of any tokens present at genesis
+# associated with public keys.
+#
+# For example:
+# ```
+# [token.NAM]
+# some_pk_bech32m_encoding = 10 # genesis tokens, the amount can have up to 6 decimal places
+# ```
+#
+# The public keys present in here are taken from `pre-genesis/wallet.toml`
+
+[token.NAM]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+# Because the total sum of tokens must be < `i64::MAX / 1_000_000` (micro units),
+# the value is chosen from:
+# `u64::MAX / 1_000_000 / 2 - 100_000_000_000`
+# where `100_000_000_000` is reserved for other genesis accounts.
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "200000000000"
+
+[token.BTC]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"
+
+[token.ETH]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"
+
+[token.DOT]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"
+
+[token.Schnitzel]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"
+
+[token.Apfel]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"
+
+[token.Kartoffel]
+# albert-key
+pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44 = "1000000"
+# bertha-key
+pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a = "1000000"
+# christel
+pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2 = "1000000"
+# daewon
+pktest1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkyuzdckd = "1000000"
+# faucet-key
+pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher = "9123372036854"
+# validator-0-key
+pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup = "1000000"

@@ -26,7 +26,7 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {
     /// The default chain ID
     pub default_chain_id: Option<ChainId>,
@@ -49,7 +49,7 @@ impl GlobalConfig {
             config
                 .merge(config::File::with_name(file_name))
                 .map_err(Error::ReadError)?;
-        }
+        };
         config.try_into().map_err(Error::DeserializationError)
     }
 

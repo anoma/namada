@@ -155,6 +155,20 @@ impl Dec {
     pub fn is_negative(&self) -> bool {
         self.0.is_negative()
     }
+
+    /// Return the integer value of a [`Dec`] by rounding up.
+    pub fn ceil(&self) -> I256 {
+        if self.0.is_negative() {
+            self.to_i256()
+        } else {
+            let floor = self.to_i256();
+            if (*self - Dec(floor)).is_zero() {
+                floor
+            } else {
+                floor + I256::one()
+            }
+        }
+    }
 }
 
 impl FromStr for Dec {
@@ -163,7 +177,7 @@ impl FromStr for Dec {
     fn from_str(s: &str) -> Result<Self> {
         let ((large, small), is_neg) = if let Some(strip) = s.strip_prefix('-')
         {
-            (strip.split_once('.').unwrap_or((s, "0")), true)
+            (strip.split_once('.').unwrap_or((strip, "0")), true)
         } else {
             (s.split_once('.').unwrap_or((s, "0")), false)
         };
@@ -259,6 +273,12 @@ impl From<usize> for Dec {
 impl From<i128> for Dec {
     fn from(num: i128) -> Self {
         Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+    }
+}
+
+impl From<i32> for Dec {
+    fn from(num: i32) -> Self {
+        Self::from(num as i128)
     }
 }
 
@@ -585,8 +605,6 @@ mod test_dec {
         assert!(Dec::from_str("0.").is_err());
         // Test that multiple decimal points get caught
         assert!(Dec::from_str("1.2.3").is_err());
-        // Test that negative numbers are rejected
-        assert!(Dec::from_str("-1").is_err());
         // Test that non-numerics are caught
         assert!(Dec::from_str("DEADBEEF.12").is_err());
         assert!(Dec::from_str("23.DEADBEEF").is_err());
@@ -614,10 +632,26 @@ mod test_dec {
         );
     }
 
+    /// Test that ordering of [`Dec`] values using more than 64 bits works.
     #[test]
     fn test_ordering() {
         let smaller = Dec::from_str("6483947304.195066085701").unwrap();
         let larger = Dec::from_str("32418116583.390243854642").unwrap();
         assert!(smaller < larger);
+    }
+
+    /// Test that taking the ceiling of a [`Dec`] works.
+    #[test]
+    fn test_ceiling() {
+        let neg = Dec::from_str("-2.4").expect("Test failed");
+        assert_eq!(
+            neg.ceil(),
+            Dec::from_str("-2").expect("Test failed").to_i256()
+        );
+        let pos = Dec::from_str("2.4").expect("Test failed");
+        assert_eq!(
+            pos.ceil(),
+            Dec::from_str("3").expect("Test failed").to_i256()
+        );
     }
 }

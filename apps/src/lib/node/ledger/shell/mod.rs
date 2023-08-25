@@ -27,7 +27,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
-use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
+use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeParams};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::BlockGasMeter;
@@ -440,7 +440,6 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
-        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -452,6 +451,16 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
+        let native_token = if !cfg!(test) {
+            let chain_dir = base_dir.join(chain_id.as_str());
+            let genesis =
+                genesis::chain::Finalized::read_toml_files(&chain_dir)
+                    .expect("Missing genesis files");
+            genesis.get_native_token().clone()
+        } else {
+            address::nam()
+        };
+
         // load last state from storage
         let mut storage = Storage::open(
             db_path,
@@ -473,7 +482,7 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(feature = "dev"))]
+                #[cfg(not(test))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
                     let genesis_path =
@@ -492,7 +501,7 @@ where
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
-                            data: data.clone(),
+                            data,
                             broadcast_sender,
                             eth_oracle,
                         })
@@ -501,14 +510,14 @@ where
                              wallet",
                         )
                 }
-                #[cfg(feature = "dev")]
+                #[cfg(test)]
                 {
                     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-                        wallet::defaults::validator_keys();
+                        crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
+                        data: ValidatorData {
+                            address: crate::wallet::defaults::validator_address(),
+                            keys: ValidatorKeys {
                                 protocol_keypair,
                                 eth_bridge_keypair,
                                 dkg_keypair: Some(dkg_keypair),
@@ -967,7 +976,7 @@ where
                 );
                 return;
             }
-            let Some(config) = EthereumBridgeConfig::read(&self.wl_storage) else {
+            let Some(config) = EthereumBridgeParams::read(&self.wl_storage) else {
                 tracing::info!(
                     "Not starting oracle as the Ethereum bridge config couldn't be found in storage"
                 );
@@ -1646,7 +1655,6 @@ mod test_utils {
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
-                address::nam(),
             );
             shell.wl_storage.storage.block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
@@ -1913,7 +1921,6 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            native_token.clone(),
         );
         shell
             .wl_storage
@@ -1979,7 +1986,6 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
     }

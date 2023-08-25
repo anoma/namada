@@ -1,0 +1,22 @@
+# Token accounts with their validity predicates
+
+[token.NAM]
+denom = 6
+
+[token.BTC]
+denom = 8
+
+[token.ETH]
+denom = 18
+
+[token.DOT]
+denom = 10
+
+[token.Schnitzel]
+denom = 6
+
+[token.Apfel]
+denom = 6
+
+[token.Kartoffel]
+denom = 6

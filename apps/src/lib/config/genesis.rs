@@ -1,23 +1,32 @@
 //! The parameters used for the chain's genesis
 
+pub mod chain;
+pub mod templates;
+pub mod toml_utils;
+pub mod transactions;
+
 use std::collections::HashMap;
+use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 #[cfg(not(feature = "mainnet"))]
 use namada::core::ledger::testnet_pow;
-use namada::ledger::eth_bridge::EthereumBridgeConfig;
+use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
-use namada::types::chain::ProposalBytes;
+use namada::types::chain::{ChainId, ProposalBytes};
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::uint::Uint;
 use namada::types::{storage, token};
+
+#[cfg(test)]
+use crate::config::genesis::chain::Finalized;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -46,7 +55,7 @@ pub mod genesis_config {
     use thiserror::Error;
 
     use super::{
-        EstablishedAccount, EthereumBridgeConfig, Genesis, ImplicitAccount,
+        EstablishedAccount, EthereumBridgeParams, Genesis, ImplicitAccount,
         Parameters, TokenAccount, Validator,
     };
     use crate::cli;
@@ -118,7 +127,7 @@ pub mod genesis_config {
         // Governance parameters
         pub gov_params: GovernanceParamsConfig,
         // Ethereum bridge config
-        pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
+        pub ethereum_bridge_params: Option<EthereumBridgeParams>,
         // Wasm definitions
         pub wasm: HashMap<String, WasmConfig>,
     }
@@ -704,7 +713,7 @@ pub struct Genesis {
     pub pos_params: PosParams,
     pub gov_params: GovParams,
     // Ethereum bridge config
-    pub ethereum_bridge_params: Option<EthereumBridgeConfig>,
+    pub ethereum_bridge_params: Option<EthereumBridgeParams>,
 }
 
 impl Genesis {
@@ -843,241 +852,197 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
 }
 
-#[cfg(not(any(test, feature = "dev")))]
-pub fn genesis(
-    base_dir: impl AsRef<std::path::Path>,
-    chain_id: &namada::types::chain::ChainId,
-) -> Genesis {
+pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
     let path = base_dir
         .as_ref()
         .join(format!("{}.toml", chain_id.as_str()));
     genesis_config::read_genesis_config(path)
 }
-#[cfg(any(test, feature = "dev"))]
-pub fn genesis(num_validators: u64) -> Genesis {
+
+/// Modify the default genesis file (namada/genesis/localnet/) to
+/// accommodate testing.
+///
+/// This includes adding the Ethereum bridge parameters and
+/// adding a specified number of validators.
+#[cfg(test)]
+pub fn make_dev_genesis(num_validators: u64) -> Finalized {
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    use namada::core::types::string_encoding::StringEncoded;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-    use namada::types::address::{
-        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel, wnam,
-    };
+    use namada::ledger::wallet::alias::Alias;
+    use namada::proto::{standalone_signature, SerializeWithBorsh};
+    use namada::types::address::wnam;
+    use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
 
-    use crate::wallet;
+    use crate::config::genesis::chain::finalize;
+    use crate::wallet::defaults;
 
-    let vp_implicit_path = "vp_implicit.wasm";
-    let vp_user_path = "vp_user.wasm";
+    let mut current_path = std::env::current_dir()
+        .expect("Current directory should exist")
+        .canonicalize()
+        .expect("Current directory should exist");
+    while current_path.file_name().unwrap() != "apps" {
+        current_path.pop();
+    }
+    current_path.pop();
+    let chain_dir = current_path.join("genesis").join("localnet");
+    let templates = templates::All::read_toml_files(&chain_dir)
+        .expect("Missing genesis files");
+    let mut genesis = finalize(
+        templates,
+        ChainIdPrefix::from_str("test").unwrap(),
+        DateTimeUtc::now(),
+        Duration::from_secs(30).into(),
+    );
 
-    // NOTE When the validator's key changes, tendermint must be reset with
-    // `namada reset` command. To generate a new validator, use the
-    // `tests::gen_genesis_validator` below.
-    let mut validators = Vec::<Validator>::new();
-
-    // Use hard-coded keys for the first validator to avoid breaking other code
-    let consensus_keypair = wallet::defaults::validator_keypair();
-    let account_keypair = wallet::defaults::validator_keypair();
+    // Add Ethereum bridge params.
+    genesis.parameters.eth_bridge_params = Some(templates::EthBridgeParams {
+        eth_start_height: Default::default(),
+        min_confirmations: Default::default(),
+        contracts: Contracts {
+            native_erc20: wnam(),
+            bridge: UpgradeableContract {
+                address: EthAddress([0; 20]),
+                version: Default::default(),
+            },
+            governance: UpgradeableContract {
+                address: EthAddress([1; 20]),
+                version: Default::default(),
+            },
+        },
+    });
+    genesis
+        .transactions
+        .validator_account
+        .as_mut()
+        .map(|vals| vals[0].address = defaults::validator_address());
+    let default_addresses: HashMap<Alias, Address> =
+        defaults::addresses().into_iter().collect();
+    genesis
+        .transactions
+        .established_account
+        .as_mut()
+        .map(|accs| {
+            for acc in accs {
+                if let Some(addr) = default_addresses.get(&acc.tx.alias) {
+                    acc.address = addr.clone();
+                }
+            }
+        });
+    // remove Albert's bond since it messes up existing unit test math
+    genesis.transactions.bond.as_mut().map(|bonds| {
+        bonds.retain(|bond| {
+            bond.data.source
+                != transactions::AliasOrPk::Alias(
+                    Alias::from_str("albert").unwrap(),
+                )
+        })
+    });
     let secp_eth_cold_keypair = secp256k1::SecretKey::try_from_slice(&[
         90, 83, 107, 155, 193, 251, 120, 27, 76, 1, 188, 8, 116, 121, 90, 99,
         65, 17, 187, 6, 238, 141, 63, 188, 76, 38, 102, 7, 47, 185, 28, 52,
     ])
     .unwrap();
-
-    let eth_cold_keypair =
-        common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
-    let address = wallet::defaults::validator_address();
-    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-        wallet::defaults::validator_keys();
-    let validator = Validator {
-        pos_data: GenesisValidator {
-            address,
-            tokens: token::Amount::native_whole(200_000),
-            consensus_key: consensus_keypair.ref_to(),
-            commission_rate: Dec::new(5, 2).expect("This can't fail"),
-            max_commission_rate_change: Dec::new(1, 2)
-                .expect("This can't fail"),
-            eth_cold_key: eth_cold_keypair.ref_to(),
-            eth_hot_key: eth_bridge_keypair.ref_to(),
+    let sign_pk = |sk: &common::SecretKey| transactions::SignedPk {
+        pk: StringEncoded { raw: sk.ref_to() },
+        authorization: StringEncoded {
+            raw: standalone_signature::<_, SerializeWithBorsh>(
+                sk,
+                &sk.ref_to(),
+            ),
         },
-        account_key: account_keypair.ref_to(),
-        protocol_key: protocol_keypair.ref_to(),
-        dkg_public_key: dkg_keypair.public(),
-        non_staked_balance: token::Amount::native_whole(100_000),
-        // TODO replace with https://github.com/anoma/namada/issues/25)
-        validator_vp_code_path: vp_user_path.into(),
-        validator_vp_sha256: Default::default(),
     };
-    validators.push(validator);
-
     // Add other validators with randomly generated keys if needed
-    for _ in 0..(num_validators - 1) {
+    for val in 0..(num_validators - 1) {
         let consensus_keypair: common::SecretKey =
             testing::gen_keypair::<ed25519::SigScheme>()
                 .try_to_sk()
                 .unwrap();
         let account_keypair = consensus_keypair.clone();
-        let address = address::gen_established_address("validator account");
+        let address = namada::types::address::gen_established_address(
+            "validator account",
+        );
         let eth_cold_keypair =
             common::SecretKey::try_from_sk(&secp_eth_cold_keypair).unwrap();
         let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-            wallet::defaults::validator_keys();
-        let validator = Validator {
-            pos_data: GenesisValidator {
+            defaults::validator_keys();
+        let alias = Alias::from_str(&format!("validator-{}", val + 1))
+            .expect("infallible");
+        // add the validator
+        genesis.transactions.validator_account.as_mut().map(|vals| {
+            vals.push(chain::FinalizedValidatorAccountTx {
                 address,
-                tokens: token::Amount::native_whole(200_000),
-                consensus_key: consensus_keypair.ref_to(),
-                commission_rate: Dec::new(5, 2).expect("This can't fail"),
-                max_commission_rate_change: Dec::new(1, 2)
-                    .expect("This can't fail"),
-                eth_cold_key: eth_cold_keypair.ref_to(),
-                eth_hot_key: eth_bridge_keypair.ref_to(),
-            },
-            account_key: account_keypair.ref_to(),
-            protocol_key: protocol_keypair.ref_to(),
-            dkg_public_key: dkg_keypair.public(),
-            non_staked_balance: token::Amount::native_whole(100_000),
-            // TODO replace with https://github.com/anoma/namada/issues/25)
-            validator_vp_code_path: vp_user_path.into(),
-            validator_vp_sha256: Default::default(),
-        };
-        validators.push(validator);
+                tx: transactions::ValidatorAccountTx {
+                    alias: alias.clone(),
+                    dkg_key: StringEncoded {
+                        raw: dkg_keypair.public(),
+                    },
+                    vp: "vp_validator".to_string(),
+                    commission_rate: Dec::new(5, 2).expect("This can't fail"),
+                    max_commission_rate_change: Dec::new(1, 2)
+                        .expect("This can't fail"),
+                    net_address: SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                        8080,
+                    ),
+                    account_key: sign_pk(&account_keypair),
+                    consensus_key: sign_pk(&consensus_keypair),
+                    protocol_key: sign_pk(&protocol_keypair),
+                    tendermint_node_key: sign_pk(&consensus_keypair),
+                    eth_hot_key: sign_pk(&eth_bridge_keypair),
+                    eth_cold_key: sign_pk(&eth_cold_keypair),
+                },
+            })
+        });
+        // add the balance to validators implicit key
+        genesis
+            .balances
+            .token
+            .get_mut(&Alias::from_str("nam").unwrap())
+            .map(|bals| {
+                bals.0.insert(
+                    StringEncoded {
+                        raw: account_keypair.ref_to(),
+                    },
+                    token::Amount::native_whole(200_000),
+                )
+            });
+        // transfer funds from implicit key to validator
+        genesis.transactions.transfer.as_mut().map(|trans| {
+            trans.push(transactions::SignedTransferTx {
+                data: transactions::TransferTx {
+                    token: Alias::from_str("nam").expect("infallible"),
+                    source: StringEncoded {
+                        raw: account_keypair.ref_to(),
+                    },
+                    target: alias.clone(),
+                    amount: token::Amount::native_whole(200_000),
+                },
+                // these signatures won't be checked, so we can put whatever
+                // here
+                signature: sign_pk(&account_keypair).authorization,
+            })
+        });
+        // self bond
+        genesis.transactions.bond.as_mut().map(|bonds| {
+            bonds.push(transactions::SignedBondTx {
+                data: transactions::BondTx {
+                    source: transactions::AliasOrPk::Alias(alias.clone()),
+                    validator: alias,
+                    amount: token::Amount::native_whole(100_000),
+                },
+                // these signatures won't be checked, so we can put whatever
+                // here
+                signature: sign_pk(&account_keypair).authorization,
+            })
+        });
     }
 
-    let parameters = Parameters {
-        epoch_duration: EpochDuration {
-            min_num_of_blocks: 10,
-            min_duration: namada::types::time::Duration::seconds(600).into(),
-        },
-        max_expected_time_per_block: namada::types::time::DurationSecs(30),
-        max_proposal_bytes: Default::default(),
-        vp_whitelist: vec![],
-        tx_whitelist: vec![],
-        implicit_vp_code_path: vp_implicit_path.into(),
-        implicit_vp_sha256: Default::default(),
-        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (60 = min_duration) */
-        pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
-        pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
-        staked_ratio: Dec::zero(),
-        pos_inflation_amount: token::Amount::zero(),
-        wrapper_tx_fees: Some(token::Amount::native_whole(0)),
-    };
-    let albert = EstablishedAccount {
-        address: wallet::defaults::albert_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::albert_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let bertha = EstablishedAccount {
-        address: wallet::defaults::bertha_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::bertha_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let christel = EstablishedAccount {
-        address: wallet::defaults::christel_address(),
-        vp_code_path: vp_user_path.into(),
-        vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::christel_keypair().ref_to()),
-        storage: HashMap::default(),
-    };
-    let masp = EstablishedAccount {
-        address: namada::types::address::masp(),
-        vp_code_path: "vp_masp.wasm".into(),
-        vp_sha256: Default::default(),
-        public_key: None,
-        storage: HashMap::default(),
-    };
-    let implicit_accounts = vec![
-        ImplicitAccount {
-            public_key: wallet::defaults::daewon_keypair().ref_to(),
-        },
-        ImplicitAccount {
-            public_key: wallet::defaults::ester_keypair().ref_to(),
-        },
-    ];
-    let default_user_tokens = Uint::from(1_000_000);
-    let default_key_tokens = Uint::from(1_000_000);
-    let mut balances: HashMap<Address, Uint> = HashMap::from_iter([
-        // established accounts' balances
-        (wallet::defaults::albert_address(), default_user_tokens),
-        (wallet::defaults::bertha_address(), default_user_tokens),
-        (wallet::defaults::christel_address(), default_user_tokens),
-        // implicit accounts' balances
-        (wallet::defaults::daewon_address(), default_user_tokens),
-        // implicit accounts derived from public keys balances
-        (
-            bertha.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-        (
-            albert.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-        (
-            christel.public_key.as_ref().unwrap().into(),
-            default_key_tokens,
-        ),
-    ]);
-    for validator in &validators {
-        balances.insert((&validator.account_key).into(), default_key_tokens);
-    }
-
-    /// Deprecated function, soon to be deleted. Generates default tokens
-    fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
-        vec![
-            (nam(), ("NAM", 6.into())),
-            (btc(), ("BTC", 8.into())),
-            (eth(), ("ETH", 18.into())),
-            (dot(), ("DOT", 10.into())),
-            (schnitzel(), ("Schnitzel", 6.into())),
-            (apfel(), ("Apfel", 6.into())),
-            (kartoffel(), ("Kartoffel", 6.into())),
-        ]
-        .into_iter()
-        .collect()
-    }
-    let token_accounts = tokens()
-        .into_iter()
-        .map(|(address, (_, denom))| TokenAccount {
-            address,
-            denom,
-            balances: balances
-                .clone()
-                .into_iter()
-                .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
-                .collect(),
-        })
-        .collect();
-    Genesis {
-        genesis_time: DateTimeUtc::now(),
-        validators,
-        established_accounts: vec![albert, bertha, christel, masp],
-        implicit_accounts,
-        token_accounts,
-        parameters,
-        pos_params: PosParams::default(),
-        gov_params: GovParams::default(),
-        ethereum_bridge_params: Some(EthereumBridgeConfig {
-            eth_start_height: Default::default(),
-            min_confirmations: Default::default(),
-            contracts: Contracts {
-                native_erc20: wnam(),
-                bridge: UpgradeableContract {
-                    address: EthAddress([0; 20]),
-                    version: Default::default(),
-                },
-                governance: UpgradeableContract {
-                    address: EthAddress([1; 20]),
-                    version: Default::default(),
-                },
-            },
-        }),
-        native_token: address::nam(),
-        #[cfg(not(feature = "mainnet"))]
-        faucet_pow_difficulty: None,
-        #[cfg(not(feature = "mainnet"))]
-        faucet_withdrawal_limit: None,
-    }
+    genesis
 }
 
 #[cfg(test)]

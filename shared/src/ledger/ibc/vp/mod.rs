@@ -379,11 +379,11 @@ mod tests {
     use crate::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
     use crate::ibc_proto::protobuf::Protobuf;
     use crate::ledger::gas::VpGasMeter;
+    use crate::ledger::ibc;
     use crate::ledger::parameters::storage::{
         get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
     };
     use crate::ledger::parameters::EpochDuration;
-    use crate::ledger::{ibc, pos};
     use crate::proof_of_stake::parameters::PosParams;
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
@@ -408,12 +408,13 @@ mod tests {
 
         // initialize the storage
         ibc::init_genesis_storage(&mut wl_storage);
-        pos::init_genesis_storage(
+        namada_proof_of_stake::test_utils::init_genesis_helper(
             &mut wl_storage,
             &PosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        );
+        )
+        .unwrap();
         // epoch duration
         let epoch_duration_key = get_epoch_duration_storage_key();
         let epoch_duration = EpochDuration {

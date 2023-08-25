@@ -10,7 +10,7 @@ use expectrl::ControlCode;
 use namada::eth_bridge::oracle;
 use namada::eth_bridge::storage::vote_tallies;
 use namada::ledger::eth_bridge::{
-    ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+    ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };
 use namada::types::address::wnam;
@@ -292,7 +292,7 @@ async fn test_bridge_pool_e2e() {
     let wnam_address = wnam().to_canonical();
     let test = setup::network(
         |mut genesis| {
-            genesis.ethereum_bridge_params = Some(EthereumBridgeConfig {
+            genesis.ethereum_bridge_params = Some(EthereumBridgeParams {
                 eth_start_height: Default::default(),
                 min_confirmations: Default::default(),
                 contracts: Contracts {
@@ -483,7 +483,7 @@ async fn test_bridge_pool_e2e() {
 /// other ERC20 transfers.
 #[tokio::test]
 async fn test_wnam_transfer() -> Result<()> {
-    let ethereum_bridge_params = EthereumBridgeConfig {
+    let ethereum_bridge_params = EthereumBridgeParams {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
@@ -590,7 +590,7 @@ async fn test_wnam_transfer() -> Result<()> {
 /// storage, if the Ethereum bridge has been bootstrapped for the Namada chain.
 #[test]
 fn test_configure_oracle_from_storage() -> Result<()> {
-    let ethereum_bridge_params = EthereumBridgeConfig {
+    let ethereum_bridge_params = EthereumBridgeParams {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can

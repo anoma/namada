@@ -1613,10 +1613,9 @@ mod test_finalize_block {
             }
             // add bertha's gas fees the pool
             {
-                use crate::node::ledger::shell::address::nam;
                 let amt: Amount = 999_999_u64.into();
                 let pool_balance_key = token::balance_key(
-                    &nam(),
+                    &shell.wl_storage.storage.native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
                 );
                 shell
@@ -2284,7 +2283,8 @@ mod test_finalize_block {
         let val2 = validator_set[1].clone();
 
         let initial_stake = val1.bonded_stake;
-        let total_initial_stake = num_validators * initial_stake;
+        let total_initial_stake =
+            validator_set.iter().map(|v| v.bonded_stake).sum();
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
@@ -2626,9 +2626,9 @@ mod test_finalize_block {
     }
 
     /// Current test procedure (prefixed by epoch in which the event occurs):
-    /// 0) Validator initial stake of 200_000
+    /// 0) Validator initial stake of 100_000
     /// 1) Delegate 67_231 to validator
-    /// 1) Self-unbond 154_654
+    /// 1) Self-unbond 54_654
     /// 2) Unbond delegation of 18_000
     /// 3) Self-bond 9_123
     /// 4) Self-unbond 15_000
@@ -2712,11 +2712,12 @@ mod test_finalize_block {
             &val1.address,
             del_1_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 
         // Self-unbond
-        let self_unbond_1_amount = token::Amount::native_whole(154_654);
+        let self_unbond_1_amount = token::Amount::native_whole(54_654);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,
@@ -2812,6 +2813,7 @@ mod test_finalize_block {
             &val1.address,
             self_bond_1_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 
@@ -2852,6 +2854,7 @@ mod test_finalize_block {
             &val1.address,
             del_2_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 

@@ -410,7 +410,17 @@ pub struct EstablishedAddress {
 }
 
 /// A generator of established addresses
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct EstablishedAddressGen {
     last_hash: [u8; SHA_HASH_LEN],
 }

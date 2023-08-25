@@ -1,8 +1,6 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -10,30 +8,28 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::ledger::wallet::Wallet;
-use namada::types::address;
+use namada::ledger::wallet::alias::Alias;
+use namada::ledger::wallet::{alias, Wallet};
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
+use namada::types::token;
+use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada::types::uint::Uint;
 use prost::bytes::Bytes;
-use rand::prelude::ThreadRng;
-use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
-use crate::cli::{self, args, safe_exit};
-use crate::config::genesis::genesis_config::{
-    self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
-};
 use crate::config::global::GlobalConfig;
-use crate::config::{self, get_default_namada_folder, Config, TendermintMode};
+use crate::config::{
+    self, genesis, get_default_namada_folder, Config, TendermintMode,
+};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{
-    pre_genesis, read_and_confirm_encryption_password, CliWalletUtils,
-};
+use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
@@ -56,6 +52,7 @@ pub async fn join_network(
         genesis_validator,
         pre_genesis_path,
         dont_prefetch_wasm,
+        allow_duplicate_ip,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -74,7 +71,7 @@ pub async fn join_network(
             .is_ok()
         {
             eprintln!("The chain directory for {} already exists.", chain_id);
-            cli::safe_exit(1);
+            safe_exit(1);
         }
     }
     let base_dir_full = fs::canonicalize(&base_dir).await.unwrap();
@@ -109,12 +106,12 @@ pub async fn join_network(
     let validator_alias_and_pre_genesis_wallet =
         validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
             (
-                validator_alias,
+                Alias::from(validator_alias),
                 pre_genesis::load(&pre_genesis_dir).unwrap_or_else(|err| {
                     eprintln!(
                         "Error loading validator pre-genesis wallet {err}",
                     );
-                    cli::safe_exit(1)
+                    safe_exit(1)
                 }),
             )
         });
@@ -141,7 +138,7 @@ pub async fn join_network(
         Ok(contents) => contents,
         Err(error) => {
             eprintln!("Error downloading release: {}", error);
-            cli::safe_exit(1);
+            safe_exit(1);
         }
     };
 
@@ -190,16 +187,6 @@ pub async fn join_network(
         .await
         .unwrap();
 
-        // Move the genesis file
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(format!("{}.toml", chain_id.as_str())),
-            base_dir_full.join(format!("{}.toml", chain_id.as_str())),
-        )
-        .await
-        .unwrap();
-
         // Move the global config
         fs::rename(
             unpack_dir
@@ -214,6 +201,76 @@ pub async fn join_network(
         fs::remove_dir_all(unpack_dir.join(config::DEFAULT_BASE_DIR))
             .await
             .unwrap();
+    }
+
+    // Read the genesis files
+    let genesis = genesis::chain::Finalized::read_toml_files(&chain_dir)
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Failed to read genesis TOML files from {} with {err}.",
+                chain_dir.to_string_lossy()
+            );
+            safe_exit(1)
+        });
+
+    // Try to find validator data when using a pre-genesis validator
+    let validator_alias = validator_alias_and_pre_genesis_wallet
+        .as_ref()
+        .map(|(alias, _wallet)| alias.clone());
+    let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
+        |(_alias, wallet)| {
+            let tendermint_node_key: common::SecretKey = wallet
+                .tendermint_node_key
+                .try_to_sk()
+                .unwrap_or_else(|_err| {
+                    eprintln!(
+                        "Tendermint node key must be common (need to change?)"
+                    );
+                    safe_exit(1)
+                });
+            (tendermint_node_key, wallet.consensus_key.clone())
+        },
+    );
+    let node_mode = if validator_alias.is_some() {
+        TendermintMode::Validator
+    } else {
+        TendermintMode::Full
+    };
+
+    // Derive config from genesis
+    let config = genesis.derive_config(
+        &chain_dir,
+        node_mode,
+        validator_alias,
+        allow_duplicate_ip,
+    );
+
+    // Try to load pre-genesis wallet, if any
+    let pre_genesis_wallet_path = base_dir.join(PRE_GENESIS_DIR);
+    let pre_genesis_wallet = crate::wallet::load(&pre_genesis_wallet_path);
+    // Derive wallet from genesis
+    let wallet = genesis.derive_wallet(
+        &chain_dir,
+        pre_genesis_wallet,
+        validator_alias_and_pre_genesis_wallet,
+    );
+
+    // Save the config and the wallet
+    config.write(&base_dir, &chain_id, true).unwrap();
+    crate::wallet::save(&wallet).unwrap();
+
+    // Setup the node for a genesis validator, if used
+    if let Some((tendermint_node_key, consensus_key)) = validator_keys {
+        let tm_home_dir = chain_dir.join("tendermint");
+
+        // Write consensus key to tendermint home
+        tendermint_node::write_validator_key(&tm_home_dir, &consensus_key);
+
+        // Write tendermint node key
+        write_tendermint_node_key(&tm_home_dir, tendermint_node_key);
+
+        // Pre-initialize tendermint validator state
+        tendermint_node::write_validator_state(&tm_home_dir);
     }
 
     // Move wasm-dir and update config if it's non-default
@@ -242,102 +299,6 @@ pub async fn join_network(
         }
     }
 
-    // Setup the node for a genesis validator, if used
-    if let Some((validator_alias, pre_genesis_wallet)) =
-        validator_alias_and_pre_genesis_wallet
-    {
-        let tendermint_node_key: common::SecretKey = pre_genesis_wallet
-            .tendermint_node_key
-            .try_to_sk()
-            .unwrap_or_else(|_err| {
-                eprintln!(
-                    "Tendermint node key must be common (need to change?)"
-                );
-                cli::safe_exit(1)
-            });
-
-        let genesis_file_path =
-            base_dir.join(format!("{}.toml", chain_id.as_str()));
-        let genesis_config =
-            genesis_config::open_genesis_config(genesis_file_path).unwrap();
-
-        if !is_valid_validator_for_current_chain(
-            &tendermint_node_key.ref_to(),
-            &genesis_config,
-        ) {
-            eprintln!(
-                "The current validator is not valid for chain {}.",
-                chain_id.as_str()
-            );
-            safe_exit(1)
-        }
-
-        let mut wallet =
-            crate::wallet::load_or_new_from_genesis(&chain_dir, genesis_config);
-
-        let address = wallet
-            .find_address(&validator_alias)
-            .unwrap_or_else(|| {
-                eprintln!(
-                    "Unable to find validator address for alias \
-                     {validator_alias}"
-                );
-                cli::safe_exit(1)
-            })
-            .clone();
-
-        let tm_home_dir = chain_dir.join("cometbft");
-
-        // Write consensus key to tendermint home
-        tendermint_node::write_validator_key(
-            &tm_home_dir,
-            &pre_genesis_wallet.consensus_key,
-        );
-
-        // Derive the node ID from the node key
-        let node_id = id_from_pk(&tendermint_node_key.ref_to());
-        // Write tendermint node key
-        write_tendermint_node_key(&tm_home_dir, tendermint_node_key);
-
-        // Pre-initialize tendermint validator state
-        tendermint_node::write_validator_state(&tm_home_dir);
-
-        // Extend the current wallet from the pre-genesis wallet.
-        // This takes the validator keys to be usable in future commands (e.g.
-        // to sign a tx from validator account using the account key).
-        wallet.extend_from_pre_genesis_validator(
-            address,
-            validator_alias.into(),
-            pre_genesis_wallet,
-        );
-
-        crate::wallet::save(&wallet).unwrap();
-
-        // Update the config from the default non-validator settings to
-        // validator settings
-        let base_dir = base_dir.clone();
-        let chain_id = chain_id.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut config = Config::load(&base_dir, &chain_id, None);
-            config.ledger.shell.tendermint_mode = TendermintMode::Validator;
-
-            // Remove self from persistent peers
-            config.ledger.cometbft.p2p.persistent_peers.retain(|peer| {
-                if let TendermintAddress::Tcp {
-                    peer_id: Some(peer_id),
-                    ..
-                } = peer
-                {
-                    node_id != *peer_id
-                } else {
-                    true
-                }
-            });
-            config.write(&base_dir, &chain_id, true).unwrap();
-        })
-        .await
-        .unwrap();
-    }
     if !dont_prefetch_wasm {
         fetch_wasms_aux(&base_dir, &chain_id).await;
     }
@@ -394,326 +355,114 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 pub fn init_network(
     global_args: args::Global,
     args::InitNetwork {
-        genesis_path,
+        templates_path,
         wasm_checksums_path,
         chain_id_prefix,
-        unsafe_dont_encrypt,
+        genesis_time,
         consensus_timeout_commit,
-        localhost,
-        allow_duplicate_ip,
         dont_archive,
         archive_dir,
     }: args::InitNetwork,
 ) {
-    let mut config = genesis_config::open_genesis_config(genesis_path).unwrap();
-
-    // Update the WASM checksums
-    let checksums =
-        wasm_loader::Checksums::read_checksums_file(&wasm_checksums_path);
-    config.wasm.iter_mut().for_each(|(name, config)| {
-        // Find the sha256 from checksums.json
-        let name = format!("{}.wasm", name);
-        // Full name in format `{name}.{sha256}.wasm`
-        let full_name = checksums.0.get(&name).unwrap();
-        let hash = full_name
-            .split_once('.')
-            .unwrap()
-            .1
-            .split_once('.')
-            .unwrap()
-            .0;
-        config.sha256 = Some(genesis_config::HexString(hash.to_owned()));
-    });
-
-    // The `temp_chain_id` gets renamed after we have chain ID.
-    let temp_chain_id = chain_id_prefix.temp_chain_id();
-    let temp_dir = global_args.base_dir.join(temp_chain_id.as_str());
-    // The `temp_chain_id` gets renamed after we have chain ID
-    let accounts_dir = temp_dir.join(NET_ACCOUNTS_DIR);
-    // Base dir used in account sub-directories
-    let accounts_temp_dir =
-        PathBuf::from(config::DEFAULT_BASE_DIR).join(temp_chain_id.as_str());
-
-    let mut rng: ThreadRng = thread_rng();
-
-    // Accumulator of validators' Tendermint P2P addresses
-    let mut persistent_peers: Vec<TendermintAddress> =
-        Vec::with_capacity(config.validator.len());
-
-    // Iterate over each validator, generating keys and addresses
-    config.validator.iter_mut().for_each(|(name, config)| {
-        let validator_dir = accounts_dir.join(name);
-
-        let chain_dir = validator_dir.join(&accounts_temp_dir);
-        let tm_home_dir = chain_dir.join("cometbft");
-
-        // Find or generate tendermint node key
-        let node_pk = try_parse_public_key(
-            format!("validator {name} Tendermint node key"),
-            &config.tendermint_node_key,
-        )
+    // Load and validate the templates
+    let templates = genesis::templates::load_and_validate(&templates_path)
         .unwrap_or_else(|| {
-            // Generate a node key with ed25519 as default
-            let node_sk = common::SecretKey::Ed25519(
-                ed25519::SigScheme::generate(&mut rng),
-            );
-
-            let node_pk = write_tendermint_node_key(&tm_home_dir, node_sk);
-
-            tendermint_node::write_validator_state(&tm_home_dir);
-
-            node_pk
+            eprintln!("Invalid templates, aborting.");
+            safe_exit(1)
         });
 
-        // Derive the node ID from the node key
-        let node_id: TendermintNodeId = id_from_pk(&node_pk);
-
-        // Build the list of persistent peers from the validators' node IDs
-        let peer = TendermintAddress::from_str(&format!(
-            "{}@{}",
-            node_id,
-            config.net_address.as_ref().unwrap(),
-        ))
-        .expect("Validator address must be valid");
-        persistent_peers.push(peer);
-
-        // Generate account and reward addresses
-        let address = address::gen_established_address("validator account");
-        config.address = Some(address.to_string());
-
-        // Generate the consensus, account and reward keys, unless they're
-        // pre-defined. Do not use mnemonic code / HD derivation path.
-        let mut wallet = crate::wallet::load_or_new(&chain_dir);
-
-        let consensus_pk = try_parse_public_key(
-            format!("validator {name} consensus key"),
-            &config.consensus_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-consensus-key", name);
-            println!("Generating validator {} consensus key...", name);
-            let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
-
-            // Write consensus key for Tendermint
-            tendermint_node::write_validator_key(&tm_home_dir, &keypair);
-
-            keypair.ref_to()
-        });
-
-        let account_pk = try_parse_public_key(
-            format!("validator {name} account key"),
-            &config.account_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-account-key", name);
-            println!("Generating validator {} account key...", name);
-            let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
-            keypair.ref_to()
-        });
-
-        let protocol_pk = try_parse_public_key(
-            format!("validator {name} protocol key"),
-            &config.protocol_public_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-protocol-key", name);
-            println!("Generating validator {} protocol signing key...", name);
-            let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
-            keypair.ref_to()
-        });
-
-        let eth_hot_pk = try_parse_public_key(
-            format!("validator {name} eth hot key"),
-            &config.eth_hot_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-eth-hot-key", name);
-            println!("Generating validator {} eth hot key...", name);
-            let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(
-                    SchemeType::Secp256k1,
-                    Some(alias),
-                    true,
-                    password,
-                    None,
-                )
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
-            keypair.ref_to()
-        });
-
-        let eth_cold_pk = try_parse_public_key(
-            format!("validator {name} eth cold key"),
-            &config.eth_cold_key,
-        )
-        .unwrap_or_else(|| {
-            let alias = format!("{}-eth-cold-key", name);
-            println!("Generating validator {} eth cold key...", name);
-            let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(
-                    SchemeType::Secp256k1,
-                    Some(alias),
-                    true,
-                    password,
-                    None,
-                )
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
-            keypair.ref_to()
-        });
-
-        let dkg_pk = &config
-            .dkg_public_key
-            .as_ref()
-            .map(|key| {
-                key.to_dkg_public_key().unwrap_or_else(|err| {
-                    let label = format!("validator {name} DKG key");
-                    eprintln!("Invalid {label} key: {}", err);
-                    cli::safe_exit(1)
-                })
-            })
-            .unwrap_or_else(|| {
-                println!(
-                    "Generating validator {} DKG session keypair...",
-                    name
-                );
-
-                let validator_keys = crate::wallet::gen_validator_keys(
-                    &mut wallet,
-                    Some(eth_hot_pk.clone()),
-                    Some(protocol_pk.clone()),
-                    SchemeType::Ed25519,
-                )
-                .expect("Generating new validator keys should not fail");
-                let pk = validator_keys.dkg_keypair.as_ref().unwrap().public();
-                wallet.add_validator_data(address.clone(), validator_keys);
-                pk
-            });
-
-        // Add the validator public keys to genesis config
-        config.consensus_public_key =
-            Some(genesis_config::HexString(consensus_pk.to_string()));
-        config.account_public_key =
-            Some(genesis_config::HexString(account_pk.to_string()));
-        config.eth_cold_key =
-            Some(genesis_config::HexString(eth_cold_pk.to_string()));
-        config.eth_hot_key =
-            Some(genesis_config::HexString(eth_hot_pk.to_string()));
-
-        config.protocol_public_key =
-            Some(genesis_config::HexString(protocol_pk.to_string()));
-        config.dkg_public_key =
-            Some(genesis_config::HexString(dkg_pk.to_string()));
-
-        // Write keypairs to wallet
-        wallet.add_address(name.clone(), address, true);
-
-        crate::wallet::save(&wallet).unwrap();
-    });
-
-    // Create a wallet for all accounts other than validators.
-    //  Do not use mnemonic code / HD derivation path.
-    let mut wallet =
-        crate::wallet::load_or_new(&accounts_dir.join(NET_OTHER_ACCOUNTS_DIR));
-    if let Some(established) = &mut config.established {
-        established.iter_mut().for_each(|(name, config)| {
-            init_established_account(
-                name,
-                &mut wallet,
-                config,
-                unsafe_dont_encrypt,
-            );
-        })
+    // In addition to standard templates validation, check that there is at
+    // least one validator account.
+    if !templates.transactions.has_at_least_one_validator() {
+        eprintln!("No validator genesis transaction found, aborting.");
+        safe_exit(1)
     }
 
-    config.token.iter_mut().for_each(|(_name, config)| {
-        if config.address.is_none() {
-            let address = address::gen_established_address("token");
-            config.address = Some(address.to_string());
-        }
-        if config.vp.is_none() {
-            config.vp = Some("vp_token".to_string());
-        }
-    });
-
-    if let Some(implicit) = &mut config.implicit {
-        implicit.iter_mut().for_each(|(name, config)| {
-            if config.public_key.is_none() {
-                println!(
-                    "Generating implicit account {} key and address ...",
-                    name
-                );
-                let password =
-                    read_and_confirm_encryption_password(unsafe_dont_encrypt);
-                let (_alias, keypair) = wallet
-                    .gen_key(
-                        SchemeType::Ed25519,
-                        Some(name.clone()),
-                        true,
-                        password,
-                        None,
-                    )
-                    .expect("Key generation should not fail.")
-                    .expect("No existing alias expected.");
-                let public_key =
-                    genesis_config::HexString(keypair.ref_to().to_string());
-                config.public_key = Some(public_key);
-            }
-        })
+    // Also check that at least one validator account has positive voting power.
+    let tm_votes_per_token = templates.parameters.pos_params.tm_votes_per_token;
+    if !templates
+        .transactions
+        .has_validator_with_positive_voting_power(tm_votes_per_token)
+    {
+        let min_stake = token::Amount::from_uint(
+            if tm_votes_per_token > Dec::from(1) {
+                Uint::one()
+            } else {
+                (Dec::from(1) / tm_votes_per_token).ceil().abs()
+            },
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap();
+        eprintln!(
+            "No validator with positive voting power, aborting. The minimum \
+             staked tokens amount required to run the network is {}, because \
+             there are {tm_votes_per_token} votes per NAMNAM tokens.",
+            min_stake.to_string_native(),
+        );
+        safe_exit(1)
     }
 
-    // Make a copy of genesis config without validator net addresses to
-    // `write_genesis_config`. Keep the original, because we still need the
-    // addresses to configure validators.
-    let mut config_clean = config.clone();
-    config_clean
-        .validator
-        .iter_mut()
-        .for_each(|(_name, config)| {
-            config.net_address = None;
-        });
-
-    // Generate the chain ID first
-    let genesis = genesis_config::load_genesis_config(config_clean.clone());
-    let genesis_bytes = genesis.try_to_vec().unwrap();
-    let chain_id = ChainId::from_genesis(chain_id_prefix, genesis_bytes);
+    // Finalize the genesis config to derive the chain ID
+    let genesis = genesis::chain::finalize(
+        templates,
+        chain_id_prefix,
+        genesis_time,
+        consensus_timeout_commit,
+    );
+    let chain_id = &genesis.metadata.chain_id;
     let chain_dir = global_args.base_dir.join(chain_id.as_str());
-    let genesis_path = global_args
-        .base_dir
-        .join(format!("{}.toml", chain_id.as_str()));
 
-    // Write the genesis file
-    genesis_config::write_genesis_config(&config_clean, &genesis_path);
+    // Check that chain dir is empty
+    if chain_dir.exists() && chain_dir.read_dir().unwrap().next().is_some() {
+        println!(
+            "The target chain directory {} already exists and is not empty.",
+            chain_dir.to_string_lossy()
+        );
+        loop {
+            let mut buffer = String::new();
+            print!(
+                "Do you want to override the chain directory? Will exit \
+                 otherwise. [y/N]: "
+            );
+            std::io::stdout().flush().unwrap();
+            match std::io::stdin().read_line(&mut buffer) {
+                Ok(size) if size > 0 => {
+                    // Isolate the single character representing the choice
+                    let byte = buffer.chars().next().unwrap();
+                    buffer.clear();
+                    match byte {
+                        'y' | 'Y' => {
+                            fs::remove_dir_all(&chain_dir).unwrap();
+                            break;
+                        }
+                        'n' | 'N' => {
+                            println!("Exiting.");
+                            safe_exit(1)
+                        }
+                        // Input is senseless fall through to repeat prompt
+                        _ => {
+                            println!("Unrecognized input.");
+                        }
+                    };
+                }
+                _ => {}
+            }
+        }
+    }
+    fs::create_dir_all(&chain_dir).unwrap();
 
-    // Add genesis addresses and save the wallet with other account keys
-    crate::wallet::add_genesis_addresses(&mut wallet, config_clean.clone());
-    crate::wallet::save(&wallet).unwrap();
+    // Write the finalized genesis config to the chain dir
+    genesis.write_toml_files(&chain_dir).unwrap_or_else(|err| {
+        eprintln!(
+            "Failed to write finalized genesis TOML files to {} with {err}.",
+            chain_dir.to_string_lossy()
+        );
+        safe_exit(1)
+    });
 
     // Write the global config setting the default chain ID
     let global_config = GlobalConfig::new(chain_id.clone());
     global_config.write(&global_args.base_dir).unwrap();
-
-    // Rename the generate chain config dir from `temp_chain_id` to `chain_id`
-    fs::rename(&temp_dir, &chain_dir).unwrap();
 
     // Copy the WASM checksums
     let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
@@ -724,150 +473,13 @@ pub fn init_network(
     )
     .unwrap();
 
-    config.validator.iter().for_each(|(name, _config)| {
-        let validator_dir = global_args
-            .base_dir
-            .join(chain_id.as_str())
-            .join(NET_ACCOUNTS_DIR)
-            .join(name)
-            .join(config::DEFAULT_BASE_DIR);
-        let temp_validator_chain_dir =
-            validator_dir.join(temp_chain_id.as_str());
-        let validator_chain_dir = validator_dir.join(chain_id.as_str());
-        // Rename the generated directories for validators from `temp_chain_id`
-        // to `chain_id`
-        std::fs::rename(temp_validator_chain_dir, &validator_chain_dir)
-            .unwrap();
-
-        // Copy the WASM checksums
-        let wasm_dir_full = validator_chain_dir.join(config::DEFAULT_WASM_DIR);
-        fs::create_dir_all(&wasm_dir_full).unwrap();
-        fs::copy(
-            &wasm_checksums_path,
-            wasm_dir_full.join(config::DEFAULT_WASM_CHECKSUMS_FILE),
-        )
-        .unwrap();
-
-        // Write the genesis and global config into validator sub-dirs
-        genesis_config::write_genesis_config(
-            &config,
-            validator_dir.join(format!("{}.toml", chain_id.as_str())),
-        );
-        global_config.write(validator_dir).unwrap();
-        // Add genesis addresses to the validator's wallet
-        let mut wallet = crate::wallet::load_or_new(&validator_chain_dir);
-        crate::wallet::add_genesis_addresses(&mut wallet, config_clean.clone());
-        crate::wallet::save(&wallet).unwrap();
-    });
-
-    // Generate the validators' ledger config
-    config.validator.iter_mut().enumerate().for_each(
-        |(ix, (name, validator_config))| {
-            let accounts_dir = chain_dir.join(NET_ACCOUNTS_DIR);
-            let validator_dir =
-                accounts_dir.join(name).join(config::DEFAULT_BASE_DIR);
-            let mut config = Config::load(
-                &validator_dir,
-                &chain_id,
-                Some(TendermintMode::Validator),
-            );
-
-            // Configure the ledger
-            config.ledger.genesis_time = genesis.genesis_time.into();
-            // In `config::Ledger`'s `base_dir`, `chain_id` and `tendermint`,
-            // the paths are prefixed with `validator_dir` given in the first
-            // parameter. We need to remove this prefix, because
-            // these sub-directories will be moved to validators' root
-            // directories.
-            config.ledger.shell.base_dir = config::DEFAULT_BASE_DIR.into();
-            // Add a ledger P2P persistent peers
-            config.ledger.cometbft.p2p.persistent_peers = persistent_peers
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, peer)|
-                        // we do not add the validator in its own persistent peer list
-                        if index != ix  {
-                            Some(peer.to_owned())
-                        } else {
-                            None
-                        })
-                    .collect();
-
-            config.ledger.cometbft.consensus.timeout_commit =
-                consensus_timeout_commit;
-            config.ledger.cometbft.p2p.allow_duplicate_ip = allow_duplicate_ip;
-            config.ledger.cometbft.p2p.addr_book_strict = !localhost;
-            // Clear the net address from the config and use it to set ports
-            let net_address = validator_config.net_address.take().unwrap();
-            let _ip = SocketAddr::from_str(&net_address).unwrap().ip();
-            let first_port = SocketAddr::from_str(&net_address).unwrap().port();
-            if localhost {
-                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
-                    &format!("127.0.0.1:{}", first_port),
-                )
-                .unwrap();
-            } else {
-                config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
-                    &format!("0.0.0.0:{}", first_port),
-                )
-                .unwrap();
-            }
-            if localhost {
-                config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
-                    &format!("127.0.0.1:{}", first_port + 1),
-                )
-                .unwrap();
-            } else {
-                config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
-                    &format!("0.0.0.0:{}", first_port + 1),
-                )
-                .unwrap();
-            }
-            if localhost {
-                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
-                    &format!("127.0.0.1:{}", first_port + 2),
-                )
-                .unwrap();
-            } else {
-                config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
-                    &format!("0.0.0.0:{}", first_port + 2),
-                )
-                .unwrap();
-            }
-            config.write(&validator_dir, &chain_id, true).unwrap();
-        },
-    );
-
-    // Update the ledger config persistent peers and save it
-    let mut config = Config::load(&global_args.base_dir, &chain_id, None);
-    config.ledger.cometbft.p2p.persistent_peers = persistent_peers;
-    config.ledger.cometbft.consensus.timeout_commit = consensus_timeout_commit;
-    config.ledger.cometbft.p2p.allow_duplicate_ip = allow_duplicate_ip;
-    // Open P2P address
-    if !localhost {
-        config.ledger.cometbft.p2p.laddr =
-            TendermintAddress::from_str("0.0.0.0:26656").unwrap();
-    }
-    config.ledger.cometbft.p2p.addr_book_strict = !localhost;
-    config.ledger.genesis_time = genesis.genesis_time.into();
-    config
-        .write(&global_args.base_dir, &chain_id, true)
-        .unwrap();
-
     println!("Derived chain ID: {}", chain_id);
-    println!(
-        "Genesis file generated at {}",
-        genesis_path.to_string_lossy()
-    );
+    println!("Genesis files stored at {}", chain_dir.to_string_lossy());
 
     // Create a release tarball for anoma-network-config
     if !dont_archive {
         let mut release = tar::Builder::new(Vec::new());
-        let release_genesis_path = PathBuf::from(config::DEFAULT_BASE_DIR)
-            .join(format!("{}.toml", chain_id.as_str()));
-        release
-            .append_path_with_name(genesis_path, release_genesis_path)
-            .unwrap();
+        release.append_dir_all(&chain_dir, &chain_dir).unwrap();
         let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
         let release_global_config_path =
             GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
@@ -876,13 +488,6 @@ pub fn init_network(
                 global_config_path,
                 release_global_config_path,
             )
-            .unwrap();
-        let chain_config_path =
-            Config::file_path(&global_args.base_dir, &chain_id);
-        let release_chain_config_path =
-            Config::file_path(config::DEFAULT_BASE_DIR, &chain_id);
-        release
-            .append_path_with_name(chain_config_path, release_chain_config_path)
             .unwrap();
         let release_wasm_checksums_path =
             PathBuf::from(config::DEFAULT_BASE_DIR)
@@ -910,39 +515,20 @@ pub fn init_network(
             release_file.to_string_lossy()
         );
     }
-}
 
-fn init_established_account(
-    name: impl AsRef<str>,
-    wallet: &mut Wallet<CliWalletUtils>,
-    config: &mut genesis_config::EstablishedAccountConfig,
-    unsafe_dont_encrypt: bool,
-) {
-    if config.address.is_none() {
-        let address = address::gen_established_address("established");
-        config.address = Some(address.to_string());
-        wallet.add_address(&name, address, true);
-    }
-    if config.public_key.is_none() {
-        println!("Generating established account {} key...", name.as_ref());
-        let password =
-            read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        let (_alias, keypair) = wallet
-            .gen_key(
-                SchemeType::Ed25519,
-                Some(format!("{}-key", name.as_ref())),
-                true,
-                password,
-                None, // do not use mnemonic code / HD derivation path
-            )
-            .expect("Key generation should not fail.")
-            .expect("No existing alias expected.");
-        let public_key =
-            genesis_config::HexString(keypair.ref_to().to_string());
-        config.public_key = Some(public_key);
-    }
-    if config.vp.is_none() {
-        config.vp = Some("vp_user".to_string());
+    // After the archive is created, try to copy the built WASM, if they're
+    // present with the checksums. This is used for local network setup, so
+    // that we can use a local WASM build.
+    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full);
+    for (_, full_name) in checksums.0 {
+        // try to copy built file from the Namada WASM root dir
+        let file = std::env::current_dir()
+            .unwrap()
+            .join(crate::config::DEFAULT_WASM_DIR)
+            .join(&full_name);
+        if file.exists() {
+            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
+        }
     }
 }
 
@@ -967,34 +553,50 @@ pub fn default_base_dir(
 }
 
 /// Initialize genesis validator's address, consensus key and validator account
-/// key and use it in the ledger's node.
+/// key into a special "pre-genesis" wallet.
 pub fn init_genesis_validator(
     global_args: args::Global,
     args::InitGenesisValidator {
+        source,
         alias,
         commission_rate,
         max_commission_rate_change,
         net_address,
         unsafe_dont_encrypt,
         key_scheme,
+        transfer_from_source_amount,
+        self_bond_amount,
     }: args::InitGenesisValidator,
 ) {
+    let (mut source_wallet, wallet_file) =
+        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
+
+    let source_key =
+        source_wallet.find_key(&source, None).unwrap_or_else(|err| {
+            eprintln!(
+                "Couldn't find key for source \"{source}\" in the pre-genesis \
+                 wallet {}. Failed with {err}.",
+                wallet_file.to_string_lossy()
+            );
+            safe_exit(1)
+        });
+
     // Validate the commission rate data
     if commission_rate > Dec::one() {
         eprintln!("The validator commission rate must not exceed 1.0 or 100%");
-        cli::safe_exit(1)
+        safe_exit(1)
     }
     if max_commission_rate_change > Dec::one() {
         eprintln!(
             "The validator maximum change in commission rate per epoch must \
              not exceed 1.0 or 100%"
         );
-        cli::safe_exit(1)
+        safe_exit(1)
     }
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
     println!("Generating validator keys...");
-    let pre_genesis = pre_genesis::gen_and_store(
+    let validator_wallet = pre_genesis::gen_and_store(
         key_scheme,
         unsafe_dont_encrypt,
         &pre_genesis_dir,
@@ -1004,76 +606,64 @@ pub fn init_genesis_validator(
             "Unable to generate the validator pre-genesis wallet: {}",
             err
         );
-        cli::safe_exit(1)
+        safe_exit(1)
     });
     println!(
         "The validator's keys were stored in the wallet at {}",
         pre_genesis::validator_file_name(&pre_genesis_dir).to_string_lossy()
     );
 
-    let validator_config = ValidatorPreGenesisConfig {
-        validator: HashMap::from_iter([(
-            alias,
-            genesis_config::ValidatorConfig {
-                consensus_public_key: Some(HexString(
-                    pre_genesis.consensus_key.ref_to().to_string(),
-                )),
-                eth_cold_key: Some(HexString(
-                    pre_genesis.eth_cold_key.ref_to().to_string(),
-                )),
-                eth_hot_key: Some(HexString(
-                    pre_genesis.eth_hot_key.ref_to().to_string(),
-                )),
-                account_public_key: Some(HexString(
-                    pre_genesis.account_key.ref_to().to_string(),
-                )),
-                protocol_public_key: Some(HexString(
-                    pre_genesis
-                        .store
-                        .validator_keys
-                        .protocol_keypair
-                        .ref_to()
-                        .to_string(),
-                )),
-                dkg_public_key: Some(HexString(
-                    pre_genesis
-                        .store
-                        .validator_keys
-                        .dkg_keypair
-                        .as_ref()
-                        .unwrap()
-                        .public()
-                        .to_string(),
-                )),
-                commission_rate: Some(commission_rate),
-                max_commission_rate_change: Some(max_commission_rate_change),
-                tendermint_node_key: Some(HexString(
-                    pre_genesis.tendermint_node_key.ref_to().to_string(),
-                )),
-                net_address: Some(net_address.to_string()),
-                ..Default::default()
-            },
-        )]),
-    };
-    let genesis_part = toml::to_string(&validator_config).unwrap();
-    println!("Your public partial pre-genesis TOML configuration:");
+    let transactions = genesis::transactions::init_validator(
+        genesis::transactions::GenesisValidatorData {
+            source_key,
+            alias: alias::Alias::from(alias),
+            commission_rate,
+            max_commission_rate_change,
+            net_address,
+            transfer_from_source_amount,
+            self_bond_amount,
+        },
+        &mut source_wallet,
+        &validator_wallet,
+    );
+
+    let genesis_part = toml::to_string(&transactions).unwrap();
+    println!("Your public signed pre-genesis transactions TOML:");
     println!();
     println!("{genesis_part}");
 
-    let file_name = validator_pre_genesis_file(&pre_genesis_dir);
+    let file_name = validator_pre_genesis_txs_file(&pre_genesis_dir);
     fs::write(&file_name, genesis_part).unwrap_or_else(|err| {
         eprintln!(
-            "Couldn't write partial pre-genesis file to {}. Failed with: {}",
+            "Couldn't write pre-genesis transactions file to {}. Failed with: \
+             {}",
             file_name.to_string_lossy(),
             err
         );
-        cli::safe_exit(1)
+        safe_exit(1)
     });
     println!();
     println!(
-        "Pre-genesis TOML written to {}",
+        "Pre-genesis transactions TOML written to {}",
         file_name.to_string_lossy()
     );
+}
+
+fn load_pre_genesis_wallet_or_exit(
+    base_dir: &Path,
+) -> (Wallet<CliWalletUtils>, PathBuf) {
+    let pre_genesis_dir = base_dir.join(PRE_GENESIS_DIR);
+    let wallet_file = crate::wallet::wallet_file(&pre_genesis_dir);
+    (
+        crate::wallet::load(&pre_genesis_dir).unwrap_or_else(|| {
+            eprintln!(
+                "No pre-genesis wallet found at {}.",
+                wallet_file.to_string_lossy()
+            );
+            safe_exit(1)
+        }),
+        wallet_file,
+    )
 }
 
 async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
@@ -1082,19 +672,6 @@ async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
     response.error_for_status_ref()?;
     let contents = response.bytes().await?;
     Ok(contents)
-}
-
-fn try_parse_public_key(
-    label: impl AsRef<str>,
-    value: &Option<HexString>,
-) -> Option<common::PublicKey> {
-    let label = label.as_ref();
-    value.as_ref().map(|key| {
-        key.to_public_key().unwrap_or_else(|err| {
-            eprintln!("Invalid {label} key: {}", err);
-            cli::safe_exit(1)
-        })
-    })
 }
 
 fn network_configs_url_prefix(chain_id: &ChainId) -> String {
@@ -1145,14 +722,84 @@ pub fn write_tendermint_node_key(
     node_pk
 }
 
-/// The default path to a validator pre-genesis file.
-pub fn validator_pre_genesis_file(pre_genesis_path: &Path) -> PathBuf {
-    pre_genesis_path.join("validator.toml")
+/// The default path to a validator pre-genesis txs file.
+pub fn validator_pre_genesis_txs_file(pre_genesis_path: &Path) -> PathBuf {
+    pre_genesis_path.join("transactions.toml")
 }
 
 /// The default validator pre-genesis directory
 pub fn validator_pre_genesis_dir(base_dir: &Path, alias: &str) -> PathBuf {
     base_dir.join(PRE_GENESIS_DIR).join(alias)
+}
+
+/// Validate genesis templates. Exits process if invalid.
+pub fn validate_genesis_templates(
+    _global_args: args::Global,
+    args::ValidateGenesisTemplates { path }: args::ValidateGenesisTemplates,
+) {
+    if genesis::templates::load_and_validate(&path).is_none() {
+        safe_exit(1)
+    }
+}
+
+/// Sign genesis transactions.
+pub fn sign_genesis_tx(
+    global_args: args::Global,
+    args::SignGenesisTx { path, output }: args::SignGenesisTx,
+) {
+    let (mut wallet, _wallet_file) =
+        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
+
+    let contents = fs::read(&path).unwrap_or_else(|err| {
+        eprintln!(
+            "Unable to read from file {}. Failed with {err}.",
+            path.to_string_lossy()
+        );
+        safe_exit(1);
+    });
+    let unsigned = genesis::transactions::parse_unsigned(&contents)
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Unable to parse the TOML from {}. Failed with {err}.",
+                path.to_string_lossy()
+            );
+            safe_exit(1);
+        });
+    if unsigned.validator_account.is_some()
+        && !unsigned.validator_account.as_ref().unwrap().is_empty()
+    {
+        eprintln!(
+            "Validator transactions must be signed with a validator wallet. \
+             You can use `namada client utils init-genesis-validator` \
+             supplied with the required arguments to generate a validator \
+             wallet and sign the validator genesis transactions."
+        );
+        safe_exit(1);
+    }
+    let signed = genesis::transactions::sign_txs(unsigned, &mut wallet);
+
+    match output {
+        Some(output_path) => {
+            let transactions = toml::to_vec(&signed).unwrap();
+            fs::write(&output_path, transactions).unwrap_or_else(|err| {
+                eprintln!(
+                    "Failed to write output to {} with {err}.",
+                    output_path.to_string_lossy()
+                );
+                safe_exit(1);
+            });
+            println!(
+                "Your public signed transactions TOML has been written to {}",
+                output_path.to_string_lossy()
+            );
+        }
+        None => {
+            let transactions = toml::to_string(&signed).unwrap();
+            println!("Your public signed transactions TOML:");
+            println!();
+            println!("{transactions}");
+        }
+    }
 }
 
 /// Add a spinning wheel to a message for long running commands.
@@ -1179,19 +826,6 @@ where
     task.join().unwrap()
 }
 
-fn is_valid_validator_for_current_chain(
-    tendermint_node_pk: &common::PublicKey,
-    genesis_config: &GenesisConfig,
-) -> bool {
-    genesis_config.validator.iter().any(|(_alias, config)| {
-        if let Some(tm_node_key) = &config.tendermint_node_key {
-            tm_node_key.0.eq(&tendermint_node_pk.to_string())
-        } else {
-            false
-        }
-    })
-}
-
 /// Replace the contents of `addr` with a dummy address.
 #[inline]
 pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
@@ -1203,4 +837,14 @@ pub fn take_config_address(addr: &mut TendermintAddress) -> TendermintAddress {
             port: 0,
         },
     )
+}
+
+#[cfg(not(test))]
+fn safe_exit(code: i32) -> ! {
+    crate::cli::safe_exit(code)
+}
+
+#[cfg(test)]
+fn safe_exit(code: i32) -> ! {
+    panic!("Process exited unsuccesfully with error code: {}", code);
 }

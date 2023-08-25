@@ -1,0 +1,103 @@
+# This file contains hand-written unsigned transactions for localnet with:
+#
+# - MASP account
+# - Faucet account that allows anyone to withdraw limited amount of tokens
+# - 2 established accounts for "Albert" and "Bertha"
+#
+# Note that 2 more localnet user accounts "Christel" and "Daewon" are left as
+# implicit accounts, so their tokens are kept in the accounts derived from their
+# keys used in `balances.toml`.
+#
+# This file is used to produce `signed-transactions.toml` with
+# the `sign-genesis-tx` command.
+
+# MASP
+[[established_account]]
+alias = "masp"
+vp = "vp_masp"
+
+# Faucet
+[[established_account]]
+alias = "faucet"
+vp = "vp_testnet_faucet"
+public_key = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+
+# Albert
+[[established_account]]
+alias = "albert"
+vp = "vp_user"
+public_key = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+
+# Bertha
+[[established_account]]
+alias = "bertha"
+vp = "vp_user"
+public_key = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+
+# Transfer all the Faucet's tokens into it's established account:
+[[transfer]]
+token = "NAM"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+[[transfer]]
+token = "BTC"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+[[transfer]]
+token = "DOT"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+[[transfer]]
+token = "Schnitzel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+[[transfer]]
+token = "Apfel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+[[transfer]]
+token = "Kartoffel"
+source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
+target = "faucet"
+amount = "9123372036854"
+
+# Transfer all the Albert's tokens into it's established account:
+[[transfer]]
+token = "NAM"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+
+[[transfer]]
+token = "BTC"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+
+[[transfer]]
+token = "DOT"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+
+[[transfer]]
+token = "Schnitzel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+
+[[transfer]]
+token = "Apfel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"

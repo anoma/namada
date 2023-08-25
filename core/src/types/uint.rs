@@ -264,6 +264,11 @@ impl I256 {
         Self(Uint::zero())
     }
 
+    /// Gives the one value of an I256
+    pub fn one() -> I256 {
+        Self(Uint::one())
+    }
+
     /// Get a string representation of `self` as a
     /// native token amount.
     pub fn to_string_native(&self) -> String {

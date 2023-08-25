@@ -59,6 +59,7 @@ pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
 pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
     load(store_dir).or_else(|_| {
         let store = Store::default();
+        dbg!("new wallet", &store);
         save(&store, store_dir)
             .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
         Ok(store)
@@ -72,14 +73,8 @@ pub fn load_or_new_from_genesis(
     genesis_cfg: GenesisConfig,
 ) -> Result<Store, LoadStoreError> {
     load(store_dir).or_else(|_| {
-        #[cfg(not(feature = "dev"))]
-        let store = new(genesis_cfg);
-        #[cfg(feature = "dev")]
-        let store = {
-            // The function is unused in dev
-            let _ = genesis_cfg;
-            new()
-        };
+        let mut store = Store::default();
+        add_genesis_addresses(&mut store, genesis_cfg);
         save(&store, store_dir)
             .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
         Ok(store)
@@ -110,11 +105,11 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
             err.to_string(),
         )
     })?;
-    Store::decode(store).map_err(LoadStoreError::Decode)
+    dbg!(store_dir);
+    dbg!(Store::decode(store).map_err(LoadStoreError::Decode))
 }
 
 /// Add addresses from a genesis configuration.
-#[cfg(not(feature = "dev"))]
 pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
     for (alias, addr) in
         super::defaults::addresses_from_genesis(genesis.clone())
@@ -135,33 +130,6 @@ pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
             }
         }
     }
-}
-
-#[cfg(not(feature = "dev"))]
-fn new(genesis: GenesisConfig) -> Store {
-    let mut store = Store::default();
-    add_genesis_addresses(&mut store, genesis);
-    store
-}
-
-#[cfg(feature = "dev")]
-fn new() -> Store {
-    let mut store = Store::default();
-    // Pre-load the default keys without encryption
-    let no_password = None;
-    for (alias, keypair) in super::defaults::keys() {
-        let pkh: PublicKeyHash = (&keypair.ref_to()).into();
-        store.insert_keypair::<CliWalletUtils>(
-            alias,
-            StoredKeypair::new(keypair, no_password.clone()).0,
-            pkh,
-            true,
-        );
-    }
-    for (alias, addr) in super::defaults::addresses() {
-        store.insert_address::<CliWalletUtils>(alias, addr, true);
-    }
-    store
 }
 
 /// Generate keypair for signing protocol txs and for the DKG
@@ -193,7 +161,7 @@ pub fn gen_validator_keys(
     }
 }
 
-#[cfg(all(test, feature = "dev"))]
+#[cfg(test)]
 mod test_wallet {
     use namada::types::address::Address;
 
@@ -201,7 +169,7 @@ mod test_wallet {
 
     #[test]
     fn test_toml_roundtrip_ed25519() {
-        let mut store = new();
+        let mut store = Store::default();
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
@@ -214,7 +182,7 @@ mod test_wallet {
 
     #[test]
     fn test_toml_roundtrip_secp256k1() {
-        let mut store = new();
+        let mut store = Store::default();
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(

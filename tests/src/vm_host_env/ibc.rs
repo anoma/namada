@@ -56,6 +56,7 @@ use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsg
 use namada::ibc_proto::ics23::CommitmentProof;
 use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
+use namada::ledger::ibc;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
     client_state_key, client_type_key, client_update_height_key,
@@ -74,10 +75,10 @@ use namada::ledger::parameters::storage::{
     get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
 };
 use namada::ledger::parameters::EpochDuration;
+use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::traits::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
-use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::tendermint::time::Time as TmTime;
@@ -213,12 +214,13 @@ pub fn init_storage() -> (Address, Address) {
 
     tx_host_env::with(|env| {
         ibc::init_genesis_storage(&mut env.wl_storage);
-        pos::init_genesis_storage(
+        namada_proof_of_stake::test_utils::init_genesis_helper(
             &mut env.wl_storage,
             &PosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        );
+        )
+        .unwrap();
         // store wasm code
         let key = Key::wasm_code(&code_hash);
         env.wl_storage.storage.write(&key, code.clone()).unwrap();

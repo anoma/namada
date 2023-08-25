@@ -9,6 +9,7 @@ use namada::types::key::*;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
 use thiserror::Error;
@@ -18,6 +19,7 @@ use tokio::process::Command;
 
 use crate::cli::namada_version;
 use crate::config;
+use crate::facade::tendermint::node::Id as TendermintNodeId;
 #[cfg(feature = "abciplus")]
 use crate::facade::tendermint::Moniker;
 use crate::facade::tendermint::{block, Genesis};
@@ -84,13 +86,6 @@ pub async fn run(
     let tendermint_path = from_env_or_default()?;
     let mode = config.shell.tendermint_mode.to_str().to_owned();
 
-    #[cfg(feature = "dev")]
-    // This has to be checked before we run tendermint init
-    let has_validator_key = {
-        let path = home_dir.join("config").join("priv_validator_key.json");
-        Path::new(&path).exists()
-    };
-
     // init and run a tendermint node child process
     let output = Command::new(&tendermint_path)
         .args(["init", &mode, "--home", &home_dir_string])
@@ -101,14 +96,6 @@ pub async fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    #[cfg(feature = "dev")]
-    {
-        let consensus_key = crate::wallet::defaults::validator_keypair();
-        // write the validator key file if it didn't already exist
-        if !has_validator_key {
-            write_validator_key_async(&home_dir, &consensus_key).await;
-        }
-    }
     #[cfg(feature = "abcipp")]
     write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
     #[cfg(not(feature = "abcipp"))]
@@ -343,6 +330,28 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) {
     });
     serde_json::to_writer_pretty(file, &state)
         .expect("Couldn't write private validator state file");
+}
+
+/// Length of a Tendermint Node ID in bytes
+const TENDERMINT_NODE_ID_LENGTH: usize = 20;
+
+/// Derive Tendermint node ID from public key
+pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
+    let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
+
+    match pk {
+        common::PublicKey::Ed25519(_) => {
+            let _pk: ed25519::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+        common::PublicKey::Secp256k1(_) => {
+            let _pk: secp256k1::PublicKey = pk.try_to_pk().unwrap();
+            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
+        }
+    }
+    TendermintNodeId::new(bytes)
 }
 
 async fn update_tendermint_config(

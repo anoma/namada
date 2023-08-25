@@ -14,7 +14,6 @@ use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::testing::node::MockNode;
 use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
-use namada_core::types::address::Address;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use toml::value::Table;
 
@@ -57,10 +56,11 @@ pub fn initialize_genesis(
     // Run `init-network` to generate the finalized genesis config, keys and
     // addresses and update WASM checksums
     let genesis_path = test_dir.path().join("e2e-test-genesis-src.toml");
-    genesis_config::write_genesis_config(&genesis, &genesis_path);
+    genesis_config::write_genesis_config(&genesis, genesis_path);
     let wasm_checksums_path = working_dir.join("wasm/checksums.json");
 
     // setup genesis file
+    // TODO: FIXME
     namada_apps::client::utils::init_network(
         args::Global {
             chain_id: None,
@@ -68,16 +68,14 @@ pub fn initialize_genesis(
             wasm_dir: None,
         },
         args::InitNetwork {
-            genesis_path,
+            templates_path: Default::default(),
             wasm_checksums_path,
             chain_id_prefix: ChainIdPrefix::from_str("integration-test")
                 .unwrap(),
-            unsafe_dont_encrypt: true,
             consensus_timeout_commit: Timeout::from_str("1s").unwrap(),
-            localhost: true,
-            allow_duplicate_ip: true,
             dont_archive: true,
             archive_dir: None,
+            genesis_time: Default::default(),
         },
     );
 
@@ -133,7 +131,6 @@ fn create_node(
             None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
-            Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
         ))),
         test_dir: ManuallyDrop::new(base_dir),
         keep_temp,
@@ -154,7 +151,7 @@ fn create_node(
     {
         let mut locked = node.shell.lock().unwrap();
         locked
-            .init_chain(init_req, 1)
+            .init_chain(init_req)
             .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
         locked.commit();
     }

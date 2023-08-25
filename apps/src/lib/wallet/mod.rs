@@ -4,17 +4,14 @@ mod store;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
 pub use namada::ledger::wallet::alias::Alias;
 use namada::ledger::wallet::{
-    AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
-    Wallet, WalletUtils,
+    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletUtils,
 };
 pub use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
-use namada::types::address::Address;
 use namada::types::key::*;
 use rand_core::OsRng;
 pub use store::wallet_file;
@@ -234,23 +231,6 @@ where
         .transpose()
 }
 
-/// Add addresses from a genesis configuration.
-pub fn add_genesis_addresses(
-    wallet: &mut Wallet<CliWalletUtils>,
-    genesis: GenesisConfig,
-) {
-    for (alias, config) in &genesis.token {
-        let exp_addr = format!("Genesis token {alias} must have address");
-        let address =
-            Address::from_str(config.address.as_ref().expect(&exp_addr))
-                .expect("Valid address");
-        wallet.add_vp_type_to_address(AddressVpType::Token, address);
-    }
-    for (alias, addr) in defaults::addresses_from_genesis(genesis) {
-        wallet.add_address(alias.normalize(), addr, true);
-    }
-}
-
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
     self::store::save(wallet.store(), wallet.store_dir())
@@ -290,6 +270,12 @@ pub fn load_or_new_from_genesis(
             cli::safe_exit(1)
         });
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
+}
+
+/// Check if a wallet exists in the given store dir.
+pub fn exists(store_dir: &Path) -> bool {
+    let file = wallet_file(store_dir);
+    file.exists()
 }
 
 /// Read the password for encryption from the file/env/stdin, with

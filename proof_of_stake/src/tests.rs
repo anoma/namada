@@ -29,6 +29,7 @@ use proptest::test_runner::Config;
 // `tracing` logs from tests
 use test_log::test;
 
+use super::test_utils::init_genesis_helper;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::PosParams;
 use crate::types::{
@@ -41,9 +42,8 @@ use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
-    get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set, is_validator, process_slashes,
-    purge_validator_sets_for_old_epoch,
+    get_num_consensus_validators, insert_validator_into_validator_set,
+    is_validator, process_slashes, purge_validator_sets_for_old_epoch,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
@@ -164,8 +164,13 @@ fn test_init_genesis_aux(
     s.storage.block.epoch = start_epoch;
 
     validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
-    init_genesis(&mut s, &params, validators.clone().into_iter(), start_epoch)
-        .unwrap();
+    init_genesis_helper(
+        &mut s,
+        &params,
+        validators.clone().into_iter(),
+        start_epoch,
+    )
+    .unwrap();
 
     let mut bond_details = bonds_and_unbonds(&s, None, None).unwrap();
     assert!(bond_details.iter().all(|(_id, details)| {
@@ -243,7 +248,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Genesis
     let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    init_genesis_helper(
         &mut s,
         &params,
         validators.clone().into_iter(),
@@ -281,6 +286,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_self_bond,
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -398,6 +404,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_del,
         current_epoch,
+        None,
     )
     .unwrap();
     let val_stake_pre = read_validator_stake(
@@ -798,7 +805,7 @@ fn test_become_validator_aux(
 
     // Genesis
     let mut current_epoch = dbg!(s.storage.block.epoch);
-    init_genesis(
+    init_genesis_helper(
         &mut s,
         &params,
         validators.clone().into_iter(),
@@ -848,6 +855,7 @@ fn test_become_validator_aux(
         commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
         max_commission_rate_change: Dec::new(5, 2)
             .expect("Dec creation failed"),
+        offset_opt: None,
     })
     .unwrap();
     assert!(is_validator(&s, &new_validator).unwrap());
@@ -866,7 +874,8 @@ fn test_become_validator_aux(
     let staking_token = staking_token_address(&s);
     let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
-    bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
+    bond_tokens(&mut s, None, &new_validator, amount, current_epoch, None)
+        .unwrap();
 
     // Check the bond delta
     let bond_handle = bond_handle(&new_validator, &new_validator);
@@ -958,7 +967,7 @@ fn test_slashes_with_unbonding_aux(
     // Genesis
     // let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    init_genesis_helper(
         &mut s,
         &params,
         validators.clone().into_iter(),
@@ -1144,15 +1153,8 @@ fn test_validator_sets() {
         )
         .unwrap();
 
-        update_validator_deltas(
-            s,
-            &params,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
+        update_validator_deltas(s, &params, addr, stake.change(), epoch, None)
+            .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1187,7 +1189,7 @@ fn test_validator_sets() {
     let start_epoch = Epoch::default();
     let epoch = start_epoch;
 
-    init_genesis(
+    init_genesis_helper(
         &mut s,
         &params,
         [
@@ -1442,7 +1444,7 @@ fn test_validator_sets() {
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
-    update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch)
+    update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch, None)
         .unwrap();
     update_validator_deltas(
         &mut s,
@@ -1450,7 +1452,7 @@ fn test_validator_sets() {
         &val1,
         -unbond.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
     // Epoch 6
@@ -1638,16 +1640,10 @@ fn test_validator_sets() {
     let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
     println!("val6 {val6} new stake {}", stake6.to_string_native());
-    update_validator_set(&mut s, &params, &val6, bond.change(), epoch).unwrap();
-    update_validator_deltas(
-        &mut s,
-        &params,
-        &val6,
-        bond.change(),
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
+    update_validator_set(&mut s, &params, &val6, bond.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch, None)
+        .unwrap();
     let val6_bond_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
@@ -1825,15 +1821,8 @@ fn test_validator_sets_swap() {
         )
         .unwrap();
 
-        update_validator_deltas(
-            s,
-            &params,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
+        update_validator_deltas(s, &params, addr, stake.change(), epoch, None)
+            .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1857,7 +1846,7 @@ fn test_validator_sets_swap() {
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
 
-    init_genesis(
+    init_genesis_helper(
         &mut s,
         &params,
         [
@@ -1919,7 +1908,7 @@ fn test_validator_sets_swap() {
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
 
-    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch)
+    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch, None)
         .unwrap();
     update_validator_deltas(
         &mut s,
@@ -1927,11 +1916,11 @@ fn test_validator_sets_swap() {
         &val2,
         bond2.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch)
+    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch, None)
         .unwrap();
     update_validator_deltas(
         &mut s,
@@ -1939,7 +1928,7 @@ fn test_validator_sets_swap() {
         &val3,
         bond3.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
@@ -1958,7 +1947,7 @@ fn test_validator_sets_swap() {
         into_tm_voting_power(params.tm_votes_per_token, stake3)
     );
 
-    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch)
+    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
         .unwrap();
     update_validator_deltas(
         &mut s,
@@ -1966,11 +1955,11 @@ fn test_validator_sets_swap() {
         &val2,
         bonds.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch)
+    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch, None)
         .unwrap();
     update_validator_deltas(
         &mut s,
@@ -1978,7 +1967,7 @@ fn test_validator_sets_swap() {
         &val3,
         bonds.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
