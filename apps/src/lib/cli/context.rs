@@ -8,8 +8,9 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
 use namada::ledger::wallet::Wallet;
-use namada::types::address::Address;
+use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::key::*;
 use namada::types::masp::*;
 
@@ -324,16 +325,25 @@ impl ArgFromContext for Address {
         ctx: &Context,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
+        struct Skip;
         let raw = raw.as_ref();
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(raw)
-            // Or it can be an alias that may be found in the wallet
+            // An Ethereum address
             .or_else(|_| {
-                ctx.wallet
-                    .find_address(raw)
-                    .cloned()
-                    .ok_or_else(|| format!("Unknown address {}", raw))
+                (raw.len() == 42 && raw.starts_with("0x"))
+                    .then(|| {
+                        raw.parse::<EthAddress>()
+                            .map(|addr| {
+                                Address::Internal(InternalAddress::Erc20(addr))
+                            })
+                            .map_err(|_| Skip)
+                    })
+                    .unwrap_or(Err(Skip))
             })
+            // Or it can be an alias that may be found in the wallet
+            .or_else(|_| ctx.wallet.find_address(raw).cloned().ok_or(Skip))
+            .map_err(|_| format!("Unknown address {raw}"))
     }
 }
 
