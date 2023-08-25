@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
+use crate::ledger::gas::{GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 use crate::ledger::testnet_pow;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
@@ -71,6 +72,8 @@ pub enum Error {
     InvalidJSONDeserialization(String),
     #[error("The wrapper signature is invalid.")]
     InvalidWrapperSignature,
+    #[error("Signature verification went out of gas")]
+    OutOfGas,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -1346,6 +1349,7 @@ impl Tx {
         public_keys_index_map: AccountPublicKeysMap,
         threshold: u8,
         max_signatures: Option<u8>,
+        gas_meter: &mut VpGasMeter,
     ) -> std::result::Result<(), Error> {
         let max_signatures = max_signatures.unwrap_or(u8::MAX);
         let mut valid_signatures = 0;
@@ -1387,6 +1391,9 @@ impl Tx {
                             &signatures.get_raw_hash(),
                         )
                         .is_ok();
+                    gas_meter
+                        .consume(VERIFY_TX_SIG_GAS_COST)
+                        .map_err(|_| Error::OutOfGas)?;
                     if is_valid_signature {
                         valid_signatures += 1;
                     }
@@ -1490,6 +1497,7 @@ impl Tx {
     /// signatures over it
     #[cfg(feature = "ferveo-tpke")]
     pub fn encrypt(&mut self, pubkey: &EncryptionKey) -> &mut Self {
+        use crate::types::hash::Hash;
         let header_hash = self.header_hash();
         let mut plaintexts = vec![];
         // Iterate backwrds to sidestep the effects of deletion on indexing
@@ -1497,6 +1505,28 @@ impl Tx {
             match &self.sections[i] {
                 Section::Signature(sig)
                     if sig.targets.contains(&header_hash) => {}
+                Section::MaspTx(_) => {
+                    // Do NOT encrypt the fee unshielding transaction
+                    if let Some(unshield_section_hash) = self
+                        .header()
+                        .wrapper()
+                        .expect("Tried to encrypt a non-wrapper tx")
+                        .unshield_section_hash
+                    {
+                        if unshield_section_hash
+                            == Hash(
+                                self.sections[i]
+                                    .hash(&mut Sha256::new())
+                                    .finalize_reset()
+                                    .into(),
+                            )
+                        {
+                            continue;
+                        }
+                    }
+
+                    plaintexts.push(self.sections.remove(i))
+                }
                 // Add eligible section to the list of sections to encrypt
                 _ => plaintexts.push(self.sections.remove(i)),
             }
@@ -1660,20 +1690,22 @@ impl Tx {
     pub fn add_wrapper(
         &mut self,
         fee: Fee,
-        gas_payer: common::PublicKey,
+        fee_payer: common::PublicKey,
         epoch: Epoch,
         gas_limit: GasLimit,
         #[cfg(not(feature = "mainnet"))] requires_pow: Option<
             testnet_pow::Solution,
         >,
+        fee_unshield_hash: Option<crate::types::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
             fee,
-            gas_payer,
+            fee_payer,
             epoch,
             gas_limit,
             #[cfg(not(feature = "mainnet"))]
             requires_pow,
+            fee_unshield_hash,
         )));
         self
     }

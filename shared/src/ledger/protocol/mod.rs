@@ -1,13 +1,22 @@
 //! The ledger's protocol
-
 use std::collections::BTreeSet;
 use std::panic;
 
+use borsh::BorshSerialize;
 use eyre::{eyre, WrapErr};
+use masp_primitives::transaction::Transaction;
+use namada_core::ledger::gas::TxGasMeter;
+use namada_core::ledger::storage::wl_storage::WriteLogAndStorage;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::proto::Section;
+use namada_core::types::hash::Hash;
+use namada_core::types::storage::Key;
+use namada_core::types::token::Amount;
+use namada_core::types::transaction::WrapperTx;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
-use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::gas::{self, GasMetering, VpGasMeter};
 use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
@@ -20,12 +29,13 @@ use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
+use crate::ledger::{replay_protection, storage_api};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
-use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::protocol::{EthereumTxData, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
+use crate::types::{hash, storage};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
@@ -44,8 +54,12 @@ pub enum Error {
     ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
-    #[error("Gas error: {0}")]
-    GasError(gas::Error),
+    #[error("Fee ushielding error: {0}")]
+    FeeUnshieldingError(crate::types::transaction::WrapperTxErr),
+    #[error("{0}")]
+    GasError(#[from] gas::Error),
+    #[error("Error while processing transaction's fees: {0}")]
+    FeeError(String),
     #[error("Error executing VP for addresses: {0:?}")]
     VpRunnerError(vm::wasm::run::Error),
     #[error("The address {0} doesn't exist")]
@@ -78,25 +92,36 @@ pub enum Error {
 
 /// Shell parameters for running wasm transactions.
 #[allow(missing_docs)]
-pub enum ShellParams<'a, D, H, CA>
+pub struct ShellParams<'a, CA, WLS>
 where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
+    WLS: WriteLogAndStorage + StorageRead,
 {
-    /// Parameters passed to dry ran txs.
-    DryRun {
-        storage: &'a Storage<D, H>,
+    tx_gas_meter: &'a mut TxGasMeter,
+    wl_storage: &'a mut WLS,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
+}
+
+impl<'a, CA, WLS> ShellParams<'a, CA, WLS>
+where
+    CA: 'static + WasmCacheAccess + Sync,
+    WLS: WriteLogAndStorage + StorageRead,
+{
+    /// Create a new instance of `ShellParams`
+    pub fn new(
+        tx_gas_meter: &'a mut TxGasMeter,
+        wl_storage: &'a mut WLS,
         vp_wasm_cache: &'a mut VpCache<CA>,
         tx_wasm_cache: &'a mut TxCache<CA>,
-    },
-    /// Parameters passed to mutating tx executions.
-    Mutating {
-        block_gas_meter: &'a mut BlockGasMeter,
-        wl_storage: &'a mut WlStorage<D, H>,
-        vp_wasm_cache: &'a mut VpCache<CA>,
-        tx_wasm_cache: &'a mut TxCache<CA>,
-    },
+    ) -> Self {
+        Self {
+            tx_gas_meter,
+            wl_storage,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        }
+    }
 }
 
 /// Result of applying a transaction
@@ -112,12 +137,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: Tx,
-    tx_length: usize,
+    tx_bytes: &'a [u8],
     tx_index: TxIndex,
-    block_gas_meter: &'a mut BlockGasMeter,
+    tx_gas_meter: &'a mut TxGasMeter,
     wl_storage: &'a mut WlStorage<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
+    block_proposer: Option<&'a Address>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -131,10 +158,9 @@ where
             has_valid_pow,
         }) => apply_wasm_tx(
             tx,
-            tx_length,
             &tx_index,
-            ShellParams::Mutating {
-                block_gas_meter,
+            ShellParams {
+                tx_gas_meter,
                 wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -145,77 +171,474 @@ where
         TxType::Protocol(protocol_tx) => {
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
-        TxType::Wrapper(_) | TxType::Decrypted(DecryptedTx::Undecryptable) => {
-            // do not apply db updates, but charge gas anyway.
-            // 1) we can only apply state updates on encrypted txs
-            // at the next block height
-            // 2) undecryptable txs should not perform any state
-            // updates either. errors are emitted at a layer above,
-            // in `Shell::finalize_block()`.
-            let gas_used = block_gas_meter
-                .finalize_transaction()
-                .map_err(Error::GasError)?;
+        TxType::Wrapper(ref wrapper) => {
+            let masp_transaction =
+                wrapper.unshield_section_hash.and_then(|ref hash| {
+                    tx.get_section(hash).and_then(|section| {
+                        if let Section::MaspTx(transaction) = section.as_ref() {
+                            Some(transaction.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                });
+
+            let changed_keys = apply_wrapper_tx(
+                wrapper,
+                masp_transaction,
+                tx_bytes,
+                ShellParams {
+                    tx_gas_meter,
+                    wl_storage,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+                block_proposer,
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow,
+            )?;
             Ok(TxResult {
-                gas_used,
-                ..Default::default()
+                gas_used: tx_gas_meter.get_tx_consumed_gas(),
+                changed_keys,
+                vps_result: VpsResult::default(),
+                initialized_accounts: vec![],
+                ibc_events: BTreeSet::default(),
             })
+        }
+        TxType::Decrypted(DecryptedTx::Undecryptable) => {
+            Ok(TxResult::default())
+        }
+    }
+}
+
+/// Load the wasm hash for a transfer from storage.
+///
+/// # Panics
+/// If the transaction hash is not found in storage
+pub fn get_transfer_hash_from_storage<S>(storage: &S) -> Hash
+where
+    S: StorageRead,
+{
+    let transfer_code_name_key =
+        Key::wasm_code_name("tx_transfer.wasm".to_string());
+    storage
+        .read(&transfer_code_name_key)
+        .expect("Could not read the storage")
+        .expect("Expected tx transfer hash in storage")
+}
+
+/// Performs the required operation on a wrapper transaction:
+///  - replay protection
+///  - fee payment
+///  - gas accounting
+///
+/// Returns the set of changed storage keys.
+pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
+    wrapper: &WrapperTx,
+    fee_unshield_transaction: Option<Transaction>,
+    tx_bytes: &[u8],
+    mut shell_params: ShellParams<'a, CA, WLS>,
+    block_proposer: Option<&Address>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+) -> Result<BTreeSet<Key>>
+where
+    CA: 'static + WasmCacheAccess + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    WLS: WriteLogAndStorage<D = D, H = H>,
+{
+    let mut changed_keys = BTreeSet::default();
+    let mut tx: Tx = tx_bytes.try_into().unwrap();
+
+    // Writes wrapper tx hash to block write log (changes must be persisted even
+    // in case of failure)
+    let wrapper_hash_key =
+        replay_protection::get_tx_hash_key(&hash::Hash(tx.header_hash().0));
+    shell_params
+        .wl_storage
+        .write(&wrapper_hash_key, ())
+        .expect("Error while writing tx hash to storage");
+    changed_keys.insert(wrapper_hash_key);
+
+    // Charge fee before performing any fallible operations
+    charge_fee(
+        wrapper,
+        fee_unshield_transaction,
+        &mut shell_params,
+        #[cfg(not(feature = "mainnet"))]
+        has_valid_pow,
+        block_proposer,
+        &mut changed_keys,
+    )?;
+
+    // Account for gas
+    shell_params.tx_gas_meter.add_tx_size_gas(tx_bytes)?;
+
+    // If wrapper was succesful, write inner tx hash to storage
+    let inner_hash_key = replay_protection::get_tx_hash_key(&hash::Hash(
+        tx.update_header(TxType::Raw).header_hash().0,
+    ));
+    shell_params
+        .wl_storage
+        .write(&inner_hash_key, ())
+        .expect("Error while writing tx hash to storage");
+    changed_keys.insert(inner_hash_key);
+
+    Ok(changed_keys)
+}
+
+/// Charge fee for the provided wrapper transaction. In ABCI returns an error if
+/// the balance of the block proposer overflows. In ABCI plus returns error if:
+/// - The unshielding fails
+/// - Fee amount overflows
+/// - Not enough funds are available to pay the entire amount of the fee
+/// - The accumulated fee amount to be credited to the block proposer overflows
+pub fn charge_fee<'a, D, H, CA, WLS>(
+    wrapper: &WrapperTx,
+    masp_transaction: Option<Transaction>,
+    shell_params: &mut ShellParams<'a, CA, WLS>,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+    block_proposer: Option<&Address>,
+    changed_keys: &mut BTreeSet<Key>,
+) -> Result<()>
+where
+    CA: 'static + WasmCacheAccess + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    WLS: WriteLogAndStorage<D = D, H = H>,
+{
+    let ShellParams {
+        tx_gas_meter: _,
+        wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    } = shell_params;
+
+    // Unshield funds if requested
+    if let Some(transaction) = masp_transaction {
+        // The unshielding tx does not charge gas, instantiate a
+        // custom gas meter for this step
+        let mut tx_gas_meter =
+            TxGasMeter::new(
+                wl_storage
+                    .read::<u64>(
+                        &namada_core::ledger::parameters::storage::get_fee_unshielding_gas_limit_key(
+                        ),
+                    )
+                    .expect("Error reading the storage")
+                    .expect("Missing fee unshielding gas limit in storage").into(),
+            );
+
+        // If it fails, do not return early
+        // from this function but try to take the funds from the unshielded
+        // balance
+        match wrapper.generate_fee_unshielding(
+            get_transfer_hash_from_storage(*wl_storage),
+            transaction,
+        ) {
+            Ok(fee_unshielding_tx) => {
+                // NOTE: A clean tx write log must be provided to this call
+                // for a correct vp validation. Block write log, instead,
+                // should contain any prior changes (if any)
+                wl_storage.write_log_mut().precommit_tx();
+                match apply_wasm_tx(
+                    fee_unshielding_tx,
+                    &TxIndex::default(),
+                    ShellParams {
+                        tx_gas_meter: &mut tx_gas_meter,
+                        wl_storage: *wl_storage,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    },
+                    #[cfg(not(feature = "mainnet"))]
+                    false,
+                ) {
+                    Ok(result) => {
+                        // NOTE: do not commit yet cause this could be
+                        // exploited to get free unshieldings
+                        if !result.is_accepted() {
+                            wl_storage.write_log_mut().drop_tx_keep_precommit();
+                            tracing::error!(
+                                "The unshielding tx is invalid, some VPs \
+                                 rejected it: {:#?}",
+                                result.vps_result.rejected_vps
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        wl_storage.write_log_mut().drop_tx_keep_precommit();
+                        tracing::error!(
+                            "The unshielding tx is invalid, wasm run failed: \
+                             {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => tracing::error!("{}", e),
+        }
+    }
+
+    // Charge or check fees
+    match block_proposer {
+        Some(proposer) => transfer_fee(
+            *wl_storage,
+            proposer,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+            wrapper,
+        )?,
+        None => check_fees(
+            *wl_storage,
+            #[cfg(not(feature = "mainnet"))]
+            has_valid_pow,
+            wrapper,
+        )?,
+    }
+
+    changed_keys.extend(wl_storage.write_log_mut().get_keys_with_precommit());
+
+    // Commit tx write log even in case of subsequent errors
+    wl_storage.write_log_mut().commit_tx();
+
+    Ok(())
+}
+
+/// Perform the actual transfer of fess from the fee payer to the block
+/// proposer.
+pub fn transfer_fee<WLS>(
+    wl_storage: &mut WLS,
+    block_proposer: &Address,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+    wrapper: &WrapperTx,
+) -> Result<()>
+where
+    WLS: WriteLogAndStorage + StorageRead,
+{
+    let balance = storage_api::token::read_balance(
+        wl_storage,
+        &wrapper.fee.token,
+        &wrapper.fee_payer(),
+    )
+    .unwrap();
+
+    match wrapper.get_tx_fee() {
+        Ok(fees) => {
+            if balance.checked_sub(fees).is_some() {
+                token_transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    fees,
+                )
+                .map_err(|e| Error::FeeError(e.to_string()))
+            } else {
+                // Balance was insufficient for fee payment
+                #[cfg(not(feature = "mainnet"))]
+                let reject = !has_valid_pow;
+                #[cfg(feature = "mainnet")]
+                let reject = true;
+
+                if reject {
+                    #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+                    {
+                        // Move all the available funds in the transparent
+                        // balance of the fee payer
+                        token_transfer(
+                            wl_storage,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                            block_proposer,
+                            balance,
+                        )
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                        return Err(Error::FeeError(
+                            "Transparent balance of wrapper's signer was \
+                             insufficient to pay fee. All the available \
+                             transparent funds have been moved to the block \
+                             proposer"
+                                .to_string(),
+                        ));
+                    }
+                    #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+                    return Err(Error::FeeError(
+                        "Insufficient transparent balance to pay fees"
+                            .to_string(),
+                    ));
+                } else {
+                    tracing::debug!(
+                        "Balance was insufficient for fee payment but a valid \
+                         PoW was provided"
+                    );
+                    Ok(())
+                }
+            }
+        }
+        Err(e) => {
+            // Fee overflow
+            #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+            {
+                // Move all the available funds in the transparent balance of
+                // the fee payer
+                token_transfer(
+                    wl_storage,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    balance,
+                )
+                .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                return Err(Error::FeeError(format!(
+                    "{}. All the available transparent funds have been moved \
+                     to the block proposer",
+                    e
+                )));
+            }
+
+            #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+            return Err(Error::FeeError(e.to_string()));
+        }
+    }
+}
+
+/// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
+/// insufficient balance or if the transfer the `dest` would overflow (This can
+/// only happen if the total supply does't fit in `token::Amount`). Contrary to
+/// `storage_api::token::transfer` this function updates the tx write log and
+/// not the block write log.
+fn token_transfer<WLS>(
+    wl_storage: &mut WLS,
+    token: &Address,
+    src: &Address,
+    dest: &Address,
+    amount: Amount,
+) -> Result<()>
+where
+    WLS: WriteLogAndStorage + StorageRead,
+{
+    let src_key = namada_core::types::token::balance_key(token, src);
+    let src_balance = namada_core::ledger::storage_api::token::read_balance(
+        wl_storage, token, src,
+    )
+    .expect("Token balance read in protocol must not fail");
+    match src_balance.checked_sub(amount) {
+        Some(new_src_balance) => {
+            if src == dest {
+                return Ok(());
+            }
+            let dest_key = namada_core::types::token::balance_key(token, dest);
+            let dest_balance =
+                namada_core::ledger::storage_api::token::read_balance(
+                    wl_storage, token, dest,
+                )
+                .expect("Token balance read in protocol must not fail");
+            match dest_balance.checked_add(amount) {
+                Some(new_dest_balance) => {
+                    wl_storage
+                        .write_log_mut()
+                        .write(&src_key, new_src_balance.try_to_vec().unwrap())
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
+                    match wl_storage.write_log_mut().write(
+                        &dest_key,
+                        new_dest_balance.try_to_vec().unwrap(),
+                    ) {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(Error::FeeError(e.to_string())),
+                    }
+                }
+                None => Err(Error::FeeError(
+                    "The transfer would overflow destination balance"
+                        .to_string(),
+                )),
+            }
+        }
+        None => Err(Error::FeeError("Insufficient source balance".to_string())),
+    }
+}
+
+/// Check if the fee payer has enough transparent balance to pay fees
+pub fn check_fees<WLS>(
+    wl_storage: &WLS,
+    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
+    wrapper: &WrapperTx,
+) -> Result<()>
+where
+    WLS: WriteLogAndStorage + StorageRead,
+{
+    let balance = storage_api::token::read_balance(
+        wl_storage,
+        &wrapper.fee.token,
+        &wrapper.fee_payer(),
+    )
+    .unwrap();
+
+    let fees = wrapper
+        .get_tx_fee()
+        .map_err(|e| Error::FeeError(e.to_string()))?;
+
+    if balance.checked_sub(fees).is_some() {
+        Ok(())
+    } else {
+        // Balance was insufficient for fee payment
+        #[cfg(not(feature = "mainnet"))]
+        let reject = !has_valid_pow;
+        #[cfg(feature = "mainnet")]
+        let reject = true;
+
+        if reject {
+            Err(Error::FeeError(
+                "Insufficient transparent balance to pay fees".to_string(),
+            ))
+        } else {
+            tracing::debug!(
+                "Balance was insufficient for fee payment but a valid PoW was \
+                 provided"
+            );
+            Ok(())
         }
     }
 }
 
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
-pub(crate) fn apply_wasm_tx<'a, D, H, CA>(
+pub fn apply_wasm_tx<'a, D, H, CA, WLS>(
     tx: Tx,
-    tx_length: usize,
     tx_index: &TxIndex,
-    shell_params: ShellParams<'a, D, H, CA>,
+    shell_params: ShellParams<'a, CA, WLS>,
     #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
+    CA: 'static + WasmCacheAccess + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
+    WLS: WriteLogAndStorage<D = D, H = H>,
 {
-    let mut default_gas_meter = Default::default();
-    let mut default_write_log = Default::default();
+    let ShellParams {
+        tx_gas_meter,
+        wl_storage,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    } = shell_params;
 
-    let (block_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) =
-        match shell_params {
-            ShellParams::Mutating {
-                block_gas_meter,
-                wl_storage,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            } => (
-                block_gas_meter,
-                &wl_storage.storage,
-                &mut wl_storage.write_log,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            ),
-            ShellParams::DryRun {
-                storage,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            } => (
-                &mut default_gas_meter,
-                storage,
-                &mut default_write_log,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            ),
-        };
+    let (tx_gas_meter, storage, write_log, vp_wasm_cache, tx_wasm_cache) = {
+        let (write_log, storage) = wl_storage.split_borrow();
+        (
+            tx_gas_meter,
+            storage,
+            write_log,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        )
+    };
 
-    // Base gas cost for applying the tx
-    block_gas_meter
-        .add_base_transaction_fee(tx_length)
-        .map_err(Error::GasError)?;
     let verifiers = execute_tx(
         &tx,
         tx_index,
         storage,
-        block_gas_meter,
+        tx_gas_meter,
         write_log,
         vp_wasm_cache,
         tx_wasm_cache,
@@ -225,7 +648,7 @@ where
         tx: &tx,
         tx_index,
         storage,
-        gas_meter: block_gas_meter,
+        tx_gas_meter,
         write_log,
         verifiers_from_tx: &verifiers,
         vp_wasm_cache,
@@ -233,9 +656,7 @@ where
         has_valid_pow,
     })?;
 
-    let gas_used = block_gas_meter
-        .finalize_transaction()
-        .map_err(Error::GasError)?;
+    let gas_used = tx_gas_meter.get_tx_consumed_gas();
     let initialized_accounts = write_log.get_initialized_accounts();
     let changed_keys = write_log.get_keys();
     let ibc_events = write_log.take_ibc_events();
@@ -326,11 +747,12 @@ where
 }
 
 /// Execute a transaction code. Returns verifiers requested by the transaction.
+#[allow(clippy::too_many_arguments)]
 fn execute_tx<D, H, CA>(
     tx: &Tx,
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
-    gas_meter: &mut BlockGasMeter,
+    tx_gas_meter: &mut TxGasMeter,
     write_log: &mut WriteLog,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
@@ -343,13 +765,19 @@ where
     wasm::run::tx(
         storage,
         write_log,
-        gas_meter,
+        tx_gas_meter,
         tx_index,
         tx,
         vp_wasm_cache,
         tx_wasm_cache,
     )
-    .map_err(Error::TxRunnerError)
+    .map_err(|e| {
+        if let wasm::run::Error::GasError(gas_error) = e {
+            Error::GasError(gas_error)
+        } else {
+            Error::TxRunnerError(e)
+        }
+    })
 }
 
 /// Arguments to [`check_vps`].
@@ -362,7 +790,7 @@ where
     tx: &'a Tx,
     tx_index: &'a TxIndex,
     storage: &'a Storage<D, H>,
-    gas_meter: &'a mut BlockGasMeter,
+    tx_gas_meter: &'a mut TxGasMeter,
     write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
     vp_wasm_cache: &'a mut VpCache<CA>,
@@ -376,7 +804,7 @@ fn check_vps<D, H, CA>(
         tx,
         tx_index,
         storage,
-        gas_meter,
+        tx_gas_meter,
         write_log,
         verifiers_from_tx,
         vp_wasm_cache,
@@ -392,8 +820,6 @@ where
     let (verifiers, keys_changed) =
         write_log.verifiers_and_changed_keys(verifiers_from_tx);
 
-    let initial_gas = gas_meter.get_current_transaction_gas();
-
     let vps_result = execute_vps(
         verifiers,
         keys_changed,
@@ -401,15 +827,13 @@ where
         tx_index,
         storage,
         write_log,
-        initial_gas,
+        tx_gas_meter,
         vp_wasm_cache,
         has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
-    gas_meter
-        .add_vps_gas(&vps_result.gas_used)
-        .map_err(Error::GasError)?;
+    tx_gas_meter.add_vps_gas(&vps_result.gas_used)?;
 
     Ok(vps_result)
 }
@@ -423,7 +847,7 @@ fn execute_vps<D, H, CA>(
     tx_index: &TxIndex,
     storage: &Storage<D, H>,
     write_log: &WriteLog,
-    initial_gas: u64,
+    tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
     #[cfg(not(feature = "mainnet"))]
     // This is true when the wrapper of this tx contained a valid
@@ -438,17 +862,21 @@ where
     verifiers
         .par_iter()
         .try_fold(VpsResult::default, |mut result, addr| {
-            let mut gas_meter = VpGasMeter::new(initial_gas);
+            let mut gas_meter = VpGasMeter::new_from_tx_meter(tx_gas_meter);
             let accept = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = storage
                         .validity_predicate(addr)
                         .map_err(Error::StorageError)?;
-                    gas_meter.add(gas).map_err(Error::GasError)?;
+                    gas_meter.consume(gas).map_err(Error::GasError)?;
                     let Some(vp_code_hash) = vp_hash else {
                         return Err(Error::MissingAddress(addr.clone()));
                     };
 
+                    // NOTE: because of the whitelisted gas and the gas metering
+                    // for the exposed vm env functions,
+                    //    the first signature verification (if any) is accounted
+                    // twice
                     wasm::run::vp(
                         &vp_code_hash,
                         tx,
@@ -600,30 +1028,17 @@ where
             };
 
             // Returning error from here will short-circuit the VP parallel
-            // execution. It's important that we only short-circuit gas
-            // errors to get deterministic gas costs
-            result.gas_used.set(&gas_meter).map_err(Error::GasError)?;
-            match accept {
-                Ok(accepted) => {
-                    if !accepted {
-                        result.rejected_vps.insert(addr.clone());
-                    } else {
-                        result.accepted_vps.insert(addr.clone());
-                    }
-                    Ok(result)
-                }
-                Err(err) => match err {
-                    Error::GasError(_) => Err(err),
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                        Ok(result)
-                    }
-                },
+            // execution.
+            result.gas_used.set(gas_meter).map_err(Error::GasError)?;
+            if accept? {
+                result.accepted_vps.insert(addr.clone());
+            } else {
+                result.rejected_vps.insert(addr.clone());
             }
+            Ok(result)
         })
         .try_reduce(VpsResult::default, |a, b| {
-            merge_vp_results(a, b, initial_gas)
+            merge_vp_results(a, b, tx_gas_meter)
         })
 }
 
@@ -631,7 +1046,7 @@ where
 fn merge_vp_results(
     a: VpsResult,
     mut b: VpsResult,
-    initial_gas: u64,
+    tx_gas_meter: &TxGasMeter,
 ) -> Result<VpsResult> {
     let mut accepted_vps = a.accepted_vps;
     let mut rejected_vps = a.rejected_vps;
@@ -641,13 +1056,7 @@ fn merge_vp_results(
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
 
-    // Returning error from here will short-circuit the VP parallel execution.
-    // It's important that we only short-circuit gas errors to get deterministic
-    // gas costs
-
-    gas_used
-        .merge(&mut b.gas_used, initial_gas)
-        .map_err(Error::GasError)?;
+    gas_used.merge(&mut b.gas_used, tx_gas_meter)?;
 
     Ok(VpsResult {
         accepted_vps,

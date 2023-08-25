@@ -276,19 +276,19 @@ where
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code));
 
-        //  0 parameter is used to compute the fee
-        // based on the code size. We dont
-        // need it here.
         let tx_result = protocol::dispatch_tx(
             tx,
-            0, /*  this is used to compute the fee
-                * based on the code size. We dont
-                * need it here. */
+            &[], /*  this is used to compute the fee
+                  * based on the code size. We dont
+                  * need it here. */
             TxIndex::default(),
-            &mut BlockGasMeter::default(),
+            &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), /* No gas limit for governance proposal */
             &mut shell.wl_storage,
             &mut shell.vp_wasm_cache,
             &mut shell.tx_wasm_cache,
+            None,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         );
         shell
             .wl_storage

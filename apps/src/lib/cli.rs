@@ -2377,6 +2377,7 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada::types::transaction::GasLimit;
 
     use super::context::*;
     use super::utils::*;
@@ -2398,7 +2399,6 @@ pub mod args {
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
     pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
@@ -2440,9 +2440,11 @@ pub mod args {
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DECRYPT: ArgFlag = flag("decrypt");
+    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const ERC20: Arg<EthAddress> = arg("erc20");
@@ -2457,32 +2459,17 @@ pub mod args {
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
+        arg_opt("gas-spending-key");
+    pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
+        arg_opt("gas-price");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
-    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("gas-payer").opt();
-    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "gas-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "gas-limit",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+    pub const GAS_LIMIT: ArgDefault<GasLimit> =
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
+    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
+    pub const BRIDGE_GAS_PAYER: Arg<WalletAddress> = arg("bridge-gas-payer");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2806,8 +2793,12 @@ pub mod args {
             let recipient = ETH_ADDRESS.parse(matches);
             let sender = ADDRESS.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let fee_amount = FEE_AMOUNT.parse(matches).amount;
-            let fee_payer = FEE_PAYER.parse(matches);
+            let fee_amount = FEE_AMOUNT_OPT
+                .parse(matches)
+                .map_or_else(token::Amount::default, |denom_amount| {
+                    denom_amount.amount
+                });
+            let fee_payer = BRIDGE_GAS_PAYER.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             Self {
                 tx,
@@ -2843,15 +2834,14 @@ pub mod args {
                         "The amount of tokens being sent across the bridge.",
                     ),
                 )
-                .arg(FEE_AMOUNT.def().help(
+                .arg(FEE_AMOUNT_OPT.def().help(
                     "The amount of NAM you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
-                .arg(
-                    FEE_PAYER.def().help(
-                        "The Namada address of the account paying the fee.",
-                    ),
-                )
+                .arg(BRIDGE_GAS_PAYER.def().help(
+                    "The Namada address of the account paying the fee for the \
+                     Ethereum transaction.",
+                ))
         }
     }
 
@@ -4583,6 +4573,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
+                dry_run_wrapper: self.dry_run_wrapper,
                 dump_tx: self.dump_tx,
                 output_folder: self.output_folder,
                 force: self.force,
@@ -4590,9 +4581,11 @@ pub mod args {
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
-                gas_payer: ctx.get_opt_cached(&self.gas_payer),
-                gas_amount: self.gas_amount,
-                gas_token: ctx.get(&self.gas_token),
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                fee_unshield: self
+                    .fee_unshield
+                    .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),
                 gas_limit: self.gas_limit,
                 signing_keys: self
                     .signing_keys
@@ -4607,12 +4600,16 @@ pub mod args {
                 verification_key: self
                     .verification_key
                     .map(|public_key| ctx.get_cached(&public_key)),
+                disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+                wrapper_fee_payer: self
+                    .wrapper_fee_payer
+                    .map(|x| ctx.get_cached(&x)),
             }
         }
     }
@@ -4622,7 +4619,17 @@ pub mod args {
             app.arg(
                 DRY_RUN_TX
                     .def()
-                    .help("Simulate the transaction application."),
+                    .help("Simulate the transaction application.")
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
+            )
+            .arg(
+                DRY_RUN_WRAPPER_TX
+                    .def()
+                    .help(
+                        "Simulate the complete transaction application. This \
+                         estimates the gas cost of the transaction.",
+                    )
+                    .conflicts_with(DRY_RUN_TX.name),
             )
             .arg(DUMP_TX.def().help("Dump transaction bytes to a file."))
             .arg(FORCE.def().help(
@@ -4645,28 +4652,38 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
+            .arg(FEE_AMOUNT_OPT.def().help(
+                "The amount being paid, per gas unit, for the inclusion of \
+                 this transaction",
+            ))
+            .arg(FEE_TOKEN.def().help("The token for paying the gas"))
+            .arg(FEE_UNSHIELD_SPENDING_KEY.def().help(
+                "The spending key to be used for fee unshielding. If none is \
+                 provided, fee will be payed from the unshielded balance only.",
+            ))
+            .arg(GAS_LIMIT.def().help(
+                "The multiplier of the gas limit resolution defining the \
+                 maximum amount of gas needed to run transaction.",
+            ))
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(GAS_PAYER.def().help(
-                "The implicit address of the gas payer. It defaults to the \
-                 address associated to the first key passed to --signing-keys.",
-            ))
-            .arg(GAS_AMOUNT.def().help(
-                "The amount being paid for the inclusion of this transaction",
-            ))
-            .arg(GAS_TOKEN.def().help("The token for paying the gas"))
-            .arg(
-                GAS_LIMIT.def().help(
-                    "The maximum amount of gas needed to run transaction",
-                ),
-            )
             .arg(EXPIRATION_OPT.def().help(
                 "The expiration datetime of the transaction, after which the \
                  tx won't be accepted anymore. All of these examples are \
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
+            .arg(
+                DISPOSABLE_SIGNING_KEY
+                    .def()
+                    .help(
+                        "Generates an ephemeral, disposable keypair to sign \
+                         the wrapper transaction. This keypair will be \
+                         immediately discarded after use.",
+                    )
+                    .requires(FEE_UNSHIELD_SPENDING_KEY.name),
+            )
             .arg(
                 SIGNING_KEYS
                     .def()
@@ -4692,7 +4709,7 @@ pub mod args {
                         SIGNING_KEYS.name,
                         VERIFICATION_KEY.name,
                     ])
-                    .requires(GAS_PAYER.name),
+                    .requires(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
@@ -4708,48 +4725,65 @@ pub mod args {
                     .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
+            .arg(
+                FEE_PAYER_OPT
+                    .def()
+                    .help(
+                        "The implicit address of the gas payer. It defaults \
+                         to the address associated to the first key passed to \
+                         --signing-keys.",
+                    )
+                    .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
+            let dry_run_wrapper = DRY_RUN_WRAPPER_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let fee_amount =
+                FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
+            let fee_token = FEE_TOKEN.parse(matches);
+            let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
+            let _wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
+            let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let gas_payer = GAS_PAYER.parse(matches);
-            let gas_amount =
-                InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
-            let gas_token = GAS_TOKEN.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
             let verification_key = VERIFICATION_KEY.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             Self {
                 dry_run,
+                dry_run_wrapper,
                 dump_tx,
                 force,
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
                 wallet_alias_force,
-                gas_payer,
-                gas_amount,
-                gas_token,
+                fee_amount,
+                fee_token,
+                fee_unshield,
                 gas_limit,
                 expiration,
+                disposable_signing_key,
                 signing_keys,
                 signatures,
                 verification_key,
                 tx_reveal_code_path,
                 password,
                 chain_id,
+                wrapper_fee_payer,
                 output_folder,
             }
         }

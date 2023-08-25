@@ -1,6 +1,6 @@
 //! The parameters used for the chain's genesis
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -23,7 +23,7 @@ use namada::types::{storage, token};
 /// Genesis configuration file format
 pub mod genesis_config {
     use std::array::TryFromSliceError;
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::convert::TryInto;
     use std::path::Path;
     use std::str::FromStr;
@@ -260,6 +260,8 @@ pub mod genesis_config {
         /// room for header data, evidence and protobuf
         /// serialization overhead in Tendermint blocks.
         pub max_proposal_bytes: ProposalBytes,
+        /// Max block gas
+        pub max_block_gas: u64,
         /// Minimum number of blocks per epoch.
         pub min_num_of_blocks: u64,
         /// Maximum duration per block (in seconds).
@@ -281,9 +283,13 @@ pub mod genesis_config {
         pub pos_gain_p: Dec,
         /// PoS gain d
         pub pos_gain_d: Dec,
-        #[cfg(not(feature = "mainnet"))]
-        /// Fix wrapper tx fees
-        pub wrapper_tx_fees: Option<token::Amount>,
+        /// Fee unshielding gas limit
+        pub fee_unshielding_gas_limit: u64,
+        /// Fee unshielding descriptions limit
+        pub fee_unshielding_descriptions_limit: u64,
+        /// Map of the cost per gas unit for every token allowed for fee
+        /// payment
+        pub gas_cost: BTreeMap<Address, token::Amount>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -599,6 +605,7 @@ pub mod genesis_config {
 
         let min_duration: i64 =
             60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
+
         let parameters = Parameters {
             epoch_duration: EpochDuration {
                 min_num_of_blocks: parameters.min_num_of_blocks,
@@ -613,6 +620,7 @@ pub mod genesis_config {
                 )
                 .into(),
             max_proposal_bytes: parameters.max_proposal_bytes,
+            max_block_gas: parameters.max_block_gas,
             vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
             tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
             implicit_vp_code_path,
@@ -624,8 +632,10 @@ pub mod genesis_config {
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Dec::zero(),
             pos_inflation_amount: token::Amount::zero(),
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees: parameters.wrapper_tx_fees,
+            gas_cost: parameters.gas_cost,
+            fee_unshielding_gas_limit: parameters.fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit: parameters
+                .fee_unshielding_descriptions_limit,
         };
 
         let GovernanceParamsConfig {
@@ -868,6 +878,8 @@ pub struct ImplicitAccount {
 pub struct Parameters {
     // Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
+    /// Max block gas
+    pub max_block_gas: u64,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
@@ -892,9 +904,12 @@ pub struct Parameters {
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: token::Amount,
-    /// Fixed Wrapper tx fees
-    #[cfg(not(feature = "mainnet"))]
-    pub wrapper_tx_fees: Option<token::Amount>,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
+    /// Map of the cost per gas unit for every token allowed for fee payment
+    pub gas_cost: BTreeMap<Address, token::Amount>,
 }
 
 #[cfg(not(any(test, feature = "dev")))]
@@ -1001,6 +1016,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         },
         max_expected_time_per_block: namada::types::time::DurationSecs(30),
         max_proposal_bytes: Default::default(),
+        max_block_gas: 20_000_000,
         vp_whitelist: vec![],
         tx_whitelist: vec![],
         implicit_vp_code_path: vp_implicit_path.into(),
@@ -1012,8 +1028,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
-        #[cfg(not(feature = "mainnet"))]
-        wrapper_tx_fees: Some(token::Amount::native_whole(0)),
+        gas_cost: [(nam(), token::Amount::from(1))].into_iter().collect(),
+        fee_unshielding_gas_limit: 20_000,
+        fee_unshielding_descriptions_limit: 15,
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

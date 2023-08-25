@@ -94,6 +94,7 @@ pub fn require_no_data(request: &RequestQuery) -> storage_api::Result<()> {
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
 mod testing {
+
     use tempfile::TempDir;
     use tendermint_rpc::Response;
 
@@ -134,7 +135,23 @@ mod testing {
         /// Initialize a test client for the given root RPC router
         pub fn new(rpc: RPC) -> Self {
             // Initialize the `TestClient`
-            let wl_storage = TestWlStorage::default();
+            let mut wl_storage = TestWlStorage::default();
+
+            // Initialize mock gas limit
+            let max_block_gas_key =
+                namada_core::ledger::parameters::storage::get_max_block_gas_key(
+                );
+            wl_storage
+                .storage
+                .write(
+                    &max_block_gas_key,
+                    namada_core::ledger::storage::types::encode(
+                        &20_000_000_u64,
+                    ),
+                )
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();

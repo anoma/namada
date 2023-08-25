@@ -5,7 +5,7 @@
 use namada_tx_prelude::key::pks_handle;
 use namada_tx_prelude::*;
 
-#[transaction]
+#[transaction(gas = 140000)]
 fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let signed = tx;
     let data = signed.data().ok_or_err_msg("Missing data")?;

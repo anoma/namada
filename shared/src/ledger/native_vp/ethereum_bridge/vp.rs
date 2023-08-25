@@ -334,6 +334,7 @@ mod tests {
     use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use namada_core::ledger::gas::TxGasMeter;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_ethereum_bridge::parameters::{
         Contracts, EthereumBridgeConfig, UpgradeableContract,
@@ -426,7 +427,9 @@ mod tests {
             write_log,
             tx,
             &TxIndex(0),
-            VpGasMeter::new(0u64),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                u64::MAX.into(),
+            )),
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),

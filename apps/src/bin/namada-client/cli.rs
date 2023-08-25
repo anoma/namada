@@ -238,11 +238,16 @@ pub async fn main() -> Result<()> {
                     let tx = bridge_pool::build_bridge_pool_tx(
                         &client,
                         args.clone(),
-                        signing_data.gas_payer.clone(),
+                        signing_data.fee_payer.clone(),
                     )
-                        .await?;
-                    
-                    signing::generate_test_vector(&client, &mut ctx.wallet, &tx).await;
+                    .await?;
+
+                    signing::generate_test_vector(
+                        &client,
+                        &mut ctx.wallet,
+                        &tx,
+                    )
+                    .await;
 
                     if args.tx.dump_tx {
                         dump_tx(&args.tx, tx);

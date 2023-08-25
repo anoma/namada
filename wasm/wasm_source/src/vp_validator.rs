@@ -45,7 +45,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     }
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 50000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -60,8 +60,9 @@ fn validate_tx(
         verifiers
     );
 
-    let valid_sig =
-        Lazy::new(|| verify_signatures(ctx, &tx_data, &addr).is_ok());
+    let valid_sig = Lazy::new(|| {
+        matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
+    });
 
     if !is_valid_tx(ctx, &tx_data)? {
         return reject();

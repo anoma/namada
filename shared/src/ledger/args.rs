@@ -510,6 +510,8 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
+    /// Simulate applying both the wrapper and inner transactions
+    pub dry_run_wrapper: bool,
     /// Dump the transaction bytes to file
     pub dump_tx: bool,
     /// The output directory path to where serialize the data
@@ -526,16 +528,21 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
+    /// The amount being payed (for gas unit) to include the transaction
+    pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
-    pub gas_payer: Option<C::Keypair>,
-    /// The amount being payed to include the transaction
-    pub gas_amount: InputAmount,
+    pub wrapper_fee_payer: Option<C::Keypair>,
     /// The token in which the fee is being paid
-    pub gas_token: C::Address,
+    pub fee_token: C::Address,
+    /// The optional spending key for fee unshielding
+    pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: Option<DateTimeUtc>,
+    /// Generate an ephimeral signing key to be used only once to sign a
+    /// wrapper tx
+    pub disposable_signing_key: bool,
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet

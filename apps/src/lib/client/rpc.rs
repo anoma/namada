@@ -1078,6 +1078,43 @@ pub async fn query_protocol_parameters<
         .expect("Parameter should be defined.");
     println!("{:4}Transactions whitelist: {:?}", "", tx_whitelist);
 
+    let key = param_storage::get_max_block_gas_key();
+    let max_block_gas = query_storage_value::<C, u64>(client, &key)
+        .await
+        .expect("Parameter should be defined.");
+    println!("{:4}Max block gas: {:?}", "", max_block_gas);
+
+    let key = param_storage::get_fee_unshielding_gas_limit_key();
+    let fee_unshielding_gas_limit = query_storage_value::<C, u64>(client, &key)
+        .await
+        .expect("Parameter should be defined.");
+    println!(
+        "{:4}Fee unshielding gas limit: {:?}",
+        "", fee_unshielding_gas_limit
+    );
+
+    let key = param_storage::get_fee_unshielding_descriptions_limit_key();
+    let fee_unshielding_descriptions_limit =
+        query_storage_value::<C, u64>(client, &key)
+            .await
+            .expect("Parameter should be defined.");
+    println!(
+        "{:4}Fee unshielding descriptions limit: {:?}",
+        "", fee_unshielding_descriptions_limit
+    );
+
+    let key = param_storage::get_gas_cost_key();
+    let gas_cost_table = query_storage_value::<
+        C,
+        BTreeMap<Address, token::Amount>,
+    >(client, &key)
+    .await
+    .expect("Parameter should be defined.");
+    println!("{:4}Gas cost table:", "");
+    for (token, gas_cost) in gas_cost_table {
+        println!("{:8}{}: {:?}", "", token, gas_cost);
+    }
+
     println!("PoS parameters");
     let pos_params = query_pos_parameters(client).await;
     println!(
