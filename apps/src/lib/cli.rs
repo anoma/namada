@@ -1994,7 +1994,7 @@ pub mod cmds {
         /// This can be used to relay transfers across the
         /// bridge to Ethereum.
         ConstructProof(ConstructProof),
-        /// Construct and relay a bridge pool proof to
+        /// Construct and relay a Bridge pool proof to
         /// Ethereum directly.
         RelayProof(RelayProof),
         /// Query the contents of the pool.
@@ -2093,7 +2093,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Add a new transfer to the Ethereum bridge pool.")
+                .about("Add a new transfer to the Ethereum Bridge pool.")
                 .arg_required_else_help(true)
                 .add_args::<args::EthereumBridgePool<args::CliTypes>>()
         }
@@ -2182,7 +2182,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Get the contents of the Ethereum bridge pool.")
+                .about("Get the contents of the Ethereum Bridge pool.")
                 .add_args::<args::Query<args::CliTypes>>()
         }
     }
@@ -2202,7 +2202,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Get the contents of the Ethereum bridge pool with a \
+                    "Get the contents of the Ethereum Bridge pool with a \
                      signed Merkle root.",
                 )
                 .add_args::<args::Query<args::CliTypes>>()
@@ -3001,7 +3001,7 @@ pub mod args {
             Self {
                 query,
                 transfers: hashes
-                    .split(' ')
+                    .split_whitespace()
                     .map(|hash| {
                         KeccakHash::try_from(hash).unwrap_or_else(|_| {
                             tracing::info!(
@@ -3019,7 +3019,8 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(HASH_LIST.def().help(
-                    "List of Keccak hashes of transfers in the bridge pool.",
+                    "Whitespace separated Keccak hash list of transfers in \
+                     the Bridge pool.",
                 ))
                 .arg(
                     RELAYER
@@ -3092,7 +3093,8 @@ pub mod args {
                      ensure Ethereum transfers aren't canceled midway through.",
                 ))
                 .arg(HASH_LIST.def().help(
-                    "List of Keccak hashes of transfers in the bridge pool.",
+                    "Whitespace separated Keccak hash list of transfers in \
+                     the Bridge pool.",
                 ))
                 .arg(
                     RELAYER
