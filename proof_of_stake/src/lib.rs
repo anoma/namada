@@ -3971,11 +3971,12 @@ where
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
     use namada_core::ledger::storage_api;
+    use namada_core::ledger::storage_api::token::credit_tokens;
     use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 
+    use super::*;
     use crate::parameters::PosParams;
     use crate::types::GenesisValidator;
-    use crate::{become_validator, bond_tokens, init_genesis, BecomeValidator};
 
     /// Helper function to intialize storage with PoS data
     /// about validators for tests.
@@ -4011,6 +4012,11 @@ pub mod test_utils {
                 max_commission_rate_change,
                 offset_opt: Some(0),
             })?;
+            // Credit token amount to be bonded to the validator address so it
+            // can be bonded
+            let staking_token = staking_token_address(storage);
+            credit_tokens(storage, &staking_token, &address, tokens)?;
+
             bond_tokens(
                 storage,
                 None,
@@ -4020,6 +4026,12 @@ pub mod test_utils {
                 Some(0),
             )?;
         }
+        // Store the total consensus validator stake to storage
+        store_total_consensus_stake(storage, current_epoch)?;
+
+        // Copy validator sets and positions
+        copy_genesis_validator_sets(storage, params, current_epoch)?;
+
         Ok(())
     }
 }
