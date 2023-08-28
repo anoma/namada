@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::storage::keys as pgf_storage;
+use super::storage::steward::StewardDetail;
 use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::dec::Dec;
@@ -50,8 +51,13 @@ impl PgfParameters {
             stewards_inflation_rate,
         } = self;
 
-        let stewards_key = pgf_storage::get_stewards_key();
-        storage.write(&stewards_key, stewards)?;
+        for steward in stewards {
+            pgf_storage::stewards_handle().insert(
+                storage,
+                steward.to_owned(),
+                StewardDetail::base(steward.clone()),
+            )?;
+        }
 
         let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
         storage.write(&pgf_inflation_rate_key, pgf_inflation_rate)?;

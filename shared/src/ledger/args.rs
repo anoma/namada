@@ -437,6 +437,30 @@ pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
 }
 
 #[derive(Clone, Debug)]
+/// Commission rate change args
+pub struct UpdateStewardCommission<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Steward address
+    pub steward: C::Address,
+    /// Value to which the tx changes the commission rate
+    pub commission: C::Data,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+/// Commission rate change args
+pub struct ResignSteward<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address
+    pub steward: C::Address,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
 /// Re-activate a jailed validator args
 pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments

@@ -62,12 +62,14 @@ pub enum TallyType {
     LessOneThirdNay,
 }
 
-impl From<ProposalType> for TallyType {
-    fn from(proposal_type: ProposalType) -> Self {
-        match proposal_type {
-            ProposalType::Default(_) => TallyType::TwoThird,
-            ProposalType::PGFSteward(_) => TallyType::TwoThird,
-            ProposalType::PGFPayment(_) => TallyType::LessOneThirdNay,
+impl TallyType {
+    /// Compute the type of tally for a proposal
+    pub fn from(proposal_type: ProposalType, is_steward: bool) -> Self {
+        match (proposal_type, is_steward) {
+            (ProposalType::Default(_), _) => TallyType::TwoThird,
+            (ProposalType::PGFSteward(_), _) => TallyType::TwoThird,
+            (ProposalType::PGFPayment(_), true) => TallyType::LessOneThirdNay,
+            (ProposalType::PGFPayment(_), false) => TallyType::OneThird,
         }
     }
 }

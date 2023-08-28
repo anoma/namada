@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use borsh::BorshDeserialize;
 
 use super::token;
+use crate::ledger::governance::parameters::GovernanceParameters;
 use crate::ledger::governance::storage::keys as governance_keys;
 use crate::ledger::governance::storage::proposal::{
     ProposalType, StorageProposal,
@@ -19,7 +20,6 @@ use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 
-/// A proposal creation transaction.
 /// A proposal creation transaction.
 pub fn init_proposal<S>(
     storage: &mut S,
@@ -216,4 +216,45 @@ where
         }
         None => Ok(false),
     }
+}
+
+/// Get governance parameters
+pub fn get_parameters<S>(
+    storage: &S,
+) -> storage_api::Result<GovernanceParameters>
+where
+    S: storage_api::StorageRead,
+{
+    let key = governance_keys::get_max_proposal_code_size_key();
+    let max_proposal_code_size: u64 =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    let key = governance_keys::get_max_proposal_content_key();
+    let max_proposal_content_size: u64 =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    let key = governance_keys::get_min_proposal_fund_key();
+    let min_proposal_fund: token::Amount =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    let key = governance_keys::get_min_proposal_grace_epoch_key();
+    let min_proposal_grace_epochs: u64 =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    let key = governance_keys::get_min_proposal_voting_period_key();
+    let min_proposal_voting_period: u64 =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    let key = governance_keys::get_max_proposal_period_key();
+    let max_proposal_period: u64 =
+        storage.read(&key)?.expect("Parameter should be definied.");
+
+    Ok(GovernanceParameters {
+        min_proposal_fund,
+        max_proposal_code_size,
+        min_proposal_voting_period,
+        max_proposal_period,
+        max_proposal_content_size,
+        min_proposal_grace_epochs,
+    })
 }

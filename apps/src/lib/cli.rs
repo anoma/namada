@@ -217,7 +217,7 @@ pub mod cmds {
                 .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
-                // Proposal transactions
+                // Governance transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
@@ -227,31 +227,34 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
-                // Ethereum bridge
+                // Ethereum bridge transactions
                 .subcommand(AddToEthBridgePool::def().display_order(3))
+                // PGF transactions
+                .subcommand(TxUpdateStewardCommission::def().display_order(4))
+                .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(4))
-                .subcommand(QueryAccount::def().display_order(4))
-                .subcommand(QueryTransfers::def().display_order(4))
-                .subcommand(QueryConversions::def().display_order(4))
-                .subcommand(QueryBlock::def().display_order(4))
-                .subcommand(QueryBalance::def().display_order(4))
-                .subcommand(QueryBonds::def().display_order(4))
-                .subcommand(QueryBondedStake::def().display_order(4))
-                .subcommand(QuerySlashes::def().display_order(4))
-                .subcommand(QueryDelegations::def().display_order(4))
-                .subcommand(QueryFindValidator::def().display_order(4))
-                .subcommand(QueryResult::def().display_order(4))
-                .subcommand(QueryRawBytes::def().display_order(4))
-                .subcommand(QueryProposal::def().display_order(4))
-                .subcommand(QueryProposalResult::def().display_order(4))
-                .subcommand(QueryProtocolParameters::def().display_order(4))
-                .subcommand(QueryPgf::def().display_order(4))
-                .subcommand(QueryValidatorState::def().display_order(4))
+                .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryAccount::def().display_order(5))
+                .subcommand(QueryTransfers::def().display_order(5))
+                .subcommand(QueryConversions::def().display_order(5))
+                .subcommand(QueryBlock::def().display_order(5))
+                .subcommand(QueryBalance::def().display_order(5))
+                .subcommand(QueryBonds::def().display_order(5))
+                .subcommand(QueryBondedStake::def().display_order(5))
+                .subcommand(QuerySlashes::def().display_order(5))
+                .subcommand(QueryDelegations::def().display_order(5))
+                .subcommand(QueryFindValidator::def().display_order(5))
+                .subcommand(QueryResult::def().display_order(5))
+                .subcommand(QueryRawBytes::def().display_order(5))
+                .subcommand(QueryProposal::def().display_order(5))
+                .subcommand(QueryProposalResult::def().display_order(5))
+                .subcommand(QueryProtocolParameters::def().display_order(5))
+                .subcommand(QueryPgf::def().display_order(5))
+                .subcommand(QueryValidatorState::def().display_order(5))
                 // Actions
-                .subcommand(SignTx::def().display_order(5))
+                .subcommand(SignTx::def().display_order(6))
                 // Utils
-                .subcommand(Utils::def().display_order(6))
+                .subcommand(Utils::def().display_order(7))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -271,6 +274,10 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
+            let tx_update_steward_commission =
+                Self::parse_with_ctx(matches, TxUpdateStewardCommission);
+            let tx_resign_steward =
+                Self::parse_with_ctx(matches, TxResignSteward);
             let tx_commission_rate_change =
                 Self::parse_with_ctx(matches, TxCommissionRateChange);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -320,6 +327,8 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(add_to_eth_bridge_pool)
+                .or(tx_update_steward_commission)
+                .or(tx_resign_steward)
                 .or(query_epoch)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -392,6 +401,8 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         AddToEthBridgePool(AddToEthBridgePool),
+        TxUpdateStewardCommission(TxUpdateStewardCommission),
+        TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
@@ -1736,6 +1747,54 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxUpdateStewardCommission(
+        pub args::UpdateStewardCommission<args::CliTypes>,
+    );
+
+    impl SubCmd for TxUpdateStewardCommission {
+        const CMD: &'static str = "update-steward-rewards";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateStewardCommission(args::UpdateStewardCommission::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Update how steward commissions are split.")
+                .add_args::<args::UpdateStewardCommission<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxResignSteward(pub args::ResignSteward<args::CliTypes>);
+
+    impl SubCmd for TxResignSteward {
+        const CMD: &'static str = "resign-steward";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxResignSteward(args::ResignSteward::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Craft a transaction to resign as a steward.")
+                .add_args::<args::ResignSteward<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxCommissionRateChange(
         pub args::CommissionRateChange<args::CliTypes>,
     );
@@ -2399,8 +2458,12 @@ pub mod args {
     pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+        "tx_update_steward_commission.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
     pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 
     pub const VP_USER_WASM: &str = "vp_user.wasm";
 
@@ -2537,6 +2600,7 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const STEWARD: Arg<WalletAddress> = arg("steward");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
@@ -3706,6 +3770,75 @@ pub mod args {
         }
     }
 
+    impl CliToSdk<UpdateStewardCommission<SdkTypes>>
+        for UpdateStewardCommission<CliTypes>
+    {
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> UpdateStewardCommission<SdkTypes> {
+            UpdateStewardCommission::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                steward: ctx.get(&self.steward),
+                commission: std::fs::read(self.commission).expect(""),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for UpdateStewardCommission<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let steward = STEWARD.parse(matches);
+            let commission = DATA_PATH.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UPDATE_STEWARD_COMMISSION);
+            Self {
+                tx,
+                steward,
+                commission,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(STEWARD.def().help("Steward address."))
+                .arg(DATA_PATH.def().help(
+                    "The path to the file that describes the commission \
+                     split. The file must contain a map from namada address \
+                     to a percentage. Percentages must sum to 1 or less.",
+                ))
+        }
+    }
+
+    impl CliToSdk<ResignSteward<SdkTypes>> for ResignSteward<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ResignSteward<SdkTypes> {
+            ResignSteward::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                steward: ctx.get(&self.steward),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for ResignSteward<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let steward = STEWARD.parse(matches);
+            let tx_code_path = PathBuf::from(TX_RESIGN_STEWARD);
+            Self {
+                tx,
+                steward,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(STEWARD.def().help("Steward address."))
+        }
+    }
+
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
@@ -3803,7 +3936,6 @@ pub mod args {
                 voter: ctx.get(&self.voter),
                 is_offline: self.is_offline,
                 proposal_data: self.proposal_data.map(|path| {
-                    println!("Not able to read {}.", path.to_string_lossy());
                     std::fs::read(path)
                         .expect("Should be able to read the file.")
                 }),

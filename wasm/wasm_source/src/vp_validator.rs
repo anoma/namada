@@ -20,6 +20,7 @@ enum KeyType<'a> {
     Token { owner: &'a Address },
     PoS,
     Vp(&'a Address),
+    PgfStward(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
 }
@@ -37,6 +38,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
+        } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
+            Self::PgfStward(address)
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
         } else {
@@ -138,6 +141,13 @@ fn validate_tx(
             }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
+                    *valid_sig
+                } else {
+                    true
+                }
+            }
+            KeyType::PgfStward(address) => {
+                if address == &addr {
                     *valid_sig
                 } else {
                     true

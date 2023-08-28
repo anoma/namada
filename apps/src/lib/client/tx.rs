@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_proofs::prover::LocalTxProver;
 use namada::core::ledger::governance::cli::offline::{
-    OfflineSignedProposal, OfflineVote,
+    OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
@@ -672,6 +672,7 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
+            break;
         } else {
             signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
             let result =
@@ -759,8 +760,12 @@ where
     let ((mut tx_builder, _fee_unshield_epoch), signing_data) = if args
         .is_offline
     {
-        let proposal = namada::core::ledger::governance::cli::offline::OfflineProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?.validate(current_epoch)
-        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
+            .map_err(|e| {
+                tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+            })?
+            .validate(current_epoch, args.tx.force)
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -790,7 +795,7 @@ where
                 .map_err(|e| {
                     tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
                 })?
-                .validate(&governance_parameters, current_epoch)
+                .validate(&governance_parameters, current_epoch, args.tx.force)
                 .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -830,14 +835,19 @@ where
         .map_err(|e| {
             tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
         })?;
-        let author_balane = rpc::get_token_balance(
+        let author_balance = rpc::get_token_balance(
             client,
             &ctx.native_token,
             &proposal.proposal.author,
         )
         .await;
         let proposal = proposal
-            .validate(&governance_parameters, current_epoch, author_balane)
+            .validate(
+                &governance_parameters,
+                current_epoch,
+                author_balance,
+                args.tx.force,
+            )
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -882,7 +892,12 @@ where
         )
         .await;
         let proposal = proposal
-            .validate(&governance_parameters, current_epoch, author_balane)
+            .validate(
+                &governance_parameters,
+                current_epoch,
+                author_balane,
+                args.tx.force,
+            )
             .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
@@ -916,6 +931,7 @@ where
             signing_data,
         )
     };
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
@@ -964,6 +980,7 @@ where
         .validate(
             &signing_data.account_public_keys_map.clone().unwrap(),
             signing_data.threshold,
+            args.tx.force,
         )
         .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
         let delegations = rpc::get_delegators_delegation_at(
@@ -1004,6 +1021,7 @@ where
         )
         .await?
     };
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
@@ -1320,6 +1338,81 @@ where
     } else {
         signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
 
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn submit_update_steward_commission<
+    C: namada::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    mut ctx: Context,
+    args: args::UpdateStewardCommission,
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let default_signer = Some(args.steward.clone());
+    let signing_data = signing::aux_signing_data(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        &Some(args.steward.clone()),
+        default_signer,
+    )
+    .await?;
+
+    let mut tx = tx::build_update_steward_commission(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn submit_resign_steward<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    mut ctx: Context,
+    args: args::ResignSteward,
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let default_signer = Some(args.steward.clone());
+    let signing_data = signing::aux_signing_data(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        &Some(args.steward.clone()),
+        default_signer,
+    )
+    .await?;
+
+    let mut tx =
+        tx::build_resign_steward(client, args.clone(), &signing_data.gas_payer)
+            .await?;
+
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 

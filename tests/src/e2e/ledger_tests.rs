@@ -25,13 +25,15 @@ use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
-    GenesisConfig, ParametersConfig, PosParamsConfig,
+    GenesisConfig, ParametersConfig, PgfParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::ledger::governance::cli::onchain::{PgfAction, PgfSteward};
+use namada_core::ledger::governance::cli::onchain::{
+    PgfFunding, PgfFundingTarget, StewardsUpdate,
+};
 use namada_test_utils::TestWasms;
-use namada_vp_prelude::testnet_pow;
+use namada_vp_prelude::{testnet_pow, BTreeSet};
 use serde_json::json;
 use setup::constants::*;
 use setup::Test;
@@ -2215,9 +2217,14 @@ fn pgf_governance_proposal() -> Result<()> {
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
+            let pgf_params = PgfParametersConfig {
+                stewards: BTreeSet::from_iter(Address::from_str("atest1v4ehgw36xguyzsejx5m5xvehxqmnyvejgdzygv6rgcurgdzxxsunzs3nxuc5vwfkg3pnxdf4u4p9h9")),
+                ..genesis.pgf_params
+            };
 
             GenesisConfig {
                 parameters,
+                pgf_params,
                 ..genesis
             }
         },
@@ -2264,13 +2271,13 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 1 - Submit proposal
     let albert = find_address(&test, ALBERT)?;
-    let pgf_stewards = PgfSteward {
-        action: PgfAction::Add,
-        address: albert.clone(),
+    let pgf_stewards = StewardsUpdate {
+        add: Some(albert.clone()),
+        remove: vec![],
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, vec![pgf_stewards], 12);
+        prepare_proposal_data(&test, albert, pgf_stewards, 12);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2401,7 +2408,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 12. Wait proposals grace and check proposal author funds
     while epoch.0 < 31 {
-        sleep(1);
+        sleep(2);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -2440,7 +2447,72 @@ fn pgf_governance_proposal() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_pgf, Some(30))?;
     client.exp_string("Pgf stewards:")?;
     client.exp_string(&format!("- {}", albert_address))?;
+    client.exp_string("Reward distribution:")?;
+    client.exp_string(&format!("- 1 to {}", albert_address))?;
     client.exp_string("Pgf fundings: no fundings are currently set.")?;
+    client.assert_success();
+
+    // 15 - Submit proposal funding
+    let albert = find_address(&test, ALBERT)?;
+    let bertha = find_address(&test, BERTHA)?;
+    let christel = find_address(&test, CHRISTEL)?;
+
+    let pgf_funding = PgfFunding {
+        continous: vec![PgfFundingTarget {
+            amount: token::Amount::from_u64(10),
+            address: bertha.clone(),
+        }],
+        retro: vec![PgfFundingTarget {
+            amount: token::Amount::from_u64(5),
+            address: christel,
+        }],
+    };
+
+    let valid_proposal_json_path =
+        prepare_proposal_data(&test, albert, pgf_funding, 36);
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 2 - Query the funding proposal
+    let proposal_query_args = vec![
+        "query-proposal",
+        "--proposal-id",
+        "1",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+
+    client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    client.exp_string("Proposal Id: 1")?;
+    client.assert_success();
+
+    // 13. Wait proposals grace and check proposal author funds
+    while epoch.0 < 55 {
+        sleep(2);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    // 14. Query pgf fundings
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, query_pgf, Some(30))?;
+    client.exp_string("Pgf fundings")?;
+    client.exp_string(&format!(
+        "{} for {}",
+        bertha,
+        token::Amount::from_u64(10).to_string_native()
+    ))?;
     client.assert_success();
 
     Ok(())
@@ -3546,8 +3618,8 @@ fn prepare_proposal_data(
             },
             "author": source,
             "voting_start_epoch": start_epoch,
-            "voting_end_epoch": 24_u64,
-            "grace_epoch": 30_u64,
+            "voting_end_epoch": start_epoch + 12_u64,
+            "grace_epoch": start_epoch + 12u64 + 6_u64,
         },
         "data": data
     });

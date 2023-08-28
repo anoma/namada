@@ -44,7 +44,7 @@ pub fn pks_key_prefix(owner: &Address) -> storage::Key {
     }
 }
 
-/// Object that LazyMap handler for the user's public key subspace
+/// LazyMap handler for the user's public key subspace
 pub fn pks_handle(owner: &Address) -> LazyMap<u8, common::PublicKey> {
     LazyMap::open(pks_key_prefix(owner))
 }

@@ -20,12 +20,14 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{masp, Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::token::MaspDenom;
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
+use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use prost::EncodeError;
@@ -133,6 +135,12 @@ pub enum Error {
          unjailed."
     )]
     ValidatorFrozenFromUnjailing(Address),
+    /// The commission for the steward are not valid
+    #[error("Invalid steward commission: {0}.")]
+    InvalidStewardCommission(String),
+    /// The address is not a valid steward
+    #[error("The address {0} is not a valid steward.")]
+    InvalidSteward(Address),
     /// Rate of epoch change too large for current epoch
     #[error(
         "New rate, {0}, is too large of a change with respect to the \
@@ -283,11 +291,19 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
     match args.output_folder.to_owned() {
         Some(path) => {
             let tx_filename = format!("{}.tx", tx_id);
-            let out = File::create(path.join(tx_filename)).unwrap();
+            let tx_path = path.join(tx_filename);
+            let out = File::create(&tx_path).unwrap();
             serde_json::to_writer_pretty(out, &serialized_tx)
-                .expect("Should be able to write to file.")
+                .expect("Should be able to write to file.");
+            println!(
+                "Transaction serialized to {}.",
+                tx_path.to_string_lossy()
+            );
         }
-        None => println!("{}", serialized_tx),
+        None => {
+            println!("Below the serialized transaction: \n");
+            println!("{}", serialized_tx)
+        }
     }
 }
 
@@ -745,6 +761,98 @@ pub async fn build_validator_commission_change<
     .await?;
 
     Ok((tx, epoch))
+}
+
+/// Craft transaction to update a steward commission
+pub async fn build_update_steward_commission<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    args::UpdateStewardCommission {
+        tx: tx_args,
+        steward,
+        commission,
+        tx_code_path,
+    }: args::UpdateStewardCommission,
+    gas_payer: &common::PublicKey,
+) -> Result<Tx, Error> {
+    if !rpc::is_steward(client, &steward).await && !tx_args.force {
+        eprintln!("The given address {} is not a steward.", &steward);
+        return Err(Error::InvalidSteward(steward.clone()));
+    };
+
+    let commission = Commission::try_from(commission.as_ref())
+        .map_err(|e| Error::InvalidStewardCommission(e.to_string()))?;
+
+    if !commission.is_valid() && !tx_args.force {
+        eprintln!("The sum of all percentage must not be greater than 1.");
+        return Err(Error::InvalidStewardCommission(
+            "Commission sum is greater than 1.".to_string(),
+        ));
+    }
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let data = UpdateStewardCommission {
+        steward: steward.clone(),
+        commission: commission.reward_distribution,
+    };
+
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    tx.add_code_from_hash(tx_code_hash).add_data(data);
+
+    prepare_tx(
+        client,
+        &tx_args,
+        &mut tx,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+
+    Ok(tx)
+}
+
+/// Craft transaction to resign as a steward
+pub async fn build_resign_steward<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    args::ResignSteward {
+        tx: tx_args,
+        steward,
+        tx_code_path,
+    }: args::ResignSteward,
+    gas_payer: &common::PublicKey,
+) -> Result<Tx, Error> {
+    if !rpc::is_steward(client, &steward).await && !tx_args.force {
+        eprintln!("The given address {} is not a steward.", &steward);
+        return Err(Error::InvalidSteward(steward.clone()));
+    };
+
+    let tx_code_hash =
+        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+            .await
+            .unwrap();
+
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    tx.add_code_from_hash(tx_code_hash)
+        .add_data(steward.clone());
+
+    prepare_tx(
+        client,
+        &tx_args,
+        &mut tx,
+        gas_payer.clone(),
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await;
+    Ok(tx)
 }
 
 /// Submit transaction to unjail a jailed validator
