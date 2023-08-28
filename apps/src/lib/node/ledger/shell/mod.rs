@@ -146,22 +146,20 @@ impl From<Error> for TxResult {
 #[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum ErrorCodes {
     Ok = 0,
-    InvalidDecryptedChainId = 1,
-    ExpiredDecryptedTx = 2,
-    DecryptedTxGasLimit = 3,
-    WasmRuntimeError = 4,
-    InvalidTx = 5,
-    InvalidSig = 6,
-    InvalidOrder = 7,
-    ExtraTxs = 8,
-    Undecryptable = 9,
-    AllocationError = 10,
-    ReplayTx = 11,
-    InvalidChainId = 12,
-    ExpiredTx = 13,
-    TxGasLimit = 14,
-    FeeError = 15,
-    InvalidVoteExtension = 16,
+    DecryptedTxGasLimit = 1,
+    WasmRuntimeError = 2,
+    InvalidTx = 3,
+    InvalidSig = 4,
+    InvalidOrder = 5,
+    ExtraTxs = 6,
+    Undecryptable = 7,
+    AllocationError = 8,
+    ReplayTx = 9,
+    InvalidChainId = 10,
+    ExpiredTx = 11,
+    TxGasLimit = 12,
+    FeeError = 13,
+    InvalidVoteExtension = 14,
 }
 
 impl ErrorCodes {
@@ -172,11 +170,7 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok
-            | InvalidDecryptedChainId
-            | ExpiredDecryptedTx
-            | WasmRuntimeError
-            | DecryptedTxGasLimit => true,
+            Ok | WasmRuntimeError | DecryptedTxGasLimit => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
             | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension => false,
