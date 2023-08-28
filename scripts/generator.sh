@@ -9,6 +9,7 @@
 # vectors.
 
 NAMADA_DIR="$(pwd)"
+NAMADA_BASE_DIR_FILE="$(pwd)/namada_base_dir"
 export NAMADA_LEDGER_LOG_PATH="$(pwd)/vectors.json"
 export NAMADA_TX_LOG_PATH="$(pwd)/debugs.txt"
 
@@ -24,6 +25,7 @@ elif [ "$1" = "server" ]; then
     rm genesis/test-vectors-single-node.toml
 
     NAMADA_BASE_DIR=${NAMADA_GENESIS_FILE%.toml}
+    echo $NAMADA_BASE_DIR > $NAMADA_BASE_DIR_FILE
 
     cp wasm/*.wasm $NAMADA_BASE_DIR/wasm/
 
@@ -33,6 +35,10 @@ elif [ "$1" = "server" ]; then
 
     cargo run --bin namadan -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada/ ledger
 elif [ "$1" = "client" ]; then
+    if test -f "$NAMADA_BASE_DIR_FILE"; then
+        NAMADA_BASE_DIR="$(cat $NAMADA_BASE_DIR_FILE)" 
+    fi
+
     echo > $NAMADA_TX_LOG_PATH
 
     echo $'[' > $NAMADA_LEDGER_LOG_PATH
