@@ -116,6 +116,7 @@ pub struct ShieldedTransfer {
     pub epoch: Epoch,
 }
 
+#[cfg(feature = "testing")]
 #[derive(Clone, Copy, Debug)]
 enum LoadOrSaveProofs {
     Load,
@@ -1583,6 +1584,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         }
 
         // To speed up integration tests, we can save and load proofs
+        #[cfg(feature = "testing")]
         let load_or_save = if let Ok(masp_proofs) =
             env::var(ENV_VAR_MASP_TEST_PROOFS)
         {
@@ -1607,55 +1609,71 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         };
 
         let builder_clone = builder.clone().map_builder(WalletMap);
+        #[cfg(feature = "testing")]
         let builder_bytes = BorshSerialize::try_to_vec(&builder_clone).unwrap();
-        let builder_hash =
-            namada_core::types::hash::Hash::sha256(&builder_bytes);
-        let saved_filepath = env::current_dir()
-            .unwrap()
-            // One up from "tests" dir to the root dir
-            .parent()
-            .unwrap()
-            .join(MASP_TEST_PROOFS_DIR)
-            .join(format!("{builder_hash}.bin"));
+        let build_transfer =
+            || -> Result<ShieldedTransfer, builder::Error<std::convert::Infallible>> {
+                let (masp_tx, metadata) = builder.build(
+                    &self.utils.local_tx_prover(),
+                    &FeeRule::non_standard(Amount::zero()),
+                )?;
+                Ok(ShieldedTransfer {
+                    builder: builder_clone,
+                    masp_tx,
+                    metadata,
+                    epoch,
+            })
+        };
 
-        if let LoadOrSaveProofs::Load = load_or_save {
-            let recommendation = format!(
-                "Re-run the tests with {ENV_VAR_MASP_TEST_PROOFS}=save to \
-                 re-generate proofs."
-            );
-            let exp_str = format!(
-                "Read saved MASP proofs from {}. {recommendation}",
-                saved_filepath.to_string_lossy()
-            );
-            let loaded_bytes =
-                tokio::fs::read(&saved_filepath).await.expect(&exp_str);
-            let exp_str = format!(
-                "Valid `ShieldedTransfer` bytes in {}. {recommendation}",
-                saved_filepath.to_string_lossy()
-            );
-            let loaded: ShieldedTransfer =
-                BorshDeserialize::try_from_slice(&loaded_bytes)
-                    .expect(&exp_str);
-            Ok(Some(loaded))
-        } else {
-            // Build and return the constructed transaction
-            let (masp_tx, metadata) = builder.build(
-                &self.utils.local_tx_prover(),
-                // Fees are always paid outside of MASP
-                &FeeRule::non_standard(Amount::zero()),
-            )?;
-            let built = ShieldedTransfer {
-                builder: builder_clone,
-                masp_tx,
-                metadata,
-                epoch,
-            };
-            if let LoadOrSaveProofs::Save = load_or_save {
-                let built_bytes = BorshSerialize::try_to_vec(&built).unwrap();
-                tokio::fs::write(&saved_filepath, built_bytes)
-                    .await
-                    .unwrap();
+        #[cfg(feature = "testing")]
+        {
+            let builder_hash =
+                namada_core::types::hash::Hash::sha256(&builder_bytes);
+            let saved_filepath = env::current_dir()
+                .unwrap()
+                // One up from "tests" dir to the root dir
+                .parent()
+                .unwrap()
+                .join(MASP_TEST_PROOFS_DIR)
+                .join(format!("{builder_hash}.bin"));
+
+            if let LoadOrSaveProofs::Load = load_or_save {
+                let recommendation = format!(
+                    "Re-run the tests with {ENV_VAR_MASP_TEST_PROOFS}=save to \
+                     re-generate proofs."
+                );
+                let exp_str = format!(
+                    "Read saved MASP proofs from {}. {recommendation}",
+                    saved_filepath.to_string_lossy()
+                );
+                let loaded_bytes =
+                    tokio::fs::read(&saved_filepath).await.expect(&exp_str);
+                let exp_str = format!(
+                    "Valid `ShieldedTransfer` bytes in {}. {recommendation}",
+                    saved_filepath.to_string_lossy()
+                );
+                let loaded: ShieldedTransfer =
+                    BorshDeserialize::try_from_slice(&loaded_bytes)
+                        .expect(&exp_str);
+                Ok(Some(loaded))
+            } else {
+                // Build and return the constructed transaction
+                let built = build_transfer()?;
+                if let LoadOrSaveProofs::Save = load_or_save {
+                    let built_bytes =
+                        BorshSerialize::try_to_vec(&built).unwrap();
+                    tokio::fs::write(&saved_filepath, built_bytes)
+                        .await
+                        .unwrap();
+                }
+                Ok(Some(built))
             }
+        }
+
+        #[cfg(not(feature = "testing"))]
+        {
+            // Build and return the constructed transaction
+            let built = build_transfer()?;
             Ok(Some(built))
         }
     }

@@ -73,10 +73,12 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features
+# Check that every crate can be built with default features and that shared crate
+# can be built for wasm
 check-crates:
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
-		make -C $(wasms_for_tests) check
+		make -C $(wasms_for_tests) check && \
+		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "abciplus,namada-sdk"
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
