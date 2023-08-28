@@ -1250,6 +1250,14 @@ impl Tx {
         Section::Header(self.header.clone()).get_hash()
     }
 
+    /// Gets the hash of the raw transaction's header
+    pub fn raw_header_hash(&self) -> crate::types::hash::Hash {
+        let mut raw_header = self.header();
+        raw_header.tx_type = TxType::Raw;
+
+        Section::Header(raw_header).get_hash()
+    }
+
     /// Get hashes of all the sections in this transaction
     pub fn sechashes(&self) -> Vec<crate::types::hash::Hash> {
         let mut hashes = vec![self.header_hash()];
@@ -1765,10 +1773,7 @@ impl Tx {
         signer: Option<Address>,
     ) -> &mut Self {
         // The inner tx signer signs the Raw version of the Header
-        let mut header = self.header();
-        header.tx_type = TxType::Raw;
-
-        let mut hashes = vec![Section::Header(header).get_hash()];
+        let mut hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
         let sections_hashes = self.inner_section_targets();
         hashes.extend(sections_hashes);

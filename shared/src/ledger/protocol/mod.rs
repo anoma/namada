@@ -231,7 +231,7 @@ where
     WLS: WriteLogAndStorage<D = D, H = H>,
 {
     let mut changed_keys = BTreeSet::default();
-    let mut tx: Tx = tx_bytes.try_into().unwrap();
+    let tx: Tx = tx_bytes.try_into().unwrap();
 
     // Writes wrapper tx hash to block write log (changes must be persisted even
     // in case of failure)
@@ -258,7 +258,7 @@ where
 
     // If wrapper was succesful, write inner tx hash to storage
     let inner_hash_key = replay_protection::get_replay_protection_key(
-        &hash::Hash(tx.update_header(TxType::Raw).header_hash().0),
+        &hash::Hash(tx.raw_header_hash().0),
     );
     shell_params
         .wl_storage

@@ -721,14 +721,7 @@ where
                 metadata.has_decrypted_txs = true;
                 match tx_queue_iter.next() {
                     Some(wrapper) => {
-                        let mut inner_tx = tx.clone();
-                        inner_tx.update_header(TxType::Raw);
-                        if wrapper
-                            .tx
-                            .clone()
-                            .update_header(TxType::Raw)
-                            .header_hash()
-                            != inner_tx.header_hash()
+                        if wrapper.tx.raw_header_hash() != tx.raw_header_hash()
                         {
                             TxResult {
                                 code: ErrorCodes::InvalidOrder.into(),
@@ -742,7 +735,9 @@ where
                             wrapper.tx.clone(),
                             privkey,
                         ) {
-                            // Tx chain id
+                            // FIXME: remove these first 2 checks (also from
+                            // prepare proposal if they are there and finalize
+                            // block?) Tx chain id
                             if wrapper.tx.header.chain_id != self.chain_id {
                                 return TxResult {
                                     code: ErrorCodes::InvalidDecryptedChainId
@@ -1124,13 +1119,11 @@ mod test_process_proposal {
                     shell.chain_id.clone(),
                 )
                 .to_bytes();
-        assert!(
-            shell
-                .process_proposal(ProcessProposal {
-                    txs: vec![tx.clone(), tx]
-                })
-                .is_err()
-        );
+        assert!(shell
+            .process_proposal(ProcessProposal {
+                txs: vec![tx.clone(), tx]
+            })
+            .is_err());
     }
 
     #[cfg(feature = "abcipp")]
@@ -1287,11 +1280,9 @@ mod test_process_proposal {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        let mut txs = vec![
-            EthereumTxData::BridgePool(vote_ext.into())
-                .sign(protocol_key, shell.chain_id.clone())
-                .to_bytes(),
-        ];
+        let mut txs = vec![EthereumTxData::BridgePool(vote_ext.into())
+            .sign(protocol_key, shell.chain_id.clone())
+            .to_bytes()];
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
@@ -2226,10 +2217,7 @@ mod test_process_proposal {
                     format!(
                         "Transaction replay attempt: Inner transaction hash \
                          {} already in storage",
-                        wrapper
-                            .clone()
-                            .update_header(TxType::Raw)
-                            .header_hash(),
+                        wrapper.raw_header_hash()
                     )
                 );
             }
@@ -2263,10 +2251,9 @@ mod test_process_proposal {
             [(0, keypair)].into_iter().collect(),
             None,
         )));
-        let inner_unsigned_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
+        let inner_unsigned_hash = wrapper.raw_header_hash();
         let hash_key =
             replay_protection::get_replay_protection_key(&inner_unsigned_hash);
         shell
@@ -2327,8 +2314,7 @@ mod test_process_proposal {
             [(0, keypair)].into_iter().collect(),
             None,
         )));
-        let inner_unsigned_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_unsigned_hash = wrapper.raw_header_hash();
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {

@@ -1279,8 +1279,7 @@ mod test_prepare_proposal {
             [(0, keypair)].into_iter().collect(),
             None,
         )));
-        let inner_unsigned_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_unsigned_hash = wrapper.raw_header_hash();
 
         // Write inner hash to storage
         let hash_key =
