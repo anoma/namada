@@ -30,6 +30,7 @@ use namada_core::types::internal::HostEnvResult;
 use namada_core::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
+use namada_core::types::transaction::TxType;
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
 pub use namada_proof_of_stake::storage as proof_of_stake;
@@ -88,7 +89,13 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
-    let targets = [*tx.data_sechash(), *tx.code_sechash()];
+    let mut header = tx.header();
+    header.tx_type = TxType::Raw;
+    let targets = [
+        Section::Header(header).get_hash(),
+        *tx.data_sechash(),
+        *tx.code_sechash(),
+    ];
 
     // Serialize parameters
     let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();

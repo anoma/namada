@@ -1764,8 +1764,15 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
+        // The inner tx signer signs the Raw version of the Header
+        let mut header = self.header();
+        header.tx_type = TxType::Raw;
+
+        let mut hashes = vec![Section::Header(header).get_hash()];
         self.protocol_filter();
-        let hashes = self.inner_section_targets();
+        let sections_hashes = self.inner_section_targets();
+        hashes.extend(sections_hashes);
+
         self.add_section(Section::Signature(Signature::new(
             hashes,
             account_public_keys_map.index_secret_keys(keypairs),
