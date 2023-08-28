@@ -1365,10 +1365,12 @@ where
     )
     .await?;
 
-    let mut tx = tx::build_update_steward_commission(
+    let (mut tx, _fee_unshield_epoch) = tx::build_update_steward_commission(
         client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
         args.clone(),
-        &signing_data.gas_payer,
+        &signing_data.fee_payer,
     )
     .await?;
 
@@ -1403,9 +1405,14 @@ where
     )
     .await?;
 
-    let mut tx =
-        tx::build_resign_steward(client, args.clone(), &signing_data.gas_payer)
-            .await?;
+    let (mut tx, _fee_unshield_epoch) = tx::build_resign_steward(
+        client,
+        &mut ctx.wallet,
+        &mut ctx.shielded,
+        args.clone(),
+        &signing_data.fee_payer,
+    )
+    .await?;
 
     signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
 

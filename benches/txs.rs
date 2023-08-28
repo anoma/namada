@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
@@ -17,7 +18,7 @@ use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
 use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::Key;
 use namada::types::transaction::governance::{
-    InitProposalData, ProposalType, VoteProposalData,
+    InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::pos::{Bond, CommissionChange, Withdraw};
 use namada::types::transaction::EllipticCurve;

@@ -766,8 +766,12 @@ pub async fn build_validator_commission_change<
 /// Craft transaction to update a steward commission
 pub async fn build_update_steward_commission<
     C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
 >(
     client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args::UpdateStewardCommission {
         tx: tx_args,
         steward,
@@ -775,7 +779,7 @@ pub async fn build_update_steward_commission<
         tx_code_path,
     }: args::UpdateStewardCommission,
     gas_payer: &common::PublicKey,
-) -> Result<Tx, Error> {
+) -> Result<(Tx, Option<Epoch>), Error> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::InvalidSteward(steward.clone()));
@@ -805,29 +809,38 @@ pub async fn build_update_steward_commission<
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    prepare_tx(
+    let epoch = prepare_tx::<C, U, V>(
         client,
+        wallet,
+        shielded,
         &tx_args,
         &mut tx,
         gas_payer.clone(),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
+    .await?;
 
-    Ok(tx)
+    Ok((tx, epoch))
 }
 
 /// Craft transaction to resign as a steward
-pub async fn build_resign_steward<C: crate::ledger::queries::Client + Sync>(
+pub async fn build_resign_steward<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
+>(
     client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args::ResignSteward {
         tx: tx_args,
         steward,
         tx_code_path,
     }: args::ResignSteward,
     gas_payer: &common::PublicKey,
-) -> Result<Tx, Error> {
+) -> Result<(Tx, Option<Epoch>), Error> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::InvalidSteward(steward.clone()));
@@ -843,16 +856,20 @@ pub async fn build_resign_steward<C: crate::ledger::queries::Client + Sync>(
     tx.add_code_from_hash(tx_code_hash)
         .add_data(steward.clone());
 
-    prepare_tx(
+    let epoch = prepare_tx::<C, U, V>(
         client,
+        wallet,
+        shielded,
         &tx_args,
         &mut tx,
         gas_payer.clone(),
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
-    Ok(tx)
+    .await?;
+
+    Ok((tx, epoch))
 }
 
 /// Submit transaction to unjail a jailed validator

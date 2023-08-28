@@ -23,6 +23,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
+use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::ibc::storage::port_key;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
@@ -83,7 +84,7 @@ use namada::types::masp::{
 use namada::types::storage::{BlockHeight, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
 use namada::types::token::DenominatedAmount;
-use namada::types::transaction::governance::{InitProposalData, ProposalType};
+use namada::types::transaction::governance::InitProposalData;
 use namada::types::transaction::pos::Bond;
 use namada::types::transaction::GasLimit;
 use namada::vm::wasm::run;
