@@ -1321,9 +1321,12 @@ where
             }
         }
     } else {
-        // If there is no position at pipeline offset, then the validator must
-        // be in the below-threshold set
-        debug_assert!(tokens_pre < params.validator_stake_threshold);
+        // At non-zero offset (0 is genesis only)
+        if offset > 0 {
+            // If there is no position at pipeline offset, then the validator
+            // must be in the below-threshold set
+            debug_assert!(tokens_pre < params.validator_stake_threshold);
+        }
         tracing::debug!("Target validator is below-threshold");
 
         // Move the validator into the appropriate set
