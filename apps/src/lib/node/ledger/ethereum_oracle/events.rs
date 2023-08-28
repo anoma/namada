@@ -324,9 +324,9 @@ pub mod eth_events {
             TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
             VALIDATOR_SET_UPDATE_CODEC,
         };
-        use namada::eth_bridge::ethers::abi::AbiEncode;
 
         use super::*;
+        use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the
@@ -350,7 +350,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations.clone(),
             )?;
 
@@ -397,7 +397,10 @@ pub mod eth_events {
             ];
 
             let raw: TransferToNamadaFilter = TRANSFER_TO_NAMADA_CODEC
-                .decode(&get_log(data))
+                .decode(&ethabi::RawLog {
+                    topics: vec![TransferToNamadaFilter::signature()],
+                    data,
+                })
                 .expect("Test failed")
                 .try_into()
                 .expect("Test failed");
@@ -433,7 +436,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations,
             )
             .unwrap();
@@ -534,7 +537,7 @@ pub mod eth_events {
                 {
                     let decoded: TransferToNamadaFilter =
                         TRANSFER_TO_NAMADA_CODEC
-                            .decode(&get_log(nam_transfers.clone().encode()))
+                            .decode(&nam_transfers.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -545,7 +548,7 @@ pub mod eth_events {
             assert_eq!(
                 {
                     let decoded: TransferToErcFilter = TRANSFER_TO_ERC_CODEC
-                        .decode(&get_log(eth_transfers.clone().encode()))
+                        .decode(&eth_transfers.clone().get_log())
                         .expect("Test failed")
                         .try_into()
                         .expect("Test failed");
@@ -557,7 +560,7 @@ pub mod eth_events {
                 {
                     let decoded: ValidatorSetUpdateFilter =
                         VALIDATOR_SET_UPDATE_CODEC
-                            .decode(&get_log(update.clone().encode()))
+                            .decode(&update.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -565,15 +568,6 @@ pub mod eth_events {
                 },
                 update
             );
-        }
-
-        /// Return an Ethereum events log, from the given encoded event
-        /// data.
-        fn get_log(data: Vec<u8>) -> ethabi::RawLog {
-            ethabi::RawLog {
-                data,
-                topics: vec![],
-            }
         }
     }
 }
