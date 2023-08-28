@@ -735,37 +735,6 @@ where
                             wrapper.tx.clone(),
                             privkey,
                         ) {
-                            // FIXME: remove these first 2 checks (also from
-                            // prepare proposal if they are there and finalize
-                            // block?) Tx chain id
-                            if wrapper.tx.header.chain_id != self.chain_id {
-                                return TxResult {
-                                    code: ErrorCodes::InvalidDecryptedChainId
-                                        .into(),
-                                    info: format!(
-                                        "Decrypted tx carries a wrong chain \
-                                         id: expected {}, found {}",
-                                        self.chain_id,
-                                        wrapper.tx.header.chain_id
-                                    ),
-                                };
-                            }
-
-                            // Tx expiration
-                            if let Some(exp) = wrapper.tx.header.expiration {
-                                if block_time > exp {
-                                    return TxResult {
-                                        code: ErrorCodes::ExpiredDecryptedTx
-                                            .into(),
-                                        info: format!(
-                                            "Decrypted tx expired at {:#?}, \
-                                             block time: {:#?}",
-                                            exp, block_time
-                                        ),
-                                    };
-                                }
-                            }
-
                             TxResult {
                                 code: ErrorCodes::Ok.into(),
                                 info: "Process Proposal accepted this \
@@ -2418,70 +2387,6 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that a decrypted transaction with a mismatching chain id gets
-    /// rejected without rejecting the entire block
-    #[test]
-    fn test_decrypted_wrong_chain_id() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
-
-        let wrong_chain_id = ChainId("Wrong chain id".to_string());
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: token::Amount::zero(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = wrong_chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper
-            .set_data(Data::new("new transaction data".as_bytes().to_owned()));
-        let mut decrypted = wrapper.clone();
-
-        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        decrypted.add_section(Section::Signature(Signature::new(
-            decrypted.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
-        let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
-            .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
-            .unwrap();
-        let wrapper_in_queue = TxInQueue {
-            tx: wrapper,
-            gas: gas_limit,
-        };
-        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
-
-        // Run validation
-        let request = ProcessProposal {
-            txs: vec![decrypted.to_bytes()],
-        };
-
-        match shell.process_proposal(request) {
-            Ok(response) => {
-                assert_eq!(
-                    response[0].result.code,
-                    u32::from(ErrorCodes::InvalidDecryptedChainId)
-                );
-                assert_eq!(
-                    response[0].result.info,
-                    format!(
-                        "Decrypted tx carries a wrong chain id: expected {}, \
-                         found {}",
-                        shell.chain_id, wrong_chain_id
-                    )
-                )
-            }
-            Err(_) => panic!("Test failed"),
-        }
-    }
-
     /// Test that an expired wrapper transaction causes a block rejection
     #[test]
     fn test_expired_wrapper() {
@@ -2521,62 +2426,6 @@ mod test_process_proposal {
                     u32::from(ErrorCodes::ExpiredTx)
                 );
             }
-        }
-    }
-
-    /// Test that an expired decrypted transaction is correctly marked as so
-    /// without rejecting the entire block
-    #[test]
-    fn test_expired_decrypted() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
-
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: token::Amount::zero(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::default());
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper
-            .set_data(Data::new("new transaction data".as_bytes().to_owned()));
-        let mut decrypted = wrapper.clone();
-
-        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        decrypted.add_section(Section::Signature(Signature::new(
-            decrypted.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
-        let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
-            .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
-            .unwrap();
-        let wrapper_in_queue = TxInQueue {
-            tx: wrapper,
-            gas: gas_limit,
-        };
-        shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
-
-        // Run validation
-        let request = ProcessProposal {
-            txs: vec![decrypted.to_bytes()],
-        };
-        match shell.process_proposal(request) {
-            Ok(response) => {
-                assert_eq!(response.len(), 1);
-                assert_eq!(
-                    response[0].result.code,
-                    u32::from(ErrorCodes::ExpiredDecryptedTx)
-                );
-            }
-            Err(_) => panic!("Test failed"),
         }
     }
 
