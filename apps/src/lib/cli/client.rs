@@ -268,7 +268,7 @@ impl<IO> CliApi<IO> {
                         } else {
                             tx::submit_reveal_aux(
                                 &client,
-                                &mut ctx,
+                                &mut ctx.wallet,
                                 tx_args.clone(),
                                 &args.sender,
                             )

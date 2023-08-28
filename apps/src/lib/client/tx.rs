@@ -34,32 +34,30 @@ use crate::node::ledger::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 // Build a transaction to reveal the signer of the given transaction.
-pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
+pub async fn submit_reveal_aux<C, U>(
     client: &C,
-    ctx: &mut Context,
+    wallet: &mut Wallet<U>,
     args: args::Tx,
     address: &Address,
-) -> Result<(), tx::Error> {
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    U: WalletUtils,
+{
     if args.dump_tx {
         return Ok(());
     }
 
     if let Address::Implicit(ImplicitAddress(pkh)) = address {
-        let key = ctx
-            .wallet
+        let key = wallet
             .find_key_by_pkh(pkh, args.clone().password)
             .map_err(|e| tx::Error::Other(e.to_string()))?;
         let public_key = key.ref_to();
 
         if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
-            let signing_data = signing::aux_signing_data(
-                client,
-                &mut ctx.wallet,
-                &args,
-                &None,
-                None,
-            )
-            .await?;
+            let signing_data =
+                signing::aux_signing_data(client, wallet, &args, &None, None)
+                    .await?;
 
             let mut tx = tx::build_reveal_pk::<C>(
                 client,
@@ -70,11 +68,11 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
             )
             .await?;
 
-            signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+            signing::generate_test_vector(client, wallet, &tx).await;
 
-            signing::sign_tx(&mut ctx.wallet, &args, &mut tx, signing_data);
+            signing::sign_tx(wallet, &args, &mut tx, signing_data);
 
-            tx::process_tx(client, &mut ctx.wallet, &args, tx).await?;
+            tx::process_tx(client, wallet, &args, tx).await?;
         }
     }
 
@@ -100,7 +98,8 @@ where
     )
     .await?;
 
-    submit_reveal_aux(client, ctx, args.tx.clone(), &args.owner).await?;
+    submit_reveal_aux(client, &mut ctx.wallet, args.tx.clone(), &args.owner)
+        .await?;
 
     let mut tx =
         tx::build_custom(client, args.clone(), &signing_data.gas_payer).await?;
@@ -619,7 +618,7 @@ pub async fn submit_transfer<C: Client + Sync>(
 
         submit_reveal_aux(
             client,
-            &mut ctx,
+            &mut ctx.wallet,
             args.tx.clone(),
             &args.source.effective_address(),
         )
@@ -689,7 +688,8 @@ where
     )
     .await?;
 
-    submit_reveal_aux(client, &mut ctx, args.tx.clone(), &args.source).await?;
+    submit_reveal_aux(client, &mut ctx.wallet, args.tx.clone(), &args.source)
+        .await?;
 
     let mut tx =
         tx::build_ibc_transfer(client, args.clone(), &signing_data.gas_payer)
@@ -765,7 +765,7 @@ where
 
         submit_reveal_aux(
             client,
-            &mut ctx,
+            &mut ctx.wallet,
             args.tx.clone(),
             &proposal.proposal.author,
         )
@@ -810,7 +810,7 @@ where
 
         submit_reveal_aux(
             client,
-            &mut ctx,
+            &mut ctx.wallet,
             args.tx.clone(),
             &proposal.proposal.author,
         )
@@ -853,7 +853,7 @@ where
 
         submit_reveal_aux(
             client,
-            &mut ctx,
+            &mut ctx.wallet,
             args.tx.clone(),
             &proposal.proposal.author,
         )
@@ -1066,7 +1066,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    submit_reveal_aux(client, ctx, args.tx, &(&args.public_key).into()).await?;
+    submit_reveal_aux(
+        client,
+        &mut ctx.wallet,
+        args.tx,
+        &(&args.public_key).into(),
+    )
+    .await?;
 
     Ok(())
 }
@@ -1091,7 +1097,13 @@ where
     )
     .await?;
 
-    submit_reveal_aux(client, ctx, args.tx.clone(), &default_address).await?;
+    submit_reveal_aux(
+        client,
+        &mut ctx.wallet,
+        args.tx.clone(),
+        &default_address,
+    )
+    .await?;
 
     let mut tx =
         tx::build_bond::<C>(client, args.clone(), &signing_data.gas_payer)
