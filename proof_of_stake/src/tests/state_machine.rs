@@ -151,8 +151,13 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
-        crate::init_genesis(&mut s, &initial_state.params, initial_state.epoch)
-            .unwrap();
+        crate::test_utils::init_genesis_helper(
+            &mut s,
+            &initial_state.params,
+            initial_state.genesis_validators.clone().into_iter(),
+            initial_state.epoch,
+        )
+        .unwrap();
         Self { s }
     }
 
