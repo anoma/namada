@@ -2420,7 +2420,7 @@ pub mod args {
         }),
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
-    // pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -2686,41 +2686,41 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct LedgerDumpDb {
         // TODO: allow to specify height
-        // pub block_height: Option<BlockHeight>,
+        pub block_height: Option<BlockHeight>,
         pub out_file_path: PathBuf,
         pub historic: bool,
     }
 
     impl Args for LedgerDumpDb {
         fn parse(matches: &ArgMatches) -> Self {
-            // let block_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let block_height = BLOCK_HEIGHT_OPT.parse(matches);
             let out_file_path = OUT_FILE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
             let historic = HISTORIC.parse(matches);
 
             Self {
-                // block_height,
+                block_height,
                 out_file_path,
                 historic,
             }
         }
 
         fn def(app: App) -> App {
-            app
-                // .arg(BLOCK_HEIGHT_OPT.def().help(
-                //     "The block height to dump. Defaults to latest committed
-                // block.", ))
-                .arg(OUT_FILE_PATH_OPT.def().help(
-                    "Path for the output file (omitting file extension). \
-                     Defaults to \"db_dump.{block_height}.toml\" in the \
-                     current working directory.",
-                ))
-                .arg(
-                    HISTORIC.def().help(
-                        "If provided, dump also the diff of the last height",
-                    ),
-                )
+            app.arg(BLOCK_HEIGHT_OPT.def().help(
+                "The block height to dump. Defaults to latest committed
+                block.",
+            ))
+            .arg(OUT_FILE_PATH_OPT.def().help(
+                "Path for the output file (omitting file extension). Defaults \
+                 to \"db_dump.{block_height}.toml\" in the current working \
+                 directory.",
+            ))
+            .arg(
+                HISTORIC
+                    .def()
+                    .help("If provided, dump also the diff of the last height"),
+            )
         }
     }
 
