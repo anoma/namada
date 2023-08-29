@@ -1460,38 +1460,3 @@ pub async fn submit_tx(
 ) -> Result<TxResponse, tx::Error> {
     tx::submit_tx(client, to_broadcast).await
 }
-
-#[cfg(test)]
-mod test_tx {
-    use masp_primitives::transaction::components::Amount;
-    use namada::core::types::storage::Epoch;
-    use namada::ledger::masp::{make_asset_type, MaspAmount};
-    use namada::types::address::testing::gen_established_address;
-    use namada::types::token::MaspDenom;
-
-    #[test]
-    fn test_masp_add_amount() {
-        let address_1 = gen_established_address();
-        let denom_1 = MaspDenom::One;
-        let denom_2 = MaspDenom::Three;
-        let epoch = Epoch::default();
-        let _masp_amount = MaspAmount::default();
-
-        let asset_base = make_asset_type(Some(epoch), &address_1, denom_1);
-        let _asset_denom = make_asset_type(Some(epoch), &address_1, denom_2);
-        let _asset_prefix = make_asset_type(Some(epoch), &address_1, denom_1);
-
-        let _amount_base =
-            Amount::from_pair(asset_base, 16).expect("Test failed");
-        let _amount_denom =
-            Amount::from_pair(asset_base, 2).expect("Test failed");
-        let _amount_prefix =
-            Amount::from_pair(asset_base, 4).expect("Test failed");
-
-        // masp_amount += amount_base;
-        // assert_eq!(masp_amount.get((epoch,)), Uint::zero());
-        // Amount::from_pair(atype, amount)
-        // MaspDenom::One
-        // assert_eq!(zero.abs(), Uint::zero());
-    }
-}
