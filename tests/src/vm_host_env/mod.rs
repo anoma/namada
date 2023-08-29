@@ -476,6 +476,7 @@ mod tests {
                 signed_tx_data
                     .verify_signatures(
                         &[
+                            signed_tx_data.header_hash(),
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
                         ],
@@ -495,6 +496,7 @@ mod tests {
                 signed_tx_data
                     .verify_signatures(
                         &[
+                            signed_tx_data.header_hash(),
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
                         ],
