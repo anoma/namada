@@ -244,8 +244,8 @@ pub fn get_dummy_header() -> crate::types::storage::Header {
 
 /// A dummy validator used for testing
 #[cfg(any(test, feature = "testing"))]
-pub fn get_dummy_genesis_validator()
--> namada_proof_of_stake::types::GenesisValidator {
+pub fn get_dummy_genesis_validator(
+) -> namada_proof_of_stake::types::GenesisValidator {
     use crate::core::types::address::testing::established_address_1;
     use crate::core::types::dec::Dec;
     use crate::core::types::key::testing::common_sk_from_simple_seed;
@@ -724,7 +724,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -742,10 +746,9 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -950,10 +953,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1037,7 +1039,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1061,10 +1067,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1284,10 +1289,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1371,7 +1375,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1394,10 +1402,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1459,7 +1466,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1482,10 +1493,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1584,7 +1594,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1607,10 +1621,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1708,7 +1721,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1731,10 +1748,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1817,7 +1833,11 @@ mod tests {
         outer_tx.set_code(Code::new(tx_code));
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
-            vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
+            vec![
+                outer_tx.header_hash(),
+                *outer_tx.code_sechash(),
+                *outer_tx.data_sechash(),
+            ],
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
@@ -1840,10 +1860,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&outer_tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -1944,10 +1963,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     // skip test_close_init_channel() and test_close_confirm_channel() since it
@@ -2086,10 +2104,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2274,10 +2291,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2421,10 +2437,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2572,10 +2587,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 
     #[test]
@@ -2724,9 +2738,8 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed"));
     }
 }
