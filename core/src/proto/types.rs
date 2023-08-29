@@ -1494,7 +1494,8 @@ impl Tx {
         public_keys_index_map: &AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> Vec<SignatureIndex> {
-        let targets = self.inner_section_targets();
+        let mut targets = vec![self.header_hash()];
+        targets.extend(self.inner_section_targets());
         let mut signatures = Vec::new();
         let section = Signature::new(
             targets,
