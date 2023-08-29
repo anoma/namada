@@ -163,6 +163,8 @@ elif [ "$1" = "client" ]; then
 
     cargo run --bin namadac --features std -- init-validator --alias bertha-validator --account-keys bertha-key --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys bertha-key --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
 
+    cargo run --bin namadac --features std -- init-validator --alias validator-mult --account-keys albert-key,bertha-key --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys albert-key,bertha-key --threshold 2 --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
+
     # TODO panics
     cargo run --bin namadac --features std -- unbond --validator christel --amount 5 --signing-keys christel-key --force --ledger-address 127.0.0.1:27657
 
