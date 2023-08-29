@@ -107,6 +107,8 @@ elif [ "$1" = "client" ]; then
     # proposal_default
 
     cargo run --bin namadac --features std -- bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
+    
+    cargo run --bin namadac --features std -- unjail-validator --validator Bertha --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.02 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
@@ -172,6 +174,12 @@ elif [ "$1" = "client" ]; then
     cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-keys albert-key --owner albert --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
+    
+    cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
+    
+    cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver albert  --token atest1d93xxw36xvcx2vekx5exyc35x43rjvf3vsckzwt9x3jnvdp5vsckgetzxpjxvdeexc6nzvtp3473aa --amount 50000 --channel-id channel-0 --port-id transfer --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
+    
+    cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --timeout-sec-offset 5 --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 

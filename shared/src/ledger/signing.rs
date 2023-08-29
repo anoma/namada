@@ -1,5 +1,6 @@
 //! Functions to sign transactions
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::ErrorKind;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -21,6 +22,10 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use crate::core::ledger::governance::storage::proposal::ProposalType;
+use crate::core::ledger::governance::storage::vote::{
+    StorageProposalVote, VoteType,
+};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
@@ -29,8 +34,8 @@ use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
     Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
@@ -390,11 +395,20 @@ fn make_ledger_amount_addr(
     prefix: &str,
 ) {
     if let Some(token) = tokens.get(token) {
-        output.push(format!("{}Amount {}: {}", prefix, token, amount));
+        output.push(format!(
+            "{}Amount : {} {}",
+            prefix,
+            token.to_uppercase(),
+            to_ledger_decimal(&amount.to_string()),
+        ));
     } else {
         output.extend(vec![
-            format!("{}Token: {}", prefix, token),
-            format!("{}Amount: {}", prefix, amount),
+            format!("{}Token : {}", prefix, token),
+            format!(
+                "{}Amount : {}",
+                prefix,
+                to_ledger_decimal(&amount.to_string())
+            ),
         ]);
     }
 }
@@ -415,21 +429,31 @@ async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
         let formatted_amt =
             format_denominated_amount(client, token, amount.into()).await;
         if let Some(token) = tokens.get(token) {
-            output
-                .push(
-                    format!("{}Amount: {} {}", prefix, token, formatted_amt,),
-                );
+            output.push(format!(
+                "{}Amount : {} {}",
+                prefix,
+                token.to_uppercase(),
+                to_ledger_decimal(&formatted_amt),
+            ));
         } else {
             output.extend(vec![
-                format!("{}Token: {}", prefix, token),
-                format!("{}Amount: {}", prefix, formatted_amt),
+                format!("{}Token : {}", prefix, token),
+                format!(
+                    "{}Amount : {}",
+                    prefix,
+                    to_ledger_decimal(&formatted_amt)
+                ),
             ]);
         }
     } else {
         // Otherwise display the raw AssetTypes
         output.extend(vec![
-            format!("{}Token: {}", prefix, token),
-            format!("{}Amount: {}", prefix, amount),
+            format!("{}Token : {}", prefix, token),
+            format!(
+                "{}Amount : {}",
+                prefix,
+                to_ledger_decimal(&amount.to_string())
+            ),
         ]);
     }
 }
@@ -437,54 +461,44 @@ async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
 /// Split the lines in the vector that are longer than the Ledger device's
 /// character width
 fn format_outputs(output: &mut Vec<String>) {
-    const LEDGER_WIDTH: usize = 60;
+    const MAX_KEY_LEN: usize = 39;
+    const MAX_VALUE_LEN: usize = 39;
 
     let mut i = 0;
     let mut pos = 0;
     // Break down each line that is too long one-by-one
     while pos < output.len() {
-        let prefix_len = i.to_string().len() + 3;
         let curr_line = output[pos].clone();
-        if curr_line.len() + prefix_len < LEDGER_WIDTH {
+        let (key, mut value) =
+            curr_line.split_once(':').unwrap_or(("", &curr_line));
+        // Truncate the key length to the declared maximum
+        let key = key.trim().chars().take(MAX_KEY_LEN - 1).collect::<String>();
+        // Trim value because we will insert spaces later
+        value = value.trim();
+        if value.is_empty() {
+            value = "(none)"
+        }
+        if value.chars().count() < MAX_VALUE_LEN {
             // No need to split the line in this case
-            output[pos] = format!("{} | {}", i, curr_line);
+            output[pos] = format!("{} | {} : {}", i, key, value);
             pos += 1;
         } else {
             // Line is too long so split it up. Repeat the key on each line
-            let (mut key, mut value) =
-                curr_line.split_once(':').unwrap_or(("", &curr_line));
-            key = key.trim();
-            value = value.trim();
-            if value.is_empty() {
-                value = "(none)"
-            }
-
-            // First comput how many lines we will break the current one up into
-            let mut digits = 1;
-            let mut line_space;
-            let mut lines;
-            loop {
-                let prefix_len = prefix_len + 7 + 2 * digits + key.len();
-                line_space = LEDGER_WIDTH - prefix_len;
-                lines = (value.len() + line_space - 1) / line_space;
-                if lines.to_string().len() <= digits {
-                    break;
-                } else {
-                    digits += 1;
-                }
-            }
-
-            // Then break up this line according to the above plan
             output.remove(pos);
-            for (idx, part) in
-                value.chars().chunks(line_space).into_iter().enumerate()
+            let part_count = (value.chars().count() + MAX_VALUE_LEN - 2)
+                / (MAX_VALUE_LEN - 1);
+            for (idx, part) in value
+                .chars()
+                .chunks(MAX_VALUE_LEN - 1)
+                .into_iter()
+                .enumerate()
             {
                 let line = format!(
                     "{} | {} [{}/{}] : {}",
                     i,
                     key,
                     idx + 1,
-                    lines,
+                    part_count,
                     part.collect::<String>(),
                 );
                 output.insert(pos, line);
@@ -621,6 +635,64 @@ pub async fn generate_test_vector<
     }
 }
 
+/// Convert decimal numbers into the format used by Ledger. Specifically remove
+/// all insignificant zeros occuring after decimal point.
+fn to_ledger_decimal(amount: &str) -> String {
+    if amount.contains('.') {
+        let mut amount = amount.trim_end_matches('0').to_string();
+        if amount.ends_with('.') {
+            amount.push('0')
+        }
+        amount
+    } else {
+        amount.to_string() + ".0"
+    }
+}
+
+/// A ProposalVote wrapper that prints the spending cap with Ledger decimal
+/// formatting.
+struct LedgerProposalVote<'a>(&'a StorageProposalVote);
+
+impl<'a> Display for LedgerProposalVote<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            StorageProposalVote::Yay(vote_type) => match vote_type {
+                VoteType::Default => write!(f, "yay"),
+                VoteType::PGFSteward => write!(f, "yay for PGF steward"),
+                VoteType::PGFPayment => {
+                    write!(f, "yay for PGF payment proposal")
+                }
+            },
+
+            StorageProposalVote::Nay => write!(f, "nay"),
+        }
+    }
+}
+
+/// A ProposalType wrapper that prints the hash of the contained WASM code if it
+/// is present.
+struct LedgerProposalType<'a>(&'a ProposalType, &'a Tx);
+
+impl<'a> Display for LedgerProposalType<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            ProposalType::Default(None) => write!(f, "Default"),
+            ProposalType::Default(Some(hash)) => {
+                let extra = self
+                    .1
+                    .get_section(hash)
+                    .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                    .expect("unable to load vp code")
+                    .code
+                    .hash();
+                write!(f, "{}", HEXLOWER.encode(&extra.0))
+            }
+            ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
+            ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
+        }
+    }
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector<
@@ -665,18 +737,16 @@ pub async fn to_ledger_vector<
             .await
             .unwrap();
     let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await.unwrap();
+    let unjail_validator_hash =
+        query_wasm_code_hash(client, TX_UNJAIL_VALIDATOR_WASM)
+            .await
+            .unwrap();
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
-        .get_addresses_with_vp_type(AddressVpType::Token)
+        .get_addresses()
         .into_iter()
-        .map(|addr| {
-            let alias = match wallet.find_alias(&addr) {
-                Some(alias) => alias.to_string(),
-                None => addr.to_string(),
-            };
-            (addr, alias)
-        })
+        .map(|(alias, addr)| (addr, alias))
         .collect();
 
     let mut tv = LedgerVector {
@@ -684,7 +754,7 @@ pub async fn to_ledger_vector<
             .encode(&tx.try_to_vec().expect("unable to serialize transaction")),
         index: 0,
         valid: true,
-        name: "Custom 0".to_string(),
+        name: "Custom_0".to_string(),
         ..Default::default()
     };
 
@@ -704,7 +774,7 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Init Account 0".to_string();
+        tv.name = "Init_Account_0".to_string();
 
         let extra = tx
             .get_section(&init_account.vp_code_hash)
@@ -717,15 +787,19 @@ pub async fn to_ledger_vector<
         } else {
             HEXLOWER.encode(&extra.0)
         };
-
+        let public_keys = init_account
+            .public_keys
+            .iter()
+            .map(ToString::to_string)
+            .join(", ");
         tv.output.extend(vec![
             format!("Type : Init Account"),
-            format!("Public key : {:?}", init_account.public_keys),
+            format!("Public keys : {}", public_keys),
             format!("VP type : {}", vp_code),
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Public key : {:?}", init_account.public_keys),
+            format!("Public keys : {}", public_keys),
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
@@ -734,7 +808,7 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Init Validator 0".to_string();
+        tv.name = "Init_Validator_0".to_string();
 
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
@@ -748,10 +822,17 @@ pub async fn to_ledger_vector<
             HEXLOWER.encode(&extra.0)
         };
 
+        let account_keys = init_validator
+            .account_keys
+            .iter()
+            .map(ToString::to_string)
+            .join(", ");
         tv.output.extend(vec![
             format!("Type : Init Validator"),
-            format!("Account key : {:?}", init_validator.account_keys),
+            format!("Account keys : {}", account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
+            format!("Ethereum cold key : {}", init_validator.eth_cold_key),
+            format!("Ethereum hot key : {}", init_validator.eth_hot_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),
             format!("Commission rate : {}", init_validator.commission_rate),
@@ -763,8 +844,10 @@ pub async fn to_ledger_vector<
         ]);
 
         tv.output_expert.extend(vec![
-            format!("Account key : {:?}", init_validator.account_keys),
+            format!("Account keys : {}", account_keys),
             format!("Consensus key : {}", init_validator.consensus_key),
+            format!("Ethereum cold key : {}", init_validator.eth_cold_key),
+            format!("Ethereum hot key : {}", init_validator.eth_hot_key),
             format!("Protocol key : {}", init_validator.protocol_key),
             format!("DKG key : {}", init_validator.dkg_key),
             format!("Commission rate : {}", init_validator.commission_rate),
@@ -780,16 +863,24 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Init Proposal 0".to_string();
+        tv.name = "Init_Proposal_0".to_string();
 
-        let init_proposal_data_id = init_proposal_data
-            .id
-            .as_ref()
-            .map(u64::to_string)
-            .unwrap_or_else(|| "(none)".to_string());
+        let extra = tx
+            .get_section(&init_proposal_data.content)
+            .and_then(|x| Section::extra_data_sec(x.as_ref()))
+            .expect("unable to load vp code")
+            .code
+            .hash();
+
+        tv.output.push(format!("Type : Init proposal"));
+        if let Some(id) = init_proposal_data.id.as_ref() {
+            tv.output.push(format!("ID : {}", id));
+        }
         tv.output.extend(vec![
-            format!("Type : Init proposal"),
-            format!("ID : {}", init_proposal_data_id),
+            format!(
+                "Proposal type : {}",
+                LedgerProposalType(&init_proposal_data.r#type, tx)
+            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
@@ -800,12 +891,17 @@ pub async fn to_ledger_vector<
                 init_proposal_data.voting_end_epoch
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
-        tv.output
-            .push(format!("Content: {}", init_proposal_data.content));
 
+        if let Some(id) = init_proposal_data.id.as_ref() {
+            tv.output_expert.push(format!("ID : {}", id));
+        }
         tv.output_expert.extend(vec![
-            format!("ID : {}", init_proposal_data_id),
+            format!(
+                "Proposal type : {}",
+                LedgerProposalType(&init_proposal_data.r#type, tx)
+            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
@@ -816,21 +912,20 @@ pub async fn to_ledger_vector<
                 init_proposal_data.voting_end_epoch
             ),
             format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
-        tv.output
-            .push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
         let vote_proposal =
             VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Vote Proposal 0".to_string();
+        tv.name = "Vote_Proposal_0".to_string();
 
         tv.output.extend(vec![
             format!("Type : Vote Proposal"),
             format!("ID : {}", vote_proposal.id),
-            format!("Vote : {}", vote_proposal.vote),
+            format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
             format!("Voter : {}", vote_proposal.voter),
         ]);
         for delegation in &vote_proposal.delegations {
@@ -839,7 +934,7 @@ pub async fn to_ledger_vector<
 
         tv.output_expert.extend(vec![
             format!("ID : {}", vote_proposal.id),
-            format!("Vote : {}", vote_proposal.vote),
+            format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
             format!("Voter : {}", vote_proposal.voter),
         ]);
         for delegation in vote_proposal.delegations {
@@ -852,10 +947,10 @@ pub async fn to_ledger_vector<
                 .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
         )?;
 
-        tv.name = "Init Account 0".to_string();
+        tv.name = "Reveal_Pubkey_0".to_string();
 
         tv.output.extend(vec![
-            format!("Type : Reveal PK"),
+            format!("Type : Reveal Pubkey"),
             format!("Public key : {}", public_key),
         ]);
 
@@ -867,7 +962,7 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Update VP 0".to_string();
+        tv.name = "Update_VP_0".to_string();
 
         match &transfer.vp_code_hash {
             Some(hash) => {
@@ -921,7 +1016,7 @@ pub async fn to_ledger_vector<
             None
         };
 
-        tv.name = "Transfer 0".to_string();
+        tv.name = "Transfer_0".to_string();
 
         tv.output.push("Type : Transfer".to_string());
         make_ledger_masp_endpoints(
@@ -950,7 +1045,7 @@ pub async fn to_ledger_vector<
         )
         .map_err(|x| std::io::Error::new(ErrorKind::Other, x))?;
 
-        tv.name = "IBC 0".to_string();
+        tv.name = "IBC_0".to_string();
         tv.output.push("Type : IBC".to_string());
 
         match MsgTransfer::try_from(any_msg.clone()) {
@@ -1005,24 +1100,29 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Bond 0".to_string();
+        tv.name = "Bond_0".to_string();
 
-        let bond_source = bond
-            .source
-            .as_ref()
-            .map(Address::to_string)
-            .unwrap_or_else(|| "(none)".to_string());
+        tv.output.push(format!("Type : Bond"));
+        if let Some(source) = bond.source.as_ref() {
+            tv.output.push(format!("Source : {}", source));
+        }
         tv.output.extend(vec![
-            format!("Type : Bond"),
-            format!("Source : {}", bond_source),
             format!("Validator : {}", bond.validator),
-            format!("Amount : {}", bond.amount.to_string_native()),
+            format!(
+                "Amount : NAM {}",
+                to_ledger_decimal(&bond.amount.to_string_native())
+            ),
         ]);
 
+        if let Some(source) = bond.source.as_ref() {
+            tv.output_expert.push(format!("Source : {}", source));
+        }
         tv.output_expert.extend(vec![
-            format!("Source : {}", bond_source),
             format!("Validator : {}", bond.validator),
-            format!("Amount : {}", bond.amount.to_string_native()),
+            format!(
+                "Amount : NAM {}",
+                to_ledger_decimal(&bond.amount.to_string_native())
+            ),
         ]);
     } else if code_hash == unbond_hash {
         let unbond =
@@ -1030,24 +1130,29 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Unbond 0".to_string();
+        tv.name = "Unbond_0".to_string();
 
-        let unbond_source = unbond
-            .source
-            .as_ref()
-            .map(Address::to_string)
-            .unwrap_or_else(|| "(none)".to_string());
+        tv.output.push(format!("Type : Unbond"));
+        if let Some(source) = unbond.source.as_ref() {
+            tv.output.push(format!("Source : {}", source));
+        }
         tv.output.extend(vec![
-            format!("Code : Unbond"),
-            format!("Source : {}", unbond_source),
             format!("Validator : {}", unbond.validator),
-            format!("Amount : {}", unbond.amount.to_string_native()),
+            format!(
+                "Amount : NAM {}",
+                to_ledger_decimal(&unbond.amount.to_string_native())
+            ),
         ]);
 
+        if let Some(source) = unbond.source.as_ref() {
+            tv.output_expert.push(format!("Source : {}", source));
+        }
         tv.output_expert.extend(vec![
-            format!("Source : {}", unbond_source),
             format!("Validator : {}", unbond.validator),
-            format!("Amount : {}", unbond.amount.to_string_native()),
+            format!(
+                "Amount : NAM {}",
+                to_ledger_decimal(&unbond.amount.to_string_native())
+            ),
         ]);
     } else if code_hash == withdraw_hash {
         let withdraw =
@@ -1055,30 +1160,27 @@ pub async fn to_ledger_vector<
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
-        tv.name = "Withdraw 0".to_string();
+        tv.name = "Withdraw_0".to_string();
 
-        let withdraw_source = withdraw
-            .source
-            .as_ref()
-            .map(Address::to_string)
-            .unwrap_or_else(|| "(none)".to_string());
-        tv.output.extend(vec![
-            format!("Type : Withdraw"),
-            format!("Source : {}", withdraw_source),
-            format!("Validator : {}", withdraw.validator),
-        ]);
+        tv.output.push(format!("Type : Withdraw"));
+        if let Some(source) = withdraw.source.as_ref() {
+            tv.output.push(format!("Source : {}", source));
+        }
+        tv.output
+            .push(format!("Validator : {}", withdraw.validator));
 
-        tv.output_expert.extend(vec![
-            format!("Source : {}", withdraw_source),
-            format!("Validator : {}", withdraw.validator),
-        ]);
+        if let Some(source) = withdraw.source.as_ref() {
+            tv.output_expert.push(format!("Source : {}", source));
+        }
+        tv.output_expert
+            .push(format!("Validator : {}", withdraw.validator));
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()
                 .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
         )?;
 
-        tv.name = "Change Commission 0".to_string();
+        tv.name = "Change_Commission_0".to_string();
 
         tv.output.extend(vec![
             format!("Type : Change commission"),
@@ -1090,6 +1192,23 @@ pub async fn to_ledger_vector<
             format!("New rate : {}", commission_change.new_rate),
             format!("Validator : {}", commission_change.validator),
         ]);
+    } else if code_hash == unjail_validator_hash {
+        let address =
+            Address::try_from_slice(&tx.data().ok_or_else(|| {
+                std::io::Error::from(ErrorKind::InvalidData)
+            })?)?;
+
+        tv.name = "Unjail_Validator_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Unjail Validator"),
+            format!("Validator : {}", address),
+        ]);
+
+        tv.output_expert.push(format!("Validator : {}", address));
+    } else {
+        tv.name = "Custom_0".to_string();
+        tv.output.push("Type : Custom".to_string());
     }
 
     if let Some(wrapper) = tx.header.wrapper() {
@@ -1105,17 +1224,21 @@ pub async fn to_ledger_vector<
                 .await;
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
-            format!("PK : {}", wrapper.pk),
+            format!("Pubkey : {}", wrapper.pk),
             format!("Epoch : {}", wrapper.epoch),
             format!("Gas limit : {}", gas_limit),
-            format!("Fee token : {}", gas_token),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
-            tv.output_expert
-                .push(format!("Fee amount : {} {}", token, gas_amount));
+            tv.output_expert.push(format!(
+                "Fees : {} {}",
+                token.to_uppercase(),
+                to_ledger_decimal(&gas_amount)
+            ));
         } else {
-            tv.output_expert
-                .push(format!("Fee amount : {}", gas_amount));
+            tv.output_expert.extend(vec![
+                format!("Fee token : {}", gas_token),
+                format!("Fee amount : {}", gas_amount),
+            ]);
         }
     }
 
