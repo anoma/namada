@@ -1,4 +1,4 @@
-mod eth_bridge;
+pub(super) mod eth_bridge;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;

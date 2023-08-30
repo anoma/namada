@@ -1,16 +1,19 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_root_key,
+use namada_core::ledger::eth_bridge::storage::{
+    active_key, bridge_pool, whitelist,
 };
-use namada_core::ledger::eth_bridge::storage::{active_key, whitelist};
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{EthAddress, GetEventNonce, Uint};
+use namada_core::types::eth_abi::Encode;
+use namada_core::types::eth_bridge_pool::PendingTransfer;
+use namada_core::types::ethereum_events::{
+    EthAddress, GetEventNonce, TransferToEthereum, Uint,
+};
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::storage::{BlockHeight, Epoch, Key as StorageKey};
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::{
     EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
@@ -175,7 +178,7 @@ where
             &self
                 .wl_storage
                 .storage
-                .read(&get_nonce_key())
+                .read(&bridge_pool::get_nonce_key())
                 .expect("Reading Bridge pool nonce shouldn't fail.")
                 .0
                 .expect("Reading Bridge pool nonce shouldn't fail."),
@@ -191,7 +194,7 @@ where
                 .storage
                 .db
                 .read_subspace_val_with_height(
-                    &get_nonce_key(),
+                    &bridge_pool::get_nonce_key(),
                     height,
                     self.wl_storage.storage.get_last_block_height(),
                 )
@@ -225,7 +228,7 @@ where
         self,
     ) -> Option<(BridgePoolRootProof, BlockHeight)> {
         self.wl_storage
-            .read_bytes(&get_signed_root_key())
+            .read_bytes(&bridge_pool::get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.")
             .map(|bytes| {
                 BorshDeserialize::try_from_slice(&bytes).expect(
@@ -487,6 +490,19 @@ where
             erc20_amount: amount_to_mint,
             nut_amount: token::Amount::zero(),
         }
+    }
+
+    /// Given a [`TransferToEthereum`] event, look-up the corresponding
+    /// [`PendingTransfer`].
+    pub fn lookup_transfer_to_eth(
+        self,
+        transfer: &TransferToEthereum,
+    ) -> Option<(PendingTransfer, StorageKey)> {
+        let pending_key = bridge_pool::get_key_from_hash(&transfer.keccak256());
+        self.wl_storage
+            .read(&pending_key)
+            .expect("Reading from storage should not fail")
+            .zip(Some(pending_key))
     }
 }
 

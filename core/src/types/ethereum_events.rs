@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
+use crate::types::ethereum_structs::Erc20Transfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
@@ -366,60 +367,6 @@ pub struct TransferToNamada {
     pub receiver: Address,
 }
 
-/// Transfer to Ethereum kinds.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-#[repr(u8)]
-pub enum TransferToEthereumKind {
-    /// Transfer ERC20 assets from Namada to Ethereum.
-    ///
-    /// These transfers burn wrapped ERC20 assets in Namada, once
-    /// they have been confirmed.
-    Erc20 = Self::KIND_ERC20,
-    /// Refund non-usable tokens.
-    ///
-    /// These Bridge pool transfers should be crafted for assets
-    /// that have been transferred to Namada, that had either not
-    /// been whitelisted or whose token caps had been exceeded in
-    /// Namada at the time of the transfer.
-    Nut = Self::KIND_NUT,
-}
-
-// XXX: keep these values in sync with the smart contracts
-impl TransferToEthereumKind {
-    const KIND_ERC20: u8 = 0;
-    const KIND_NUT: u8 = 1;
-}
-
-impl TryFrom<u8> for TransferToEthereumKind {
-    type Error = eyre::Error;
-
-    fn try_from(kind: u8) -> Result<Self, Self::Error> {
-        match kind {
-            Self::KIND_ERC20 => Ok(Self::Erc20),
-            Self::KIND_NUT => Ok(Self::Nut),
-            _ => Err(eyre!(
-                "Only valid kinds are {} (ERC20) and {} (NUT)",
-                Self::KIND_ERC20,
-                Self::KIND_NUT
-            )),
-        }
-    }
-}
-
 /// An event transferring some kind of value from Namada to Ethereum
 #[derive(
     Clone,
@@ -436,20 +383,40 @@ impl TryFrom<u8> for TransferToEthereumKind {
     Deserialize,
 )]
 pub struct TransferToEthereum {
-    /// The kind of transfer to Ethereum.
-    pub kind: TransferToEthereumKind,
     /// Quantity of wrapped Asset in the transfer
     pub amount: Amount,
     /// Address of the smart contract issuing the token
     pub asset: EthAddress,
     /// The address receiving assets on Ethereum
     pub receiver: EthAddress,
-    /// The amount of fees (in NAM)
-    pub gas_amount: Amount,
-    /// The address sending assets to Ethereum.
-    pub sender: Address,
-    /// The account of fee payer.
-    pub gas_payer: Address,
+    /// Checksum of all Namada specific fields, including,
+    /// but not limited to, whether it is a NUT transfer,
+    /// the address of the sender, etc
+    ///
+    /// It serves to uniquely identify an event stored under
+    /// the Bridge pool, in Namada
+    pub checksum: Hash,
+}
+
+impl From<Erc20Transfer> for TransferToEthereum {
+    #[inline]
+    fn from(transfer: Erc20Transfer) -> Self {
+        Self {
+            amount: {
+                let uint = {
+                    use crate::types::uint::Uint as NamadaUint;
+                    let mut num_buf = [0; 32];
+                    transfer.amount.to_little_endian(&mut num_buf);
+                    NamadaUint::from_little_endian(&num_buf)
+                };
+                // this is infallible for a denom of 0
+                Amount::from_uint(uint, 0).unwrap()
+            },
+            asset: EthAddress(transfer.from.0),
+            receiver: EthAddress(transfer.to.0),
+            checksum: Hash(transfer.namada_data_digest),
+        }
+    }
 }
 
 #[cfg(test)]
