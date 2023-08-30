@@ -1250,7 +1250,7 @@ impl Tx {
         Section::Header(self.header.clone()).get_hash()
     }
 
-    /// Gets the hash of the raw transaction's header
+    /// Gets the hash of the decrypted transaction's header
     pub fn raw_header_hash(&self) -> crate::types::hash::Hash {
         let mut raw_header = self.header();
         raw_header.tx_type = TxType::Raw;
@@ -1280,6 +1280,10 @@ impl Tx {
     ) -> Option<Cow<Section>> {
         if self.header_hash() == *hash {
             return Some(Cow::Owned(Section::Header(self.header.clone())));
+        } else if self.raw_header_hash() == *hash {
+            let mut header = self.header();
+            header.tx_type = TxType::Raw;
+            return Some(Cow::Owned(Section::Header(header)));
         }
         for section in &self.sections {
             if section.get_hash() == *hash {
@@ -1364,20 +1368,6 @@ impl Tx {
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
         bytes
-    }
-
-    /// Get the inner section hashes
-    pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
-        let mut sections_hashes = self
-            .sections
-            .iter()
-            .filter_map(|section| match section {
-                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
-                _ => None,
-            })
-            .collect::<Vec<crate::types::hash::Hash>>();
-        sections_hashes.sort();
-        sections_hashes
     }
 
     /// Verify that the section with the given hash has been signed by the given
@@ -1494,8 +1484,7 @@ impl Tx {
         public_keys_index_map: &AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> Vec<SignatureIndex> {
-        let mut targets = vec![self.header_hash()];
-        targets.extend(self.inner_section_targets());
+        let targets = vec![self.raw_header_hash()];
         let mut signatures = Vec::new();
         let section = Signature::new(
             targets,
@@ -1773,11 +1762,9 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
-        // The inner tx signer signs the Raw version of the Header
-        let mut hashes = vec![self.raw_header_hash()];
+        // The inner tx signer signs the Decrypted version of the Header
+        let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
-        let sections_hashes = self.inner_section_targets();
-        hashes.extend(sections_hashes);
 
         self.add_section(Section::Signature(Signature::new(
             hashes,
@@ -1794,7 +1781,7 @@ impl Tx {
     ) -> &mut Self {
         self.protocol_filter();
         let mut pk_section = Signature {
-            targets: self.inner_section_targets(),
+            targets: vec![self.raw_header_hash()],
             signatures: BTreeMap::new(),
             signer: Signer::PubKeys(vec![]),
         };
@@ -1805,7 +1792,7 @@ impl Tx {
                 // Add the signature under the given multisig address
                 let section =
                     sections.entry(addr.clone()).or_insert_with(|| Signature {
-                        targets: self.inner_section_targets(),
+                        targets: vec![self.raw_header_hash()],
                         signatures: BTreeMap::new(),
                         signer: Signer::Address(addr.clone()),
                     });

@@ -1809,7 +1809,7 @@ where
 
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
-    let hashes = <[Hash; 3]>::try_from_slice(&hash_list)
+    let hashes = <[Hash; 1]>::try_from_slice(&hash_list)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     let (public_keys_map, gas) = env
