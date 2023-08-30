@@ -62,7 +62,7 @@ pub async fn build_bridge_pool_tx<
         code_path,
     }: args::EthereumBridgePool,
     wrapper_fee_payer: common::PublicKey,
-) -> Result<Tx, Error> {
+) -> Result<(Tx, Option<Epoch>), Error> {
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } = validate_amount(
         client,
