@@ -341,7 +341,7 @@ mod tests {
         };
         write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
 
-        // insert validators 1, 2 and 3 at epoch 1
+        // insert validators 2 and 3 at epoch 1
         for (validator, stake) in [
             (&validator_2, validator_2_stake),
             (&validator_3, validator_3_stake),
@@ -387,13 +387,12 @@ mod tests {
         let epoch_1_validators = query_validators(1);
         assert_eq!(
             epoch_0_validators,
-            HashMap::from([(validator_1, validator_1_stake)])
+            HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
             epoch_1_validators,
             HashMap::from([
-                // TODO: Figure out why this fixes the test
-                //(validator_1, validator_1_stake),
+                (validator_1, validator_1_stake),
                 (validator_2, validator_2_stake),
                 (validator_3, validator_3_stake),
             ])
