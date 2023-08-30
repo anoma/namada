@@ -588,6 +588,10 @@ mod tests {
     /// Test that when a transaction wasm goes over the stack-height limit, the
     /// execution is aborted.
     #[test]
+    // NB: Disabled on aarch64 macOS since a fix for
+    // https://github.com/wasmerio/wasmer/issues/4072
+    // reduced the available stack space on mac
+    #[cfg_attr(all(target_arch = "aarch64", target_os = "macos"), ignore)]
     fn test_tx_stack_limiter() {
         // Because each call into `$loop` inside the wasm consumes 5 stack
         // heights except for the terminal call, this should hit the stack
@@ -609,6 +613,10 @@ mod tests {
     /// Test that when a VP wasm goes over the stack-height limit, the execution
     /// is aborted.
     #[test]
+    // NB: Disabled on aarch64 macOS since a fix for
+    // https://github.com/wasmerio/wasmer/issues/4072
+    // reduced the available stack space on mac
+    #[cfg_attr(all(target_arch = "aarch64", target_os = "macos"), ignore)]
     fn test_vp_stack_limiter() {
         // Because each call into `$loop` inside the wasm consumes 5 stack
         // heights except for the terminal call, this should hit the stack
