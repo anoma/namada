@@ -234,7 +234,7 @@ mod test_process_tx {
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
             .clone();
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash(), *tx.code_sechash(), *tx.data_sechash()],
+            vec![tx.raw_header_hash()],
             [(0, gen_keypair())].into_iter().collect(),
             None,
         )));

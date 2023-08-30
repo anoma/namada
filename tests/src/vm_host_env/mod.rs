@@ -137,13 +137,11 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(
-            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-                .err()
-                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-                .unwrap()
-                .contains("CannotDeleteVp")
-        );
+        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("CannotDeleteVp"));
     }
 
     #[test]
@@ -472,46 +470,32 @@ mod tests {
                 env.tx.clone()
             });
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
-            assert!(
-                signed_tx_data
-                    .verify_signatures(
-                        &[
-                            signed_tx_data.header_hash(),
-                            *signed_tx_data.data_sechash(),
-                            *signed_tx_data.code_sechash(),
-                        ],
-                        pks_map,
-                        &None,
-                        1,
-                        None,
-                        Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ))
-                    )
-                    .is_ok()
-            );
+            assert!(signed_tx_data
+                .verify_signatures(
+                    &[signed_tx_data.header_hash(),],
+                    pks_map,
+                    &None,
+                    1,
+                    None,
+                    Some(&mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                    ))
+                )
+                .is_ok());
 
             let other_keypair = key::testing::keypair_2();
-            assert!(
-                signed_tx_data
-                    .verify_signatures(
-                        &[
-                            signed_tx_data.header_hash(),
-                            *signed_tx_data.data_sechash(),
-                            *signed_tx_data.code_sechash(),
-                        ],
-                        AccountPublicKeysMap::from_iter([
-                            other_keypair.ref_to()
-                        ]),
-                        &None,
-                        1,
-                        None,
-                        Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ))
-                    )
-                    .is_err()
-            );
+            assert!(signed_tx_data
+                .verify_signatures(
+                    &[signed_tx_data.header_hash(),],
+                    AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
+                    &None,
+                    1,
+                    None,
+                    Some(&mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                    ))
+                )
+                .is_err());
         }
     }
 

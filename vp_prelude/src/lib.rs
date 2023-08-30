@@ -89,12 +89,7 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
-    // FIXME: add a test to check the invalid signature in vp of the tx header
-    // hash FIXME: tryo a replay attack on a local devnet
-    let mut header = tx.header();
-    header.tx_type = TxType::Raw;
-    let targets =
-        [tx.raw_header_hash(), *tx.data_sechash(), *tx.code_sechash()];
+    let targets = [tx.raw_header_hash()];
 
     // Serialize parameters
     let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();

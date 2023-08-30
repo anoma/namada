@@ -1366,20 +1366,6 @@ impl Tx {
         bytes
     }
 
-    /// Get the inner section hashes
-    pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
-        let mut sections_hashes = self
-            .sections
-            .iter()
-            .filter_map(|section| match section {
-                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
-                _ => None,
-            })
-            .collect::<Vec<crate::types::hash::Hash>>();
-        sections_hashes.sort();
-        sections_hashes
-    }
-
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_signatures(
@@ -1494,8 +1480,7 @@ impl Tx {
         public_keys_index_map: &AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> Vec<SignatureIndex> {
-        let mut targets = vec![self.header_hash()];
-        targets.extend(self.inner_section_targets());
+        let targets = vec![self.header_hash()];
         let mut signatures = Vec::new();
         let section = Signature::new(
             targets,
@@ -1774,10 +1759,8 @@ impl Tx {
         signer: Option<Address>,
     ) -> &mut Self {
         // The inner tx signer signs the Raw version of the Header
-        let mut hashes = vec![self.raw_header_hash()];
+        let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
-        let sections_hashes = self.inner_section_targets();
-        hashes.extend(sections_hashes);
 
         self.add_section(Section::Signature(Signature::new(
             hashes,
