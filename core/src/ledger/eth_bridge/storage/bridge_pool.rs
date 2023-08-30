@@ -415,6 +415,7 @@ mod test_bridge_pool_tree {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::types::address::nam;
     use crate::types::eth_bridge_pool::{
         GasFee, TransferToEthereum, TransferToEthereumKind,
     };
@@ -441,6 +442,7 @@ mod test_bridge_pool_tree {
                 amount: 1.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -468,6 +470,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -496,6 +499,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -534,6 +538,7 @@ mod test_bridge_pool_tree {
                 amount: 1.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -562,6 +567,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -593,6 +599,7 @@ mod test_bridge_pool_tree {
                 amount: 1u64.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -617,6 +624,7 @@ mod test_bridge_pool_tree {
                 amount: 1u64.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -653,6 +661,7 @@ mod test_bridge_pool_tree {
                 amount: 1.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -672,6 +681,7 @@ mod test_bridge_pool_tree {
                 amount: 1u64.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -704,6 +714,7 @@ mod test_bridge_pool_tree {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -733,6 +744,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -763,6 +775,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -793,6 +806,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -821,6 +835,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -849,6 +864,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -877,6 +893,7 @@ mod test_bridge_pool_tree {
                     amount: (i as u64).into(),
                 },
                 gas_fee: GasFee {
+                    token: nam(),
                     amount: 0.into(),
                     payer: bertha_address(),
                 },
@@ -909,6 +926,7 @@ mod test_bridge_pool_tree {
                                 amount: Default::default(),
                             },
                             gas_fee: GasFee {
+                                token: nam(),
                                 amount: Default::default(),
                                 payer: bertha_address(),
                             },

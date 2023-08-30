@@ -1745,6 +1745,7 @@ mod test_finalize_block {
     ///
     /// Sets the validity of the transfer on Ethereum's side.
     fn test_bp_nonce_is_incremented_aux(valid_transfer: bool) {
+        use crate::node::ledger::shell::address::nam;
         test_bp(|shell: &mut TestShell| {
             let asset = EthAddress([0xff; 20]);
             let receiver = EthAddress([0xaa; 20]);
@@ -1769,7 +1770,6 @@ mod test_finalize_block {
             }
             // add bertha's gas fees the pool
             {
-                use crate::node::ledger::shell::address::nam;
                 let amt: Amount = 999_999_u64.into();
                 let pool_balance_key = token::balance_key(
                     &nam(),
@@ -1795,6 +1795,7 @@ mod test_finalize_block {
                         sender: bertha.clone(),
                     },
                     gas_fee: GasFee {
+                        token: nam(),
                         amount: 10u64.into(),
                         payer: bertha.clone(),
                     },

@@ -2484,6 +2484,22 @@ pub mod args {
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
+        arg_default(
+            "pool-gas-amount",
+            DefaultFn(|| token::DenominatedAmount {
+                amount: token::Amount::default(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            }),
+        );
+    pub const BRIDGE_POOL_GAS_PAYER: ArgOpt<WalletAddress> =
+        arg_opt("pool-gas-payer");
+    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx(
+            "pool-gas-token",
+            DefaultFn(|| "NAM".parse().unwrap()),
+        );
+    pub const BRIDGE_POOL_TARGET: Arg<EthAddress> = arg("target");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -2515,7 +2531,7 @@ pub mod args {
     pub const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     pub const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     pub const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
-    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = arg_opt("ethereum-address");
+    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = ETH_ADDRESS.opt();
     pub const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
         "eth-rpc-endpoint",
         DefaultFn(|| "http://localhost:8545".into()),
@@ -2532,7 +2548,6 @@ pub mod args {
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
-    pub const BRIDGE_GAS_PAYER: Arg<WalletAddress> = arg("bridge-gas-payer");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -2846,7 +2861,8 @@ pub mod args {
                 sender: ctx.get(&self.sender),
                 amount: self.amount,
                 fee_amount: self.fee_amount,
-                fee_payer: ctx.get(&self.fee_payer),
+                fee_payer: self.fee_payer.map(|fee_payer| ctx.get(&fee_payer)),
+                fee_token: ctx.get(&self.fee_token),
                 code_path: self.code_path,
             }
         }
@@ -2856,15 +2872,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let asset = ERC20.parse(matches);
-            let recipient = ETH_ADDRESS.parse(matches);
-            let sender = ADDRESS.parse(matches);
+            let recipient = BRIDGE_POOL_TARGET.parse(matches);
+            let sender = SOURCE.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let fee_amount = FEE_AMOUNT_OPT
-                .parse(matches)
-                .map_or_else(token::Amount::default, |denom_amount| {
-                    denom_amount.amount
-                });
-            let fee_payer = BRIDGE_GAS_PAYER.parse(matches);
+            let fee_amount =
+                InputAmount::Unvalidated(BRIDGE_POOL_GAS_AMOUNT.parse(matches));
+            let fee_payer = BRIDGE_POOL_GAS_PAYER.parse(matches);
+            let fee_token = BRIDGE_POOL_GAS_TOKEN.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
             let nut = NUT.parse(matches);
             Self {
@@ -2875,6 +2889,7 @@ pub mod args {
                 amount,
                 fee_amount,
                 fee_payer,
+                fee_token,
                 code_path,
                 nut,
             }
@@ -2888,27 +2903,29 @@ pub mod args {
                         .help("The Ethereum address of the ERC20 token."),
                 )
                 .arg(
-                    ETH_ADDRESS
+                    BRIDGE_POOL_TARGET
                         .def()
                         .help("The Ethereum address receiving the tokens."),
                 )
                 .arg(
-                    ADDRESS
-                        .def()
-                        .help("The Namada address sending the tokens."),
+                    SOURCE.def().help("The Namada address sending the tokens."),
                 )
                 .arg(
                     AMOUNT.def().help(
                         "The amount of tokens being sent across the bridge.",
                     ),
                 )
-                .arg(FEE_AMOUNT_OPT.def().help(
-                    "The amount of NAM you wish to pay to have this transfer \
+                .arg(BRIDGE_POOL_GAS_AMOUNT.def().help(
+                    "The amount of gas you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
-                .arg(BRIDGE_GAS_PAYER.def().help(
-                    "The Namada address of the account paying the fee for the \
-                     Ethereum transaction.",
+                .arg(BRIDGE_POOL_GAS_PAYER.def().help(
+                    "The Namada address of the account paying the gas. By \
+                     default, it is the same as the source.",
+                ))
+                .arg(BRIDGE_POOL_GAS_TOKEN.def().help(
+                    "The token for paying the Bridge pool gas fees. Defaults \
+                     to NAM.",
                 ))
                 .arg(NUT.def().help(
                     "Add Non Usable Tokens (NUTs) to the Bridge pool. These \

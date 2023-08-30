@@ -656,6 +656,7 @@ mod test_ethbridge_router {
     use super::*;
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
+    use crate::types::address::nam;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
@@ -865,6 +866,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -907,6 +909,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -968,6 +971,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1081,6 +1085,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1176,6 +1181,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1248,6 +1254,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1350,6 +1357,7 @@ mod test_ethbridge_router {
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
