@@ -5,6 +5,7 @@ NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
 NAMADA_E2E_DEBUG ?= true
 RUST_BACKTRACE ?= 1
 NAMADA_MASP_TEST_SEED ?= 0
+PROPTEST_CASES ?= 100
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -201,6 +202,14 @@ test-debug:
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time
+
+# Run PoS state machine tests
+test-pos-sm:
+	cd proof_of_stake && \
+	RUST_BACKTRACE=1 \
+		PROPTEST_CASES=$(PROPTEST_CASES) \
+		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
+		cargo test pos_state_machine_test --release 
 
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
