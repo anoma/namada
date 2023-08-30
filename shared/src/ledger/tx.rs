@@ -1596,7 +1596,7 @@ pub async fn build_ibc_transfer<
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
         source: source.clone(),
-        token: token.clone(),
+        token: args.token.clone(),
     });
 
     let tx_code_hash =

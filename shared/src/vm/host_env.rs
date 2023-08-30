@@ -997,7 +997,7 @@ where
         .memory
         .read_string(event_type_ptr, event_type_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let write_log = unsafe { env.ctx.write_log.get() };
     for event in write_log.get_ibc_events() {
         if event.event_type == event_type {
