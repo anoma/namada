@@ -94,7 +94,7 @@ pub fn sign_txs<U: WalletUtils>(
     }
 }
 
-/// Parse [`UnsignedTransaction`] from bytes.
+/// Parse [`UnsignedTransactions`] from bytes.
 pub fn parse_unsigned(
     bytes: &[u8],
 ) -> Result<UnsignedTransactions, toml::de::Error> {
