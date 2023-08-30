@@ -133,7 +133,7 @@ mod test_nuts {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::ledger::gas::VpGasMeter;
+    use crate::ledger::gas::{TxGasMeter, VpGasMeter};
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -189,7 +189,9 @@ mod test_nuts {
             &wl_storage.write_log,
             &tx,
             &TxIndex(0),
-            VpGasMeter::new(0u64),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                u64::MAX.into(),
+            )),
             &keys_changed,
             &verifiers,
             VpCache::new(temp_dir(), 100usize),
