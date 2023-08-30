@@ -61,8 +61,9 @@ impl NewVotes {
         let mut inner = self.inner;
         let mut removed = HashSet::default();
         for voter in voters {
-            inner.remove(voter);
-            removed.insert(voter);
+            if inner.remove(voter).is_some() {
+                removed.insert(voter);
+            }
         }
         (Self { inner }, removed)
     }
