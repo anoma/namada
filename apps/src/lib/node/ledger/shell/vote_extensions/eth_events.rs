@@ -276,11 +276,6 @@ where
                     return Err(VoteExtensionError::InvalidNamNonce);
                 }
             }
-            EthereumEvent::UpdateBridgeWhitelist { .. } => {
-                // TODO: check nonce of whitelist update;
-                // for this, we need to store the nonce of
-                // whitelist updates somewhere
-            }
             // consider other ethereum event kinds valid
             _ => {}
         }
@@ -471,7 +466,8 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToEthereum, Uint,
+        EthAddress, EthereumEvent, TransferToEthereum, TransferToEthereumKind,
+        Uint,
     };
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::keccak_hash;
@@ -604,6 +600,7 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 0.into(),
             transfers: vec![TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
@@ -617,6 +614,7 @@ mod test_vote_extensions {
         let event_2 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
@@ -668,6 +666,7 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 0.into(),
             transfers: vec![TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
                 sender: gen_established_address(),
@@ -730,6 +729,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
@@ -824,6 +824,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
@@ -931,6 +932,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
@@ -1013,6 +1015,7 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
                     sender: gen_established_address(),
                     asset: EthAddress([1; 20]),

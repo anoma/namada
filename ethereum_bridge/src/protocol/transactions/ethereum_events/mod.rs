@@ -330,6 +330,16 @@ mod tests {
         )]);
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        test_utils::whitelist_tokens(
+            &mut wl_storage,
+            [(
+                DAI_ERC20_ETH_ADDRESS,
+                test_utils::WhitelistMeta {
+                    cap: Amount::max(),
+                    denom: 18,
+                },
+            )],
+        );
 
         let changed_keys =
             apply_updates(&mut wl_storage, updates, voting_powers)?;
@@ -405,6 +415,16 @@ mod tests {
                 vec![(sole_validator.clone(), Amount::native_whole(100))],
             ));
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        test_utils::whitelist_tokens(
+            &mut wl_storage,
+            [(
+                DAI_ERC20_ETH_ADDRESS,
+                test_utils::WhitelistMeta {
+                    cap: Amount::max(),
+                    denom: 18,
+                },
+            )],
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {

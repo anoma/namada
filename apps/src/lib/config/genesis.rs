@@ -924,10 +924,13 @@ pub fn genesis(
 }
 #[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
-    use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
+    use namada::ledger::eth_bridge::{
+        Contracts, Erc20WhitelistEntry, UpgradeableContract,
+    };
     use namada::types::address::{
         self, apfel, btc, dot, eth, kartoffel, nam, schnitzel, wnam,
     };
+    use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada::types::ethereum_events::EthAddress;
 
     use crate::wallet;
@@ -1132,6 +1135,13 @@ pub fn genesis(num_validators: u64) -> Genesis {
         gov_params: GovernanceParameters::default(),
         pgf_params: PgfParameters::default(),
         ethereum_bridge_params: Some(EthereumBridgeConfig {
+            erc20_whitelist: vec![Erc20WhitelistEntry {
+                token_address: DAI_ERC20_ETH_ADDRESS,
+                token_cap: token::DenominatedAmount {
+                    amount: token::Amount::max(),
+                    denom: 18.into(),
+                },
+            }],
             eth_start_height: Default::default(),
             min_confirmations: Default::default(),
             contracts: Contracts {
