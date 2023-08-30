@@ -246,7 +246,7 @@ where
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
             // Check replay protection
-            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage)
+            self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
             // Check fees

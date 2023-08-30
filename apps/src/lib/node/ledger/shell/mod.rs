@@ -922,7 +922,6 @@ where
     pub fn replay_protection_checks(
         &self,
         wrapper: &Tx,
-        tx_bytes: &[u8],
         temp_wl_storage: &mut TempWlStorage<D, H>,
     ) -> Result<()> {
         let inner_tx_hash = wrapper.raw_header_hash();
@@ -944,9 +943,7 @@ where
             .write(&inner_hash_key, vec![])
             .expect("Couldn't write inner transaction hash to write log");
 
-        let tx =
-            Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
-        let wrapper_hash = tx.header_hash();
+        let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key =
             replay_protection::get_replay_protection_key(&wrapper_hash);
         if temp_wl_storage
