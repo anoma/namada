@@ -78,6 +78,12 @@ pub mod tx {
         // Emit an IBC event
         pub fn namada_tx_emit_ibc_event(event_ptr: u64, event_len: u64);
 
+        // Get an IBC event
+        pub fn namada_tx_get_ibc_event(
+            event_type_ptr: u64,
+            event_type_len: u64,
+        ) -> i64;
+
         // Get the chain ID
         pub fn namada_tx_get_chain_id(result_ptr: u64);
 

@@ -1,11 +1,10 @@
 //! IbcCommonContext implementation for IBC
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use prost::Message;
 use sha2::Digest;
 
 use super::storage::IbcStorageContext;
-use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics02_client::client_state::ClientState;
@@ -31,7 +30,9 @@ use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
+use crate::types::address::Address;
 use crate::types::storage::Key;
+use crate::types::token;
 
 /// Context to handle typical IBC data
 pub trait IbcCommonContext: IbcStorageContext {
@@ -357,25 +358,92 @@ pub trait IbcCommonContext: IbcStorageContext {
             })
     }
 
-    /// Write the denom
-    fn store_denom(
+    /// Write the IBC denom
+    fn store_ibc_denom(
         &mut self,
-        trace_hash: String,
-        denom: PrefixedDenom,
+        trace_hash: impl AsRef<str>,
+        denom: impl AsRef<str>,
     ) -> Result<(), ContextError> {
-        let key = storage::ibc_denom_key(trace_hash);
-        let bytes = denom.to_string().try_to_vec().map_err(|e| {
+        let key = storage::ibc_denom_key(trace_hash.as_ref());
+        let has_key = self.has_key(&key).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!(
-                    "Encoding the denom failed: Denom {}, error {}",
-                    denom, e
+                    "Reading the IBC denom failed: Key {}",
+                    key
                 ),
             })
         })?;
-        self.write(&key, bytes).map_err(|_| {
+        if !has_key {
+            let bytes = denom
+                .as_ref()
+                .try_to_vec()
+                .expect("encoding shouldn't fail");
+            self.write(&key, bytes).map_err(|_| {
+                ContextError::ChannelError(ChannelError::Other {
+                    description: format!(
+                        "Writing the denom failed: Key {}",
+                        key
+                    ),
+                })
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Read the token denom
+    fn read_token_denom(
+        &self,
+        token: &Address,
+    ) -> Result<Option<token::Denomination>, ContextError> {
+        let key = token::denom_key(token);
+        let bytes = self.read(&key).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
-                description: format!("Writing the denom failed: Key {}", key),
+                description: format!(
+                    "Reading the token denom failed: Key {}",
+                    key
+                ),
             })
-        })
+        })?;
+        bytes
+            .map(|b| token::Denomination::try_from_slice(&b))
+            .transpose()
+            .map_err(|_| {
+                ContextError::ChannelError(ChannelError::Other {
+                    description: format!(
+                        "Decoding the token denom failed: Token {}",
+                        token
+                    ),
+                })
+            })
+    }
+
+    /// Write the IBC denom
+    fn store_token_denom(
+        &mut self,
+        token: &Address,
+    ) -> Result<(), ContextError> {
+        let key = token::denom_key(token);
+        let has_key = self.has_key(&key).map_err(|_| {
+            ContextError::ChannelError(ChannelError::Other {
+                description: format!(
+                    "Reading the token denom failed: Key {}",
+                    key
+                ),
+            })
+        })?;
+        if !has_key {
+            // IBC denomination should be zero for U256
+            let denom = token::Denomination::from(0);
+            let bytes = denom.try_to_vec().expect("encoding shouldn't fail");
+            self.write(&key, bytes).map_err(|_| {
+                ContextError::ChannelError(ChannelError::Other {
+                    description: format!(
+                        "Writing the token denom failed: Key {}",
+                        key
+                    ),
+                })
+            })?;
+        }
+        Ok(())
     }
 }

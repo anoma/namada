@@ -18,6 +18,7 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use std::collections::BTreeSet;
     use std::panic;
 
     use itertools::Itertools;
@@ -1206,7 +1207,10 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
@@ -1214,7 +1218,10 @@ mod tests {
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(100)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(100, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
@@ -1240,7 +1247,7 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
         let balance_key = token::balance_key(&ibc_token, &sender);
-        let init_bal = Amount::native_whole(100);
+        let init_bal = Amount::from_u64(100);
         writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
         let minted_key = token::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.try_to_vec().unwrap());
@@ -1293,11 +1300,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(balance, Some(Amount::from_u64(0)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(0)));
+        assert_eq!(minted, Some(Amount::from_u64(0)));
     }
 
     #[test]
@@ -1370,11 +1377,96 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(100)));
+        assert_eq!(minted, Some(Amount::from_u64(100)));
+    }
+
+    #[test]
+    fn test_ibc_receive_no_token() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
+        // Set the initial state before starting transactions
+        let (token, receiver) = ibc::init_storage();
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id, false);
+        writes.extend(channel_writes);
+
+        writes.into_iter().for_each(|(key, val)| {
+            tx_host_env::with(|env| {
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
+            });
+        });
+
+        // packet with invalid data
+        let sequence = ibc::Sequence::from(1);
+        let mut packet = ibc::received_packet(
+            port_id.clone(),
+            channel_id.clone(),
+            sequence,
+            token.to_string(),
+            &receiver,
+        );
+        packet.data = vec![0];
+
+        // Start a transaction to receive a packet
+        let msg = ibc::msg_packet_recv(packet);
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map)
+            .sign_wrapper(keypair);
+        // Receive the packet, but no token is received
+        tx_host_env::ibc::ibc_actions(tx::ctx())
+            .execute(&tx_data)
+            .expect("receiving the token failed");
+
+        // Check if the transaction is valid
+        let env = tx_host_env::take();
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(result.expect("validation failed unexpectedly"));
+        // Check if the ack has an error due to the invalid packet data
+        tx_host_env::set(env);
+        let ack_key = ibc_storage::ack_key(&port_id, &channel_id, sequence);
+        let ack = tx_host_env::with(|env| {
+            env.wl_storage
+                .read_bytes(&ack_key)
+                .expect("read error")
+                .unwrap()
+        });
+        let expected_ack =
+            Hash::sha256(Vec::<u8>::from(ibc::transfer_ack_with_error()))
+                .to_vec();
+        assert_eq!(ack, expected_ack);
+        // Check if only the ack and the receipt are added
+        let receipt_key =
+            ibc_storage::receipt_key(&port_id, &channel_id, sequence);
+        let changed_keys = tx_host_env::with(|env| {
+            env.wl_storage
+                .write_log
+                .verifiers_and_changed_keys(&BTreeSet::new())
+                .1
+        });
+        let expected_changed_keys = BTreeSet::from([ack_key, receipt_key]);
+        assert_eq!(changed_keys, expected_changed_keys);
     }
 
     #[test]
@@ -1409,7 +1501,10 @@ mod tests {
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_uint(100, ibc::ANY_DENOMINATION)
+            .unwrap()
+            .try_to_vec()
+            .unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1462,11 +1557,17 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(200)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(200, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
@@ -1505,7 +1606,7 @@ mod tests {
             denom,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_u64(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1564,11 +1665,11 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(escrow, Some(Amount::from_u64(0)));
     }
 
     #[test]

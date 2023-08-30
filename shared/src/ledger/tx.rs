@@ -1560,35 +1560,36 @@ pub async fn build_ibc_transfer<
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
-    args::TxIbcTransfer {
-        tx: tx_args,
-        source,
-        receiver,
-        token,
-        amount,
-        port_id,
-        channel_id,
-        timeout_height,
-        timeout_sec_offset,
-        memo,
-        tx_code_path,
-    }: args::TxIbcTransfer,
+    args: args::TxIbcTransfer,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
     // Check that the source address exists on chain
     let source =
-        source_exists_or_err(source.clone(), tx_args.force, client).await?;
+        source_exists_or_err(args.source.clone(), args.tx.force, client)
+            .await?;
     // We cannot check the receiver
 
+    // validate the amount given
+    let validated_amount =
+        validate_amount(client, args.amount, &args.token, args.tx.force)
+            .await
+            .expect("expected to validate amount");
+    if validated_amount.canonical().denom.0 != 0 {
+        return Err(Error::Other(format!(
+            "The amount for the IBC transfer should be an integer: {}",
+            validated_amount
+        )));
+    }
+
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let balance_key = token::balance_key(&args.token, &source);
 
     let post_balance = check_balance_too_low_err(
-        &token,
+        &args.token,
         &source,
-        amount,
+        validated_amount.amount,
         balance_key,
-        tx_args.force,
+        args.tx.force,
         client,
     )
     .await?;
@@ -1599,38 +1600,33 @@ pub async fn build_ibc_transfer<
     });
 
     let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
+        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
             .await
             .unwrap();
 
-    let ibc_denom = match &token {
+    let ibc_denom = match &args.token {
         Address::Internal(InternalAddress::IbcToken(hash)) => {
             let ibc_denom_key = ibc_denom_key(hash);
             rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
                 .await
-                .ok_or_else(|| Error::TokenDoesNotExist(token.clone()))?
+                .ok_or_else(|| Error::TokenDoesNotExist(args.token.clone()))?
         }
-        _ => token.to_string(),
+        _ => args.token.to_string(),
     };
-    let amount = amount
-        .to_string_native()
-        .split('.')
-        .next()
-        .expect("invalid amount")
-        .to_string();
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
-        amount: amount.parse().expect("Invalid amount"),
+        // Set the IBC amount as an integer
+        amount: validated_amount.into(),
     };
     let packet_data = PacketData {
         token,
         sender: source.to_string().into(),
-        receiver: receiver.into(),
-        memo: memo.unwrap_or_default().into(),
+        receiver: args.receiver.into(),
+        memo: args.memo.unwrap_or_default().into(),
     };
 
     // this height should be that of the destination chain, not this chain
-    let timeout_height = match timeout_height {
+    let timeout_height = match args.timeout_height {
         Some(h) => {
             TimeoutHeight::At(IbcHeight::new(0, h).expect("invalid height"))
         }
@@ -1639,7 +1635,7 @@ pub async fn build_ibc_transfer<
 
     let now: crate::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
     let now: IbcTimestamp = now.into();
-    let timeout_timestamp = if let Some(offset) = timeout_sec_offset {
+    let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
         (now + Duration::new(offset, 0)).unwrap()
     } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
@@ -1649,8 +1645,8 @@ pub async fn build_ibc_transfer<
     };
 
     let msg = MsgTransfer {
-        port_id_on_a: port_id,
-        chan_id_on_a: channel_id,
+        port_id_on_a: args.port_id,
+        chan_id_on_a: args.channel_id,
         packet_data,
         timeout_height_on_b: timeout_height,
         timeout_timestamp_on_b: timeout_timestamp,
@@ -1661,8 +1657,8 @@ pub async fn build_ibc_transfer<
     prost::Message::encode(&any_msg, &mut data)
         .map_err(Error::EncodeFailure)?;
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let chain_id = args.tx.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, args.tx.expiration);
     tx.add_code_from_hash(tx_code_hash)
         .add_serialized_data(data);
 
@@ -1670,7 +1666,7 @@ pub async fn build_ibc_transfer<
         client,
         wallet,
         shielded,
-        &tx_args,
+        &args.tx,
         &mut tx,
         fee_payer,
         tx_source_balance,
