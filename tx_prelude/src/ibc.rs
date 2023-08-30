@@ -12,7 +12,7 @@ use namada_core::ledger::tx_env::TxEnv;
 use namada_core::types::address::{Address, InternalAddress};
 pub use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::Amount;
+use namada_core::types::token::DenominatedAmount;
 
 use crate::token::{burn, mint, transfer};
 use crate::{Ctx, KeyValIterator};
@@ -35,6 +35,10 @@ impl IbcStorageContext for Ctx {
         key: &Key,
     ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
         self.read_bytes(key)
+    }
+
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        <Ctx as StorageRead>::has_key(self, key)
     }
 
     fn write(
@@ -71,14 +75,20 @@ impl IbcStorageContext for Ctx {
         <Ctx as TxEnv>::emit_ibc_event(self, &event)
     }
 
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        <Ctx as TxEnv>::get_ibc_event(self, &event_type)
+    }
+
     fn transfer_token(
         &mut self,
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> std::result::Result<(), Self::Error> {
-        let amount = amount.denominated(token, self)?;
         transfer(self, src, dest, token, amount, &None, &None, &None)
     }
 
@@ -86,14 +96,14 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         mint(
             self,
             &Address::Internal(InternalAddress::Ibc),
             target,
             token,
-            amount,
+            amount.amount,
         )
     }
 
@@ -101,9 +111,9 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
-        burn(self, target, token, amount)
+        burn(self, target, token, amount.amount)
     }
 
     fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {

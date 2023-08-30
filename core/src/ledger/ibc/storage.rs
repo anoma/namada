@@ -373,38 +373,6 @@ pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
     ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
 }
 
-/// Token address from the denom string
-pub fn token(denom: impl AsRef<str>) -> Result<Address> {
-    let token_str = denom.as_ref().split('/').last().ok_or_else(|| {
-        Error::Denom(format!("No token was specified: {}", denom.as_ref()))
-    })?;
-    Address::decode(token_str).map_err(|e| {
-        Error::Denom(format!(
-            "Invalid token address: token {}, error {}",
-            token_str, e
-        ))
-    })
-}
-
-/// Get the hash of IBC token address from the denom string
-pub fn token_hash_from_denom(denom: impl AsRef<str>) -> Result<Option<String>> {
-    let addr = Address::decode(denom.as_ref()).map_err(|e| {
-        Error::Denom(format!(
-            "Decoding the denom failed: denom {}, error {}",
-            denom.as_ref(),
-            e
-        ))
-    })?;
-    match addr {
-        Address::Established(_) => Ok(None),
-        Address::Internal(InternalAddress::IbcToken(h)) => Ok(Some(h)),
-        _ => Err(Error::Denom(format!(
-            "Unexpected address was given: {}",
-            addr
-        ))),
-    }
-}
-
 /// Hash the denom
 pub fn calc_hash(denom: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();

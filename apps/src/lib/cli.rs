@@ -3479,7 +3479,7 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
@@ -3491,7 +3491,7 @@ pub mod args {
                 source,
                 receiver,
                 token,
-                amount: amount.amount,
+                amount,
                 port_id,
                 channel_id,
                 timeout_height,

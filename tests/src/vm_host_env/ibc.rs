@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use namada::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
 use namada::ibc::applications::transfer::coin::PrefixedCoin;
+use namada::ibc::applications::transfer::error::TokenTransferError;
 use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::applications::transfer::packet::PacketData;
 use namada::ibc::applications::transfer::VERSION;
@@ -80,7 +81,7 @@ use namada::types::storage::{
     self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
 };
 use namada::types::time::DurationSecs;
-use namada::types::token::{self, Amount};
+use namada::types::token::{self, Amount, DenominatedAmount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::ledger::gas::TxGasMeter;
 use namada_test_utils::TestWasms;
@@ -89,7 +90,7 @@ use namada_tx_prelude::BorshSerialize;
 use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
-
+pub const ANY_DENOMINATION: u8 = 4;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
@@ -233,14 +234,21 @@ pub fn init_storage() -> (Address, Address) {
 
     // initialize a token
     let token = tx_host_env::ctx().init_account(code_hash).unwrap();
-
+    let denom_key = token::denom_key(&token);
+    let token_denom = token::Denomination(ANY_DENOMINATION);
     // initialize an account
     let account = tx_host_env::ctx().init_account(code_hash).unwrap();
     let key = token::balance_key(&token, &account);
-    let init_bal = Amount::native_whole(100);
-    let bytes = init_bal.try_to_vec().expect("encoding failed");
+    let init_bal = Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {
-        env.wl_storage.storage.write(&key, &bytes).unwrap();
+        env.wl_storage
+            .storage
+            .write(&denom_key, &token_denom.try_to_vec().unwrap())
+            .unwrap();
+        env.wl_storage
+            .storage
+            .write(&key, &init_bal.try_to_vec().unwrap())
+            .unwrap();
     });
 
     // epoch duration
@@ -642,6 +650,7 @@ pub fn msg_transfer(
     denom: String,
     sender: &Address,
 ) -> MsgTransfer {
+    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     MsgTransfer {
         port_id_on_a: port_id,
@@ -649,7 +658,7 @@ pub fn msg_transfer(
         packet_data: PacketData {
             token: PrefixedCoin {
                 denom: denom.parse().expect("invalid denom"),
-                amount: 100.into(),
+                amount: amount.into(),
             },
             sender: sender.to_string().into(),
             receiver: address::testing::gen_established_address()
@@ -694,11 +703,12 @@ pub fn received_packet(
     token: String,
     receiver: &Address,
 ) -> Packet {
+    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let counterparty = dummy_channel_counterparty();
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let coin = PrefixedCoin {
         denom: token.parse().expect("invalid denom"),
-        amount: 100.into(),
+        amount: amount.into(),
     };
     let sender = address::testing::gen_established_address();
     let data = PacketData {
@@ -775,4 +785,10 @@ pub fn packet_from_message(
 pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
     let ibc_token = ibc_token(denom);
     token::balance_key(&ibc_token, owner)
+}
+
+pub fn transfer_ack_with_error() -> TokenTransferAcknowledgement {
+    TokenTransferAcknowledgement::Error(
+        TokenTransferError::PacketDataDeserialization.to_string(),
+    )
 }

@@ -3423,6 +3423,7 @@ dependencies = [
  "num-rational 0.4.1",
  "num-traits",
  "num256",
+ "primitive-types",
  "proptest",
  "prost",
  "prost-types",

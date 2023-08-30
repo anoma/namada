@@ -4284,6 +4284,7 @@ dependencies = [
  "num-traits 0.2.15",
  "num256",
  "pretty_assertions",
+ "primitive-types",
  "proptest",
  "prost",
  "prost-types",
