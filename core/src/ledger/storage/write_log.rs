@@ -535,7 +535,15 @@ impl WriteLog {
         // get changed keys grouped by the address
         for key in changed_keys.iter() {
             // for token keys, trigger Multitoken VP and the owner's VP
-            if let Some([_, owner]) = is_any_token_balance_key(key) {
+            //
+            // TODO: this should not be a special case, as it is error prone.
+            // any internal addresses corresponding to tokens which have
+            // native vp equivalents should be automatically added as verifiers
+            if let Some([token, owner]) = is_any_token_balance_key(key) {
+                if matches!(&token, Address::Internal(InternalAddress::Nut(_)))
+                {
+                    verifiers.insert(token.clone());
+                }
                 verifiers
                     .insert(Address::Internal(InternalAddress::Multitoken));
                 verifiers.insert(owner.clone());
@@ -545,7 +553,7 @@ impl WriteLog {
                 verifiers
                     .insert(Address::Internal(InternalAddress::Multitoken));
             } else {
-                for addr in &key.find_addresses() {
+                for addr in key.iter_addresses() {
                     if verifiers_from_tx.contains(addr)
                         || initialized_accounts.contains(addr)
                     {

@@ -507,14 +507,17 @@ impl Key {
 
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
-        let mut addresses = Vec::new();
-        for s in &self.segments {
-            match s {
-                DbKeySeg::AddressSeg(addr) => addresses.push(addr.clone()),
-                _ => continue,
-            }
-        }
-        addresses
+        self.iter_addresses().cloned().collect()
+    }
+
+    /// Iterates over all addresses in the key segments
+    pub fn iter_addresses<'k, 'this: 'k>(
+        &'this self,
+    ) -> impl Iterator<Item = &'_ Address> + 'k {
+        self.segments.iter().filter_map(|s| match s {
+            DbKeySeg::AddressSeg(addr) => Some(addr),
+            _ => None,
+        })
     }
 
     /// Return the segment at the index parameter
