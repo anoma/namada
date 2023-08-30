@@ -500,6 +500,20 @@ pub struct EthAssetMint {
     pub erc20_amount: token::Amount,
 }
 
+impl EthAssetMint {
+    /// Check if NUTs should be minted.
+    #[inline]
+    pub fn should_mint_nuts(&self) -> bool {
+        !self.nut_amount.is_zero()
+    }
+
+    /// Check if ERC20s should be minted.
+    #[inline]
+    pub fn should_mint_erc20s(&self) -> bool {
+        !self.erc20_amount.is_zero()
+    }
+}
+
 /// A handle to the Ethereum addresses of the set of consensus
 /// validators in Namada, at some given epoch.
 pub struct ConsensusEthAddresses<'db, D, H>
