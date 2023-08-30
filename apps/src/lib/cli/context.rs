@@ -261,6 +261,10 @@ impl<T> FromContext<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn into_raw(self) -> String {
+        self.raw
+    }
 }
 
 impl FromContext<TransferSource> {

@@ -1,5 +1,6 @@
 //! Structures encapsulating SDK arguments
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
@@ -7,6 +8,7 @@ use namada_core::types::chain::ChainId;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::time::DateTimeUtc;
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
@@ -57,15 +59,29 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type TransferTarget: Clone + std::fmt::Debug;
     /// Represents some data that is used in a transaction
     type Data: Clone + std::fmt::Debug;
+    /// Bridge pool recommendations conversion rates table.
+    type BpConversionTable: Clone + std::fmt::Debug;
 }
 
 /// The concrete types being used in Namada SDK
 #[derive(Clone, Debug)]
 pub struct SdkTypes;
 
+/// An entry in the Bridge pool recommendations conversion
+/// rates table.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BpConversionTableEntry {
+    /// An alias for the token, or the string representation
+    /// of its address if none is available.
+    pub alias: String,
+    /// Conversion rate from the given token to gwei.
+    pub conversion_rate: f64,
+}
+
 impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
+    type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
@@ -725,8 +741,8 @@ pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
     /// An optional parameter indicating how much net
     /// gas the relayer is willing to pay.
     pub gas: Option<u64>,
-    /// Estimate of amount of NAM a single ETH is worth.
-    pub nam_per_eth: f64,
+    /// Bridge pool recommendations conversion rates table.
+    pub conversion_table: C::BpConversionTable,
 }
 
 /// A transfer to be added to the Ethereum bridge pool.
