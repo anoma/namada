@@ -97,7 +97,7 @@ pub const TX_CHANGE_COMMISSION_WASM: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 /// Errors to do with transaction events.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     /// Accepted tx timeout
     #[error("Timed out waiting for tx to be accepted")]
@@ -197,13 +197,13 @@ pub enum Error {
     NegativeBalanceAfterTransfer(Box<Address>, String, Box<Address>),
     /// No Balance found for token
     #[error("{0}")]
-    MaspError(builder::Error<std::convert::Infallible>),
+    MaspError(String),
     /// Wasm validation failed
     #[error("Validity predicate code validation failed with {0}")]
     WasmValidationFailure(WasmValidationError),
     /// Encoding transaction failure
     #[error("Encoding tx data, {0}, shouldn't fail")]
-    EncodeTxFailure(std::io::Error),
+    EncodeTxFailure(String),
     /// Like EncodeTxFailure but for the encode error type
     #[error("Encoding tx data, {0}, shouldn't fail")]
     EncodeFailure(EncodeError),
@@ -222,9 +222,6 @@ pub enum Error {
     /// The proposal can't be found
     #[error("Proposal {0} can't be found")]
     ProposalDoesNotExist(u64),
-    /// Encoding public key failure
-    #[error("Encoding a public key, {0}, shouldn't fail")]
-    EncodeKeyFailure(std::io::Error),
     /// Updating an VP of an implicit account
     #[error(
         "A validity predicate of an implicit address cannot be directly \
@@ -944,7 +941,7 @@ pub async fn build_unjail_validator<
     let _data = validator
         .clone()
         .try_to_vec()
-        .map_err(Error::EncodeTxFailure)?;
+        .map_err(|err| Error::EncodeTxFailure(err.to_string()))?;
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
@@ -1836,7 +1833,7 @@ pub async fn build_transfer<
                 Box::new(token.clone()),
             ))
         }
-        Err(err) => Err(Error::MaspError(err)),
+        Err(err) => Err(Error::MaspError(err.to_string())),
     }?;
 
     let chain_id = args.tx.chain_id.clone().unwrap();
