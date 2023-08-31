@@ -140,13 +140,10 @@ elif [ "$1" = "client" ]; then
 
     PROPOSAL_ID_1=$(cargo run --bin namadac --features std -- init-proposal --pgf-stewards --force --data-path proposal_pgf_steward_add.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
 
-    # TODO no vector produced
     cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --address validator-0 --ledger-address 127.0.0.1:27657
 
-    # TODO force is not respected? no vector produced
     cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --address Bertha --signing-keys bertha-key --ledger-address 127.0.0.1:27657
 
-    # TODO force is not respected? no vector produced
     cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_1 --vote yay --address Bertha --signing-keys bertha-key --ledger-address 127.0.0.1:27657
 
     # non-proposal tests
@@ -165,28 +162,16 @@ elif [ "$1" = "client" ]; then
 
     cargo run --bin namadac --features std -- init-validator --alias validator-mult --account-keys albert-key,bertha-key --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys albert-key,bertha-key --threshold 2 --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
 
-    # TODO panics
+    # TODO works but panics
     cargo run --bin namadac --features std -- unbond --validator christel --amount 5 --signing-keys christel-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- withdraw --validator albert --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- init-account --alias albert-account --public-keys albert-key --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 
-    # TODO panics, no vector produced
-    cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-keys albert-key --owner albert --force --ledger-address 127.0.0.1:27657
-
     cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
-    
-    cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
-    
-    cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver albert  --token atest1d93xxw36xvcx2vekx5exyc35x43rjvf3vsckzwt9x3jnvdp5vsckgetzxpjxvdeexc6nzvtp3473aa --amount 50000 --channel-id channel-0 --port-id transfer --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
-    
-    cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --timeout-sec-offset 5 --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
-
-    # TODO force is not respected? no vector produced
-    cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver albert  --token atest1d93xxw36xvcx2vekx5exyc35x43rjvf3vsckzwt9x3jnvdp5vsckgetzxpjxvdeexc6nzvtp3473aa --amount 50000 --channel-id channel-0 --port-id transfer --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source albert --receiver bertha  --token nam --amount 100000 --channel-id channel-0 --port-id transfer --signing-keys albert-key --timeout-sec-offset 5 --force --ledger-address 127.0.0.1:27657
 
@@ -200,22 +185,22 @@ elif [ "$1" = "client" ]; then
     
     cargo run --bin namadaw -- masp add --alias bb_payment_address --value patest1vqe0vyxh6wmhahwa52gthgd6edgqxfmgyv8e94jtwn55mdvpvylcyqnp59595272qrz3zxn0ysg
 
-    # TODO panics, no vector produced
+    # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source albert --target aa_payment_address --token btc --amount 20 --force --ledger-address 127.0.0.1:27657
     
-    # TODO force is not respected? no vector produced
+    # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source a_spending_key --target ab_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
     
     # TODO fragile
     until cargo run --bin namadac -- epoch --ledger-address 127.0.0.1:27657 | grep -m1 "Last committed epoch: 2" ; do sleep 10 ; done;
     
-    # TODO force is not respected? no vector produced
+    # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source a_spending_key --target bb_payment_address --token btc --amount 7 --force --ledger-address 127.0.0.1:27657
     
-    # TODO force is not respected?
+    # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source a_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
     
-    # TODO force is not respected?
+    # TODO vector produced only when epoch boundaries not straddled
     cargo run --bin namadac --features std -- transfer --source b_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
 
     rm -f proposal_default.json

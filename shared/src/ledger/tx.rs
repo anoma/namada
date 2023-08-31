@@ -1189,7 +1189,7 @@ pub async fn build_vote_proposal<C: crate::ledger::queries::Client + Sync>(
 
     let is_validator = rpc::is_validator(client, &voter).await;
 
-    if !proposal.can_be_voted(epoch, is_validator) {
+    if !tx.force && !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::InvalidProposalVotingPeriod(proposal_id));
     }
 
