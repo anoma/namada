@@ -971,14 +971,14 @@ pub async fn to_ledger_vector<
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_account_hash {
-        let transfer =
+        let update_account =
             UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
                 std::io::Error::from(ErrorKind::InvalidData)
             })?)?;
 
         tv.name = "Update_VP_0".to_string();
 
-        match &transfer.vp_code_hash {
+        match &update_account.vp_code_hash {
             Some(hash) => {
                 let extra = tx
                     .get_section(hash)
@@ -993,14 +993,40 @@ pub async fn to_ledger_vector<
                 };
                 tv.output.extend(vec![
                     format!("Type : Update VP"),
-                    format!("Address : {}", transfer.addr),
-                    format!("VP type : {}", vp_code),
+                    format!("Address : {}", update_account.addr),
                 ]);
+                tv.output.extend(
+                    update_account
+                        .public_keys
+                        .iter()
+                        .map(|k| format!("Public key : {}", k.to_string())),
+                );
+                tv.output.extend(vec![format!("Threshold : {}", {
+                    match update_account.threshold {
+                        Some(t) => t.to_string(),
+                        _ => "none".to_string(),
+                    }
+                })]);
+                tv.output.extend(vec![format!("VP type : {}", vp_code)]);
 
-                tv.output_expert.extend(vec![
-                    format!("Address : {}", transfer.addr),
-                    format!("VP type : {}", HEXLOWER.encode(&extra.0)),
-                ]);
+                tv.output_expert
+                    .extend(vec![format!("Address : {}", update_account.addr)]);
+                tv.output_expert.extend(
+                    update_account
+                        .public_keys
+                        .iter()
+                        .map(|k| format!("Public key : {}", k.to_string())),
+                );
+                tv.output_expert.extend(vec![format!("Threshold : {}", {
+                    match update_account.threshold {
+                        Some(t) => t.to_string(),
+                        _ => "none".to_string(),
+                    }
+                })]);
+                tv.output_expert.extend(vec![format!(
+                    "VP type : {}",
+                    HEXLOWER.encode(&extra.0)
+                )]);
             }
             None => (),
         };
