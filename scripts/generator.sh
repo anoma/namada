@@ -158,6 +158,10 @@ elif [ "$1" = "client" ]; then
 
     cargo run --bin namadac --features std -- update-account --code-path vp_user.wasm --address bertha --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
+    cargo run --bin namadac --features std -- update-account --code-path vp_user.wasm --address bertha --public-keys albert-key,bertha-key --force --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- update-account --code-path vp_user.wasm --address bertha --public-keys albert-key,bertha-key,christel-key --threshold 2 --force --ledger-address 127.0.0.1:27657
+
     cargo run --bin namadac --features std -- init-validator --alias bertha-validator --account-keys bertha-key --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys bertha-key --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- init-validator --alias validator-mult --account-keys albert-key,bertha-key --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys albert-key,bertha-key --threshold 2 --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
@@ -168,6 +172,11 @@ elif [ "$1" = "client" ]; then
     cargo run --bin namadac --features std -- withdraw --validator albert --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- init-account --alias albert-account --public-keys albert-key --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
+
+    cargo run --bin namadac --features std -- init-account --alias account-mul --public-keys albert-key,bertha-key,christel-key --signing-keys albert-key,bertha-key,christel-key --threshold 2 --force --ledger-address 127.0.0.1:27657
+
+    # TODO panics, no vector produced
+    # cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-keys albert-key --owner albert --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
