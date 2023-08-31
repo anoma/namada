@@ -21,10 +21,10 @@ pub struct InitAccount {
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_keys: Vec<common::PublicKey>,
-    /// The VP code hash
-    pub vp_code_hash: Hash,
     /// The account signature threshold
     pub threshold: u8,
+    /// The VP code hash
+    pub vp_code_hash: Hash,
 }
 
 /// A tx data type to update an account's validity predicate
@@ -41,12 +41,12 @@ pub struct InitAccount {
 pub struct UpdateAccount {
     /// An address of the account
     pub addr: Address,
-    /// The new VP code hash
-    pub vp_code_hash: Option<Hash>,
     /// Public keys to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
     pub public_keys: Vec<common::PublicKey>,
     /// The account signature threshold
     pub threshold: Option<u8>,
+    /// The new VP code hash
+    pub vp_code_hash: Option<Hash>,
 }
