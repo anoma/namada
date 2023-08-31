@@ -829,14 +829,15 @@ pub async fn to_ledger_vector<
             HEXLOWER.encode(&extra.0)
         };
 
-        let account_keys = init_validator
-            .account_keys
-            .iter()
-            .map(ToString::to_string)
-            .join(", ");
+        tv.output.extend(vec!["Type : Init Validator".to_string()]);
+        tv.output.extend(
+            init_validator
+                .account_keys
+                .iter()
+                .map(|k| format!("Account key : {}", k.to_string())),
+        );
         tv.output.extend(vec![
-            format!("Type : Init Validator"),
-            format!("Account keys : {}", account_keys),
+            format!("Threshold : {}", init_validator.threshold),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
@@ -850,8 +851,14 @@ pub async fn to_ledger_vector<
             format!("Validator VP type : {}", vp_code,),
         ]);
 
+        tv.output_expert.extend(
+            init_validator
+                .account_keys
+                .iter()
+                .map(|k| format!("Account key : {}", k.to_string())),
+        );
         tv.output_expert.extend(vec![
-            format!("Account keys : {}", account_keys),
+            format!("Threshold : {}", init_validator.threshold),
             format!("Consensus key : {}", init_validator.consensus_key),
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
