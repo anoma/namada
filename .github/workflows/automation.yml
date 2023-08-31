@@ -108,6 +108,11 @@ jobs:
         if: steps.check.outputs.triggered == 'true'
         with:
           ref: ${{ steps.comment-branch.outputs.head_ref }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        if: steps.check.outputs.triggered == 'true'
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run task ${{ matrix.make.name }}
         if: steps.check.outputs.triggered == 'true'
         run: ${{ matrix.make.command }}
