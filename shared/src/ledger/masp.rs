@@ -67,6 +67,7 @@ use crate::proto::Tx;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
+use crate::types::error::{Error, PinnedBalanceError};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
@@ -423,15 +424,6 @@ pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
         }
     }
     false
-}
-
-/// Errors that can occur when trying to retrieve pinned transaction
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub enum PinnedBalanceError {
-    /// No transaction has yet been pinned to the given payment address
-    NoTransactionPinned,
-    /// The supplied viewing key does not recognize payments to given address
-    InvalidViewingKey,
 }
 
 // #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
@@ -1244,7 +1236,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(I128Sum, Epoch), PinnedBalanceError> {
+    ) -> Result<(I128Sum, Epoch), Error> {
         // Check that the supplied viewing key corresponds to given payment
         // address
         let counter_owner = viewing_key.to_payment_address(
@@ -1254,7 +1246,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         );
         match counter_owner {
             Some(counter_owner) if counter_owner == owner.into() => {}
-            _ => return Err(PinnedBalanceError::InvalidViewingKey),
+            _ => {
+                return Err(Error::from(PinnedBalanceError::InvalidViewingKey));
+            }
         }
         // The address of the MASP account
         let masp_addr = masp();
@@ -1316,7 +1310,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
-    ) -> Result<(MaspAmount, Epoch), PinnedBalanceError> {
+    ) -> Result<(MaspAmount, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(client, owner, viewing_key).await?;

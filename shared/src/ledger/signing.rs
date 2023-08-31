@@ -16,8 +16,9 @@ use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
     masp, masp_tx_key, Address, ImplicitAddress,
 };
+use namada_core::types::token;
 // use namada_core::types::storage::Key;
-use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
+use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -32,15 +33,16 @@ use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
 use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
-    Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Tx};
+use crate::types::error::{Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -250,7 +252,9 @@ pub async fn aux_signing_data<
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {
-                return Err(Error::InvalidAccount(owner.encode()));
+                return Err(Error::from(TxError::InvalidAccount(
+                    owner.encode(),
+                )));
             }
         }
         Some(Address::Implicit(_)) => (
@@ -258,7 +262,7 @@ pub async fn aux_signing_data<
             1u8,
         ),
         Some(owner @ Address::Internal(_)) => {
-            return Err(Error::InvalidAccount(owner.encode()));
+            return Err(Error::from(TxError::InvalidAccount(owner.encode())));
         }
         None => (None, 0u8),
     };
@@ -268,7 +272,7 @@ pub async fn aux_signing_data<
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.to_public(),
-            None => public_keys.get(0).ok_or(Error::InvalidFeePayer)?.clone(),
+            None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
         }
     };
 

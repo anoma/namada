@@ -21,6 +21,7 @@ use namada::proto::Tx;
 use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
+use namada::types::error;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
 
@@ -43,7 +44,7 @@ pub async fn aux_signing_data<C: namada::ledger::queries::Client + Sync>(
     args: &args::Tx,
     owner: &Option<Address>,
     default_signer: Option<Address>,
-) -> Result<signing::SigningTxData, tx::Error> {
+) -> Result<signing::SigningTxData, error::Error> {
     let signing_data =
         signing::aux_signing_data(client, wallet, args, owner, default_signer)
             .await?;
@@ -52,7 +53,7 @@ pub async fn aux_signing_data<C: namada::ledger::queries::Client + Sync>(
         if !(args.dry_run || args.dry_run_wrapper) {
             // Store the generated signing key to wallet in case of need
             crate::wallet::save(wallet).map_err(|_| {
-                tx::Error::Other(
+                error::Error::Other(
                     "Failed to save disposable address to wallet".to_string(),
                 )
             })?;
@@ -73,7 +74,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
     ctx: &mut Context,
     args: args::Tx,
     address: &Address,
-) -> Result<(), tx::Error> {
+) -> Result<(), error::Error> {
     if args.dump_tx {
         return Ok(());
     }
@@ -82,7 +83,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
         let key = ctx
             .wallet
             .find_key_by_pkh(pkh, args.clone().password)
-            .map_err(|e| tx::Error::Other(e.to_string()))?;
+            .map_err(|e| error::Error::Other(e.to_string()))?;
         let public_key = key.ref_to();
 
         if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
@@ -116,7 +117,7 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxCustom,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -157,7 +158,7 @@ pub async fn submit_update_account<C>(
     client: &C,
     ctx: &mut Context,
     args: args::TxUpdateAccount,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -197,7 +198,7 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::TxInitAccount,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -246,7 +247,7 @@ pub async fn submit_init_validator<
         unsafe_dont_encrypt,
         tx_code_path: _,
     }: args::TxInitValidator,
-) -> Result<(), tx::Error> {
+) -> Result<(), error::Error> {
     let tx_args = args::Tx {
         chain_id: tx_args
             .clone()
@@ -639,7 +640,7 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
-) -> Result<(), tx::Error> {
+) -> Result<(), error::Error> {
     for _ in 0..2 {
         let default_signer = Some(args.source.effective_address());
         let signing_data = aux_signing_data(
@@ -710,7 +711,7 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::TxIbcTransfer,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -750,7 +751,7 @@ pub async fn submit_init_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::InitProposal,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -762,10 +763,12 @@ where
     {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
-                tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+                error::TxError::FailedGovernaneProposalDeserialize(
+                    e.to_string(),
+                )
             })?
             .validate(current_epoch, args.tx.force)
-            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -784,7 +787,9 @@ where
         let output_file_path = signed_offline_proposal
             .serialize(args.tx.output_folder)
             .map_err(|e| {
-                tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+                error::TxError::FailedGovernaneProposalDeserialize(
+                    e.to_string(),
+                )
             })?;
 
         println!("Proposal serialized to: {}", output_file_path);
@@ -793,10 +798,12 @@ where
         let proposal =
             PgfFundingProposal::try_from(args.proposal_data.as_ref())
                 .map_err(|e| {
-                    tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+                    error::TxError::FailedGovernaneProposalDeserialize(
+                        e.to_string(),
+                    )
                 })?
                 .validate(&governance_parameters, current_epoch, args.tx.force)
-                .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+                .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -833,7 +840,7 @@ where
             args.proposal_data.as_ref(),
         )
         .map_err(|e| {
-            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+            error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
         })?;
         let author_balance = rpc::get_token_balance(
             client,
@@ -848,7 +855,7 @@ where
                 author_balance,
                 args.tx.force,
             )
-            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -883,7 +890,7 @@ where
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
-            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+            error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
         })?;
         let author_balane = rpc::get_token_balance(
             client,
@@ -898,7 +905,7 @@ where
                 author_balane,
                 args.tx.force,
             )
-            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
         let default_signer = Some(proposal.proposal.author.clone());
         let signing_data = aux_signing_data(
@@ -952,7 +959,7 @@ pub async fn submit_vote_proposal<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::VoteProposal,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -971,18 +978,18 @@ where
 
     let (mut tx_builder, _fee_unshield_epoch) = if args.is_offline {
         let proposal_vote = ProposalVote::try_from(args.vote)
-            .map_err(|_| tx::Error::InvalidProposalVote)?;
+            .map_err(|_| error::TxError::InvalidProposalVote)?;
 
         let proposal = OfflineSignedProposal::try_from(
             args.proposal_data.clone().unwrap().as_ref(),
         )
-        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?
+        .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?
         .validate(
             &signing_data.account_public_keys_map.clone().unwrap(),
             signing_data.threshold,
             args.tx.force,
         )
-        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
         let delegations = rpc::get_delegators_delegation_at(
             client,
             &args.voter,
@@ -1046,7 +1053,7 @@ pub async fn sign_tx<C>(
         tx_data,
         owner,
     }: args::SignTx,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -1127,7 +1134,7 @@ pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::RevealPk,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -1140,7 +1147,7 @@ pub async fn submit_bond<C>(
     client: &C,
     ctx: &mut Context,
     args: args::Bond,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -1183,7 +1190,7 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     ctx: &mut Context,
     args: args::Unbond,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -1226,7 +1233,7 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::Withdraw,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -1268,7 +1275,7 @@ pub async fn submit_validator_commission_change<
     client: &C,
     mut ctx: Context,
     args: args::CommissionRateChange,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -1309,7 +1316,7 @@ pub async fn submit_unjail_validator<
     client: &C,
     mut ctx: Context,
     args: args::TxUnjailValidator,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C::Error: std::fmt::Display,
 {
@@ -1350,7 +1357,7 @@ pub async fn submit_update_steward_commission<
     client: &C,
     mut ctx: Context,
     args: args::UpdateStewardCommission,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -1390,7 +1397,7 @@ pub async fn submit_resign_steward<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     mut ctx: Context,
     args: args::ResignSteward,
-) -> Result<(), tx::Error>
+) -> Result<(), error::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
@@ -1442,7 +1449,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 pub async fn broadcast_tx(
     rpc_cli: &HttpClient,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, tx::Error> {
+) -> Result<Response, error::Error> {
     tx::broadcast_tx(rpc_cli, to_broadcast).await
 }
 
@@ -1457,6 +1464,6 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     client: &HttpClient,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, tx::Error> {
+) -> Result<TxResponse, error::Error> {
     tx::submit_tx(client, to_broadcast).await
 }
