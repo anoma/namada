@@ -787,19 +787,26 @@ pub async fn to_ledger_vector<
         } else {
             HEXLOWER.encode(&extra.0)
         };
-        let public_keys = init_account
-            .public_keys
-            .iter()
-            .map(ToString::to_string)
-            .join(", ");
+        tv.output.extend(vec![format!("Type : Init Account")]);
+        tv.output.extend(
+            init_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k.to_string())),
+        );
         tv.output.extend(vec![
-            format!("Type : Init Account"),
-            format!("Public keys : {}", public_keys),
+            format!("Threshold : {}", init_account.threshold),
             format!("VP type : {}", vp_code),
         ]);
 
+        tv.output_expert.extend(
+            init_account
+                .public_keys
+                .iter()
+                .map(|k| format!("Public key : {}", k.to_string())),
+        );
         tv.output_expert.extend(vec![
-            format!("Public keys : {}", public_keys),
+            format!("Threshold : {}", init_account.threshold),
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
