@@ -203,14 +203,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::types::dec::Dec;
-    use namada_core::types::key::RefTo;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::{address, token};
     use namada_proof_of_stake::parameters::PosParams;
-    use namada_proof_of_stake::{
-        become_validator, bond_tokens, write_pos_params, BecomeValidator,
-    };
+    use namada_proof_of_stake::write_pos_params;
 
     use super::*;
     use crate::test_utils;
@@ -339,32 +335,16 @@ mod tests {
             pipeline_len: 1,
             ..Default::default()
         };
-        write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
+        write_pos_params(&mut wl_storage, params).expect("Test failed");
 
         // insert validators 2 and 3 at epoch 1
-        for (validator, stake) in [
-            (&validator_2, validator_2_stake),
-            (&validator_3, validator_3_stake),
-        ] {
-            let keys = test_utils::TestValidatorKeys::generate();
-            let consensus_key = &keys.consensus.ref_to();
-            let eth_cold_key = &keys.eth_gov.ref_to();
-            let eth_hot_key = &keys.eth_bridge.ref_to();
-            become_validator(BecomeValidator {
-                storage: &mut wl_storage,
-                params: &params,
-                address: validator,
-                consensus_key,
-                eth_cold_key,
-                eth_hot_key,
-                current_epoch: 0.into(),
-                commission_rate: Dec::new(5, 2).unwrap(),
-                max_commission_rate_change: Dec::new(1, 2).unwrap(),
-            })
-            .expect("Test failed");
-            bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
-                .expect("Test failed");
-        }
+        test_utils::append_validators_to_storage(
+            &mut wl_storage,
+            HashMap::from([
+                (validator_2.clone(), validator_2_stake),
+                (validator_3.clone(), validator_3_stake),
+            ]),
+        );
 
         // query validators to make sure they were inserted correctly
         let query_validators = |epoch: u64| {
@@ -382,12 +362,24 @@ mod tests {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(0.into())),
+            validator_1_stake,
+        );
+        assert_eq!(
             epoch_1_validators,
             HashMap::from([
                 (validator_1, validator_1_stake),
                 (validator_2, validator_2_stake),
                 (validator_3, validator_3_stake),
             ])
+        );
+        assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(1.into())),
+            validator_1_stake + validator_2_stake + validator_3_stake,
         );
 
         // check that voting works as expected
