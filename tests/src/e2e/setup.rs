@@ -350,7 +350,7 @@ pub fn network(
         let base_dir = test_dir.path();
         let src_path =
             wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
-        let dest_dir = base_dir.join("src").join("pre-genesis");
+        let dest_dir = base_dir.join("pre-genesis");
         let dest_path = wallet::wallet_file(&dest_dir);
         println!(
             "{} from {} to {}.",
