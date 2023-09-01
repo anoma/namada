@@ -67,7 +67,6 @@ impl QueryMatcher {
         use crate::ibc::core::ics02_client::events::{
             CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
         };
-        use crate::ibc::events::IbcEventType;
 
         let mut attributes = HashMap::new();
         attributes
@@ -79,9 +78,7 @@ impl QueryMatcher {
                 .to_string(),
         );
         Self {
-            event_type: EventType::Ibc(
-                IbcEventType::UpdateClient.as_str().to_string(),
-            ),
+            event_type: EventType::Ibc("update_client".to_string()),
             attributes,
         }
     }

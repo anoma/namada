@@ -13,7 +13,7 @@ Also, it introduces some protocol parameters:
 
 - `min_proposal_fund`
 - `max_proposal_code_size`
-- `min_proposal_period`
+- `min_proposal_voting_period`
 - `max_proposal_period`
 - `max_proposal_content_size`
 - `min_proposal_grace_epochs`
@@ -26,7 +26,7 @@ On-chain proposals are created under the `governance_address` storage space and,
 /$GovernanceAddress/counter: u64
 /$GovernanceAddress/min_proposal_fund: u64
 /$GovernanceAddress/max_proposal_code_size: u64
-/$GovernanceAddress/min_proposal_period: u64
+/$GovernanceAddress/min_proposal_voting_period: u64
 /$GovernanceAddress/max_proposal_period: u64
 /$GovernanceAddress/max_proposal_content_size: u64
 /$GovernanceAddress/min_proposal_grace_epochs: u64
@@ -50,11 +50,11 @@ and follow these rules:
 - `$id` must be equal to `counter + 1`.
 - `startEpoch` must:
   - be greater than `currentEpoch`, where current epoch is the epoch in which the transaction is executed and included in a block
-  - be a multiple of `min_proposal_period`.
+  - be a multiple of `min_proposal_voting_period`.
 - `endEpoch` must:
-  - be at least `min_proposal_period` epochs greater than `startEpoch`
+  - be at least `min_proposal_voting_period` epochs greater than `startEpoch`
   - be at most `max_proposal_period` epochs greater than `startEpoch`
-  - be a multiple of `min_proposal_period`
+  - be a multiple of `min_proposal_voting_period`
 - `graceEpoch` must:
   - be at least `min_grace_epoch` epochs greater than `endEpoch`
 - `proposalCode` can be empty and must be a valid transaction with size less than `max_proposal_code_size` kibibytes.

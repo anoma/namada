@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -7,34 +6,29 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::HEXLOWER_PERMISSIVE;
 use masp_proofs::prover::LocalTxProver;
-use namada::ledger::governance::storage as gov_storage;
+use namada::core::ledger::governance::cli::offline::{
+    OfflineSignedProposal, OfflineVote,
+};
+use namada::core::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+};
 use namada::ledger::queries::Client;
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use namada::ledger::signing::TxSigningKey;
 use namada::ledger::wallet::{Wallet, WalletUtils};
 use namada::ledger::{masp, pos, signing, tx};
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proto::{Code, Data, Section, Tx};
-use namada::types::address::Address;
+use namada::proto::Tx;
+use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
-use namada::types::governance::{
-    OfflineProposal, OfflineVote, Proposal, ProposalVote, VoteType,
-};
 use namada::types::io::Io;
 use namada::types::key::{self, *};
-use namada::types::storage::{Epoch, Key};
-use namada::types::token;
-use namada::types::transaction::governance::{ProposalType, VoteProposalData};
-use namada::types::transaction::{InitValidator, TxType};
+use namada::types::transaction::pos::InitValidator;
 use namada::{display_line, edisplay_line};
 
 use super::rpc;
-use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 use crate::client::rpc::query_wasm_code_hash;
-use crate::client::signing::find_pk;
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -48,35 +42,53 @@ pub async fn submit_reveal_aux<
 >(
     client: &C,
     ctx: &mut Context,
-    args: &args::Tx,
-    addr: Option<Address>,
-    pk: common::PublicKey,
-    tx: &mut Tx,
+    args: args::Tx,
+    address: &Address,
 ) -> Result<(), tx::Error> {
-    if let Some(Address::Implicit(_)) = addr {
-        let reveal_pk = tx::build_reveal_pk::<_, _, IO>(
-            client,
-            &mut ctx.wallet,
-            args::RevealPk {
-                tx: args.clone(),
-                public_key: pk.clone(),
-            },
-        )
-        .await?;
-        if let Some((mut rtx, _, pk)) = reveal_pk {
-            // Sign the reveal public key transaction with the fee payer
-            signing::sign_tx(&mut ctx.wallet, &mut rtx, args, &pk).await?;
-            // Submit the reveal public key transaction first
-            tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, args, rtx)
-                .await?;
-            // Update the stateful PoW challenge of the outer transaction
-            #[cfg(not(feature = "mainnet"))]
-            signing::update_pow_challenge::<_, IO>(
-                client, args, tx, &pk, false,
+    if args.dump_tx {
+        return Ok(());
+    }
+
+    if let Address::Implicit(ImplicitAddress(pkh)) = address {
+        let key = ctx
+            .wallet
+            .find_key_by_pkh(pkh, args.clone().password)
+            .map_err(|e| tx::Error::Other(e.to_string()))?;
+        let public_key = key.ref_to();
+
+        if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
+            let signing_data = signing::aux_signing_data::<_, _, IO>(
+                client,
+                &mut ctx.wallet,
+                &args,
+                &None,
+                None,
+            )
+            .await?;
+
+            let mut tx = tx::build_reveal_pk_aux::<C, IO>(
+                client,
+                &args,
+                address,
+                &public_key,
+                &signing_data.gas_payer,
+            )
+            .await?;
+
+            signing::generate_test_vector::<_, _, IO>(
+                client,
+                &mut ctx.wallet,
+                &tx,
             )
             .await;
+
+            signing::sign_tx(&mut ctx.wallet, &args, &mut tx, signing_data);
+
+            tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args, tx)
+                .await?;
         }
     }
+
     Ok(())
 }
 
@@ -89,46 +101,77 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) =
-        tx::build_custom::<_, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    submit_reveal_aux::<_, IO>(
+    let default_signer = Some(args.owner.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
-        ctx,
+        &mut ctx.wallet,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(args.owner.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &args.owner)
+        .await?;
+
+    let mut tx = tx::build_custom::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
-pub async fn submit_update_vp<C, IO: Io>(
+pub async fn submit_update_account<C, IO: Io>(
     client: &C,
     ctx: &mut Context,
-    args: args::TxUpdateVp,
+    args: args::TxUpdateAccount,
 ) -> Result<(), tx::Error>
 where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) =
-        tx::build_update_vp::<_, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    submit_reveal_aux::<_, IO>(
+    let default_signer = Some(args.addr.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
-        ctx,
+        &mut ctx.wallet,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(args.addr.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    let mut tx = tx::build_update_account::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -141,23 +184,33 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) = tx::build_init_account::<_, _, IO>(
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
         &mut ctx.wallet,
-        args.clone(),
-    )
-    .await?;
-    submit_reveal_aux::<_, IO>(
-        client,
-        ctx,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &None,
+        None,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    let mut tx = tx::build_init_account::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -166,9 +219,9 @@ pub async fn submit_init_validator<C, IO: Io>(
     mut ctx: Context,
     args::TxInitValidator {
         tx: tx_args,
-        source,
         scheme,
-        account_key,
+        account_keys,
+        threshold,
         consensus_key,
         eth_cold_key,
         eth_hot_key,
@@ -199,25 +252,19 @@ where
 
     let validator_key_alias = format!("{}-key", alias);
     let consensus_key_alias = format!("{}-consensus-key", alias);
+
+    let threshold = match threshold {
+        Some(threshold) => threshold,
+        None => {
+            if account_keys.len() == 1 {
+                1u8
+            } else {
+                safe_exit(1)
+            }
+        }
+    };
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
-    let account_key = account_key.unwrap_or_else(|| {
-        display_line!(IO, "Generating validator account key...");
-        let password =
-            read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        ctx.wallet
-            .gen_key(
-                scheme,
-                Some(validator_key_alias.clone()),
-                tx_args.wallet_alias_force,
-                password,
-                None,
-            )
-            .expect("Key generation should not fail.")
-            .expect("No existing alias expected.")
-            .1
-            .ref_to()
-    });
 
     let consensus_key = consensus_key
         .map(|key| match key {
@@ -352,12 +399,14 @@ where
             .await
             .unwrap();
 
-    let mut tx = Tx::new(TxType::Raw);
-    let extra = tx.add_section(Section::ExtraData(Code::from_hash(
-        validator_vp_code_hash,
-    )));
+    let chain_id = tx_args.chain_id.clone().unwrap();
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let extra_section_hash =
+        tx.add_extra_section_from_hash(validator_vp_code_hash);
+
     let data = InitValidator {
-        account_key,
+        account_keys,
+        threshold,
         consensus_key: consensus_key.ref_to(),
         eth_cold_key: key::secp256k1::PublicKey::try_from_pk(&eth_cold_pk)
             .unwrap(),
@@ -367,110 +416,128 @@ where
         dkg_key,
         commission_rate,
         max_commission_rate_change,
-        validator_vp_code_hash: extra.get_hash(),
+        validator_vp_code_hash: extra_section_hash,
     };
-    let data = data.try_to_vec().expect("Encoding tx data shouldn't fail");
-    tx.header.chain_id = tx_args.chain_id.clone().unwrap();
-    tx.header.expiration = tx_args.expiration;
-    tx.set_data(Data::new(data));
-    tx.set_code(Code::from_hash(tx_code_hash));
 
-    let (mut tx, addr, pk) = tx::prepare_tx::<_, _, IO>(
+    tx.add_code_from_hash(tx_code_hash).add_data(data);
+
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
         &mut ctx.wallet,
         &tx_args,
-        tx,
-        TxSigningKey::WalletAddress(source),
+        &None,
+        None,
+    )
+    .await?;
+
+    tx::prepare_tx::<_, IO>(
+        client,
+        &tx_args,
+        &mut tx,
+        signing_data.gas_payer.clone(),
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await?;
-    submit_reveal_aux::<_, IO>(
-        client,
-        &mut ctx,
-        &tx_args,
-        addr,
-        pk.clone(),
-        &mut tx,
-    )
-    .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &tx_args, &pk).await?;
-    let result =
-        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &tx_args, tx)
-            .await?
-            .initialized_accounts();
+    .await;
 
-    if !tx_args.dry_run {
-        let (validator_address_alias, validator_address) = match &result[..] {
-            // There should be 1 account for the validator itself
-            [validator_address] => {
-                if let Some(alias) = ctx.wallet.find_alias(validator_address) {
-                    (alias.clone(), validator_address.clone())
-                } else {
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if tx_args.dump_tx {
+        tx::dump_tx::<IO>(&tx_args, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &tx_args, &mut tx, signing_data);
+
+        let result =
+            tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &tx_args, tx)
+                .await?
+                .initialized_accounts();
+
+        if !tx_args.dry_run {
+            let (validator_address_alias, validator_address) = match &result[..]
+            {
+                // There should be 1 account for the validator itself
+                [validator_address] => {
+                    if let Some(alias) =
+                        ctx.wallet.find_alias(validator_address)
+                    {
+                        (alias.clone(), validator_address.clone())
+                    } else {
+                        edisplay_line!(
+                            IO,
+                            "Expected one account to be created"
+                        );
+                        safe_exit(1)
+                    }
+                }
+                _ => {
                     edisplay_line!(IO, "Expected one account to be created");
                     safe_exit(1)
                 }
-            }
-            _ => {
-                edisplay_line!(IO, "Expected one account to be created");
-                safe_exit(1)
-            }
-        };
-        // add validator address and keys to the wallet
-        ctx.wallet
-            .add_validator_data(validator_address, validator_keys);
-        crate::wallet::save(&ctx.wallet)
-            .unwrap_or_else(|err| edisplay_line!(IO, "{}", err));
+            };
+            // add validator address and keys to the wallet
+            ctx.wallet
+                .add_validator_data(validator_address, validator_keys);
+            crate::wallet::save(&ctx.wallet)
+                .unwrap_or_else(|err| edisplay_line!(IO, "{}", err));
 
-        let tendermint_home = ctx.config.ledger.cometbft_dir();
-        tendermint_node::write_validator_key(&tendermint_home, &consensus_key);
-        tendermint_node::write_validator_state(tendermint_home);
+            let tendermint_home = ctx.config.ledger.cometbft_dir();
+            tendermint_node::write_validator_key(
+                &tendermint_home,
+                &consensus_key,
+            );
+            tendermint_node::write_validator_state(tendermint_home);
 
-        // Write Namada config stuff or figure out how to do the above
-        // tendermint_node things two epochs in the future!!!
-        ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
-        ctx.config
-            .write(
-                &ctx.config.ledger.shell.base_dir,
-                &ctx.config.ledger.chain_id,
-                true,
-            )
-            .unwrap();
+            // Write Namada config stuff or figure out how to do the above
+            // tendermint_node things two epochs in the future!!!
+            ctx.config.ledger.shell.tendermint_mode = TendermintMode::Validator;
+            ctx.config
+                .write(
+                    &ctx.config.ledger.shell.base_dir,
+                    &ctx.config.ledger.chain_id,
+                    true,
+                )
+                .unwrap();
 
-        let key = pos::params_key();
-        let pos_params = rpc::query_storage_value::<C, PosParams>(client, &key)
-            .await
-            .expect("Pos parameter should be defined.");
+            let key = pos::params_key();
+            let pos_params =
+                rpc::query_storage_value::<C, PosParams>(client, &key)
+                    .await
+                    .expect("Pos parameter should be defined.");
 
-        display_line!(IO, "");
-        display_line!(
-            IO,
-            "The validator's addresses and keys were stored in the wallet:"
-        );
-        display_line!(
-            IO,
-            "  Validator address \"{}\"",
-            validator_address_alias
-        );
-        display_line!(
-            IO,
-            "  Validator account key \"{}\"",
-            validator_key_alias
-        );
-        display_line!(IO, "  Consensus key \"{}\"", consensus_key_alias);
-        display_line!(
-            IO,
-            "The ledger node has been setup to use this validator's address \
-             and consensus key."
-        );
-        display_line!(
-            IO,
-            "Your validator will be active in {} epochs. Be sure to restart \
-             your node for the changes to take effect!",
-            pos_params.pipeline_len
-        );
-    } else {
-        display_line!(IO, "Transaction dry run. No addresses have been saved.");
+            display_line!(IO, "");
+            display_line!(
+                IO,
+                "The validator's addresses and keys were stored in the wallet:"
+            );
+            display_line!(
+                IO,
+                "  Validator address \"{}\"",
+                validator_address_alias
+            );
+            display_line!(
+                IO,
+                "  Validator account key \"{}\"",
+                validator_key_alias
+            );
+            display_line!(IO, "  Consensus key \"{}\"", consensus_key_alias);
+            display_line!(
+                IO,
+                "The ledger node has been setup to use this validator's \
+                 address and consensus key."
+            );
+            display_line!(
+                IO,
+                "Your validator will be active in {} epochs. Be sure to \
+                 restart your node for the changes to take effect!",
+                pos_params.pipeline_len
+            );
+        } else {
+            display_line!(
+                IO,
+                "Transaction dry run. No addresses have been saved."
+            );
+        }
     }
     Ok(())
 }
@@ -592,53 +659,73 @@ pub async fn submit_transfer<C: Client + Sync, IO: Io>(
     args: args::TxTransfer,
 ) -> Result<(), tx::Error> {
     for _ in 0..2 {
-        let arg = args.clone();
-        let (mut tx, addr, pk, tx_epoch, _isf) =
-            tx::build_transfer::<_, _, _, IO>(
-                client,
-                &mut ctx.wallet,
-                &mut ctx.shielded,
-                arg,
-            )
-            .await?;
+        let default_signer = Some(args.source.effective_address());
+        let signing_data = signing::aux_signing_data::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            &Some(args.source.effective_address()),
+            default_signer,
+        )
+        .await?;
+
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
-            &args.tx,
-            addr,
-            pk.clone(),
-            &mut tx,
+            args.tx.clone(),
+            &args.source.effective_address(),
         )
         .await?;
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        let result =
-            tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
-                .await?;
-        // Query the epoch in which the transaction was probably submitted
-        let submission_epoch =
-            rpc::query_and_print_epoch::<_, IO>(client).await;
 
-        match result {
-            ProcessTxResponse::Applied(resp) if
-            // If a transaction is shielded
-                tx_epoch.is_some() &&
-            // And it is rejected by a VP
-                resp.code == 1.to_string() &&
-            // And the its submission epoch doesn't match construction epoch
-                tx_epoch.unwrap() != submission_epoch =>
-            {
-                // Then we probably straddled an epoch boundary. Let's retry...
-                edisplay_line!(IO,
-                    "MASP transaction rejected and this may be due to the \
-                     epoch changing. Attempting to resubmit transaction.",
-                );
-                continue;
-            },
-            // Otherwise either the transaction was successful or it will not
-            // benefit from resubmission
-            _ => break,
+        let arg = args.clone();
+        let (mut tx, tx_epoch) = tx::build_transfer::<_, _, IO>(
+            client,
+            &mut ctx.shielded,
+            arg,
+            &signing_data.gas_payer,
+        )
+        .await?;
+        signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+            .await;
+
+        if args.tx.dump_tx {
+            tx::dump_tx::<IO>(&args.tx, tx);
+        } else {
+            signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+            let result = tx::process_tx::<_, _, IO>(
+                client,
+                &mut ctx.wallet,
+                &args.tx,
+                tx,
+            )
+            .await?;
+
+            let submission_epoch =
+                rpc::query_and_print_epoch::<_, IO>(client).await;
+
+            match result {
+                ProcessTxResponse::Applied(resp) if
+                // If a transaction is shielded
+                    tx_epoch.is_some() &&
+                // And it is rejected by a VP
+                    resp.code == 1.to_string() &&
+                // And its submission epoch doesn't match construction epoch
+                    tx_epoch.unwrap() != submission_epoch =>
+                {
+                    // Then we probably straddled an epoch boundary. Let's retry...
+                    edisplay_line!(IO,
+                        "MASP transaction rejected and this may be due to the \
+                        epoch changing. Attempting to resubmit transaction.",
+                    );
+                    continue;
+                },
+                // Otherwise either the transaction was successful or it will not
+                // benefit from resubmission
+                _ => break,
+            }
         }
     }
+
     Ok(())
 }
 
@@ -651,23 +738,36 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) = tx::build_ibc_transfer::<_, _, IO>(
+    let default_signer = Some(args.source.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
         &mut ctx.wallet,
-        args.clone(),
-    )
-    .await?;
-    submit_reveal_aux::<_, IO>(
-        client,
-        &mut ctx,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(args.source.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    submit_reveal_aux::<_, IO>(client, &mut ctx, args.tx.clone(), &args.source)
+        .await?;
+
+    let mut tx = tx::build_ibc_transfer::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -680,195 +780,181 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let file = File::open(&args.proposal_data).expect("File must exist.");
-    let proposal: Proposal =
-        serde_json::from_reader(file).expect("JSON was not well-formatted");
-
-    let signer = WalletAddress::new(proposal.clone().author.to_string());
     let current_epoch = rpc::query_and_print_epoch::<_, IO>(client).await;
+    let governance_parameters = rpc::query_governance_parameters(client).await;
 
-    let governance_parameters = rpc::get_governance_parameters(client).await;
-    if proposal.voting_start_epoch <= current_epoch
-        || proposal.voting_start_epoch.0
-            % governance_parameters.min_proposal_period
-            != 0
-    {
-        display_line!(IO, "{}", proposal.voting_start_epoch <= current_epoch);
-        display_line!(
-            IO,
-            "{}",
-            proposal.voting_start_epoch.0
-                % governance_parameters.min_proposal_period
-                == 0
-        );
-        edisplay_line!(
-            IO,
-            "Invalid proposal start epoch: {} must be greater than current \
-             epoch {} and a multiple of {}",
-            proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.voting_end_epoch <= proposal.voting_start_epoch
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            < governance_parameters.min_proposal_period
-        || proposal.voting_end_epoch.0 - proposal.voting_start_epoch.0
-            > governance_parameters.max_proposal_period
-        || proposal.voting_end_epoch.0 % 3 != 0
-    {
-        edisplay_line!(
-            IO,
-            "Invalid proposal end epoch: difference between proposal start \
-             and end epoch must be at least {} and at max {} and end epoch \
-             must be a multiple of {}",
-            governance_parameters.min_proposal_period,
-            governance_parameters.max_proposal_period,
-            governance_parameters.min_proposal_period
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    } else if proposal.grace_epoch <= proposal.voting_end_epoch
-        || proposal.grace_epoch.0 - proposal.voting_end_epoch.0
-            < governance_parameters.min_proposal_grace_epochs
-    {
-        edisplay_line!(
-            IO,
-            "Invalid proposal grace epoch: difference between proposal grace \
-             and end epoch must be at least {}",
-            governance_parameters.min_proposal_grace_epochs
-        );
-        if !args.tx.force {
-            safe_exit(1)
-        }
-    }
+    let (mut tx_builder, signing_data) = if args.is_offline {
+        let proposal = namada::core::ledger::governance::cli::offline::OfflineProposal::try_from(args.proposal_data.as_ref()).map_err(|e| tx::Error::FailedGovernaneProposalDeserialize(e.to_string()))?.validate(current_epoch)
+        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
 
-    if args.offline {
-        let signer = ctx.get(&signer);
-        let key = find_pk::<_, _, IO>(client, &mut ctx.wallet, &signer).await?;
-        let signing_key =
-            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
-        let offline_proposal =
-            OfflineProposal::new(proposal, signer, &signing_key);
-        let proposal_filename = args
-            .proposal_data
-            .parent()
-            .expect("No parent found")
-            .join("proposal");
-        let out = File::create(&proposal_filename).unwrap();
-        match serde_json::to_writer_pretty(out, &offline_proposal) {
-            Ok(_) => {
-                display_line!(
-                    IO,
-                    "Proposal created: {}.",
-                    proposal_filename.to_string_lossy()
-                );
-            }
-            Err(e) => {
-                edisplay_line!(
-                    IO,
-                    "Error while creating proposal file: {}.",
-                    e
-                );
-                safe_exit(1)
-            }
-        }
-        Ok(())
-    } else {
-        let signer = ctx.get(&signer);
-        let tx_data = proposal.clone().try_into();
-        let (mut init_proposal_data, init_proposal_content, init_proposal_code) =
-            if let Ok(data) = tx_data {
-                data
-            } else {
-                edisplay_line!(
-                    IO,
-                    "Invalid data for init proposal transaction."
-                );
-                safe_exit(1)
-            };
-
-        let balance =
-            rpc::get_token_balance(client, &ctx.native_token, &proposal.author)
-                .await;
-        if balance
-            < token::Amount::from_uint(
-                governance_parameters.min_proposal_fund,
-                0,
-            )
-            .unwrap()
-        {
-            edisplay_line!(
-                IO,
-                "Address {} doesn't have enough funds.",
-                &proposal.author
-            );
-            safe_exit(1);
-        }
-
-        if init_proposal_content.len()
-            > governance_parameters.max_proposal_content_size as usize
-        {
-            edisplay_line!(IO, "Proposal content size too big.");
-            safe_exit(1);
-        }
-
-        let mut tx = Tx::new(TxType::Raw);
-        let tx_code_hash =
-            query_wasm_code_hash::<_, IO>(client, args::TX_INIT_PROPOSAL)
-                .await
-                .unwrap();
-        tx.header.chain_id = ctx.config.ledger.chain_id.clone();
-        tx.header.expiration = args.tx.expiration;
-        // Put the content of this proposal into an extra section
-        {
-            let content_sec = tx.add_section(Section::ExtraData(Code::new(
-                init_proposal_content,
-            )));
-            let content_sec_hash = content_sec.get_hash();
-            init_proposal_data.content = content_sec_hash;
-        }
-        // Put any proposal code into an extra section
-        if let Some(init_proposal_code) = init_proposal_code {
-            let code_sec = tx
-                .add_section(Section::ExtraData(Code::new(init_proposal_code)));
-            let code_sec_hash = code_sec.get_hash();
-            init_proposal_data.r#type =
-                ProposalType::Default(Some(code_sec_hash));
-        }
-        let data = init_proposal_data
-            .try_to_vec()
-            .expect("Encoding proposal data shouldn't fail");
-        tx.set_data(Data::new(data));
-        tx.set_code(Code::from_hash(tx_code_hash));
-
-        let (mut tx, addr, pk) = tx::prepare_tx::<_, _, IO>(
+        let default_signer = Some(proposal.author.clone());
+        let signing_data = signing::aux_signing_data::<_, _, IO>(
             client,
             &mut ctx.wallet,
             &args.tx,
-            tx,
-            TxSigningKey::WalletAddress(signer),
-            #[cfg(not(feature = "mainnet"))]
-            false,
+            &Some(proposal.author.clone()),
+            default_signer,
         )
         .await?;
+
+        let signed_offline_proposal = proposal.sign(
+            args.tx.signing_keys,
+            &signing_data.account_public_keys_map.unwrap(),
+        );
+        let output_file_path = signed_offline_proposal
+            .serialize(args.tx.output_folder)
+            .map_err(|e| {
+                tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+            })?;
+
+        display_line!(IO, "Proposal serialized to: {}", output_file_path);
+        return Ok(());
+    } else if args.is_pgf_funding {
+        let proposal =
+            PgfFundingProposal::try_from(args.proposal_data.as_ref())
+                .map_err(|e| {
+                    tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+                })?
+                .validate(&governance_parameters, current_epoch)
+                .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+
+        let default_signer = Some(proposal.proposal.author.clone());
+        let signing_data = signing::aux_signing_data::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            &Some(proposal.proposal.author.clone()),
+            default_signer,
+        )
+        .await?;
+
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
-            &args.tx,
-            addr,
-            pk.clone(),
-            &mut tx,
+            args.tx.clone(),
+            &proposal.proposal.author,
         )
         .await?;
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
-            .await?;
-        Ok(())
+
+        (
+            tx::build_pgf_funding_proposal::<_, IO>(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
+    } else if args.is_pgf_stewards {
+        let proposal = PgfStewardProposal::try_from(
+            args.proposal_data.as_ref(),
+        )
+        .map_err(|e| {
+            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+        })?;
+        let author_balane = rpc::get_token_balance(
+            client,
+            &ctx.native_token,
+            &proposal.proposal.author,
+        )
+        .await;
+        let proposal = proposal
+            .validate(&governance_parameters, current_epoch, author_balane)
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+
+        let default_signer = Some(proposal.proposal.author.clone());
+        let signing_data = signing::aux_signing_data::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            &Some(proposal.proposal.author.clone()),
+            default_signer,
+        )
+        .await?;
+
+        submit_reveal_aux::<_, IO>(
+            client,
+            &mut ctx,
+            args.tx.clone(),
+            &proposal.proposal.author,
+        )
+        .await?;
+
+        (
+            tx::build_pgf_stewards_proposal::<_, IO>(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
+    } else {
+        let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
+            .map_err(|e| {
+            tx::Error::FailedGovernaneProposalDeserialize(e.to_string())
+        })?;
+        let author_balane = rpc::get_token_balance(
+            client,
+            &ctx.native_token,
+            &proposal.proposal.author,
+        )
+        .await;
+        let proposal = proposal
+            .validate(&governance_parameters, current_epoch, author_balane)
+            .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+
+        let default_signer = Some(proposal.proposal.author.clone());
+        let signing_data = signing::aux_signing_data::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            &Some(proposal.proposal.author.clone()),
+            default_signer,
+        )
+        .await?;
+
+        submit_reveal_aux::<_, IO>(
+            client,
+            &mut ctx,
+            args.tx.clone(),
+            &proposal.proposal.author,
+        )
+        .await?;
+
+        (
+            tx::build_default_proposal::<_, IO>(
+                client,
+                args.clone(),
+                proposal,
+                &signing_data.gas_payer,
+            )
+            .await?,
+            signing_data,
+        )
+    };
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx_builder);
+    } else {
+        signing::sign_tx(
+            &mut ctx.wallet,
+            &args.tx,
+            &mut tx_builder,
+            signing_data,
+        );
+        tx::process_tx::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            tx_builder,
+        )
+        .await?;
     }
+
+    Ok(())
 }
 
 pub async fn submit_vote_proposal<C, IO: Io>(
@@ -880,293 +966,174 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let signer = if let Some(addr) = &args.tx.signer {
-        addr
-    } else {
-        edisplay_line!(IO, "Missing mandatory argument --signer.");
-        safe_exit(1)
-    };
+    let current_epoch = rpc::query_and_print_epoch::<_, IO>(client).await;
 
-    // Construct vote
-    let proposal_vote = match args.vote.to_ascii_lowercase().as_str() {
-        "yay" => {
-            if let Some(pgf) = args.proposal_pgf {
-                let splits = pgf.trim().split_ascii_whitespace();
-                let address_iter = splits.clone().step_by(2);
-                let cap_iter = splits.into_iter().skip(1).step_by(2);
-                let mut set = HashSet::new();
-                for (address, cap) in
-                    address_iter.zip(cap_iter).map(|(addr, cap)| {
-                        (
-                            addr.parse()
-                                .expect("Failed to parse pgf council address"),
-                            cap.parse::<u64>()
-                                .expect("Failed to parse pgf spending cap"),
-                        )
-                    })
-                {
-                    set.insert((
-                        address,
-                        token::Amount::from_uint(cap, 0).unwrap(),
-                    ));
-                }
+    let default_signer = Some(args.voter.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        &mut ctx.wallet,
+        &args.tx,
+        &Some(args.voter.clone()),
+        default_signer.clone(),
+    )
+    .await?;
 
-                ProposalVote::Yay(VoteType::PGFCouncil(set))
-            } else if let Some(eth) = args.proposal_eth {
-                let mut splits = eth.trim().split_ascii_whitespace();
-                // Sign the message
-                let sigkey = splits
-                    .next()
-                    .expect("Expected signing key")
-                    .parse::<common::SecretKey>()
-                    .expect("Signing key parsing failed.");
+    let mut tx_builder = if args.is_offline {
+        let proposal_vote = ProposalVote::try_from(args.vote)
+            .map_err(|_| tx::Error::InvalidProposalVote)?;
 
-                let msg = splits.next().expect("Missing message to sign");
-                if splits.next().is_some() {
-                    edisplay_line!(IO, "Unexpected argument after message");
-                    safe_exit(1);
-                }
+        let proposal = OfflineSignedProposal::try_from(
+            args.proposal_data.clone().unwrap().as_ref(),
+        )
+        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?
+        .validate(
+            &signing_data.account_public_keys_map.clone().unwrap(),
+            signing_data.threshold,
+        )
+        .map_err(|e| tx::Error::InvalidProposal(e.to_string()))?;
+        let delegations = rpc::get_delegators_delegation_at(
+            client,
+            &args.voter,
+            proposal.proposal.tally_epoch,
+        )
+        .await
+        .keys()
+        .cloned()
+        .collect::<Vec<Address>>();
 
-                ProposalVote::Yay(VoteType::ETHBridge(common::SigScheme::sign(
-                    &sigkey,
-                    HEXLOWER_PERMISSIVE
-                        .decode(msg.as_bytes())
-                        .expect("Error while decoding message"),
-                )))
-            } else {
-                ProposalVote::Yay(VoteType::Default)
-            }
-        }
-        "nay" => ProposalVote::Nay,
-        _ => {
-            edisplay_line!(IO, "Vote must be either yay or nay");
-            safe_exit(1);
-        }
-    };
-
-    if args.offline {
-        if !proposal_vote.is_default_vote() {
-            edisplay_line!(
-                IO,
-                "Wrong vote type for offline proposal. Just vote yay or nay!"
-            );
-            safe_exit(1);
-        }
-        let proposal_file_path =
-            args.proposal_data.expect("Proposal file should exist.");
-        let file = File::open(&proposal_file_path).expect("File must exist.");
-
-        let proposal: OfflineProposal =
-            serde_json::from_reader(file).expect("JSON was not well-formatted");
-        let public_key = rpc::get_public_key(client, &proposal.address)
-            .await
-            .expect("Public key should exist.");
-        if !proposal.check_signature(&public_key) {
-            edisplay_line!(IO, "Proposal signature mismatch!");
-            safe_exit(1)
-        }
-
-        let key = find_pk::<_, _, IO>(client, &mut ctx.wallet, signer).await?;
-        let signing_key =
-            signing::find_key_by_pk(&mut ctx.wallet, &args.tx, &key)?;
         let offline_vote = OfflineVote::new(
             &proposal,
             proposal_vote,
-            signer.clone(),
-            &signing_key,
+            args.voter.clone(),
+            delegations,
         );
 
-        let proposal_vote_filename = proposal_file_path
-            .parent()
-            .expect("No parent found")
-            .join(format!("proposal-vote-{}", &signer.to_string()));
-        let out = File::create(&proposal_vote_filename).unwrap();
-        match serde_json::to_writer_pretty(out, &offline_vote) {
-            Ok(_) => {
-                display_line!(
-                    IO,
-                    "Proposal vote created: {}.",
-                    proposal_vote_filename.to_string_lossy()
-                );
-                Ok(())
-            }
-            Err(e) => {
-                edisplay_line!(
-                    IO,
-                    "Error while creating proposal vote file: {}.",
-                    e
-                );
-                safe_exit(1)
-            }
-        }
+        let offline_signed_vote = offline_vote.sign(
+            args.tx.signing_keys,
+            &signing_data.account_public_keys_map.unwrap(),
+        );
+        let output_file_path = offline_signed_vote
+            .serialize(args.tx.output_folder)
+            .expect("Should be able to serialize the offline proposal");
+
+        display_line!(IO, "Proposal vote serialized to: {}", output_file_path);
+        return Ok(());
     } else {
-        let current_epoch = rpc::query_and_print_epoch::<_, IO>(client).await;
-
-        let voter_address = signer.clone();
-        let proposal_id = args.proposal_id.unwrap();
-        let proposal_start_epoch_key =
-            gov_storage::get_voting_start_epoch_key(proposal_id);
-        let proposal_start_epoch = rpc::query_storage_value::<C, Epoch>(
+        tx::build_vote_proposal::<_, IO>(
             client,
-            &proposal_start_epoch_key,
+            args.clone(),
+            current_epoch,
+            &signing_data.gas_payer,
         )
-        .await;
+        .await?
+    };
 
-        // Check vote type and memo
-        let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
-        let proposal_type: ProposalType = rpc::query_storage_value::<
-            C,
-            ProposalType,
-        >(client, &proposal_type_key)
-        .await
-        .unwrap_or_else(|| {
-            panic!("Didn't find type of proposal id {} in storage", proposal_id)
-        });
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx_builder);
+    } else {
+        signing::sign_tx(
+            &mut ctx.wallet,
+            &args.tx,
+            &mut tx_builder,
+            signing_data,
+        );
+        tx::process_tx::<_, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            tx_builder,
+        )
+        .await?;
+    }
 
-        if let ProposalVote::Yay(ref vote_type) = proposal_vote {
-            if &proposal_type != vote_type {
+    Ok(())
+}
+
+pub async fn sign_tx<C, IO: Io>(
+    client: &C,
+    ctx: &mut Context,
+    args::SignTx {
+        tx: tx_args,
+        tx_data,
+        owner,
+    }: args::SignTx,
+) -> Result<(), tx::Error>
+where
+    C: namada::ledger::queries::Client + Sync,
+    C::Error: std::fmt::Display,
+{
+    let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
+        transaction
+    } else {
+        edisplay_line!(IO, "Couldn't decode the transaction.");
+        safe_exit(1)
+    };
+
+    let default_signer = Some(owner.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        &mut ctx.wallet,
+        &tx_args,
+        &Some(owner),
+        default_signer,
+    )
+    .await?;
+
+    let secret_keys = &signing_data
+        .public_keys
+        .iter()
+        .filter_map(|public_key| {
+            if let Ok(secret_key) =
+                signing::find_key_by_pk(&mut ctx.wallet, &tx_args, public_key)
+            {
+                Some(secret_key)
+            } else {
                 edisplay_line!(
                     IO,
-                    "Expected vote of type {}, found {}",
-                    proposal_type,
-                    args.vote
+                    "Couldn't find the secret key for {}. Skipping signature \
+                     generation.",
+                    public_key
                 );
-                safe_exit(1);
-            } else if let VoteType::PGFCouncil(set) = vote_type {
-                // Check that addresses proposed as council are established and
-                // are present in storage
-                for (address, _) in set {
-                    match address {
-                        Address::Established(_) => {
-                            let vp_key = Key::validity_predicate(address);
-                            if !rpc::query_has_storage_key::<C>(client, &vp_key)
-                                .await
-                            {
-                                edisplay_line!(
-                                    IO,
-                                    "Proposed PGF council {} cannot be found \
-                                     in storage",
-                                    address
-                                );
-                                safe_exit(1);
-                            }
-                        }
-                        _ => {
-                            edisplay_line!(
-                                IO,
-                                "PGF council vote contains a non-established \
-                                 address: {}",
-                                address
-                            );
-                            safe_exit(1);
-                        }
-                    }
-                }
+                None
             }
-        }
+        })
+        .collect::<Vec<common::SecretKey>>();
 
-        match proposal_start_epoch {
-            Some(epoch) => {
-                if current_epoch < epoch {
-                    edisplay_line!(
-                        IO,
-                        "Current epoch {} is not greater than proposal start \
-                         epoch {}",
-                        current_epoch,
-                        epoch
-                    );
+    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
+    {
+        let signatures =
+            tx.compute_section_signature(secret_keys, &account_public_keys_map);
 
-                    if !args.tx.force {
-                        safe_exit(1)
-                    }
-                }
-                let mut delegations =
-                    rpc::get_delegators_delegation(client, &voter_address)
-                        .await;
+        for signature in &signatures {
+            let filename = format!(
+                "offline_signature_{}_{}.tx",
+                tx.header_hash(),
+                signature.index
+            );
+            let output_path = match &tx_args.output_folder {
+                Some(path) => path.join(filename),
+                None => filename.into(),
+            };
 
-                // Optimize by quering if a vote from a validator
-                // is equal to ours. If so, we can avoid voting, but ONLY if we
-                // are  voting in the last third of the voting
-                // window, otherwise there's  the risk of the
-                // validator changing his vote and, effectively, invalidating
-                // the delgator's vote
-                if !args.tx.force
-                    && is_safe_voting_window(client, proposal_id, epoch).await?
-                {
-                    delegations = filter_delegations(
-                        client,
-                        delegations,
-                        proposal_id,
-                        &proposal_vote,
-                    )
-                    .await;
-                }
+            let signature_path = File::create(&output_path)
+                .expect("Should be able to create signature file.");
 
-                let tx_data = VoteProposalData {
-                    id: proposal_id,
-                    vote: proposal_vote,
-                    voter: voter_address,
-                    delegations: delegations.into_iter().collect(),
-                };
-
-                let chain_id = args.tx.chain_id.clone().unwrap();
-                let expiration = args.tx.expiration;
-                let data = tx_data
-                    .try_to_vec()
-                    .expect("Encoding proposal data shouldn't fail");
-
-                let tx_code_hash = query_wasm_code_hash::<_, IO>(
-                    client,
-                    args.tx_code_path.to_str().unwrap(),
-                )
-                .await
-                .unwrap();
-                let mut tx = Tx::new(TxType::Raw);
-                tx.header.chain_id = chain_id;
-                tx.header.expiration = expiration;
-                tx.set_data(Data::new(data));
-                tx.set_code(Code::from_hash(tx_code_hash));
-
-                let (mut tx, addr, pk) = tx::prepare_tx::<_, _, IO>(
-                    client,
-                    &mut ctx.wallet,
-                    &args.tx,
-                    tx,
-                    TxSigningKey::WalletAddress(signer.clone()),
-                    #[cfg(not(feature = "mainnet"))]
-                    false,
-                )
-                .await?;
-                submit_reveal_aux::<_, IO>(
-                    client,
-                    &mut ctx,
-                    &args.tx,
-                    addr,
-                    pk.clone(),
-                    &mut tx,
-                )
-                .await?;
-                signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk)
-                    .await?;
-                tx::process_tx::<_, _, IO>(
-                    client,
-                    &mut ctx.wallet,
-                    &args.tx,
-                    tx,
-                )
-                .await?;
-                Ok(())
-            }
-            None => {
-                edisplay_line!(
-                    IO,
-                    "Proposal start epoch for proposal id {} is not definied.",
-                    proposal_id
-                );
-                if !args.tx.force { safe_exit(1) } else { Ok(()) }
-            }
+            serde_json::to_writer_pretty(
+                signature_path,
+                &signature.serialize(),
+            )
+            .expect("Signature should be deserializable.");
+            display_line!(
+                IO,
+                "Signature for {} serialized at {}",
+                &account_public_keys_map
+                    .get_public_key_from_index(signature.index)
+                    .unwrap(),
+                output_path.display()
+            );
         }
     }
+    Ok(())
 }
 
 pub async fn submit_reveal_pk<C, IO: Io>(
@@ -1178,73 +1145,15 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let reveal_tx =
-        tx::build_reveal_pk::<_, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    if let Some((mut tx, _, pk)) = reveal_tx {
-        signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
-            .await?;
-    }
-    Ok(())
-}
-
-/// Check if current epoch is in the last third of the voting period of the
-/// proposal. This ensures that it is safe to optimize the vote writing to
-/// storage.
-async fn is_safe_voting_window<C>(
-    client: &C,
-    proposal_id: u64,
-    proposal_start_epoch: Epoch,
-) -> Result<bool, tx::Error>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
-    tx::is_safe_voting_window(client, proposal_id, proposal_start_epoch).await
-}
-
-/// Removes validators whose vote corresponds to that of the delegator (needless
-/// vote)
-async fn filter_delegations<C>(
-    client: &C,
-    delegations: HashSet<Address>,
-    proposal_id: u64,
-    delegator_vote: &ProposalVote,
-) -> HashSet<Address>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
-    // Filter delegations by their validator's vote concurrently
-    let delegations = futures::future::join_all(
-        delegations
-            .into_iter()
-            // we cannot use `filter/filter_map` directly because we want to
-            // return a future
-            .map(|validator_address| async {
-                let vote_key = gov_storage::get_vote_proposal_key(
-                    proposal_id,
-                    validator_address.to_owned(),
-                    validator_address.to_owned(),
-                );
-
-                if let Some(validator_vote) =
-                    rpc::query_storage_value::<C, ProposalVote>(
-                        client, &vote_key,
-                    )
-                    .await
-                {
-                    if &validator_vote == delegator_vote {
-                        return None;
-                    }
-                }
-                Some(validator_address)
-            }),
+    submit_reveal_aux::<_, IO>(
+        client,
+        ctx,
+        args.tx,
+        &(&args.public_key).into(),
     )
-    .await;
-    // Take out the `None`s
-    delegations.into_iter().flatten().collect()
+    .await?;
+
+    Ok(())
 }
 
 pub async fn submit_bond<C, IO: Io>(
@@ -1256,20 +1165,35 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) =
-        tx::build_bond::<C, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    submit_reveal_aux::<_, IO>(
+    let default_address = args.source.clone().unwrap_or(args.validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
-        ctx,
+        &mut ctx.wallet,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(default_address.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &default_address)
+        .await?;
+
+    let mut tx =
+        tx::build_bond::<C, IO>(client, args.clone(), &signing_data.gas_payer)
+            .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -1282,22 +1206,39 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk, latest_withdrawal_pre) =
-        tx::build_unbond::<_, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    submit_reveal_aux::<_, IO>(
+    let default_address = args.source.clone().unwrap_or(args.validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
-        ctx,
+        &mut ctx.wallet,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(default_address),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
-    tx::query_unbonds::<_, IO>(client, args.clone(), latest_withdrawal_pre)
-        .await?;
+
+    let (mut tx, latest_withdrawal_pre) = tx::build_unbond::<_, _, IO>(
+        client,
+        &mut ctx.wallet,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+
+        tx::query_unbonds::<_, IO>(client, args.clone(), latest_withdrawal_pre)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -1310,20 +1251,35 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) =
-        tx::build_withdraw::<_, _, IO>(client, &mut ctx.wallet, args.clone())
-            .await?;
-    submit_reveal_aux::<_, IO>(
+    let default_address = args.source.clone().unwrap_or(args.validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
-        &mut ctx,
+        &mut ctx.wallet,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(default_address),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    let mut tx = tx::build_withdraw::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -1336,24 +1292,34 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let arg = args.clone();
-    let (mut tx, addr, pk) = tx::build_validator_commission_change::<_, _, IO>(
+    let default_signer = Some(args.validator.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
         &mut ctx.wallet,
-        arg,
-    )
-    .await?;
-    submit_reveal_aux::<_, IO>(
-        client,
-        &mut ctx,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(args.validator.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    let mut tx = tx::build_validator_commission_change::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -1369,23 +1335,34 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let (mut tx, addr, pk) = tx::build_unjail_validator::<_, _, IO>(
+    let default_signer = Some(args.validator.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
         &mut ctx.wallet,
-        args.clone(),
-    )
-    .await?;
-    submit_reveal_aux::<_, IO>(
-        client,
-        &mut ctx,
         &args.tx,
-        addr,
-        pk.clone(),
-        &mut tx,
+        &Some(args.validator.clone()),
+        default_signer,
     )
     .await?;
-    signing::sign_tx(&mut ctx.wallet, &mut tx, &args.tx, &pk).await?;
-    tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
+
+    let mut tx = tx::build_unjail_validator::<_, IO>(
+        client,
+        args.clone(),
+        &signing_data.gas_payer,
+    )
+    .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
+        .await;
+
+    if args.tx.dump_tx {
+        tx::dump_tx::<IO>(&args.tx, tx);
+    } else {
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -1436,11 +1413,10 @@ where
 #[cfg(test)]
 mod test_tx {
     use masp_primitives::transaction::components::Amount;
+    use namada::core::types::storage::Epoch;
     use namada::ledger::masp::{make_asset_type, MaspAmount};
     use namada::types::address::testing::gen_established_address;
     use namada::types::token::MaspDenom;
-
-    use super::*;
 
     #[test]
     fn test_masp_add_amount() {

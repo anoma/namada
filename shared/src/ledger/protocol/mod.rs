@@ -8,15 +8,15 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
 
 use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter};
+use crate::ledger::governance::GovernanceVp;
 use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
-use crate::ledger::native_vp::governance::GovernanceVp;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
-use crate::ledger::native_vp::slash_fund::SlashFundVp;
 use crate::ledger::native_vp::{self, NativeVp};
+use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
@@ -61,9 +61,9 @@ pub enum Error {
     #[error("IBC Token native VP: {0}")]
     MultitokenNativeVpError(crate::ledger::native_vp::multitoken::Error),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::native_vp::governance::Error),
-    #[error("SlashFund native VP error: {0}")]
-    SlashFundNativeVpError(crate::ledger::native_vp::slash_fund::Error),
+    GovernanceNativeVpError(crate::ledger::governance::Error),
+    #[error("Pgf native VP error: {0}")]
+    PgfNativeVpError(crate::ledger::pgf::Error),
     #[error("Ethereum bridge native VP error: {0}")]
     EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
@@ -543,14 +543,6 @@ where
                             gas_meter = governance.ctx.gas_meter.into_inner();
                             result
                         }
-                        InternalAddress::SlashFund => {
-                            let slash_fund = SlashFundVp { ctx };
-                            let result = slash_fund
-                                .validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::SlashFundNativeVpError);
-                            gas_meter = slash_fund.ctx.gas_meter.into_inner();
-                            result
-                        }
                         InternalAddress::Multitoken => {
                             let multitoken = MultitokenVp { ctx };
                             let result = multitoken
@@ -583,6 +575,14 @@ where
                                 .map_err(Error::ReplayProtectionNativeVpError);
                             gas_meter =
                                 replay_protection_vp.ctx.gas_meter.into_inner();
+                            result
+                        }
+                        InternalAddress::Pgf => {
+                            let pgf_vp = PgfVp { ctx };
+                            let result = pgf_vp
+                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .map_err(Error::PgfNativeVpError);
+                            gas_meter = pgf_vp.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::IbcToken(_)

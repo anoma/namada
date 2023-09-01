@@ -410,7 +410,8 @@ impl Display for Dec {
             str_pre.push_str(string.as_str());
             string = str_pre;
         };
-        let stripped_string = string.trim_end_matches(['.', '0']);
+        let stripped_string = string.trim_end_matches('0');
+        let stripped_string = stripped_string.trim_end_matches('.');
         if stripped_string.is_empty() {
             f.write_str("0")
         } else if is_neg {
@@ -619,5 +620,12 @@ mod test_dec {
         let smaller = Dec::from_str("6483947304.195066085701").unwrap();
         let larger = Dec::from_str("32418116583.390243854642").unwrap();
         assert!(smaller < larger);
+    }
+
+    #[test]
+    fn test_dec_display() {
+        let num = Dec::from_str("14000.0000").unwrap();
+        let s = format!("{}", num);
+        assert_eq!(s, String::from("14000"));
     }
 }

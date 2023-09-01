@@ -22,12 +22,12 @@ use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
 use crate::ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path, SeqSendPath,
 };
+use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::ContextError;
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::client_state::MockClientState;
 #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
 use crate::ibc::mock::consensus_state::MockConsensusState;
-use crate::ibc::timestamp::Timestamp;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
@@ -48,11 +48,11 @@ pub trait IbcCommonContext: IbcStorageContext {
                 })?;
                 self.decode_client_state(any)
             }
-            Ok(None) => {
-                Err(ContextError::ClientError(ClientError::ClientNotFound {
+            Ok(None) => Err(ContextError::ClientError(
+                ClientError::ClientStateNotFound {
                     client_id: client_id.clone(),
-                }))
-            }
+                },
+            )),
             Err(_) => Err(ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Reading the client state failed: ID {}",
@@ -145,11 +145,11 @@ pub trait IbcCommonContext: IbcStorageContext {
                 })
             }),
             Ok(None) => {
-                let port_channel_id =
+                let (port_id, channel_id) =
                     storage::port_channel_id(&key).expect("invalid key");
                 Err(ContextError::ChannelError(ChannelError::ChannelNotFound {
-                    channel_id: port_channel_id.channel_id,
-                    port_id: port_channel_id.port_id,
+                    channel_id,
+                    port_id,
                 }))
             }
             Err(_) => Err(ContextError::ChannelError(ChannelError::Other {

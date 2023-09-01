@@ -3,10 +3,12 @@
 pub mod args;
 pub mod eth_bridge;
 pub mod events;
+pub mod governance;
 pub mod ibc;
 pub mod inflation;
 pub mod masp;
 pub mod native_vp;
+pub mod pgf;
 pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
@@ -20,5 +22,5 @@ pub mod vp_host_fns;
 pub mod wallet;
 
 pub use namada_core::ledger::{
-    gas, governance, parameters, replay_protection, storage_api, tx_env, vp_env,
+    gas, parameters, replay_protection, storage_api, tx_env, vp_env,
 };

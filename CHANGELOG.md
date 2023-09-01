@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## v0.21.1
+
+Namada 0.21.0 is a patch release addressing some minor changes to the PGF and IBC components.
+
+### BUG FIXES
+
+- Introduce a new genesis section to control PGF storage at chain start.
+  ([\#1816](https://github.com/anoma/namada/pull/1816))
+
+### FEATURES
+
+- Support the memo field of IBC transfer
+  ([\#1635](https://github.com/anoma/namada/issues/1635))
+
+## v0.21.0
+
+Namada 0.21.0 is a minor release introducing a first version of the PGF mechanism, addressing several 
+improvements to the PoS and Governance system and some changes to the ledger stability.
+
+### BUG FIXES
+
+- Fixes buggy Display for the Dec type when the number is some multiple of 10
+  ([\#1774](https://github.com/anoma/namada/pull/1774))
+- Downgraded sysinfo back to v0.27.8 with a working available memory report on
+  Mac M1. ([\#1775](https://github.com/anoma/namada/pull/1775))
+- Fixes buggy error handling in pos unjail_validator. Now properly enforces that
+  if an unjail tx is submitted when the validator state is something other than
+  Jailed in any of the current or future epochs, the tx will error out and fail.
+  ([\#1793](https://github.com/anoma/namada/pull/1793))
+- Fix available_memory size
+  ([\#1801](https://github.com/anoma/namada/issues/1801))
+
+### FEATURES
+
+- Introduce multisignature accounts and transaction format. It is now possible
+  to supply multiple public keys when creating a new account/validator and
+  specify the minimum number of signatures required to authorize a transaction.
+  ([\#1765](https://github.com/anoma/namada/pull/1765))
+- Introduce a simplified version of Public Good Fundings.
+  ([\#1803](https://github.com/anoma/namada/pull/1803))
+
+### TESTING
+
+- Added pre-built MASP proofs for integration tests.
+  ([\#1768](https://github.com/anoma/namada/pull/1768))
+
 ## v0.20.1
 
 Namada 0.20.1 is a patch release addressing a bug in the inflation mechanism and minor ledger improvements.
