@@ -6,11 +6,11 @@ use eyre::Result;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::token::Amount;
 #[allow(unused_imports)]
 use namada_core::types::transaction::protocol::ProtocolTxType;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::validator_set_update;
-use namada_core::types::voting_power::FractionalVotingPower;
 
 use super::ChangedKeys;
 use crate::protocol::transactions::utils;
@@ -85,7 +85,7 @@ fn apply_update<D, H>(
     ext: validator_set_update::VextDigest,
     signing_epoch: Epoch,
     epoch_2nd_height: BlockHeight,
-    voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -199,7 +199,6 @@ where
 #[cfg(test)]
 mod test_valset_upd_state_changes {
     use namada_core::types::address;
-    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
     use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::pos_queries::PosQueries;

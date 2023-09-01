@@ -7,9 +7,9 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
-use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::protocol::transactions::utils::GetVoters;
@@ -140,7 +140,7 @@ fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     mut update: BridgePoolRoot,
     seen_by: Votes,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<(ChangedKeys, bool)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -199,8 +199,8 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
     use namada_core::types::storage::Key;
-    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots;
+    use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::PosParams;
     use namada_proof_of_stake::write_pos_params;
 
@@ -431,7 +431,7 @@ mod test_apply_bp_roots_to_storage {
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(
             voting_power,
             FractionalVotingPower::new_u64(5, 12).unwrap()
@@ -450,7 +450,7 @@ mod test_apply_bp_roots_to_storage {
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::new_u64(5, 6).unwrap());
     }
 

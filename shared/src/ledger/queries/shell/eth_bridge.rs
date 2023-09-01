@@ -504,7 +504,7 @@ where
                     "Iterating over storage should not yield keys without \
                      values.",
                 )
-                .average_voting_power(ctx.wl_storage);
+                .fractional_stake(ctx.wl_storage);
             for transfer in transfers {
                 let key = get_key_from_hash(&transfer.keccak256());
                 let transfer = ctx
@@ -1275,6 +1275,7 @@ mod test_ethbridge_router {
             },
         };
         // write validator to storage
+        let (_, dummy_validator_stake) = test_utils::default_validator();
         test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
@@ -1307,9 +1308,12 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &eth_msg_key.voting_power(),
-                EpochedVotingPower::from([(0.into(), voting_power)])
-                    .try_to_vec()
-                    .expect("Test failed"),
+                EpochedVotingPower::from([(
+                    0.into(),
+                    voting_power * dummy_validator_stake,
+                )])
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
         client

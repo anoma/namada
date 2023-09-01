@@ -73,21 +73,27 @@ pub fn setup_default_storage()
     (wl_storage, all_keys)
 }
 
-/// Set up a [`TestWlStorage`] initialized at genesis with a single
-/// validator.
-///
-/// The validator's address is [`address::testing::established_address_1`].
+/// Set up a [`TestWlStorage`] initialized at genesis with
+/// [`default_validator`].
 #[inline]
 pub fn init_default_storage(
     wl_storage: &mut TestWlStorage,
 ) -> HashMap<Address, TestValidatorKeys> {
     init_storage_with_validators(
         wl_storage,
-        HashMap::from_iter([(
-            address::testing::established_address_1(),
-            token::Amount::native_whole(100),
-        )]),
+        HashMap::from_iter([default_validator()]),
     )
+}
+
+/// Default validator used in tests.
+///
+/// The validator's address is [`address::testing::established_address_1`],
+/// and its voting power is proportional to the stake of 100 NAM.
+#[inline]
+pub fn default_validator() -> (Address, token::Amount) {
+    let addr = address::testing::established_address_1();
+    let voting_power = token::Amount::native_whole(100);
+    (addr, voting_power)
 }
 
 /// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestWlStorage`], and
@@ -217,23 +223,7 @@ pub fn init_storage_with_validators(
         0.into(),
     )
     .expect("Test failed");
-    let config = EthereumBridgeConfig {
-        erc20_whitelist: vec![],
-        eth_start_height: Default::default(),
-        min_confirmations: Default::default(),
-        contracts: Contracts {
-            native_erc20: wnam(),
-            bridge: UpgradeableContract {
-                address: EthAddress([42; 20]),
-                version: Default::default(),
-            },
-            governance: UpgradeableContract {
-                address: EthAddress([18; 20]),
-                version: Default::default(),
-            },
-        },
-    };
-    config.init_storage(wl_storage);
+    bootstrap_ethereum_bridge(wl_storage);
 
     for (validator, keys) in all_keys.iter() {
         let protocol_key = keys.protocol.ref_to();
