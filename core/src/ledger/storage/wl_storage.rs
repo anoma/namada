@@ -4,6 +4,7 @@ use std::iter::Peekable;
 
 use super::EPOCH_SWITCH_BLOCKS_DELAY;
 use crate::ledger::parameters::EpochDuration;
+use crate::ledger::replay_protection::is_replay_protection_key;
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
@@ -399,7 +400,18 @@ where
             }
             None => {
                 // when not found in write log, try to check the storage
-                self.storage().block.tree.has_key(key).into_storage_result()
+                if is_replay_protection_key(key) {
+                    // Replay protection keys are not included in the merkle
+                    // tree
+                    Ok(self
+                        .storage()
+                        .db
+                        .read_subspace_val(key)
+                        .into_storage_result()?
+                        .is_some())
+                } else {
+                    self.storage().block.tree.has_key(key).into_storage_result()
+                }
             }
         }
     }
