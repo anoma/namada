@@ -639,8 +639,6 @@ where
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
-            // TODO: hack, would be better to pull replay protection out of the
-            // subspace into a new storage root key which doesn't get merkelized
             // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
@@ -659,7 +657,9 @@ where
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
-            self.block.tree.delete(key)?;
+            if !is_replay_protection_key(key) {
+                self.block.tree.delete(key)?;
+            }
             deleted_bytes_len =
                 self.db.delete_subspace_val(self.block.height, key)?;
         }
@@ -1009,8 +1009,6 @@ where
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
-            // TODO: hack, would be better to pull replay protection out of the
-            // subspace into a new storage root key which doesn't get merkelized
             // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
