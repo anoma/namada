@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use borsh::BorshSerialize;
@@ -23,6 +24,7 @@ use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{masp, Address, InternalAddress};
 use namada_core::types::dec::Dec;
+use namada_core::types::hash::Hash;
 use namada_core::types::token::MaspDenom;
 use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
@@ -277,32 +279,18 @@ pub async fn build_reveal_pk<
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    let tx_code_hash = query_wasm_code_hash(
-        client,
-        args.tx_reveal_code_path.to_str().unwrap(),
-    )
-    .await
-    .unwrap();
-
-    let chain_id = args.chain_id.clone().unwrap();
-
-    let mut tx = Tx::new(chain_id, args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(public_key);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         args,
-        &mut tx,
-        fee_payer.clone(),
+        args.tx_reveal_code_path.clone(),
+        public_key,
+        do_nothing,
+        fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -516,11 +504,6 @@ pub async fn build_validator_commission_change<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     let epoch = rpc::query_epoch(client).await;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let params: PosParams = rpc::get_pos_params(client).await;
 
     let validator = validator.clone();
@@ -579,24 +562,18 @@ pub async fn build_validator_commission_change<
         new_rate: rate,
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Craft transaction to update a steward commission
@@ -631,34 +608,23 @@ pub async fn build_update_steward_commission<
         )));
     }
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let data = UpdateStewardCommission {
         steward: steward.clone(),
         commission: commission.reward_distribution,
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
+        tx_code_path,
+        data,
+        do_nothing,
+        gas_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Craft transaction to resign as a steward
@@ -682,30 +648,18 @@ pub async fn build_resign_steward<
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash)
-        .add_data(steward.clone());
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        gas_payer.clone(),
+        tx_code_path,
+        steward,
+        do_nothing,
+        gas_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Submit transaction to unjail a jailed validator
@@ -787,35 +741,18 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let _data = validator
-        .clone()
-        .try_to_vec()
-        .map_err(|err| TxError::EncodeTxFailure(err.to_string()))?;
-
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash)
-        .add_data(validator.clone());
-
-    let epoch = prepare_tx(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        validator,
+        do_nothing,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Submit transaction to withdraw an unbond
@@ -842,11 +779,6 @@ pub async fn build_withdraw<
             .await?;
 
     let source = source.clone();
-
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -878,24 +810,18 @@ pub async fn build_withdraw<
 
     let data = pos::Withdraw { validator, source };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Submit a transaction to unbond
@@ -919,11 +845,6 @@ pub async fn build_unbond<
     let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
-
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
 
     if !tx_args.force {
         known_validator_or_err(validator.clone(), tx_args.force, client)
@@ -971,24 +892,19 @@ pub async fn build_unbond<
         source: source.clone(),
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let fee_unshield_epoch = prepare_tx::<C, U, V>(
+    let (tx, epoch) = build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
-
-    Ok((tx, fee_unshield_epoch, latest_withdrawal_pre))
+    Ok((tx, epoch, latest_withdrawal_pre))
 }
 
 /// Query the unbonds post-tx
@@ -1104,35 +1020,24 @@ pub async fn build_bond<
         token: native_token,
     });
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let data = pos::Bond {
         validator,
         amount,
         source,
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx(
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
         tx_source_balance,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Build a default proposal governance
@@ -1156,48 +1061,35 @@ pub async fn build_default_proposal<
     proposal: DefaultProposal,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
-    let mut init_proposal_data =
-        InitProposalData::try_from(proposal.clone())
-            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+    let init_proposal_data = InitProposalData::try_from(proposal.clone())
+        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let push_data =
+        |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
+            let (_, extra_section_hash) = tx_builder.add_extra_section(
+                proposal.proposal.content.try_to_vec().unwrap(),
+            );
+            init_proposal_data.content = extra_section_hash;
 
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    if let Some(init_proposal_code) = proposal.data {
-        let (_, extra_section_hash) =
-            tx_builder.add_extra_section(init_proposal_code);
-        init_proposal_data.r#type =
-            ProposalType::Default(Some(extra_section_hash));
-    };
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    let epoch = prepare_tx::<C, U, V>(
+            if let Some(init_proposal_code) = proposal.data {
+                let (_, extra_section_hash) =
+                    tx_builder.add_extra_section(init_proposal_code);
+                init_proposal_data.r#type =
+                    ProposalType::Default(Some(extra_section_hash));
+            };
+        };
+    build(
         client,
         wallet,
         shielded,
         &tx,
-        &mut tx_builder,
-        fee_payer,
+        tx_code_path,
+        init_proposal_data,
+        push_data,
+        &fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx_builder, epoch))
+    .await
 }
 
 /// Build a proposal vote
@@ -1262,30 +1154,18 @@ pub async fn build_vote_proposal<
         delegations,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-    tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx,
-        &mut tx_builder,
-        fee_payer,
+        tx_code_path,
+        data,
+        do_nothing,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx_builder, epoch))
+    .await
 }
 
 /// Build a pgf funding proposal governance
@@ -1307,43 +1187,28 @@ pub async fn build_pgf_funding_proposal<
         tx_code_path,
     }: args::InitProposal,
     proposal: PgfFundingProposal,
-    fee_payer: common::PublicKey,
+    fee_payer: &common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
-    let mut init_proposal_data =
-        InitProposalData::try_from(proposal.clone())
-            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+    let init_proposal_data = InitProposalData::try_from(proposal.clone())
+        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
+        let (_, extra_section_hash) = tx
+            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        data.content = extra_section_hash;
+    };
+    build(
         client,
         wallet,
         shielded,
         &tx,
-        &mut tx_builder,
+        tx_code_path,
+        init_proposal_data,
+        add_section,
         fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx_builder, epoch))
+    .await
 }
 
 /// Build a pgf funding proposal governance
@@ -1367,41 +1232,27 @@ pub async fn build_pgf_stewards_proposal<
     proposal: PgfStewardProposal,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
-    let mut init_proposal_data =
-        InitProposalData::try_from(proposal.clone())
-            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
+    let init_proposal_data = InitProposalData::try_from(proposal.clone())
+        .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+    let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
+        let (_, extra_section_hash) = tx
+            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        data.content = extra_section_hash;
+    };
 
-    let chain_id = tx.chain_id.clone().unwrap();
-
-    let mut tx_builder = Tx::new(chain_id, tx.expiration);
-
-    let (_, extra_section_hash) = tx_builder
-        .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
-    init_proposal_data.content = extra_section_hash;
-
-    tx_builder
-        .add_code_from_hash(tx_code_hash)
-        .add_data(init_proposal_data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    build(
         client,
         wallet,
         shielded,
         &tx,
-        &mut tx_builder,
-        fee_payer,
+        tx_code_path,
+        init_proposal_data,
+        add_section,
+        &fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx_builder, epoch))
+    .await
 }
 
 /// Submit an IBC transfer
@@ -1529,6 +1380,85 @@ pub async fn build_ibc_transfer<
     .await?;
 
     Ok((tx, epoch))
+}
+
+/// Abstraction for helping build transactions
+pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
+    tx_args: &crate::ledger::args::Tx,
+    path: PathBuf,
+    data: D,
+    on_tx: F,
+    gas_payer: &common::PublicKey,
+    tx_source_balance: Option<TxSourcePostBalance>,
+) -> Result<(Tx, Option<Epoch>), Error>
+where
+    F: FnOnce(&mut Tx, &mut D),
+    D: BorshSerialize,
+    U: WalletUtils,
+    V: ShieldedUtils,
+{
+    build_pow_flag(
+        client,
+        wallet,
+        shielded,
+        tx_args,
+        path,
+        data,
+        on_tx,
+        gas_payer,
+        tx_source_balance,
+        #[cfg(not(feature = "mainnet"))]
+        false,
+    )
+    .await
+}
+
+async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
+    client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
+    tx_args: &crate::ledger::args::Tx,
+    path: PathBuf,
+    mut data: D,
+    on_tx: F,
+    gas_payer: &common::PublicKey,
+    tx_source_balance: Option<TxSourcePostBalance>,
+    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
+) -> Result<(Tx, Option<Epoch>), Error>
+where
+    F: FnOnce(&mut Tx, &mut D),
+    D: BorshSerialize,
+    U: WalletUtils,
+    V: ShieldedUtils,
+{
+    let chain_id = tx_args.chain_id.clone().unwrap();
+
+    let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
+
+    let tx_code_hash = query_wasm_code_hash(client, path.to_str().unwrap())
+        .await
+        .unwrap();
+
+    on_tx(&mut tx_builder, &mut data);
+
+    tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
+
+    let epoch = prepare_tx::<C, U, V>(
+        client,
+        wallet,
+        shielded,
+        tx_args,
+        &mut tx_builder,
+        gas_payer.clone(),
+        tx_source_balance,
+        #[cfg(not(feature = "mainnet"))]
+        requires_pow,
+    )
+    .await?;
+    Ok((tx_builder, epoch))
 }
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
@@ -1672,11 +1602,6 @@ pub async fn build_transfer<
     #[cfg(feature = "mainnet")]
     let is_source_faucet = false;
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded.gen_shielded_transfer(client, args.clone()).await;
 
@@ -1692,41 +1617,21 @@ pub async fn build_transfer<
         Err(err) => Err(TxError::MaspError(err.to_string())),
     }?;
 
-    let chain_id = args.tx.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, args.tx.expiration);
+    let shielded_tx_epoch = shielded_parts.clone().map(|trans| trans.epoch);
 
-    // Add the MASP Transaction and its Builder to facilitate validation
-    let (masp_hash, shielded_tx_epoch) = if let Some(ShieldedTransfer {
-        builder,
-        masp_tx,
-        metadata,
-        epoch,
-    }) = shielded_parts
-    {
-        // Add a MASP Transaction section to the Tx and get the tx hash
-        let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
-
-        // Get the decoded asset types used in the transaction to give
-        // offline wallet users more information
-        let asset_types = used_asset_types(shielded, client, &builder)
-            .await
-            .unwrap_or_default();
-
-        tx.add_masp_builder(MaspBuilder {
-            asset_types,
-            // Store how the Info objects map to Descriptors/Outputs
-            metadata,
-            // Store the data that was used to construct the Transaction
-            builder,
-            // Link the Builder to the Transaction by hash code
-            target: masp_tx_hash,
-        });
-
-        // The MASP Transaction section hash will be used in Transfer
-        (Some(masp_tx_hash), Some(epoch))
-    } else {
-        (None, None)
+    let asset_types = match shielded_parts.clone() {
+        None => None,
+        Some(transfer) => {
+            // Get the decoded asset types used in the transaction to give
+            // offline wallet users more information
+            let asset_types =
+                used_asset_types(shielded, client, &transfer.builder)
+                    .await
+                    .unwrap_or_default();
+            Some(asset_types)
+        }
     };
+
     // Construct the corresponding transparent Transfer object
     let transfer = token::Transfer {
         source: source.clone(),
@@ -1735,21 +1640,45 @@ pub async fn build_transfer<
         amount: validated_amount,
         key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
-        shielded: masp_hash,
+        shielded: None,
     };
 
-    tracing::debug!("Transfer data {:?}", transfer);
+    let add_shielded = |tx: &mut Tx, transfer: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        if let Some(ShieldedTransfer {
+            builder,
+            masp_tx,
+            metadata,
+            epoch: _,
+        }) = shielded_parts
+        {
+            // Add a MASP Transaction section to the Tx and get the tx hash
+            let masp_tx_hash = tx.add_masp_tx_section(masp_tx).1;
+            transfer.shielded = Some(masp_tx_hash);
 
-    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
+            tracing::debug!("Transfer data {:?}", transfer);
 
-    // Dry-run/broadcast/submit the transaction
-    let unshielding_epoch = prepare_tx::<C, U, V>(
+            tx.add_masp_builder(MaspBuilder {
+                // Is safe
+                asset_types: asset_types.unwrap(),
+                // Store how the Info objects map to Descriptors/Outputs
+                metadata,
+                // Store the data that was used to construct the Transaction
+                builder,
+                // Link the Builder to the Transaction by hash code
+                target: masp_tx_hash,
+            });
+        };
+    };
+    let (tx, unshielding_epoch) = build_pow_flag(
         client,
         wallet,
         shielded,
         &args.tx,
-        &mut tx,
-        fee_payer,
+        args.tx_code_path,
+        transfer,
+        add_shielded,
+        &fee_payer,
         tx_source_balance,
         #[cfg(not(feature = "mainnet"))]
         is_source_faucet,
@@ -1800,11 +1729,6 @@ pub async fn build_init_account<
             .await
             .unwrap();
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let threshold = match threshold {
         Some(threshold) => threshold,
         None => {
@@ -1816,30 +1740,29 @@ pub async fn build_init_account<
         }
     };
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
     let data = InitAccount {
         public_keys,
-        vp_code_hash: extra_section_hash,
+        // We will add the hash inside the add_code_hash function
+        vp_code_hash: Hash::zero(),
         threshold,
     };
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let epoch = prepare_tx::<C, U, V>(
+    let add_code_hash = |tx: &mut Tx, data: &mut InitAccount| {
+        let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
+        data.vp_code_hash = extra_section_hash;
+    };
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer.clone(),
+        tx_code_path,
+        data,
+        add_code_hash,
+        fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Submit a transaction to update a VP
@@ -1881,11 +1804,6 @@ pub async fn build_update_account<
         None => None,
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
-            .await
-            .unwrap();
-
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     let extra_section_hash = vp_code_hash
@@ -1898,22 +1816,23 @@ pub async fn build_update_account<
         threshold,
     };
 
-    tx.add_code_from_hash(tx_code_hash).add_data(data);
-
-    let epoch = prepare_tx::<C, U, V>(
+    let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
+        let extra_section_hash = vp_code_hash
+            .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
+        data.vp_code_hash = extra_section_hash;
+    };
+    build(
         client,
         wallet,
         shielded,
         &tx_args,
-        &mut tx,
-        fee_payer,
+        tx_code_path,
+        data,
+        add_code_hash,
+        &fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
-    .await?;
-
-    Ok((tx, epoch))
+    .await
 }
 
 /// Submit a custom transaction
@@ -2141,4 +2060,11 @@ fn validate_untrusted_code_err(
     } else {
         Ok(())
     }
+}
+
+/// A helper for [`fn build`] that can be used for `on_tx` arg that does nothing
+fn do_nothing<D>(_tx: &mut Tx, _data: &mut D)
+where
+    D: BorshSerialize,
+{
 }
