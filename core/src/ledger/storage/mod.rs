@@ -560,7 +560,13 @@ where
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
-        Ok((self.block.tree.has_key(key)?, key.len() as _))
+        if is_replay_protection_key(key) {
+            // Replay protection keys are not included in the merkle
+            // tree
+            Ok((self.db.read_subspace_val(key)?.is_some(), key.len() as _))
+        } else {
+            Ok((self.block.tree.has_key(key)?, key.len() as _))
+        }
     }
 
     /// Returns a value from the specified subspace and the gas cost
@@ -640,6 +646,7 @@ where
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
             // Update the merkle tree for all but replay-protection entries
+            // FIXME: move these check directly in the merkle tree method?
             self.block.tree.update(key, value)?;
         }
 
