@@ -27,6 +27,7 @@ pub use wl_storage::{
 #[cfg(feature = "wasm-runtime")]
 pub use self::masp_conversions::update_allowed_conversions;
 pub use self::masp_conversions::{encode_asset_type, ConversionState};
+use super::replay_protection::is_tx_hash_key;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::MIN_STORAGE_GAS;
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
@@ -637,7 +638,10 @@ where
             let height =
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
-        } else {
+        } else if !is_tx_hash_key(key) {
+            // TODO: hack, would be better to pull replay protection out of the
+            // subspace into a new storage root key which doesn't get merkelized
+            // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
 
@@ -1004,7 +1008,10 @@ where
             let height =
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
-        } else {
+        } else if !is_tx_hash_key(key) {
+            // TODO: hack, would be better to pull replay protection out of the
+            // subspace into a new storage root key which doesn't get merkelized
+            // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
         self.db
