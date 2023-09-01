@@ -261,8 +261,11 @@ pub async fn join_network(
 
     // Setup the node for a genesis validator, if used
     if let Some((tendermint_node_key, consensus_key)) = validator_keys {
-        println!("Setting up validator keys.");
-        let tm_home_dir = chain_dir.join("tendermint");
+        println!(
+            "Setting up validator keys in CometBFT. Consensus key: {}.",
+            consensus_key.to_public()
+        );
+        let tm_home_dir = chain_dir.join(config::COMETBFT_DIR);
 
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(&tm_home_dir, &consensus_key);

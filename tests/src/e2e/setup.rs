@@ -264,7 +264,7 @@ pub fn network(
     {
         let src_path =
             wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
-        let dest_dir = validator_0_base_dir.join("src").join("pre-genesis");
+        let dest_dir = validator_0_base_dir.join("pre-genesis");
         let dest_path = wallet::wallet_file(&dest_dir);
         println!(
             "{} for {validator_alias} from {} to {}.",
