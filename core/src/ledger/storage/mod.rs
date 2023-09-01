@@ -646,7 +646,6 @@ where
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
             // Update the merkle tree for all but replay-protection entries
-            // FIXME: move these check directly in the merkle tree method?
             self.block.tree.update(key, value)?;
         }
 
@@ -768,36 +767,44 @@ where
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.try_to_vec().expect(
-                                            "Serialization should never fail",
-                                        )
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_replay_protection_key(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.try_to_vec().expect(
+                                                "Serialization should never \
+                                                 fail",
+                                            )
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?
+                                };
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                tree.delete(&old_key)?;
+                                if !is_replay_protection_key(&old_key) {
+                                    tree.delete(&old_key)?;
+                                }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.try_to_vec().expect(
-                                            "Serialization should never fail",
-                                        )
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_replay_protection_key(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.try_to_vec().expect(
+                                                "Serialization should never \
+                                                 fail",
+                                            )
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -806,23 +813,28 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-                        tree.delete(&key)?;
+                        if !is_replay_protection_key(&key) {
+                            tree.delete(&key)?;
+                        }
                         old_diff = old_diff_iter.next();
                     }
                     (None, Some(new)) => {
                         // the value was inserted
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
-                        tree.update(
-                            &key,
-                            if is_pending_transfer_key(&key) {
-                                target_height
-                                    .try_to_vec()
-                                    .expect("Serialization should never fail")
-                            } else {
-                                new.1.clone()
-                            },
-                        )?;
+
+                        if !is_replay_protection_key(&key) {
+                            tree.update(
+                                &key,
+                                if is_pending_transfer_key(&key) {
+                                    target_height.try_to_vec().expect(
+                                        "Serialization should never fail",
+                                    )
+                                } else {
+                                    new.1.clone()
+                                },
+                            )?
+                        };
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,
@@ -1031,7 +1043,10 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<i64> {
-        self.block.tree.delete(key)?;
+        if !is_replay_protection_key(key) {
+            // Update the merkle tree for all but replay-protection entries
+            self.block.tree.delete(key)?;
+        }
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
     }
