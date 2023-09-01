@@ -212,7 +212,7 @@ where
                         .update_header(TxType::Raw)
                         .header_hash();
                     let tx_hash_key =
-                        replay_protection::get_tx_hash_key(&tx_hash);
+                        replay_protection::get_replay_protection_key(&tx_hash);
                     self.wl_storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
@@ -229,16 +229,19 @@ where
                     let processed_tx =
                         Tx::try_from(processed_tx.tx.as_ref()).unwrap();
                     let wrapper_tx_hash_key =
-                        replay_protection::get_tx_hash_key(&hash::Hash(
-                            processed_tx.header_hash().0,
-                        ));
+                        replay_protection::get_replay_protection_key(
+                            &hash::Hash(processed_tx.header_hash().0),
+                        );
                     self.wl_storage
                         .write_bytes(&wrapper_tx_hash_key, vec![])
                         .expect("Error while writing tx hash to storage");
 
-                    let inner_tx_hash_key = replay_protection::get_tx_hash_key(
-                        &tx.clone().update_header(TxType::Raw).header_hash(),
-                    );
+                    let inner_tx_hash_key =
+                        replay_protection::get_replay_protection_key(
+                            &tx.clone()
+                                .update_header(TxType::Raw)
+                                .header_hash(),
+                        );
                     self.wl_storage
                         .write_bytes(&inner_tx_hash_key, vec![])
                         .expect("Error while writing tx hash to storage");
@@ -493,7 +496,7 @@ where
                             msg
                         {
                             let tx_hash_key =
-                                replay_protection::get_tx_hash_key(&hash);
+                                replay_protection::get_replay_protection_key(&hash);
                             self.wl_storage
                                 .delete(&tx_hash_key)
                                 .expect(
@@ -2279,7 +2282,7 @@ mod test_finalize_block {
         }));
 
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::get_tx_hash_key(
+        let inner_hash_key = replay_protection::get_replay_protection_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
