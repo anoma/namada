@@ -59,7 +59,7 @@ pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
 pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
     load(store_dir).or_else(|_| {
         let store = Store::default();
-        dbg!("new wallet", &store);
+        println!("Created a new wallet at {}", store_dir.to_string_lossy());
         save(&store, store_dir)
             .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
         Ok(store)
@@ -105,8 +105,7 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
             err.to_string(),
         )
     })?;
-    dbg!(store_dir);
-    dbg!(Store::decode(store).map_err(LoadStoreError::Decode))
+    Store::decode(store).map_err(LoadStoreError::Decode)
 }
 
 /// Add addresses from a genesis configuration.

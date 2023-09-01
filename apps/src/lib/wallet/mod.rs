@@ -236,12 +236,17 @@ pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
     self::store::save(wallet.store(), wallet.store_dir())
 }
 
-/// Load a wallet from the store file.
+/// Load a wallet from the store file. Returns `None` if the wallet doesn't
+/// exits. Shuts down the process on decoding error.
 pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
-    let store = self::store::load(store_dir).unwrap_or_else(|err| {
-        eprintln!("Unable to load the wallet: {}", err);
-        cli::safe_exit(1)
-    });
+    let store = match self::store::load(store_dir) {
+        Ok(store) => Some(store),
+        Err(err @ store::LoadStoreError::Decode(_)) => {
+            eprintln!("Unable to load the wallet: {}", err);
+            cli::safe_exit(1)
+        }
+        Err(_) => None,
+    }?;
     Some(Wallet::<CliWalletUtils>::new(
         store_dir.to_path_buf(),
         store,
@@ -252,7 +257,7 @@ pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
 /// keys or addresses.
 pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
     let store = self::store::load_or_new(store_dir).unwrap_or_else(|err| {
-        eprintln!("Unable to load the wallet: {}", err);
+        eprintln!("Unable to load or create the wallet: {}", err);
         cli::safe_exit(1)
     });
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
@@ -260,6 +265,7 @@ pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
 
 /// Load a wallet from the store file or create a new one with the default
 /// addresses loaded from the genesis file, if not found.
+/// TODO: update for new genesis
 pub fn load_or_new_from_genesis(
     store_dir: &Path,
     genesis_cfg: GenesisConfig,

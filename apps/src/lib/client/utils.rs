@@ -261,6 +261,7 @@ pub async fn join_network(
 
     // Setup the node for a genesis validator, if used
     if let Some((tendermint_node_key, consensus_key)) = validator_keys {
+        println!("Setting up validator keys.");
         let tm_home_dir = chain_dir.join("tendermint");
 
         // Write consensus key to tendermint home
@@ -271,6 +272,11 @@ pub async fn join_network(
 
         // Pre-initialize tendermint validator state
         tendermint_node::write_validator_state(&tm_home_dir);
+    } else {
+        println!(
+            "No validator keys are being used. Make sure you didn't forget to \
+             specify `--genesis-validator`?"
+        );
     }
 
     // Move wasm-dir and update config if it's non-default
@@ -478,8 +484,15 @@ pub fn init_network(
 
     // Create a release tarball for anoma-network-config
     if !dont_archive {
+        // TODO: remove the `config::DEFAULT_BASE_DIR` and instead just archive
+        // the chain dir
         let mut release = tar::Builder::new(Vec::new());
-        release.append_dir_all(&chain_dir, &chain_dir).unwrap();
+        release
+            .append_dir_all(
+                PathBuf::from(config::DEFAULT_BASE_DIR).join(chain_id.as_str()),
+                &chain_dir,
+            )
+            .unwrap();
         let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
         let release_global_config_path =
             GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
@@ -649,7 +662,8 @@ pub fn init_genesis_validator(
     );
 }
 
-fn load_pre_genesis_wallet_or_exit(
+/// Try to load a pre-genesis wallet or terminate if it cannot be found.
+pub fn load_pre_genesis_wallet_or_exit(
     base_dir: &Path,
 ) -> (Wallet<CliWalletUtils>, PathBuf) {
     let pre_genesis_dir = base_dir.join(PRE_GENESIS_DIR);

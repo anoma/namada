@@ -3057,6 +3057,7 @@ fn test_genesis_validators() -> Result<()> {
         test_dir,
         net,
         genesis,
+        genesis_new: todo!(),
         async_runtime: Default::default(),
     };
 

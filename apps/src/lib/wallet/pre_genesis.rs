@@ -14,7 +14,7 @@ use crate::wallet::store::gen_validator_keys;
 use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
 
 /// Validator pre-genesis wallet file name
-const VALIDATOR_FILE_NAME: &str = "wallet.toml";
+const VALIDATOR_FILE_NAME: &str = "validator-wallet.toml";
 
 /// Get the path to the validator pre-genesis wallet store.
 pub fn validator_file_name(store_dir: impl AsRef<Path>) -> PathBuf {

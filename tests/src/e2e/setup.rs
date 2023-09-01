@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::fs::{File, OpenOptions};
-use std::net::SocketAddr;
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -20,10 +19,12 @@ use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::{eyre, Context};
 use itertools::{Either, Itertools};
 use namada::types::chain::ChainId;
-use namada_apps::client::utils;
+use namada_apps::client::utils::{self, validator_pre_genesis_dir};
+use namada_apps::config::genesis::chain;
 use namada_apps::config::genesis::genesis_config::{self, GenesisConfig};
-use namada_apps::config::{ethereum_bridge, Config};
+use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
+use namada_vp_prelude::HashSet;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde_json;
@@ -113,29 +114,22 @@ pub fn set_ethereum_bridge_mode(
 /// INVARIANT: Do not call this function more than once on the same config.
 pub fn set_validators<F>(
     num: u8,
+    // TODO:
+    // mut genesis: genesis::templates::All
     mut genesis: GenesisConfig,
     port_offset: F,
 ) -> GenesisConfig
 where
     F: Fn(u8) -> u16,
 {
-    let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
-    // Clone the first validator before modifying it
-    let other_validators = validator_0.clone();
-    let net_address_0 =
-        SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
-            .unwrap();
-    let net_address_port_0 = net_address_0.port();
-    for ix in 0..num {
-        let mut validator = other_validators.clone();
-        let mut net_address = net_address_0;
-        // 6 ports for each validator
-        let first_port = net_address_port_0 + port_offset(ix);
-        net_address.set_port(first_port);
-        validator.net_address = Some(net_address.to_string());
-        let name = format!("validator-{}", ix);
-        genesis.validator.insert(name, validator);
-    }
+    // TODO: for each validator:
+    // - generate a balance key
+    // - assign balance to the key
+    // - invoke `init-genesis-validator` signed by balance key to generate
+    //   validator pre-genesis wallet signed genesis txs
+    // - load and insert the generated pre-genesis wallet to `PreGenesisWallets`
+    // - add txs to genesis templates
+
     genesis
 }
 
@@ -146,6 +140,9 @@ pub fn single_node_net() -> Result<Test> {
 
 /// Setup a configurable network.
 pub fn network(
+    // TODO:
+    // mut update_genesis: impl FnMut(genesis::templates::All) ->
+    // genesis::templates::All,
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
     consensus_timeout_commit: Option<&'static str>,
 ) -> Result<Test> {
@@ -157,41 +154,64 @@ pub fn network(
     let working_dir = working_dir();
     let test_dir = TestDir::new();
 
-    // Open the source genesis file
-    let mut genesis = genesis_config::open_genesis_config(
-        working_dir.join(SINGLE_NODE_NET_GENESIS),
-    )?;
+    // Open the source genesis file templates
+    let templates_dir = working_dir.join("genesis").join("localnet");
+    println!(
+        "{} {}.",
+        "Loading genesis templates from".yellow(),
+        templates_dir.to_string_lossy()
+    );
+    let mut templates = genesis::templates::All::read_toml_files(
+        &templates_dir,
+    )
+    .expect(&format!(
+        "Missing genesis templates files at {}",
+        templates_dir.to_string_lossy()
+    ));
 
-    genesis.parameters.vp_whitelist =
+    // Update the templates as needed
+    templates.parameters.parameters.vp_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-    genesis.parameters.tx_whitelist =
+    templates.parameters.parameters.tx_whitelist =
         Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
 
     // Run the provided function on it
-    let genesis = update_genesis(genesis);
+    // TODO: update to work on `genesis::templates::All`
+    // let genesis = update_genesis(genesis);
 
-    // Run `init-network` to generate the finalized genesis config, keys and
-    // addresses and update WASM checksums
-    let genesis_file = test_dir.path().join("e2e-test-genesis-src.toml");
-    genesis_config::write_genesis_config(&genesis, &genesis_file);
-    let genesis_path = genesis_file.to_string_lossy();
+    // Write the updateds genesis templates to the test dir
+    let updated_templates_dir = test_dir.path().join("templates");
+    create_dir_all(&updated_templates_dir)?;
+    println!(
+        "{} {}.",
+        "Writing updated genesis templates to".yellow(),
+        updated_templates_dir.to_string_lossy()
+    );
+    templates.write_toml_files(&updated_templates_dir)?;
+
+    // Run `init-network` on the updated templates to generate the finalized
+    // genesis config and addresses and update WASM checksums
+    let templates_path = updated_templates_dir.to_string_lossy().into_owned();
+    println!("{}", "Finalizing network from genesis templates.".yellow());
     let checksums_path = working_dir
         .join("wasm/checksums.json")
         .to_string_lossy()
         .into_owned();
+    let genesis_dir = test_dir.path().join("genesis");
+    let archive_dir = genesis_dir.to_string_lossy().to_string();
     let mut args = vec![
         "utils",
         "init-network",
-        "--unsafe-dont-encrypt",
-        "--genesis-path",
-        &genesis_path,
+        "--templates-path",
+        &templates_path,
         "--chain-prefix",
         "e2e-test",
-        "--localhost",
-        "--dont-archive",
-        "--allow-duplicate-ip",
         "--wasm-checksums-path",
         &checksums_path,
+        "--genesis-time",
+        "2023-08-30T00:00:00Z",
+        "--archive-dir",
+        &archive_dir,
     ];
     if let Some(consensus_timeout_commit) = consensus_timeout_commit {
         args.push("--consensus-timeout-commit");
@@ -202,7 +222,7 @@ pub fn network(
         args,
         Some(5),
         &working_dir,
-        &test_dir,
+        &genesis_dir,
         format!("{}:{}", std::file!(), std::line!()),
     )?;
 
@@ -212,31 +232,168 @@ pub fn network(
     let chain_id_raw =
         matched.trim().split_once("Derived chain ID: ").unwrap().1;
     let chain_id = ChainId::from_str(chain_id_raw.trim())?;
-    println!("'init-network' output: {}", unread);
+    println!("'init-network' unread output: {}", unread);
     let net = Network { chain_id };
+    init_network.assert_success();
 
     // release lock on wallet by dropping the
     // child process
     drop(init_network);
 
-    // Move the "others" accounts wallet in the main base dir, so that we can
-    // use them with `Who::NonValidator`
-    let chain_dir = test_dir.path().join(net.chain_id.as_str());
-    std::fs::rename(
-        wallet::wallet_file(
-            chain_dir
-                .join(utils::NET_ACCOUNTS_DIR)
-                .join(utils::NET_OTHER_ACCOUNTS_DIR),
-        ),
-        wallet::wallet_file(chain_dir.clone()),
+    // Host the network archive to make it available for `join-network` commands
+    // TODO: allow to unpack from a file instead of having to host it
+    let network_archive_server = file_serve::Server::new(&archive_dir);
+    let network_archive_addr = network_archive_server.addr().to_owned();
+    std::thread::spawn(move || {
+        network_archive_server.serve().unwrap();
+    });
+    std::env::set_var(
+        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_SERVER,
+        format!("http://{network_archive_addr}"),
+    );
+
+    let validator_alias = "validator-0";
+    let validator_0_base_dir = test_dir
+        .path()
+        .join(utils::NET_ACCOUNTS_DIR)
+        .join(validator_alias);
+
+    // Copy the main wallet from templates dir into validator's base dir.
+    // We only have to do this for "validator-0" as it's using a pre-generated
+    // wallets.
+    {
+        let src_path =
+            wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
+        let dest_dir = validator_0_base_dir.join("src").join("pre-genesis");
+        let dest_path = wallet::wallet_file(&dest_dir);
+        println!(
+            "{} for {validator_alias} from {} to {}.",
+            "Copying main pre-genesis wallet".yellow(),
+            src_path.to_string_lossy(),
+            dest_path.to_string_lossy(),
+        );
+        fs::create_dir_all(&dest_dir)?;
+        fs::copy(&src_path, &dest_path)?;
+    }
+
+    // Copy the pre-genesis validator wallet from templates dir into validator's
+    // base dir.
+    // We only have to do this for "validator-0" as it's using a pre-generated
+    // wallets.
+    {
+        let src_path = wallet::pre_genesis::validator_file_name(
+            validator_pre_genesis_dir(
+                &templates_dir.join("src"),
+                validator_alias,
+            ),
+        );
+        let dest_dir = utils::validator_pre_genesis_dir(
+            &validator_0_base_dir,
+            validator_alias,
+        );
+        let dest_path = wallet::pre_genesis::validator_file_name(&dest_dir);
+        println!(
+            "{} for {validator_alias} from {} to {}.",
+            "Copying pre-genesis validator-wallet".yellow(),
+            src_path.to_string_lossy(),
+            dest_path.to_string_lossy(),
+        );
+        fs::create_dir_all(&dest_dir)?;
+        fs::copy(&src_path, dest_path)?;
+    }
+
+    let genesis_new = chain::Finalized::read_toml_files(
+        &genesis_dir.join(net.chain_id.as_str()),
     )
     .unwrap();
+    let validator_aliases = genesis_new
+        .transactions
+        .validator_account
+        .as_ref()
+        .map(|txs| {
+            txs.iter().fold(HashSet::new(), |mut acc, finalized| {
+                acc.insert(finalized.tx.alias.to_string());
+                acc
+            })
+        })
+        .unwrap_or_default();
 
+    // Setup a dir for every validator and non-validator using their
+    // pre-genesis wallets
+    for alias in &validator_aliases {
+        println!("{} {}.", "Joining network with ".yellow(), alias);
+        let validator_base_dir =
+            test_dir.path().join(utils::NET_ACCOUNTS_DIR).join(alias);
+        let mut join_network = run_cmd(
+            Bin::Client,
+            [
+                "utils",
+                "join-network",
+                "--chain-id",
+                net.chain_id.as_str(),
+                "--genesis-validator",
+                alias,
+                "--dont-prefetch-wasm",
+            ],
+            Some(5),
+            &working_dir,
+            &validator_base_dir,
+            format!("{}:{}", std::file!(), std::line!()),
+        )?;
+        join_network.exp_string("Successfully configured for chain")?;
+        join_network.assert_success();
+    }
+
+    // Setup a dir for a non-validator using the pre-genesis wallet
+    {
+        // Copy the main wallet from templates dir into the base dir.
+        let base_dir = test_dir.path();
+        let src_path =
+            wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
+        let dest_dir = base_dir.join("src").join("pre-genesis");
+        let dest_path = wallet::wallet_file(&dest_dir);
+        println!(
+            "{} from {} to {}.",
+            "Copying main pre-genesis wallet into a default non-validator \
+             base dir"
+                .yellow(),
+            src_path.to_string_lossy(),
+            dest_path.to_string_lossy(),
+        );
+        fs::create_dir_all(&dest_dir)?;
+        fs::copy(&src_path, &dest_path)?;
+
+        println!(
+            "{}.",
+            "Joining network with a default non-validator node".yellow()
+        );
+        let mut join_network = run_cmd(
+            Bin::Client,
+            [
+                "utils",
+                "join-network",
+                "--chain-id",
+                net.chain_id.as_str(),
+                "--dont-prefetch-wasm",
+            ],
+            Some(5),
+            &working_dir,
+            &base_dir,
+            format!("{}:{}", std::file!(), std::line!()),
+        )?;
+        join_network.exp_string("Successfully configured for chain")?;
+        join_network.assert_success();
+    }
+
+    // TODO: remove old genesis once replaced
+    let genesis = genesis_config::open_genesis_config(
+        working_dir.join(SINGLE_NODE_NET_GENESIS),
+    )?;
     copy_wasm_to_chain_dir(
         &working_dir,
-        &chain_dir,
+        test_dir.path(),
         &net.chain_id,
-        genesis.validator.keys(),
+        validator_aliases.iter(),
     );
 
     Ok(Test {
@@ -244,6 +401,7 @@ pub fn network(
         test_dir,
         net,
         genesis,
+        genesis_new,
         async_runtime: Default::default(),
     })
 }
@@ -266,7 +424,9 @@ pub struct Test {
     /// Namada cmds
     pub test_dir: TestDir,
     pub net: Network,
+    // TODO: remove once replaced
     pub genesis: GenesisConfig,
+    pub genesis_new: chain::Finalized,
     pub async_runtime: LazyAsyncRuntime,
 }
 
@@ -456,10 +616,8 @@ impl Test {
             Who::Validator(index) => self
                 .test_dir
                 .path()
-                .join(self.net.chain_id.as_str())
                 .join(utils::NET_ACCOUNTS_DIR)
-                .join(format!("validator-{}", index))
-                .join(config::DEFAULT_BASE_DIR),
+                .join(format!("validator-{}", index)),
         }
     }
 
@@ -885,7 +1043,7 @@ pub mod constants {
 /// Copy WASM files from the `wasm` directory to every node's chain dir.
 pub fn copy_wasm_to_chain_dir<'a>(
     working_dir: &Path,
-    chain_dir: &Path,
+    test_dir: &Path,
     chain_id: &ChainId,
     genesis_validator_keys: impl Iterator<Item = &'a String>,
 ) {
@@ -911,6 +1069,7 @@ pub fn copy_wasm_to_chain_dir<'a>(
             built_wasm_dir.to_string_lossy()
         );
     }
+    let chain_dir = test_dir.join(chain_id.as_str());
     let target_wasm_dir = chain_dir.join(config::DEFAULT_WASM_DIR);
     for file in &wasm_files {
         std::fs::copy(
@@ -922,10 +1081,9 @@ pub fn copy_wasm_to_chain_dir<'a>(
 
     // Copy the built WASM files from "wasm" directory to each validator dir
     for validator_name in genesis_validator_keys {
-        let target_wasm_dir = chain_dir
+        let target_wasm_dir = test_dir
             .join(utils::NET_ACCOUNTS_DIR)
             .join(validator_name)
-            .join(config::DEFAULT_BASE_DIR)
             .join(chain_id.as_str())
             .join(config::DEFAULT_WASM_DIR);
         for file in &wasm_files {

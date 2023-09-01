@@ -485,19 +485,12 @@ where
                 #[cfg(not(test))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
-                    let genesis_path =
-                        &base_dir.join(format!("{}.toml", chain_id.as_str()));
                     tracing::debug!(
-                        "{}",
-                        wallet_path.as_path().to_str().unwrap()
+                        "Loading wallet from {}",
+                        wallet_path.to_string_lossy()
                     );
-                    let mut wallet = crate::wallet::load_or_new_from_genesis(
-                        wallet_path,
-                        genesis::genesis_config::open_genesis_config(
-                            genesis_path,
-                        )
-                        .unwrap(),
-                    );
+                    let mut wallet = crate::wallet::load(wallet_path)
+                        .expect("Validator node must have a wallet");
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {

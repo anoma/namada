@@ -22,7 +22,7 @@ cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
 cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
   --alias daewon --unsafe-dont-encrypt
 cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
-  --alias validator-0-key --unsafe-dont-encrypt
+  --alias validator-0-balance-key --unsafe-dont-encrypt
 cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key gen \
   --alias faucet-key --unsafe-dont-encrypt
 ```
@@ -35,12 +35,12 @@ cargo run --bin namadaw -- --base-dir "genesis/localnet/src" key list
 
 ## transactions.toml
 
-The pre-genesis validator wallet used to generate [validator transactions for transactions.toml](src/pre-genesis/validator-0/transactions.toml) is located at [src/pre-genesis/validator-0/wallet.toml](src/pre-genesis/validator-0/wallet.toml) and can be re-generated from the repo's root dir with:
+The pre-genesis validator wallet used to generate [validator transactions for transactions.toml](src/pre-genesis/validator-0/transactions.toml) is located at [src/pre-genesis/validator-0/validator-wallet.toml](src/pre-genesis/validator-0/validator-wallet.toml) and can be re-generated from the repo's root dir with:
 
 ```shell
 cargo run --bin namadac -- --base-dir "genesis/localnet/src" utils \
   init-genesis-validator \
-  --source validator-0-key \
+  --source validator-0-balance-key \
   --alias validator-0 \
   --net-address "127.0.0.1:27656" \
   --commission-rate 0.05 \

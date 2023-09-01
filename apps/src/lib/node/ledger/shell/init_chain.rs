@@ -28,8 +28,6 @@ use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, SignedBondTx, SignedTransferTx, TransferTx,
     ValidatorAccountTx,
 };
-use crate::facade::tendermint_proto::abci;
-use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
@@ -72,6 +70,7 @@ where
         let genesis = genesis::make_dev_genesis(num_validators);
         #[cfg(test)]
         {
+            // TODO: is this needed? check if any test fails without it
             // update the native token from the genesis file
             let native_token = genesis.get_native_token().clone();
             self.wl_storage.storage.native_token = native_token;
@@ -159,35 +158,10 @@ where
         ibc::init_genesis_storage(&mut self.wl_storage);
 
         // Set the initial validator set
-        if let Some(txs) = genesis.transactions.validator_account.as_ref() {
-            for FinalizedValidatorAccountTx {
-                address: _,
-                tx:
-                    ValidatorAccountTx {
-                        alias,
-                        consensus_key,
-                        ..
-                    },
-            } in txs
-            {
-                tracing::debug!(
-                    "Applying genesis tx to init a validator account {alias}"
-                );
-
-                let mut abci_validator = abci::ValidatorUpdate::default();
-                let pub_key = TendermintPublicKey {
-                    sum: Some(
-                        key_to_tendermint(&consensus_key.pk.raw).unwrap(),
-                    ),
-                };
-                abci_validator.pub_key = Some(pub_key);
-                // TODO Read from PoS - must be after bonds txs
-                let stake = token::Amount::default();
-                abci_validator.power =
-                    into_tm_voting_power(pos_params.tm_votes_per_token, stake);
-                response.validators.push(abci_validator);
-            }
-        }
+        response.validators = self
+            .get_abci_validator_updates(true)
+            .expect("Must be able to set genesis validator set");
+        debug_assert!(!response.validators.is_empty());
 
         Ok(response)
     }
