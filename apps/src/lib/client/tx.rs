@@ -102,9 +102,9 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
             )
             .await?;
 
-            signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+            signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
-            signing::sign_tx(&mut ctx.wallet, &args, &mut tx, signing_data);
+            signing::sign_tx(&mut ctx.wallet, &args, &mut tx, signing_data)?;
 
             tx::process_tx(client, &mut ctx.wallet, &args, tx).await?;
         }
@@ -142,12 +142,12 @@ where
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
@@ -182,12 +182,12 @@ where
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
@@ -215,12 +215,12 @@ where
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
@@ -445,12 +445,12 @@ pub async fn submit_init_validator<
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if tx_args.dump_tx {
         tx::dump_tx(&tx_args, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &tx_args, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &tx_args, &mut tx, signing_data)?;
 
         let result = tx::process_tx(client, &mut ctx.wallet, &tx_args, tx)
             .await?
@@ -669,13 +669,13 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
             signing_data.fee_payer.clone(),
         )
         .await?;
-        signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+        signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
             break;
         } else {
-            signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+            signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
             let result =
                 tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
 
@@ -735,12 +735,12 @@ where
         signing_data.fee_payer.clone(),
     )
     .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
@@ -938,7 +938,7 @@ where
             signing_data,
         )
     };
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
@@ -948,7 +948,7 @@ where
             &args.tx,
             &mut tx_builder,
             signing_data,
-        );
+        )?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder).await?;
     }
 
@@ -1028,7 +1028,7 @@ where
         )
         .await?
     };
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
@@ -1038,7 +1038,7 @@ where
             &args.tx,
             &mut tx_builder,
             signing_data,
-        );
+        )?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx_builder).await?;
     }
 
@@ -1173,12 +1173,12 @@ where
         signing_data.fee_payer.clone(),
     )
     .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
 
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1214,12 +1214,12 @@ where
             signing_data.fee_payer.clone(),
         )
         .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
 
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
 
@@ -1256,12 +1256,12 @@ where
         signing_data.fee_payer.clone(),
     )
     .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
 
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1297,12 +1297,12 @@ where
         signing_data.fee_payer.clone(),
     )
     .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
 
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1338,12 +1338,12 @@ where
         signing_data.fee_payer.clone(),
     )
     .await?;
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
 
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
@@ -1381,12 +1381,12 @@ where
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
@@ -1421,12 +1421,12 @@ where
     )
     .await?;
 
-    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await;
+    signing::generate_test_vector(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data);
+        signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
         tx::process_tx(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 

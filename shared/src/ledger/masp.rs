@@ -57,6 +57,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 #[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
+use thiserror::Error;
 
 use crate::ledger::args::InputAmount;
 use crate::ledger::queries::Client;
@@ -67,7 +68,9 @@ use crate::proto::Tx;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
-use crate::types::error::{Error, PinnedBalanceError};
+use crate::types::error::{
+    EncodingError, Error, PinnedBalanceError, QueryError,
+};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
@@ -124,6 +127,17 @@ enum LoadOrSaveProofs {
     Load,
     Save,
     Neither,
+}
+
+/// A return type for gen_shielded_transfer
+#[derive(Error, Debug)]
+pub enum TransferErr {
+    /// Build error for masp errors
+    #[error("{0}")]
+    Build(#[from] builder::Error<std::convert::Infallible>),
+    /// errors
+    #[error("{0}")]
+    General(#[from] Error),
 }
 
 fn load_pvks() -> (
@@ -518,7 +532,8 @@ impl<'a> From<&'a MaspAmount> for I128Sum {
         let mut res = I128Sum::zero();
         for ((epoch, token), val) in masp_amount.iter() {
             for denom in MaspDenom::iter() {
-                let asset = make_asset_type(Some(*epoch), token, denom);
+                let asset =
+                    make_asset_type(Some(*epoch), token, denom).unwrap();
                 res += I128Sum::from_pair(asset, denom.denominate_i128(val))
                     .unwrap();
             }
@@ -651,7 +666,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
-    ) {
+    ) -> Result<(), Error> {
         // First determine which of the keys requested to be fetched are new.
         // Necessary because old transactions will need to be scanned for new
         // keys.
@@ -673,7 +688,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (txs, mut tx_iter);
         if !unknown_keys.is_empty() {
             // Load all transactions accepted until this point
-            txs = Self::fetch_shielded_transfers(client, 0).await;
+            txs = Self::fetch_shielded_transfers(client, 0).await?;
             tx_iter = txs.iter();
             // Do this by constructing a shielding context only for unknown keys
             let mut tx_ctx = Self {
@@ -689,7 +704,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 {
                     tx_ctx
                         .scan_tx(client, *height, *idx, *epoch, tx, stx)
-                        .await;
+                        .await?;
                 } else {
                     break;
                 }
@@ -699,14 +714,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             self.merge(tx_ctx);
         } else {
             // Load only transactions accepted from last_txid until this point
-            txs = Self::fetch_shielded_transfers(client, self.last_txidx).await;
+            txs =
+                Self::fetch_shielded_transfers(client, self.last_txidx).await?;
             tx_iter = txs.iter();
         }
         // Now that we possess the unspent notes corresponding to both old and
         // new keys up until tx_pos, proceed to scan the new transactions.
         for ((height, idx), (epoch, tx, stx)) in &mut tx_iter {
-            self.scan_tx(client, *height, *idx, *epoch, tx, stx).await;
+            self.scan_tx(client, *height, *idx, *epoch, tx, stx).await?;
         }
+        Ok(())
     }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
@@ -717,13 +734,18 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn fetch_shielded_transfers<C: Client + Sync>(
         client: &C,
         last_txidx: u64,
-    ) -> BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)> {
+    ) -> Result<
+        BTreeMap<(BlockHeight, TxIndex), (Epoch, Transfer, Transaction)>,
+        Error,
+    > {
         // The address of the MASP account
         let masp_addr = masp();
         // Construct the key where last transaction pointer is stored
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
-            .expect("Cannot obtain a storage key");
+            .map_err(|k| {
+                Error::Other(format!("Cannot obtain a storage key: {}", k))
+            })?;
         // Query for the index of the last accepted transaction
         let head_txidx = query_storage_value::<C, u64>(client, &head_tx_key)
             .await
@@ -734,22 +756,23 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Construct the key for where the current transaction is stored
             let current_tx_key = Key::from(masp_addr.to_db_key())
                 .push(&(TX_KEY_PREFIX.to_owned() + &i.to_string()))
-                .expect("Cannot obtain a storage key");
+                .map_err(|e| {
+                    Error::Other(format!("Cannot obtain a storage key {}", e))
+                })?;
             // Obtain the current transaction
             let (tx_epoch, tx_height, tx_index, current_tx, current_stx) =
                 query_storage_value::<
                     C,
                     (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
                 >(client, &current_tx_key)
-                .await
-                .unwrap();
+                .await?;
             // Collect the current transaction
             shielded_txs.insert(
                 (tx_height, tx_index),
                 (tx_epoch, current_tx, current_stx),
             );
         }
-        shielded_txs
+        Ok(shielded_txs)
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -768,7 +791,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         epoch: Epoch,
         tx: &Transfer,
         shielded: &Transaction,
-    ) {
+    ) -> Result<(), Error> {
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
         // Listen for notes sent to our viewing keys
@@ -781,12 +804,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Update each merkle tree in the witness map with the latest
             // addition
             for (_, witness) in self.witness_map.iter_mut() {
-                witness.append(node).expect("note commitment tree is full");
+                witness.append(node).map_err(|()| {
+                    Error::Other("note commitment tree is full".to_string())
+                })?;
             }
             let note_pos = self.tree.size();
-            self.tree
-                .append(node)
-                .expect("note commitment tree is full");
+            self.tree.append(node).map_err(|()| {
+                Error::Other("note commitment tree is full".to_string())
+            })?;
             // Finally, make it easier to construct merkle paths to this new
             // note
             let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
@@ -808,7 +833,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // key
                     notes.insert(note_pos);
                     // Compute the nullifier now to quickly recognize when spent
-                    let nf = note.nf(&vk.nk, note_pos.try_into().unwrap());
+                    let nf = note.nf(
+                        &vk.nk,
+                        note_pos.try_into().map_err(|_| {
+                            Error::Other("Can not get nullifier".to_string())
+                        })?,
+                    );
                     self.note_map.insert(note_pos, note);
                     self.memo_map.insert(note_pos, memo);
                     // The payment address' diversifier is required to spend
@@ -826,9 +856,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                                 note.asset_type,
                                 note.value as i128,
                             )
-                            .expect(
-                                "found note with invalid value or asset type",
-                            ),
+                            .map_err(|()| {
+                                Error::Other(
+                                    "found note with invalid value or asset \
+                                     type"
+                                        .to_string(),
+                                )
+                            })?,
                         )
                         .await;
 
@@ -859,7 +893,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             note.asset_type,
                             note.value as i128,
                         )
-                        .expect("found note with invalid value or asset type"),
+                        .map_err(|()| {
+                            Error::Other(
+                                "found note with invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?,
                     )
                     .await;
             }
@@ -880,6 +919,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             (height, index),
             (epoch, transfer_delta, transaction_delta),
         );
+        Ok(())
     }
 
     /// Summarize the effects on shielded and transparent accounts of each
@@ -900,10 +940,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         &mut self,
         client: &C,
         vk: &ViewingKey,
-    ) -> Option<MaspAmount> {
+    ) -> Result<Option<MaspAmount>, Error> {
         // Cannot query the balance of a key that's not in the map
         if !self.pos_map.contains_key(vk) {
-            return None;
+            return Ok(None);
         }
         let mut val_acc = I128Sum::zero();
         // Retrieve the notes that can be spent by this key
@@ -914,16 +954,23 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     continue;
                 }
                 // Get note associated with this ID
-                let note = self.note_map.get(note_idx).unwrap();
+                let note = self.note_map.get(note_idx).ok_or_else(|| {
+                    Error::Other(format!("Unable to get note {note_idx}"))
+                })?;
                 // Finally add value to multi-asset accumulator
                 val_acc += I128Sum::from_nonnegative(
                     note.asset_type,
                     note.value as i128,
                 )
-                .expect("found note with invalid value or asset type");
+                .map_err(|()| {
+                    Error::Other(
+                        "found note with invalid value or asset type"
+                            .to_string(),
+                    )
+                })?
             }
         }
-        Some(self.decode_all_amounts(client, val_acc).await)
+        Ok(Some(self.decode_all_amounts(client, val_acc).await))
     }
 
     /// Query the ledger for the decoding of the given asset type and cache it
@@ -983,9 +1030,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         client: &C,
         vk: &ViewingKey,
         target_epoch: Epoch,
-    ) -> Option<MaspAmount> {
+    ) -> Result<Option<MaspAmount>, Error> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(client, vk).await {
+        if let Some(balance) = self.compute_shielded_balance(client, vk).await?
+        {
             let exchanged_amount = self
                 .compute_exchanged_amount(
                     client,
@@ -993,12 +1041,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     target_epoch,
                     BTreeMap::new(),
                 )
-                .await
+                .await?
                 .0;
             // And then exchange balance into current asset types
-            Some(self.decode_all_amounts(client, exchanged_amount).await)
+            Ok(Some(
+                self.decode_all_amounts(client, exchanged_amount).await,
+            ))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -1017,16 +1067,16 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         usage: &mut i128,
         input: &mut MaspAmount,
         output: &mut MaspAmount,
-    ) {
+    ) -> Result<(), Error> {
         // we do not need to convert negative values
         if value <= 0 {
-            return;
+            return Ok(());
         }
         // If conversion if possible, accumulate the exchanged amount
         let conv: I128Sum = I128Sum::from_sum(conv.into());
         // The amount required of current asset to qualify for conversion
         let masp_asset =
-            make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2);
+            make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2)?;
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
             eprintln!(
@@ -1052,6 +1102,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .await
             - trace.clone();
         *output += trace;
+        Ok(())
     }
 
     /// Convert the given amount into the latest asset types whilst making a
@@ -1064,7 +1115,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         mut input: MaspAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
-    ) -> (I128Sum, Conversions) {
+    ) -> Result<(I128Sum, Conversions), Error> {
         // Where we will store our exchanged value
         let mut output = MaspAmount::default();
         // Repeatedly exchange assets until it is no longer possible
@@ -1075,9 +1126,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let token_addr = token_addr.clone();
             for denom in MaspDenom::iter() {
                 let target_asset_type =
-                    make_asset_type(Some(target_epoch), &token_addr, denom);
+                    make_asset_type(Some(target_epoch), &token_addr, denom)?;
                 let asset_type =
-                    make_asset_type(Some(asset_epoch), &token_addr, denom);
+                    make_asset_type(Some(asset_epoch), &token_addr, denom)?;
                 let at_target_asset_type = target_epoch == asset_epoch;
 
                 let denom_value = denom.denominate_i128(&value);
@@ -1112,7 +1163,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         &mut input,
                         &mut output,
                     )
-                    .await;
+                    .await?;
                 } else if let (Some((conv, _wit, usage)), false) = (
                     conversions.get_mut(&target_asset_type),
                     at_target_asset_type,
@@ -1133,7 +1184,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         &mut input,
                         &mut output,
                     )
-                    .await;
+                    .await?;
                 } else {
                     // At the target asset type. Then move component over to
                     // output.
@@ -1152,7 +1203,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 }
             }
         }
-        (output.into(), conversions)
+        Ok((output.into(), conversions))
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -1165,11 +1216,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         vk: &ViewingKey,
         target: I128Sum,
         target_epoch: Epoch,
-    ) -> (
-        I128Sum,
-        Vec<(Diversifier, Note, MerklePath<Node>)>,
-        Conversions,
-    ) {
+    ) -> Result<
+        (
+            I128Sum,
+            Vec<(Diversifier, Note, MerklePath<Node>)>,
+            Conversions,
+        ),
+        Error,
+    > {
         // Establish connection with which to do exchange rate queries
         let mut conversions = BTreeMap::new();
         let mut val_acc = I128Sum::zero();
@@ -1187,14 +1241,19 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     continue;
                 }
                 // Get note, merkle path, diversifier associated with this ID
-                let note = *self.note_map.get(note_idx).unwrap();
+                let note = *self.note_map.get(note_idx).ok_or_else(|| {
+                    Error::Other(format!("Unable to get note {note_idx}"))
+                })?;
 
                 // The amount contributed by this note before conversion
                 let pre_contr =
                     I128Sum::from_pair(note.asset_type, note.value as i128)
-                        .expect(
-                            "received note has invalid value or asset type",
-                        );
+                        .map_err(|()| {
+                            Error::Other(
+                                "received note has invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?;
                 let input = self.decode_all_amounts(client, pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
@@ -1203,7 +1262,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         target_epoch,
                         conversions.clone(),
                     )
-                    .await;
+                    .await?;
 
                 // Use this note only if it brings us closer to our target
                 if is_amount_required(
@@ -1216,15 +1275,33 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     val_acc += contr;
                     // Commit the conversions that were used to exchange
                     conversions = proposed_convs;
-                    let merkle_path =
-                        self.witness_map.get(note_idx).unwrap().path().unwrap();
-                    let diversifier = self.div_map.get(note_idx).unwrap();
+                    let merkle_path = self
+                        .witness_map
+                        .get(note_idx)
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Unable to get note {note_idx}"
+                            ))
+                        })?
+                        .path()
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Un able to get path: {}",
+                                line!()
+                            ))
+                        })?;
+                    let diversifier =
+                        self.div_map.get(note_idx).ok_or_else(|| {
+                            Error::Other(format!(
+                                "Unable to get note {note_idx}"
+                            ))
+                        })?;
                     // Commit this note to our transaction
                     notes.push((*diversifier, note, merkle_path));
                 }
             }
         }
-        (val_acc, notes, conversions)
+        Ok((val_acc, notes, conversions))
     }
 
     /// Compute the combined value of the output notes of the transaction pinned
@@ -1255,15 +1332,21 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Construct the key for where the transaction ID would be stored
         let pin_key = Key::from(masp_addr.to_db_key())
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
-            .expect("Cannot obtain a storage key");
+            .map_err(|_| {
+                Error::Other("Cannot obtain a storage key".to_string())
+            })?;
         // Obtain the transaction pointer at the key
+        // If we don't discard the error message then a test fails,
+        // however the error underlying this will go undetected
         let txidx = rpc::query_storage_value::<C, u64>(client, &pin_key)
             .await
-            .ok_or(PinnedBalanceError::NoTransactionPinned)?;
+            .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
         // Construct the key for where the pinned transaction is stored
         let tx_key = Key::from(masp_addr.to_db_key())
             .push(&(TX_KEY_PREFIX.to_owned() + &txidx.to_string()))
-            .expect("Cannot obtain a storage key");
+            .map_err(|_| {
+                Error::Other("Cannot obtain a storage key".to_string())
+            })?;
         // Obtain the pointed to transaction
         let (tx_epoch, _tx_height, _tx_index, _tx, shielded) =
             rpc::query_storage_value::<
@@ -1271,7 +1354,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 (Epoch, BlockHeight, TxIndex, Transfer, Transaction),
             >(client, &tx_key)
             .await
-            .expect("Ill-formed epoch, transaction pair");
+            .map_err(|_| {
+                Error::Other("Ill-formed epoch, transaction pair".to_string())
+            })?;
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
         for so in shielded
@@ -1292,7 +1377,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         note.asset_type,
                         note.value as i128,
                     )
-                    .expect("found note with invalid value or asset type");
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
+                                .to_string(),
+                        )
+                    })?;
                 }
                 _ => {}
             }
@@ -1321,7 +1411,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
             .compute_exchanged_amount(client, amount, ep, BTreeMap::new())
-            .await
+            .await?
             .0;
         println!("Exchanged amount: {:?}", computed_amount);
         Ok((self.decode_all_amounts(client, computed_amount).await, ep))
@@ -1389,10 +1479,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         &mut self,
         client: &C,
         args: args::TxTransfer,
-    ) -> Result<
-        Option<ShieldedTransfer>,
-        builder::Error<std::convert::Infallible>,
-    > {
+    ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
 
@@ -1413,23 +1500,24 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
         // Load the current shielded context given the spending key we possess
         let _ = self.load().await;
-        self.fetch(client, &spending_keys, &[]).await;
+        self.fetch(client, &spending_keys, &[]).await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(client).await;
+        let epoch = rpc::query_epoch(client).await?;
         // Context required for storing which notes are in the source's
         // possesion
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.
-        let rng = if let Ok(seed) =
-            env::var(ENV_VAR_MASP_TEST_SEED).map(|seed| {
+        let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
+            .map_err(|e| Error::Other(e.to_string()))
+            .and_then(|seed| {
                 let exp_str =
                     format!("Env var {ENV_VAR_MASP_TEST_SEED} must be a u64.");
-                let parsed_seed: u64 =
-                    FromStr::from_str(&seed).expect(&exp_str);
-                parsed_seed
+                let parsed_seed: u64 = FromStr::from_str(&seed)
+                    .map_err(|_| Error::Other(exp_str))?;
+                Ok(parsed_seed)
             }) {
             tracing::warn!(
                 "UNSAFE: Using a seed from {ENV_VAR_MASP_TEST_SEED} env var \
@@ -1451,7 +1539,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         };
         // Convert transaction amount into MASP types
         let (asset_types, amount) =
-            convert_amount(epoch, &args.token, amt.amount);
+            convert_amount(epoch, &args.token, amt.amount)?;
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1463,7 +1551,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     I128Sum::from_sum(amount),
                     epoch,
                 )
-                .await;
+                .await?;
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
@@ -1489,9 +1577,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let source_enc = args
                 .source
                 .address()
-                .expect("source address should be transparent")
+                .ok_or_else(|| {
+                    Error::Other(
+                        "source address should be transparent".to_string(),
+                    )
+                })?
                 .try_to_vec()
-                .expect("source address encoding");
+                .map_err(|_| {
+                    Error::from(EncodingError::Encode(
+                        "source address".to_string(),
+                    ))
+                })?;
             let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
                 source_enc.as_ref(),
             ));
@@ -1530,9 +1626,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let target_enc = args
                 .target
                 .address()
-                .expect("target address should be transparent")
+                .ok_or_else(|| {
+                    Error::Other(
+                        "source address should be transparent".to_string(),
+                    )
+                })?
                 .try_to_vec()
-                .expect("target address encoding");
+                .map_err(|_| {
+                    Error::from(EncodingError::Encode(
+                        "target address".to_string(),
+                    ))
+                })?;
             let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
                 target_enc.as_ref(),
             ));
@@ -1557,7 +1661,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let mut additional = I128Sum::zero();
             for (asset_type, amt) in builder
                 .value_balance()
-                .expect("Unable to compute value balance")
+                .map_err(|e| {
+                    Error::Other(format!(
+                        "unable to complete value balance: {}",
+                        e
+                    ))
+                })?
                 .components()
             {
                 if *amt >= 0 {
@@ -1573,14 +1682,21 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         .map_err(builder::Error::SaplingBuild)?;
                 } else {
                     // Record how much of the current asset type we are short by
-                    additional +=
-                        I128Sum::from_nonnegative(*asset_type, -*amt).unwrap();
+                    additional += I128Sum::from_nonnegative(*asset_type, -*amt)
+                        .map_err(|()| {
+                            Error::Other(format!(
+                                "from non negative conversion: {}",
+                                line!()
+                            ))
+                        })?;
                 }
             }
             // If we are short by a non-zero amount, then we have insufficient
             // funds
             if !additional.is_zero() {
-                return Err(builder::Error::InsufficientFunds(additional));
+                return Err(TransferErr::from(
+                    builder::Error::InsufficientFunds(additional),
+                ));
             }
         }
 
@@ -1592,17 +1708,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
                 "load" => LoadOrSaveProofs::Load,
                 "save" => LoadOrSaveProofs::Save,
-                env_var => panic!(
+                env_var => Err(Error::Other(format!(
                     "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
                      Expecting \"save\" or \"load\", but got \"{env_var}\"."
-                ),
+                )))?,
             };
             if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                panic!(
+                Err(Error::Other(format!(
                     "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
                      var when using {ENV_VAR_MASP_TEST_PROOFS} for \
                      deterministic proofs."
-                );
+                )))?;
             }
             parsed
         } else {
@@ -1611,7 +1727,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         #[cfg(feature = "testing")]
-        let builder_bytes = BorshSerialize::try_to_vec(&builder_clone).unwrap();
+        let builder_bytes = BorshSerialize::try_to_vec(&builder_clone)
+            .map_err(|e| {
+                Error::from(EncodingError::Conversion(e.to_string()))
+            })?;
+
         let build_transfer =
             || -> Result<ShieldedTransfer, builder::Error<std::convert::Infallible>> {
                 let (masp_tx, metadata) = builder.build(
@@ -1630,11 +1750,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         {
             let builder_hash =
                 namada_core::types::hash::Hash::sha256(&builder_bytes);
+
             let saved_filepath = env::current_dir()
-                .unwrap()
+                .map_err(|e| Error::Other(e.to_string()))?
                 // One up from "tests" dir to the root dir
                 .parent()
-                .unwrap()
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Can not get parent directory of the current dir"
+                            .to_string(),
+                    )
+                })?
                 .join(MASP_TEST_PROOFS_DIR)
                 .join(format!("{builder_hash}.bin"));
 
@@ -1647,25 +1773,32 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     "Read saved MASP proofs from {}. {recommendation}",
                     saved_filepath.to_string_lossy()
                 );
-                let loaded_bytes =
-                    tokio::fs::read(&saved_filepath).await.expect(&exp_str);
+                let loaded_bytes = tokio::fs::read(&saved_filepath)
+                    .await
+                    .map_err(|_e| Error::Other(exp_str))?;
+
                 let exp_str = format!(
                     "Valid `ShieldedTransfer` bytes in {}. {recommendation}",
                     saved_filepath.to_string_lossy()
                 );
                 let loaded: ShieldedTransfer =
                     BorshDeserialize::try_from_slice(&loaded_bytes)
-                        .expect(&exp_str);
+                        .map_err(|_e| Error::Other(exp_str))?;
+
                 Ok(Some(loaded))
             } else {
                 // Build and return the constructed transaction
                 let built = build_transfer()?;
                 if let LoadOrSaveProofs::Save = load_or_save {
-                    let built_bytes =
-                        BorshSerialize::try_to_vec(&built).unwrap();
+                    let built_bytes = BorshSerialize::try_to_vec(&built)
+                        .map_err(|e| {
+                            Error::from(EncodingError::Conversion(
+                                e.to_string(),
+                            ))
+                        })?;
                     tokio::fs::write(&saved_filepath, built_bytes)
                         .await
-                        .unwrap();
+                        .map_err(|e| Error::Other(e.to_string()))?;
                 }
                 Ok(Some(built))
             }
@@ -1689,9 +1822,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         query_owner: &Either<BalanceOwner, Vec<Address>>,
         query_token: &Option<Address>,
         viewing_keys: &HashMap<String, ExtendedViewingKey>,
-    ) -> BTreeMap<
-        (BlockHeight, TxIndex),
-        (Epoch, TransferDelta, TransactionDelta),
+    ) -> Result<
+        BTreeMap<
+            (BlockHeight, TxIndex),
+            (Epoch, TransferDelta, TransactionDelta),
+        >,
+        Error,
     > {
         const TXS_PER_PAGE: u8 = 100;
         let _ = self.load().await;
@@ -1700,12 +1836,12 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &[], &fvks).await;
+        self.fetch(client, &[], &fvks).await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
         // Required for filtering out rejected transactions from Tendermint
         // responses
-        let block_results = rpc::query_results(client).await;
+        let block_results = rpc::query_results(client).await?;
         let mut transfers = self.get_tx_deltas().clone();
         // Construct the set of addresses relevant to user's query
         let relevant_addrs = match &query_owner {
@@ -1737,7 +1873,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             Order::Ascending,
                         )
                         .await
-                        .expect("Unable to query for transactions")
+                        .map_err(|e| {
+                            Error::from(QueryError::General(format!(
+                                "for transaction: {e}"
+                            )))
+                        })?
                         .txs;
                     for response_tx in txs {
                         let height = BlockHeight(response_tx.height.value());
@@ -1752,10 +1892,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                             continue;
                         }
                         let tx = Tx::try_from(response_tx.tx.as_ref())
-                            .expect("Ill-formed Tx");
+                            .map_err(|e| Error::Other(e.to_string()))?;
                         let mut wrapper = None;
                         let mut transfer = None;
-                        extract_payload(tx, &mut wrapper, &mut transfer);
+                        extract_payload(tx, &mut wrapper, &mut transfer)?;
                         // Epoch data is not needed for transparent transactions
                         let epoch =
                             wrapper.map(|x| x.epoch).unwrap_or_default();
@@ -1793,7 +1933,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 }
             }
         }
-        transfers
+        Ok(transfers)
     }
 }
 
@@ -1802,14 +1942,17 @@ fn extract_payload(
     mut tx: Tx,
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
-) {
+) -> Result<(), Error> {
     let privkey =
         <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-    tx.decrypt(privkey).expect("unable to decrypt transaction");
+    tx.decrypt(privkey).map_err(|e| {
+        Error::Other(format!("unable to decrypt transaction: {}", e))
+    })?;
     *wrapper = tx.header.wrapper();
     let _ = tx.data().map(|signed| {
         Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))
     });
+    Ok(())
 }
 
 /// Make asset type corresponding to given address and epoch
@@ -1817,16 +1960,19 @@ pub fn make_asset_type(
     epoch: Option<Epoch>,
     token: &Address,
     denom: MaspDenom,
-) -> AssetType {
+) -> Result<AssetType, Error> {
     // Typestamp the chosen token with the current epoch
     let token_bytes = match epoch {
-        None => (token, denom).try_to_vec().expect("token should serialize"),
+        None => (token, denom)
+            .try_to_vec()
+            .map_err(|e| Error::from(EncodingError::Encode(e.to_string())))?,
         Some(epoch) => (token, denom, epoch.0)
             .try_to_vec()
-            .expect("token should serialize"),
+            .map_err(|e| Error::from(EncodingError::Encode(e.to_string())))?,
     };
     // Generate the unique asset identifier from the unique token address
-    AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
+    AssetType::new(token_bytes.as_ref())
+        .map_err(|_| Error::Other("unable to create asset type".to_string()))
 }
 
 /// Convert Anoma amount and token type to MASP equivalents
@@ -1834,21 +1980,23 @@ fn convert_amount(
     epoch: Epoch,
     token: &Address,
     val: token::Amount,
-) -> ([AssetType; 4], U64Sum) {
+) -> Result<([AssetType; 4], U64Sum), Error> {
     let mut amount = U64Sum::zero();
     let asset_types: [AssetType; 4] = MaspDenom::iter()
         .map(|denom| {
-            let asset_type = make_asset_type(Some(epoch), token, denom);
+            let asset_type = make_asset_type(Some(epoch), token, denom)?;
             // Combine the value and unit into one amount
             amount +=
                 U64Sum::from_nonnegative(asset_type, denom.denominate(&val))
-                    .expect("invalid value for amount");
-            asset_type
+                    .map_err(|_| {
+                        Error::Other("invalid value for amount".to_string())
+                    })?;
+            Ok(asset_type)
         })
-        .collect::<Vec<AssetType>>()
+        .collect::<Result<Vec<AssetType>, Error>>()?
         .try_into()
-        .expect("This can't fail");
-    (asset_types, amount)
+        .map_err(|_| Error::Other(format!("This can't fail: {}", line!())))?;
+    Ok((asset_types, amount))
 }
 
 mod tests {

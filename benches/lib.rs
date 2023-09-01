@@ -776,11 +776,13 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        async_runtime.block_on(self.shielded.fetch(
-            &self.shell,
-            &[spending_key.into()],
-            &[],
-        ));
+        async_runtime
+            .block_on(self.shielded.fetch(
+                &self.shell,
+                &[spending_key.into()],
+                &[],
+            ))
+            .unwrap();
         let shielded = async_runtime
             .block_on(self.shielded.gen_shielded_transfer(&self.shell, args))
             .unwrap()

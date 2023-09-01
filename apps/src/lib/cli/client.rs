@@ -266,7 +266,7 @@ impl<IO> CliApi<IO> {
                             &mut ctx.wallet,
                             &tx,
                         )
-                        .await;
+                        .await?;
 
                         if args.tx.dump_tx {
                             dump_tx(&args.tx, tx);
@@ -284,7 +284,7 @@ impl<IO> CliApi<IO> {
                                 &tx_args,
                                 &mut tx,
                                 signing_data,
-                            );
+                            )?;
 
                             sdk_tx::process_tx(
                                 &client,

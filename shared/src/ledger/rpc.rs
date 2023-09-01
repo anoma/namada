@@ -37,10 +37,11 @@ use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
+use crate::types::error::{EncodingError, Error, QueryError};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::{storage, token};
+use crate::types::{error, storage, token};
 
 /// Query the status of a given transaction.
 ///
@@ -94,8 +95,8 @@ where
 /// Query the epoch of the last committed block
 pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> Epoch {
-    unwrap_client_response::<C, _>(RPC.shell().epoch(client).await)
+) -> Result<Epoch, error::Error> {
+    convert_response::<C, _>(RPC.shell().epoch(client).await)
 }
 
 /// Query the epoch of the given block height, if it exists.
@@ -104,19 +105,17 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_epoch_at_height<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     height: BlockHeight,
-) -> Option<Epoch> {
-    unwrap_client_response::<C, _>(
-        RPC.shell().epoch_at_height(client, &height).await,
-    )
+) -> Result<Option<Epoch>, error::Error> {
+    convert_response::<C, _>(RPC.shell().epoch_at_height(client, &height).await)
 }
 
 /// Query the last committed block, if any.
 pub async fn query_block<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> Option<LastBlock> {
+) -> Result<Option<LastBlock>, error::Error> {
     // NOTE: We're not using `client.latest_block()` because it may return an
     // updated block from pre-commit before it's actually committed
-    unwrap_client_response::<C, _>(RPC.shell().last_block(client).await)
+    convert_response::<C, _>(RPC.shell().last_block(client).await)
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
@@ -128,11 +127,20 @@ fn unwrap_client_response<C: crate::ledger::queries::Client, T>(
     })
 }
 
+/// A helper to turn client's response into an error type that can be used with
+/// ? The exact error type is a `QueryError::NoResponse`, and thus should be
+/// seen as getting no response back from a query.
+fn convert_response<C: crate::ledger::queries::Client, T>(
+    response: Result<T, C::Error>,
+) -> Result<T, Error> {
+    response.map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
+
 /// Query the results of the last committed block
 pub async fn query_results<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> Vec<BlockResults> {
-    unwrap_client_response::<C, _>(RPC.shell().read_results(client).await)
+) -> Result<Vec<BlockResults>, Error> {
+    convert_response::<C, _>(RPC.shell().read_results(client).await)
 }
 
 /// Query token amount of owner.
@@ -140,8 +148,8 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
-) -> token::Amount {
-    unwrap_client_response::<C, _>(
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
         RPC.vp().token().balance(client, token, owner).await,
     )
 }
@@ -150,10 +158,8 @@ pub async fn get_token_balance<C: crate::ledger::queries::Client + Sync>(
 pub async fn is_validator<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
-    unwrap_client_response::<C, _>(
-        RPC.vp().pos().is_validator(client, address).await,
-    )
+) -> Result<bool, Error> {
+    convert_response::<C, _>(RPC.vp().pos().is_validator(client, address).await)
 }
 
 /// Check if the given address is a pgf steward.
@@ -170,8 +176,8 @@ pub async fn is_steward<C: crate::ledger::queries::Client + Sync>(
 pub async fn is_delegator<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
-    unwrap_client_response::<C, bool>(
+) -> Result<bool, error::Error> {
+    convert_response::<C, bool>(
         RPC.vp().pos().is_delegator(client, address, &None).await,
     )
 }
@@ -181,8 +187,8 @@ pub async fn is_delegator_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
-) -> bool {
-    unwrap_client_response::<C, bool>(
+) -> Result<bool, error::Error> {
+    convert_response::<C, bool>(
         RPC.vp()
             .pos()
             .is_delegator(client, address, &Some(epoch))
@@ -196,14 +202,14 @@ pub async fn is_delegator_at<C: crate::ledger::queries::Client + Sync>(
 pub async fn known_address<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
+) -> Result<bool, Error> {
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = storage::Key::validity_predicate(address);
             query_has_storage_key(client, &key).await
         }
-        Address::Implicit(_) | Address::Internal(_) => true,
+        Address::Implicit(_) | Address::Internal(_) => Ok(true),
     }
 }
 
@@ -240,6 +246,9 @@ pub async fn get_testnet_pow_challenge<
     )
 }
 
+// Consider how we want to handle this unwrap. It gets used in contexts that
+// often ignore the optional value and do not have any error type surrounding
+// it.
 /// Query a conversion.
 pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
     client: &C,
@@ -260,22 +269,22 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     code_path: impl AsRef<str>,
-) -> Option<Hash> {
+) -> Result<Hash, error::Error> {
     let hash_key = Key::wasm_hash(code_path.as_ref());
     match query_storage_value_bytes(client, &hash_key, None, false)
-        .await
+        .await?
         .0
     {
-        Some(hash) => {
-            Some(Hash::try_from(&hash[..]).expect("Invalid code hash"))
-        }
+        Some(hash) => Ok(Hash::try_from(&hash[..]).expect("Invalid code hash")),
         None => {
             eprintln!(
                 "The corresponding wasm code of the code path {} doesn't \
                  exist on chain.",
                 code_path.as_ref(),
             );
-            None
+            Err(Error::from(QueryError::Wasm(
+                code_path.as_ref().to_string(),
+            )))
         }
     }
 }
@@ -284,7 +293,7 @@ pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
 pub async fn query_storage_value<C, T>(
     client: &C,
     key: &storage::Key,
-) -> Option<T>
+) -> Result<T, Error>
 where
     T: BorshDeserialize,
     C: crate::ledger::queries::Client + Sync,
@@ -294,28 +303,27 @@ where
     // returns 0 bytes when the key is not found.
     let maybe_unit = T::try_from_slice(&[]);
     if let Ok(unit) = maybe_unit {
-        return if unwrap_client_response::<C, _>(
+        return if convert_response::<C, _>(
             RPC.shell().storage_has_key(client, key).await,
-        ) {
-            Some(unit)
+        )? {
+            Ok(unit)
         } else {
-            None
+            Err(Error::from(QueryError::NoSuchKey(key.to_string())))
         };
     }
 
-    let response = unwrap_client_response::<C, _>(
+    let response = convert_response::<C, _>(
         RPC.shell()
             .storage_value(client, None, None, false, key)
             .await,
-    );
+    )?;
     if response.data.is_empty() {
-        return None;
+        return Err(Error::from(QueryError::General(format!(
+            "No data found in {key}"
+        ))));
     }
     T::try_from_slice(&response.data[..])
-        .map(Some)
-        .unwrap_or_else(|err| {
-            panic!("Error decoding the value: {}", err);
-        })
+        .map_err(|err| Error::from(EncodingError::Decoding(err.to_string())))
 }
 
 /// Query a storage value and the proof without decoding.
@@ -326,18 +334,18 @@ pub async fn query_storage_value_bytes<
     key: &storage::Key,
     height: Option<BlockHeight>,
     prove: bool,
-) -> (Option<Vec<u8>>, Option<Proof>) {
+) -> Result<(Option<Vec<u8>>, Option<Proof>), error::Error> {
     let data = None;
-    let response = unwrap_client_response::<C, _>(
+    let response = convert_response::<C, _>(
         RPC.shell()
             .storage_value(client, data, height, prove, key)
             .await,
-    );
-    if response.data.is_empty() {
+    )?;
+    Ok(if response.data.is_empty() {
         (None, response.proof)
     } else {
         (Some(response.data), response.proof)
-    }
+    })
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
@@ -346,15 +354,15 @@ pub async fn query_storage_value_bytes<
 pub async fn query_storage_prefix<C: crate::ledger::queries::Client + Sync, T>(
     client: &C,
     key: &storage::Key,
-) -> Option<impl Iterator<Item = (storage::Key, T)>>
+) -> Result<Option<impl Iterator<Item = (storage::Key, T)>>, error::Error>
 where
     T: BorshDeserialize,
 {
-    let values = unwrap_client_response::<C, _>(
+    let values = convert_response::<C, _>(
         RPC.shell()
             .storage_prefix(client, None, None, false, key)
             .await,
-    );
+    )?;
     let decode =
         |PrefixValue { key, value }: PrefixValue| match T::try_from_slice(
             &value[..],
@@ -368,21 +376,19 @@ where
             }
             Ok(value) => Some((key, value)),
         };
-    if values.data.is_empty() {
+    Ok(if values.data.is_empty() {
         None
     } else {
         Some(values.data.into_iter().filter_map(decode))
-    }
+    })
 }
 
 /// Query to check if the given storage key exists.
 pub async fn query_has_storage_key<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     key: &storage::Key,
-) -> bool {
-    unwrap_client_response::<C, _>(
-        RPC.shell().storage_has_key(client, key).await,
-    )
+) -> Result<bool, Error> {
+    convert_response::<C, _>(RPC.shell().storage_has_key(client, key).await)
 }
 
 /// Represents a query for an event pertaining to the specified transaction
@@ -453,14 +459,14 @@ pub async fn query_tx_events<C: crate::ledger::queries::Client + Sync>(
 pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     tx_bytes: Vec<u8>,
-) -> namada_core::types::transaction::TxResult {
+) -> Result<namada_core::types::transaction::TxResult, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
-    let result = unwrap_client_response::<C, _>(
+    let result = convert_response::<C, _>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
-    )
+    )?
     .data;
     println! {"Dry-run result: {}", result};
-    result
+    Ok(result)
 }
 
 /// Data needed for broadcasting a tx and
@@ -640,16 +646,16 @@ pub async fn query_tx_response<C: crate::ledger::queries::Client + Sync>(
 /// Get the PoS parameters
 pub async fn get_pos_params<C: crate::ledger::queries::Client + Sync>(
     client: &C,
-) -> PosParams {
-    unwrap_client_response::<C, _>(RPC.vp().pos().pos_params(client).await)
+) -> Result<PosParams, error::Error> {
+    convert_response::<C, _>(RPC.vp().pos().pos_params(client).await)
 }
 
 /// Get all validators in the given epoch
 pub async fn get_all_validators<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
-) -> HashSet<Address> {
-    unwrap_client_response::<C, _>(
+) -> Result<HashSet<Address>, error::Error> {
+    convert_response::<C, _>(
         RPC.vp()
             .pos()
             .validator_addresses(client, &Some(epoch))
@@ -663,8 +669,8 @@ pub async fn get_total_staked_tokens<
 >(
     client: &C,
     epoch: Epoch,
-) -> token::Amount {
-    unwrap_client_response::<C, _>(
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
         RPC.vp().pos().total_stake(client, &Some(epoch)).await,
     )
 }
@@ -674,14 +680,14 @@ pub async fn get_validator_stake<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
-) -> token::Amount {
-    unwrap_client_response::<C, _>(
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
         RPC.vp()
             .pos()
             .validator_stake(client, validator, &Some(epoch))
             .await,
     )
-    .unwrap_or_default()
+    .map(|t| t.unwrap_or_default())
 }
 
 /// Query and return a validator's state
@@ -689,8 +695,8 @@ pub async fn get_validator_state<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<ValidatorState> {
-    unwrap_client_response::<C, Option<ValidatorState>>(
+) -> Result<Option<ValidatorState>, error::Error> {
+    convert_response::<C, Option<ValidatorState>>(
         RPC.vp()
             .pos()
             .validator_state(client, validator, &epoch)
@@ -704,8 +710,8 @@ pub async fn get_delegators_delegation<
 >(
     client: &C,
     address: &Address,
-) -> HashSet<Address> {
-    unwrap_client_response::<C, _>(
+) -> Result<HashSet<Address>, error::Error> {
+    convert_response::<C, _>(
         RPC.vp().pos().delegation_validators(client, address).await,
     )
 }
@@ -717,8 +723,8 @@ pub async fn get_delegators_delegation_at<
     client: &C,
     address: &Address,
     epoch: Epoch,
-) -> HashMap<Address, token::Amount> {
-    unwrap_client_response::<C, _>(
+) -> Result<HashMap<Address, token::Amount>, error::Error> {
+    convert_response::<C, _>(
         RPC.vp()
             .pos()
             .delegations(client, address, &Some(epoch))
@@ -730,10 +736,10 @@ pub async fn get_delegators_delegation_at<
 pub async fn query_proposal_by_id<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
-) -> Option<StorageProposal> {
+) -> Result<Option<StorageProposal>, Error> {
     // let a = RPC.vp().gov().proposal_id(client, &proposal_id).await;
     // println!("{:?}", a.err().unwrap());
-    unwrap_client_response::<C, _>(
+    convert_response::<C, _>(
         RPC.vp().gov().proposal_id(client, &proposal_id).await,
     )
 }
@@ -744,8 +750,8 @@ pub async fn query_commission_rate<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<CommissionPair> {
-    unwrap_client_response::<C, Option<CommissionPair>>(
+) -> Result<Option<CommissionPair>, Error> {
+    convert_response::<C, Option<CommissionPair>>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)
@@ -759,8 +765,8 @@ pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
     source: &Address,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> token::Amount {
-    unwrap_client_response::<C, token::Amount>(
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, token::Amount>(
         RPC.vp().pos().bond(client, source, validator, &epoch).await,
     )
 }
@@ -769,8 +775,8 @@ pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
 pub async fn get_account_info<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     owner: &Address,
-) -> Option<Account> {
-    unwrap_client_response::<C, Option<Account>>(
+) -> Result<Option<Account>, error::Error> {
+    convert_response::<C, Option<Account>>(
         RPC.shell().account(client, owner).await,
     )
 }
@@ -781,8 +787,8 @@ pub async fn is_public_key_revealed<
 >(
     client: &C,
     owner: &Address,
-) -> bool {
-    unwrap_client_response::<C, bool>(RPC.shell().revealed(client, owner).await)
+) -> Result<bool, error::Error> {
+    convert_response::<C, bool>(RPC.shell().revealed(client, owner).await)
 }
 
 /// Query an account substorage at a specific index
@@ -790,14 +796,14 @@ pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     owner: &Address,
     index: u8,
-) -> Option<common::PublicKey> {
-    let account = unwrap_client_response::<C, Option<Account>>(
+) -> Result<Option<common::PublicKey>, Error> {
+    let account = convert_response::<C, Option<Account>>(
         RPC.shell().account(client, owner).await,
-    );
+    )?;
     if let Some(account) = account {
-        account.get_public_key_from_index(index)
+        Ok(account.get_public_key_from_index(index))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -808,9 +814,9 @@ pub async fn query_and_print_unbonds<
     client: &C,
     source: &Address,
     validator: &Address,
-) {
-    let unbonds = query_unbond_with_slashing(client, source, validator).await;
-    let current_epoch = query_epoch(client).await;
+) -> Result<(), error::Error> {
+    let unbonds = query_unbond_with_slashing(client, source, validator).await?;
+    let current_epoch = query_epoch(client).await?;
 
     let mut total_withdrawable = token::Amount::default();
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
@@ -838,6 +844,7 @@ pub async fn query_and_print_unbonds<
             amount.to_string_native()
         );
     }
+    Ok(())
 }
 
 /// Query withdrawable tokens in a validator account for a given epoch
@@ -848,8 +855,8 @@ pub async fn query_withdrawable_tokens<
     bond_source: &Address,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> token::Amount {
-    unwrap_client_response::<C, token::Amount>(
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, token::Amount>(
         RPC.vp()
             .pos()
             .withdrawable_tokens(client, bond_source, validator, &epoch)
@@ -864,8 +871,8 @@ pub async fn query_unbond_with_slashing<
     client: &C,
     source: &Address,
     validator: &Address,
-) -> HashMap<(Epoch, Epoch), token::Amount> {
-    unwrap_client_response::<C, HashMap<(Epoch, Epoch), token::Amount>>(
+) -> Result<HashMap<(Epoch, Epoch), token::Amount>, error::Error> {
+    convert_response::<C, HashMap<(Epoch, Epoch), token::Amount>>(
         RPC.vp()
             .pos()
             .unbond_with_slashing(client, source, validator)
@@ -886,8 +893,8 @@ pub async fn query_governance_parameters<
 pub async fn query_proposal_votes<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
-) -> Vec<Vote> {
-    unwrap_client_response::<C, Vec<Vote>>(
+) -> Result<Vec<Vote>, error::Error> {
+    convert_response::<C, Vec<Vote>>(
         RPC.vp().gov().proposal_id_votes(client, &proposal_id).await,
     )
 }
@@ -898,14 +905,14 @@ pub async fn get_bond_amount_at<C: crate::ledger::queries::Client + Sync>(
     delegator: &Address,
     validator: &Address,
     epoch: Epoch,
-) -> Option<token::Amount> {
-    let (_total, total_active) = unwrap_client_response::<C, (Amount, Amount)>(
+) -> Result<Option<token::Amount>, error::Error> {
+    let (_total, total_active) = convert_response::<C, (Amount, Amount)>(
         RPC.vp()
             .pos()
             .bond_with_slashing(client, delegator, validator, &Some(epoch))
             .await,
-    );
-    Some(total_active)
+    )?;
+    Ok(Some(total_active))
 }
 
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
@@ -914,8 +921,8 @@ pub async fn bonds_and_unbonds<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Option<Address>,
-) -> BondsAndUnbondsDetails {
-    unwrap_client_response::<C, _>(
+) -> Result<BondsAndUnbondsDetails, error::Error> {
+    convert_response::<C, _>(
         RPC.vp()
             .pos()
             .bonds_and_unbonds(client, source, validator)
@@ -932,8 +939,8 @@ pub async fn enriched_bonds_and_unbonds<
     current_epoch: Epoch,
     source: &Option<Address>,
     validator: &Option<Address>,
-) -> EnrichedBondsAndUnbondsDetails {
-    unwrap_client_response::<C, _>(
+) -> Result<EnrichedBondsAndUnbondsDetails, error::Error> {
+    convert_response::<C, _>(
         RPC.vp()
             .pos()
             .enriched_bonds_and_unbonds(
@@ -952,47 +959,54 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
     amount: InputAmount,
     token: &Address,
     force: bool,
-) -> Option<token::DenominatedAmount> {
+) -> Result<token::DenominatedAmount, Error> {
     let input_amount = match amount {
-        InputAmount::Unvalidated(amt) if amt.is_zero() => return Some(amt),
+        InputAmount::Unvalidated(amt) if amt.is_zero() => return Ok(amt),
         InputAmount::Unvalidated(amt) => amt.canonical(),
-        InputAmount::Validated(amt) => return Some(amt),
+        InputAmount::Validated(amt) => return Ok(amt),
     };
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
+    let denom = match convert_response::<C, Option<Denomination>>(
         RPC.vp().token().denomination(client, token).await,
-    )
-    .or_else(|| {
-        if force {
-            println!(
-                "No denomination found for token: {token}, but --force was \
-                 passed. Defaulting to the provided denomination."
-            );
-            Some(input_amount.denom)
-        } else {
-            println!(
-                "No denomination found for token: {token}, the input \
-                 arguments could not be parsed."
-            );
-            None
+    )? {
+        Some(denom) => Ok(denom),
+        None => {
+            if force {
+                println!(
+                    "No denomination found for token: {token}, but --force \
+                     was passed. Defaulting to the provided denomination."
+                );
+                Ok(input_amount.denom)
+            } else {
+                println!(
+                    "No denomination found for token: {token}, the input \
+                     arguments could not be parsed."
+                );
+                Err(Error::from(QueryError::General(format!(
+                    "denomination for token {token}"
+                ))))
+            }
         }
-    })?;
+    }?;
     if denom < input_amount.denom && !force {
         println!(
             "The input amount contained a higher precision than allowed by \
              {token}."
         );
-        None
+        Err(Error::from(QueryError::General(format!(
+            "the input amount. It contained a higher precision than allowed \
+             by {token}"
+        ))))
     } else {
-        match input_amount.increase_precision(denom) {
-            Ok(res) => Some(res),
-            Err(_) => {
-                println!(
-                    "The amount provided requires more the 256 bits to \
-                     represent."
-                );
-                None
-            }
-        }
+        input_amount.increase_precision(denom).map_err(|_err| {
+            println!(
+                "The amount provided requires more the 256 bits to represent."
+            );
+            Error::from(QueryError::General(
+                "the amount provided. It requires more than 256 bits to \
+                 represent"
+                    .to_string(),
+            ))
+        })
     }
 }
 
@@ -1058,9 +1072,13 @@ pub async fn format_denominated_amount<
     token: &Address,
     amount: token::Amount,
 ) -> String {
-    let denom = unwrap_client_response::<C, Option<Denomination>>(
+    let denom = convert_response::<C, Option<Denomination>>(
         RPC.vp().token().denomination(client, token).await,
     )
+    .unwrap_or_else(|t| {
+        println!("Error in querying for denomination: {t}");
+        None
+    })
     .unwrap_or_else(|| {
         println!(
             "No denomination found for token: {token}, defaulting to zero \

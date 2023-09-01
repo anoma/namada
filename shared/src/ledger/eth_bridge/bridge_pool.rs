@@ -72,13 +72,16 @@ pub async fn build_bridge_pool_tx<
         tx_args.force,
     )
     .await
-    .ok_or_else(|| Error::Other("Failed to validate amount".into()))?;
+    .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
     let DenominatedAmount {
         amount: fee_amount, ..
     } = validate_amount(client, fee_amount, &fee_token, tx_args.force)
         .await
-        .ok_or_else(|| {
-            Error::Other("Failed to validate Bridge pool fee amount".into())
+        .map_err(|e| {
+            Error::Other(format!(
+                "Failed to validate Bridge pool fee amount. {}",
+                e
+            ))
         })?;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
