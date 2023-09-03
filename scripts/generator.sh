@@ -64,6 +64,27 @@ elif [ "$1" = "client" ]; then
         "voting_start_epoch":12
     }
     }' > proposal_default.json
+    
+    echo '{
+    "data":['$(od -An -tu1 -v wasm_for_tests/tx_proposal_code.wasm | tr '\n' ' ' | sed 's/\b\s\+\b/,/g')'],
+    "proposal": {
+        "author":"'$ALBERT_ADDRESS'",
+        "content":{
+            "abstract":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+            "authors":"test@test.com",
+            "created":"2022-03-10T08:54:37Z",
+            "details":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+            "discussions-to":"www.github.com/anoma/aip/1",
+            "license":"MIT",
+            "motivation":"Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+            "requires":"2",
+            "title":"TheTitle"
+        },
+        "grace_epoch":30,
+        "voting_end_epoch":24,
+        "voting_start_epoch":12
+    }
+    }' > proposal_default_with_data.json
 
     echo '{
     "author":"'$ALBERT_ADDRESS'",
@@ -113,6 +134,8 @@ elif [ "$1" = "client" ]; then
     cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.02 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
     PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- init-proposal --force --data-path proposal_default.json --node 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+    
+    cargo run --bin namadac --features std -- init-proposal --force --data-path proposal_default_with_data.json --node 127.0.0.1:27657
 
     cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --address validator-0 --node 127.0.0.1:27657
 
@@ -213,6 +236,8 @@ elif [ "$1" = "client" ]; then
     cargo run --bin namadac --features std -- transfer --source b_spending_key --target bb_payment_address --token btc --amount 6 --force --ledger-address 127.0.0.1:27657
 
     rm -f proposal_default.json
+    
+    rm -f proposal_default_with_data.json
 
     rm -f proposal_offline.json
 
