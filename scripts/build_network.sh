@@ -153,7 +153,7 @@ validate_arguments() {
 package() {
 
     # Clean up any existing chain data
-    rm -rf $BASE_DIR || true
+    rm -rf "$BASE_DIR" || true
     git checkout --ours -- wasm/checksums.json
     rm -f nohup.out || true
 
