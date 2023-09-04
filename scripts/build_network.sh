@@ -47,10 +47,9 @@ set +x
 # set -eoux pipefail
 
 show_help() {
-    echo "Usage: script.sh <config_toml> <namada_dir> OPTIONAL:<base_dir>"
+    echo "Usage: script.sh <namada_dir> OPTIONAL:<base_dir>"
     echo ""
     echo "Arguments:"
-    echo "  config_toml - The path to a network config toml compatible with the version of Namada being used"
     echo "  namada_dir - The path to the directory containing the Namada binaries"
     echo "  base_dir - The path to the base directory (BASE_DIR), which is the directory where the chain's information will be stored. If the default base dir has not been changed, this does not need to be provided."
     echo ""
@@ -66,6 +65,7 @@ check_toml_file() {
         exit 1
     fi
 }
+
 
 
 check_wasm_files() {
@@ -85,19 +85,19 @@ cleanup() {
     rm -f local.*.tar.gz
 }
 validate_arguments() {
-    # The script expects 3 arguments:
-    # 1. The path to a network config toml
-    # 2. The path to the directory containing the Namada binaries
-    # 3. The BASE_DIR of the chain
+    # The script expects 2 arguments:
+    # 1. The path to the directory containing the Namada binaries
+    # 2. The BASE_DIR of the chain
     
-    if [ "$#" -gt 3 ] || [ "$#" -lt 2 ]; then
-        echo "Error: Invalid number of arguments. Expected 2 or 3 arguments."
+    if [ "$#" -gt 2 ] || [ "$#" -lt 1 ]; then
+        echo "Error: Invalid number of arguments. Expected 1 or 2 arguments."
         echo "See the help page by running --help for more information."
         exit 1
     fi
 
-    NETWORK_CONFIG_PATH=$1
-    NAMADA_BIN_DIR=$2
+    SCRIPT_DIR="$(dirname $0)"
+    NETWORK_CONFIG_PATH="$SCRIPT_DIR/../genesis/e2e-tests-single-node.toml"
+    NAMADA_BIN_DIR=$1
 
     local current_directory="$(pwd)"
 
@@ -118,6 +118,12 @@ validate_arguments() {
         exit 1
     fi
 
+    cp "$NETWORK_CONFIG_PATH" "$SCRIPT_DIR/utils/network-config.toml"
+    NETWORK_CONFIG_PATH="$SCRIPT_DIR/utils/network-config.toml"
+
+    # Delete the section [validator.validator] from the network config toml
+    python3 $SCRIPT_DIR/utils/clean_config.py "$NETWORK_CONFIG_PATH"
+
     check_toml_file "$NETWORK_CONFIG_PATH"
 
     local directory="$NAMADA_BIN_DIR"
@@ -136,10 +142,10 @@ validate_arguments() {
 
     check_wasm_files
 
-    if [ "$#" -eq 2 ]; then
+    if [ "$#" -eq 1 ]; then
         BASE_DIR="$($NAMADA_BIN_DIR/namadac utils default-base-dir)"
         echo "Using default BASE_DIR: $BASE_DIR"
-    else [ "$#" -eq 3 ];
+    else [ "$#" -eq 2 ];
         BASE_DIR="$3"
     fi
 }
@@ -159,14 +165,14 @@ package() {
     $NAMADA_BIN_DIR/namadac --base-dir "$BASE_DIR" utils init-genesis-validator \
         --alias $ALIAS \
         --net-address 127.0.0.1:26656 \
-        --commission-rate 0.1 \
-        --max-commission-rate-change 0.1 \
+        --commission-rate 0.01 \
+        --max-commission-rate-change 0.05 \
         --unsafe-dont-encrypt
 
     # get the directory of this script
     SCRIPT_DIR="$(dirname $0)"
     NAMADA_NETWORK_CONFIG_PATH="${CHAIN_DIR}/network-config-processed.toml"
-    $SCRIPT_DIR/utils/add_validator_shard.py "$BASE_DIR"/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
+    python3 $SCRIPT_DIR/utils/add_validator_shard.py "$BASE_DIR"/pre-genesis/$ALIAS/validator.toml $NETWORK_CONFIG_PATH >$NAMADA_NETWORK_CONFIG_PATH
 
     python3 wasm/checksums.py
 
@@ -181,6 +187,7 @@ package() {
     basename *.tar.gz .tar.gz >${CHAIN_DIR}/chain-id
     NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
     rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}"
+    rm -rf "$SCRIPT_DIR/utils/network-config.toml"
     mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
 
     # clean up the http server when the script exits
