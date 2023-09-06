@@ -830,7 +830,7 @@ where
                 &mut ctx.shielded,
                 args.clone(),
                 proposal,
-                signing_data.fee_payer.clone(),
+                &signing_data.fee_payer.clone(),
             )
             .await?,
             signing_data,
