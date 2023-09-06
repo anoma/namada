@@ -654,7 +654,7 @@ pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
 /// Temporary helper for testing, a hash map of tokens addresses with their
 /// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
 /// are dispensed for every b possessed tokens.
-pub fn masp_rewards() -> HashMap<Address, (u64, u64)> {
+pub fn masp_rewards() -> HashMap<Address, (u32, u32)> {
     vec![
         (nam(), (0, 100)),
         (btc(), (1, 100)),

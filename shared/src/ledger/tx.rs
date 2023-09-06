@@ -14,7 +14,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
-use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::components::I32Sum;
 use namada_core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
@@ -1746,7 +1746,7 @@ async fn used_asset_types<
     // Collect all the asset types used in the Sapling converts
     for output in builder.sapling_converts() {
         for (asset_type, _) in
-            Amount::from(output.conversion().clone()).components()
+            I32Sum::from(output.conversion().clone()).components()
         {
             add_asset_type(&mut asset_types, shielded, client, *asset_type)
                 .await;
