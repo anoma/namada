@@ -1,7 +1,7 @@
 //! MASP types
 
 use std::fmt::Display;
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::str::FromStr;
 
 use bech32::{FromBase32, ToBase32};
@@ -74,7 +74,7 @@ impl FromStr for ExtendedViewingKey {
         let bytes: Vec<u8> = FromBase32::from_base32(&base32)
             .map_err(DecodeError::DecodeBase32)?;
         masp_primitives::zip32::ExtendedFullViewingKey::read(&mut &bytes[..])
-            .map_err(DecodeError::InvalidInnerEncoding)
+            .map_err(|op| DecodeError::InvalidInnerEncodingStr(op.to_string()))
             .map(Self)
     }
 }
@@ -209,16 +209,16 @@ impl FromStr for PaymentAddress {
             _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
         }
         let addr_len_err = |_| {
-            DecodeError::InvalidInnerEncoding(Error::new(
+            DecodeError::InvalidInnerEncoding(
                 ErrorKind::InvalidData,
-                "expected 43 bytes for the payment address",
-            ))
+                "expected 43 bytes for the payment address".to_string(),
+            )
         };
         let addr_data_err = || {
-            DecodeError::InvalidInnerEncoding(Error::new(
+            DecodeError::InvalidInnerEncoding(
                 ErrorKind::InvalidData,
-                "invalid payment address provided",
-            ))
+                "invalid payment address provided".to_string(),
+            )
         };
         let bytes: Vec<u8> = FromBase32::from_base32(&base32)
             .map_err(DecodeError::DecodeBase32)?;
@@ -298,7 +298,7 @@ impl FromStr for ExtendedSpendingKey {
         let bytes: Vec<u8> = FromBase32::from_base32(&base32)
             .map_err(DecodeError::DecodeBase32)?;
         masp_primitives::zip32::ExtendedSpendingKey::read(&mut &bytes[..])
-            .map_err(DecodeError::InvalidInnerEncoding)
+            .map_err(|op| DecodeError::InvalidInnerEncodingStr(op.to_string()))
             .map(Self)
     }
 }
