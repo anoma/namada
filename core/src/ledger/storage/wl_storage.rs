@@ -412,7 +412,7 @@ where
             }
             None => {
                 // when not found in write log, try to check the storage
-                self.storage().block.tree.has_key(key).into_storage_result()
+                Ok(self.storage().has_key(key).into_storage_result()?.0)
             }
         }
     }

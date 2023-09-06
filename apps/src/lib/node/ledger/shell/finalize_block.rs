@@ -217,7 +217,7 @@ where
                         .update_header(TxType::Raw)
                         .header_hash();
                     let tx_hash_key =
-                        replay_protection::get_tx_hash_key(&tx_hash);
+                        replay_protection::get_replay_protection_key(&tx_hash);
                     self.wl_storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
@@ -544,7 +544,9 @@ where
                             msg
                         {
                             let tx_hash_key =
-                                replay_protection::get_tx_hash_key(&hash);
+                                replay_protection::get_replay_protection_key(
+                                    &hash,
+                                );
                             self.wl_storage.delete(&tx_hash_key).expect(
                                 "Error while deleting tx hash key from storage",
                             );
@@ -2311,6 +2313,73 @@ mod test_finalize_block {
         }
     }
 
+    /// Test that replay protection keys are not added to the merkle tree
+    #[test]
+    fn test_replay_keys_not_merkelized() {
+        let (mut shell, _, _, _) = setup();
+
+        let (wrapper_tx, processed_tx) =
+            mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
+        let wrapper_hash_key = replay_protection::get_replay_protection_key(
+            &wrapper_tx.header_hash(),
+        );
+        let mut decrypted_tx = wrapper_tx;
+
+        decrypted_tx.update_header(TxType::Raw);
+        let decrypted_hash_key = replay_protection::get_replay_protection_key(
+            &decrypted_tx.header_hash(),
+        );
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event
+            .attributes
+            .get("code")
+            .expect(
+                "Test
+        failed",
+            )
+            .as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        // Check transactions' hashes in storage
+        assert!(shell.shell.wl_storage.has_key(&wrapper_hash_key).unwrap());
+        assert!(shell.shell.wl_storage.has_key(&decrypted_hash_key).unwrap());
+        // Check that non of the hashes is present in the merkle tree
+        assert!(
+            !shell
+                .shell
+                .wl_storage
+                .storage
+                .block
+                .tree
+                .has_key(&wrapper_hash_key)
+                .unwrap()
+        );
+        assert!(
+            !shell
+                .shell
+                .wl_storage
+                .storage
+                .block
+                .tree
+                .has_key(&decrypted_hash_key)
+                .unwrap()
+        );
+    }
+
     /// Test that if a decrypted transaction fails because of out-of-gas, its
     /// hash is removed from storage to allow rewrapping it
     #[test]
@@ -2348,7 +2417,7 @@ mod test_finalize_block {
         }));
 
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::get_tx_hash_key(
+        let inner_hash_key = replay_protection::get_replay_protection_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
@@ -2423,9 +2492,10 @@ mod test_finalize_block {
             &keypair,
         )));
 
-        let wrapper_hash_key =
-            replay_protection::get_tx_hash_key(&wrapper.header_hash());
-        let inner_hash_key = replay_protection::get_tx_hash_key(
+        let wrapper_hash_key = replay_protection::get_replay_protection_key(
+            &wrapper.header_hash(),
+        );
+        let inner_hash_key = replay_protection::get_replay_protection_key(
             &wrapper.clone().update_header(TxType::Raw).header_hash(),
         );
 
