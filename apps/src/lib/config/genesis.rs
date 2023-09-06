@@ -6,8 +6,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::pgf::parameters::PgfParameters;
-#[cfg(not(feature = "mainnet"))]
-use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
@@ -32,8 +30,6 @@ pub mod genesis_config {
     use eyre::Context;
     use namada::core::ledger::governance::parameters::GovernanceParameters;
     use namada::core::ledger::pgf::parameters::PgfParameters;
-    #[cfg(not(feature = "mainnet"))]
-    use namada::core::ledger::testnet_pow;
     use namada::ledger::parameters::EpochDuration;
     use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
     use namada::types::address::Address;
@@ -42,7 +38,6 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
-    use namada::types::uint::Uint;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -116,13 +111,6 @@ pub mod genesis_config {
         // Name of the native token - this must one of the tokens included in
         // the `token` field
         pub native_token: String,
-        #[cfg(not(feature = "mainnet"))]
-        /// Testnet faucet PoW difficulty - defaults to `0` when not set
-        pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
-        #[cfg(not(feature = "mainnet"))]
-        /// Testnet faucet withdrawal limit - defaults to 1000 tokens when not
-        /// set
-        pub faucet_withdrawal_limit: Option<Uint>,
         // Initial validator set
         pub validator: HashMap<String, ValidatorConfig>,
         // Token accounts present at genesis
@@ -535,10 +523,6 @@ pub mod genesis_config {
         let GenesisConfig {
             genesis_time,
             native_token,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_pow_difficulty,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_withdrawal_limit,
             validator,
             token,
             established,
@@ -699,10 +683,6 @@ pub mod genesis_config {
         let mut genesis = Genesis {
             genesis_time: genesis_time.try_into().unwrap(),
             native_token,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_pow_difficulty,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_withdrawal_limit,
             validators: validators.into_values().collect(),
             token_accounts,
             established_accounts: established_accounts.into_values().collect(),
@@ -753,10 +733,6 @@ pub mod genesis_config {
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
-    #[cfg(not(feature = "mainnet"))]
-    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
-    #[cfg(not(feature = "mainnet"))]
-    pub faucet_withdrawal_limit: Option<Uint>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
@@ -1157,10 +1133,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
             },
         }),
         native_token: address::nam(),
-        #[cfg(not(feature = "mainnet"))]
-        faucet_pow_difficulty: None,
-        #[cfg(not(feature = "mainnet"))]
-        faucet_withdrawal_limit: None,
     }
 }
 

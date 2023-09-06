@@ -61,12 +61,6 @@ mod tx_queue {
         /// This allows for a more detailed logging about the gas used by the
         /// wrapper and that used by the inner
         pub gas: Gas,
-        #[cfg(not(feature = "mainnet"))]
-        /// A PoW solution can be used to allow zero-fee testnet
-        /// transactions.
-        /// This is true when the wrapper of this tx contains a valid
-        /// `testnet_pow::Solution`
-        pub has_valid_pow: bool,
     }
 
     #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]

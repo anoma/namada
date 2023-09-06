@@ -1230,7 +1230,6 @@ fn masp_txs_and_queries() -> Result<()> {
 /// 3. Submit a new wrapper with an invalid unshielding tx and assert the
 /// failure
 #[test]
-#[should_panic(expected = "No faucet account found")]
 fn wrapper_fee_unshielding() {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
@@ -1282,8 +1281,6 @@ fn wrapper_fee_unshielding() {
             NAM,
             "--amount",
             "1",
-            "--gas-price",
-            "30",
             "--gas-limit",
             "20000",
             "--gas-spending-key",
@@ -1298,7 +1295,7 @@ fn wrapper_fee_unshielding() {
     // 3. Invalid unshielding
     // TODO: this test shall panic because of the panic in the sdk. Once the
     // panics are removed from there, this test can be updated
-    run(
+    let tx_run = run(
         &node,
         Bin::Client,
         vec![
@@ -1317,7 +1314,10 @@ fn wrapper_fee_unshielding() {
             B_SPENDING_KEY,
             "--ledger-address",
             validator_one_rpc,
+            "--force",
         ],
     )
-    .unwrap();
+    .is_err();
+
+    assert!(tx_run);
 }

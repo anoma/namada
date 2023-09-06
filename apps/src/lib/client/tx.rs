@@ -440,8 +440,6 @@ pub async fn submit_init_validator<
         &mut tx,
         signing_data.fee_payer.clone(),
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
 

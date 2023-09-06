@@ -225,6 +225,7 @@ impl MockNode {
         };
         let mut locked = self.shell.lock().unwrap();
         let mut result = locked.process_proposal(req);
+
         let mut errors: Vec<_> = result
             .tx_results
             .iter()
@@ -395,7 +396,7 @@ impl<'a> Client for &'a MockNode {
         tx: namada::tendermint::abci::Transaction,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
-        let resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
+        let mut resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
             code: Default::default(),
             data: Default::default(),
             log: Default::default(),
@@ -404,6 +405,7 @@ impl<'a> Client for &'a MockNode {
         let tx_bytes: Vec<u8> = tx.into();
         self.submit_tx(tx_bytes);
         if !self.success() {
+            resp.code = tendermint::abci::Code::Err(1337); // TODO: submit_tx should return the correct error code + message
             return Ok(resp);
         } else {
             self.clear_results();

@@ -35,8 +35,6 @@ pub mod tx_withdraw;
 pub mod vp_implicit;
 #[cfg(feature = "vp_masp")]
 pub mod vp_masp;
-#[cfg(feature = "vp_testnet_faucet")]
-pub mod vp_testnet_faucet;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 #[cfg(feature = "vp_validator")]

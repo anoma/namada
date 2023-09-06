@@ -1283,8 +1283,6 @@ mod tests {
                 pos_gain_d: Dec::new(1,1).expect("Cannot fail"),
                 staked_ratio: Dec::new(1,1).expect("Cannot fail"),
                 pos_inflation_amount: token::Amount::zero(),
-                #[cfg(not(feature = "mainnet"))]
-                faucet_account: None,
                 fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
                 gas_cost: BTreeMap::default(),

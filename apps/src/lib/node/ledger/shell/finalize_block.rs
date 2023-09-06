@@ -248,9 +248,6 @@ where
                                     .flatten()
                             })
                             .flatten();
-                        #[cfg(not(feature = "mainnet"))]
-                        let has_valid_pow =
-                            self.invalidate_pow_solution_if_valid(wrapper);
                         if let Err(msg) = protocol::charge_fee(
                             wrapper,
                             masp_transaction,
@@ -260,8 +257,6 @@ where
                                 &mut self.vp_wasm_cache,
                                 &mut self.tx_wasm_cache,
                             ),
-                            #[cfg(not(feature = "mainnet"))]
-                            has_valid_pow,
                             Some(&native_block_proposer_address),
                             &mut BTreeSet::default(),
                         ) {
@@ -281,165 +276,146 @@ where
                 continue;
             }
 
-            let (
-                mut tx_event,
-                tx_unsigned_hash,
-                mut tx_gas_meter,
-                has_valid_pow,
-                wrapper,
-            ) = match &tx_header.tx_type {
-                TxType::Wrapper(wrapper) => {
-                    stats.increment_wrapper_txs();
-                    let tx_event = Event::new_tx_event(&tx, height.0);
-                    #[cfg(not(feature = "mainnet"))]
-                    let has_valid_pow =
-                        self.invalidate_pow_solution_if_valid(wrapper);
+            let (mut tx_event, tx_unsigned_hash, mut tx_gas_meter, wrapper) =
+                match &tx_header.tx_type {
+                    TxType::Wrapper(wrapper) => {
+                        stats.increment_wrapper_txs();
+                        let tx_event = Event::new_tx_event(&tx, height.0);
+                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        (tx_event, None, gas_meter, Some(tx.clone()))
+                    }
+                    TxType::Decrypted(inner) => {
+                        // We remove the corresponding wrapper tx from the queue
+                        let mut tx_in_queue = self
+                            .wl_storage
+                            .storage
+                            .tx_queue
+                            .pop()
+                            .expect("Missing wrapper tx in queue");
+                        let mut event = Event::new_tx_event(&tx, height.0);
 
-                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-
-                    (
-                        tx_event,
-                        None,
-                        gas_meter,
-                        #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow,
-                        Some(tx.clone()),
-                    )
-                }
-                TxType::Decrypted(inner) => {
-                    // We remove the corresponding wrapper tx from the queue
-                    let mut tx_in_queue = self
-                        .wl_storage
-                        .storage
-                        .tx_queue
-                        .pop()
-                        .expect("Missing wrapper tx in queue");
-                    let mut event = Event::new_tx_event(&tx, height.0);
-
-                    match inner {
-                        DecryptedTx::Decrypted { has_valid_pow: _ } => {
-                            if let Some(code_sec) = tx
-                                .get_section(tx.code_sechash())
-                                .and_then(|x| Section::code_sec(x.as_ref()))
-                            {
-                                stats.increment_tx_type(
-                                    code_sec.code.hash().to_string(),
+                        match inner {
+                            DecryptedTx::Decrypted => {
+                                if let Some(code_sec) = tx
+                                    .get_section(tx.code_sechash())
+                                    .and_then(|x| Section::code_sec(x.as_ref()))
+                                {
+                                    stats.increment_tx_type(
+                                        code_sec.code.hash().to_string(),
+                                    );
+                                }
+                            }
+                            DecryptedTx::Undecryptable => {
+                                tracing::info!(
+                                    "Tx with hash {} was un-decryptable",
+                                    tx_in_queue.tx.header_hash()
                                 );
+                                event["info"] =
+                                    "Transaction is invalid.".into();
+                                event["log"] = "Transaction could not be \
+                                                decrypted."
+                                    .into();
+                                event["code"] =
+                                    ErrorCodes::Undecryptable.into();
+                                continue;
                             }
                         }
-                        DecryptedTx::Undecryptable => {
-                            tracing::info!(
-                                "Tx with hash {} was un-decryptable",
-                                tx_in_queue.tx.header_hash()
-                            );
-                            event["info"] = "Transaction is invalid.".into();
-                            event["log"] =
-                                "Transaction could not be decrypted.".into();
-                            event["code"] = ErrorCodes::Undecryptable.into();
-                            continue;
-                        }
-                    }
 
-                    (
-                        event,
-                        Some(
-                            tx_in_queue
-                                .tx
-                                .update_header(TxType::Raw)
-                                .header_hash(),
+                        (
+                            event,
+                            Some(
+                                tx_in_queue
+                                    .tx
+                                    .update_header(TxType::Raw)
+                                    .header_hash(),
+                            ),
+                            TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
+                            None,
+                        )
+                    }
+                    TxType::Raw => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                             TxType::Raw transaction"
+                        );
+                        continue;
+                    }
+                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                        ProtocolTxType::BridgePoolVext
+                        | ProtocolTxType::BridgePool
+                        | ProtocolTxType::ValSetUpdateVext
+                        | ProtocolTxType::ValidatorSetUpdate => (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            None,
                         ),
-                        TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
-                        None,
-                    )
-                }
-                TxType::Raw => {
-                    tracing::error!(
-                        "Internal logic error: FinalizeBlock received a \
-                         TxType::Raw transaction"
-                    );
-                    continue;
-                }
-                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::BridgePoolVext
-                    | ProtocolTxType::BridgePool
-                    | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => (
-                        Event::new_tx_event(&tx, height.0),
-                        None,
-                        TxGasMeter::new_from_sub_limit(0.into()),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
-                        None,
-                    ),
-                    ProtocolTxType::EthEventsVext => {
-                        let ext =
+                        ProtocolTxType::EthEventsVext => {
+                            let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
                             .unwrap();
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
-                        {
-                            for event in ext.data.ethereum_events.iter() {
-                                self.mode.dequeue_eth_event(event);
-                            }
-                        }
-                        (
-                            Event::new_tx_event(&tx, height.0),
-                            None,
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            #[cfg(not(feature = "mainnet"))]
-                            false,
-                            None,
-                        )
-                    }
-                    ProtocolTxType::EthereumEvents => {
-                        let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
-                            ).unwrap();
-                        if let Some(address) =
-                            self.mode.get_validator_address().cloned()
-                        {
-                            let this_signer = &(
-                                address,
-                                self.wl_storage.storage.get_last_block_height(),
-                            );
-                            for MultiSignedEthEvent { event, signers } in
-                                &digest.events
+                            if self
+                                .mode
+                                .get_validator_address()
+                                .map(|validator| {
+                                    validator == &ext.data.validator_addr
+                                })
+                                .unwrap_or(false)
                             {
-                                if signers.contains(this_signer) {
+                                for event in ext.data.ethereum_events.iter() {
                                     self.mode.dequeue_eth_event(event);
                                 }
                             }
+                            (
+                                Event::new_tx_event(&tx, height.0),
+                                None,
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
                         }
-                        (
-                            Event::new_tx_event(&tx, height.0),
-                            None,
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            #[cfg(not(feature = "mainnet"))]
-                            false,
-                            None,
-                        )
-                    }
-                    ref protocol_tx_type => {
-                        tracing::error!(
-                            ?protocol_tx_type,
-                            "Internal logic error: FinalizeBlock received an \
-                             unsupported TxType::Protocol transaction: {:?}",
-                            protocol_tx
-                        );
-                        continue;
-                    }
-                },
-            };
+                        ProtocolTxType::EthereumEvents => {
+                            let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx,
+                            ).unwrap();
+                            if let Some(address) =
+                                self.mode.get_validator_address().cloned()
+                            {
+                                let this_signer = &(
+                                    address,
+                                    self.wl_storage
+                                        .storage
+                                        .get_last_block_height(),
+                                );
+                                for MultiSignedEthEvent { event, signers } in
+                                    &digest.events
+                                {
+                                    if signers.contains(this_signer) {
+                                        self.mode.dequeue_eth_event(event);
+                                    }
+                                }
+                            }
+                            (
+                                Event::new_tx_event(&tx, height.0),
+                                None,
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
+                        }
+                        ref protocol_tx_type => {
+                            tracing::error!(
+                                ?protocol_tx_type,
+                                "Internal logic error: FinalizeBlock received \
+                                 an unsupported TxType::Protocol transaction: \
+                                 {:?}",
+                                protocol_tx
+                            );
+                            continue;
+                        }
+                    },
+                };
 
             match protocol::dispatch_tx(
                 tx,
@@ -454,8 +430,6 @@ where
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
                 Some(&native_block_proposer_address),
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow,
             )
             .map_err(Error::TxApply)
             {
@@ -470,8 +444,6 @@ where
                             self.wl_storage.storage.tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
                                 gas: tx_gas_meter.get_available_gas(),
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow,
                             });
                         } else {
                             tracing::trace!(
@@ -1145,8 +1117,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1187,8 +1157,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1201,10 +1169,7 @@ mod test_finalize_block {
                 .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
                 .unwrap();
         shell.enqueue_tx(outer_tx.clone(), gas_limit);
-        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         outer_tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
                 .expect("Test failed");
         ProcessedTx {
@@ -1312,8 +1277,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1327,10 +1290,7 @@ mod test_finalize_block {
                 .unwrap();
         shell.enqueue_tx(outer_tx.clone(), gas_limit);
 
-        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         let processed_tx = ProcessedTx {
             tx: outer_tx.to_bytes(),
             result: TxResult {
@@ -1371,8 +1331,6 @@ mod test_finalize_block {
             keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         let processed_tx = ProcessedTx {
@@ -2400,8 +2358,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -2411,10 +2367,7 @@ mod test_finalize_block {
         ));
         let mut decrypted_tx = wrapper_tx.clone();
 
-        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
         // Write inner hash in storage
         let inner_hash_key = replay_protection::get_replay_protection_key(
@@ -2478,8 +2431,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2551,8 +2502,6 @@ mod test_finalize_block {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2635,8 +2584,6 @@ mod test_finalize_block {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 5_000_000.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
