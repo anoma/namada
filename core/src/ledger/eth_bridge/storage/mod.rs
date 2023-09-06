@@ -1,5 +1,6 @@
 //! Functionality for accessing the storage subspace
 pub mod bridge_pool;
+pub mod whitelist;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;

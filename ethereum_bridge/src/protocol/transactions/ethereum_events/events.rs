@@ -30,7 +30,7 @@ use namada_core::types::token::{balance_key, minted_balance_key};
 
 use crate::parameters::read_native_erc20_address;
 use crate::protocol::transactions::update;
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
+use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -140,15 +140,25 @@ where
             receiver,
         } = transfer;
         let mut changed = if asset != &wrapped_native_erc20 {
-            let changed =
-                mint_wrapped_erc20s(wl_storage, asset, receiver, amount)?;
+            let (asset_count, changed) =
+                mint_eth_assets(wl_storage, asset, receiver, amount)?;
             // TODO: query denomination of the whitelisted token from storage,
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
-            tracing::info!(
-                "Minted wrapped ERC20s - (receiver - {receiver}, amount - {})",
-                amount.to_string_native(),
-            );
+            if !asset_count.erc20_amount.is_zero() {
+                tracing::info!(
+                    "Minted wrapped ERC20s - (asset - {asset}, receiver - \
+                     {receiver}, amount - {})",
+                    asset_count.erc20_amount.to_string_native(),
+                );
+            }
+            if !asset_count.nut_amount.is_zero() {
+                tracing::info!(
+                    "Minted NUTs - (asset - {asset}, receiver - {receiver}, \
+                     amount - {})",
+                    asset_count.nut_amount.to_string_native(),
+                );
+            }
             changed
         } else {
             redeem_native_token(wl_storage, receiver, amount)?
@@ -220,55 +230,76 @@ where
     ]))
 }
 
+/// Helper function to mint assets originating from Ethereum
+/// on Namada.
+///
 /// Mints `amount` of a wrapped ERC20 `asset` for `receiver`.
-fn mint_wrapped_erc20s<D, H>(
+/// If the given asset is not whitelisted or has exceeded the
+/// token caps, mint NUTs, too.
+fn mint_eth_assets<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     asset: &EthAddress,
     receiver: &Address,
-    amount: &token::Amount,
-) -> Result<BTreeSet<Key>>
+    &amount: &token::Amount,
+) -> Result<(EthAssetMint, BTreeSet<Key>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = BTreeSet::default();
-    let token = wrapped_erc20s::token(asset);
-    let balance_key = balance_key(&token, receiver);
-    update::amount(wl_storage, &balance_key, |balance| {
-        tracing::debug!(
-            %balance_key,
-            ?balance,
-            "Existing value found",
-        );
-        balance.receive(amount);
-        tracing::debug!(
-            %balance_key,
-            ?balance,
-            "New value calculated",
-        );
-    })?;
-    _ = changed_keys.insert(balance_key);
 
-    let supply_key = minted_balance_key(&token);
-    update::amount(wl_storage, &supply_key, |supply| {
-        tracing::debug!(
-            %supply_key,
-            ?supply,
-            "Existing value found",
-        );
-        supply.receive(amount);
-        tracing::debug!(
-            %supply_key,
-            ?supply,
-            "New value calculated",
-        );
-    })?;
-    _ = changed_keys.insert(supply_key);
+    let asset_count = wl_storage
+        .ethbridge_queries()
+        .get_eth_assets_to_mint(asset, amount);
 
-    // mint the token without a minter because a protocol tx doesn't need to
-    // trigger a VP
+    let assets_to_mint = [
+        // check if we should mint nuts
+        (!asset_count.nut_amount.is_zero())
+            .then(|| (wrapped_erc20s::nut(asset), asset_count.nut_amount)),
+        // check if we should mint erc20s
+        (!asset_count.erc20_amount.is_zero())
+            .then(|| (wrapped_erc20s::token(asset), asset_count.erc20_amount)),
+    ]
+    .into_iter()
+    // remove assets that do not need to be
+    // minted from the iterator
+    .flatten();
 
-    Ok(changed_keys)
+    for (token, ref amount) in assets_to_mint {
+        let balance_key = balance_key(&token, receiver);
+        update::amount(wl_storage, &balance_key, |balance| {
+            tracing::debug!(
+                %balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.receive(amount);
+            tracing::debug!(
+                %balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        })?;
+        _ = changed_keys.insert(balance_key);
+
+        let supply_key = minted_balance_key(&token);
+        update::amount(wl_storage, &supply_key, |supply| {
+            tracing::debug!(
+                %supply_key,
+                ?supply,
+                "Existing value found",
+            );
+            supply.receive(amount);
+            tracing::debug!(
+                %supply_key,
+                ?supply,
+                "New value calculated",
+            );
+        })?;
+        _ = changed_keys.insert(supply_key);
+    }
+
+    Ok((asset_count, changed_keys))
 }
 
 fn act_on_transfers_to_eth<D, H>(
@@ -479,7 +510,7 @@ where
         );
         (escrow_balance_key, sender_balance_key)
     } else {
-        let token = wrapped_erc20s::token(&transfer.transfer.asset);
+        let token = transfer.token_address();
         let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
         let sender_balance_key = balance_key(&token, &transfer.transfer.sender);
         (escrow_balance_key, sender_balance_key)
@@ -517,7 +548,7 @@ where
         return Ok(changed_keys);
     }
 
-    let token = wrapped_erc20s::token(&transfer.transfer.asset);
+    let token = transfer.token_address();
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &escrow_balance_key, |balance| {
@@ -582,20 +613,25 @@ mod tests {
         assets_transferred: A,
     ) -> Vec<PendingTransfer>
     where
-        A: Into<BTreeSet<EthAddress>>,
+        A: Into<
+            BTreeSet<(EthAddress, eth_bridge_pool::TransferToEthereumKind)>,
+        >,
     {
         let sender = address::testing::established_address_1();
         let payer = address::testing::established_address_2();
 
         // set pending transfers
         let mut pending_transfers = vec![];
-        for (i, asset) in assets_transferred.into().into_iter().enumerate() {
+        for (i, (asset, kind)) in
+            assets_transferred.into().into_iter().enumerate()
+        {
             let transfer = PendingTransfer {
                 transfer: eth_bridge_pool::TransferToEthereum {
                     asset,
                     sender: sender.clone(),
                     recipient: EthAddress([i as u8 + 1; 20]),
                     amount: Amount::from(10),
+                    kind,
                 },
                 gas_fee: GasFee {
                     amount: Amount::from(1),
@@ -619,7 +655,18 @@ mod tests {
     ) -> Vec<PendingTransfer> {
         init_bridge_pool_transfers(
             wl_storage,
-            (0..2).map(|i| EthAddress([i; 20])).collect::<BTreeSet<_>>(),
+            (0..2)
+                .map(|i| {
+                    (
+                        EthAddress([i; 20]),
+                        if i & 1 == 0 {
+                            eth_bridge_pool::TransferToEthereumKind::Erc20
+                        } else {
+                            eth_bridge_pool::TransferToEthereumKind::Nut
+                        },
+                    )
+                })
+                .collect::<BTreeSet<_>>(),
         )
     }
 
@@ -658,7 +705,7 @@ mod tests {
                     )
                     .expect("Test failed");
             } else {
-                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
@@ -704,10 +751,6 @@ mod tests {
             EthereumEvent::NewContract {
                 name: "bridge".to_string(),
                 address: arbitrary_eth_address(),
-            },
-            EthereumEvent::UpdateBridgeWhitelist {
-                nonce: arbitrary_nonce(),
-                whitelist: vec![],
             },
             EthereumEvent::UpgradedContract {
                 name: "bridge".to_string(),
@@ -760,42 +803,114 @@ mod tests {
         );
     }
 
-    #[test]
-    /// Test acting on a single transfer and minting the first ever wDAI
-    fn test_act_on_transfers_to_namada_mints_wdai() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        let initial_stored_keys_count = stored_keys_count(&wl_storage);
+    /// Parameters to test minting DAI in Namada.
+    struct TestMintDai {
+        /// The token cap of DAI.
+        ///
+        /// If the token is not whitelisted, this value
+        /// is not set.
+        dai_token_cap: Option<token::Amount>,
+        /// The transferred amount of DAI.
+        transferred_amount: token::Amount,
+    }
 
-        let amount = Amount::from(100);
-        let receiver = address::testing::established_address_1();
-        let transfers = vec![TransferToNamada {
-            amount,
-            asset: DAI_ERC20_ETH_ADDRESS,
-            receiver: receiver.clone(),
-        }];
+    impl TestMintDai {
+        /// Execute a test with the given parameters.
+        fn run_test(self) {
+            let dai_token_cap = self.dai_token_cap.unwrap_or_default();
 
-        update_transfers_to_namada_state(
-            &mut wl_storage,
-            &mut BTreeSet::new(),
-            &transfers,
-        )
-        .unwrap();
+            let (erc20_amount, nut_amount) =
+                if dai_token_cap > self.transferred_amount {
+                    (self.transferred_amount, token::Amount::zero())
+                } else {
+                    (dai_token_cap, self.transferred_amount - dai_token_cap)
+                };
+            assert_eq!(self.transferred_amount, nut_amount + erc20_amount);
 
-        let wdai = wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS);
-        let receiver_balance_key = balance_key(&wdai, &receiver);
-        let wdai_supply_key = minted_balance_key(&wdai);
+            let mut wl_storage = TestWlStorage::default();
+            test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+            if !dai_token_cap.is_zero() {
+                test_utils::whitelist_tokens(
+                    &mut wl_storage,
+                    [(
+                        DAI_ERC20_ETH_ADDRESS,
+                        test_utils::WhitelistMeta {
+                            cap: dai_token_cap,
+                            denom: 18,
+                        },
+                    )],
+                );
+            }
 
-        assert_eq!(
-            stored_keys_count(&wl_storage),
-            initial_stored_keys_count + 2
-        );
+            let receiver = address::testing::established_address_1();
+            let transfers = vec![TransferToNamada {
+                amount: self.transferred_amount,
+                asset: DAI_ERC20_ETH_ADDRESS,
+                receiver: receiver.clone(),
+            }];
 
-        let expected_amount = amount.try_to_vec().unwrap();
-        for key in vec![receiver_balance_key, wdai_supply_key] {
-            let value = wl_storage.read_bytes(&key).unwrap();
-            assert_matches!(value, Some(bytes) if bytes == expected_amount);
+            update_transfers_to_namada_state(
+                &mut wl_storage,
+                &mut BTreeSet::new(),
+                &transfers,
+            )
+            .unwrap();
+
+            for is_nut in [false, true] {
+                let wdai = if is_nut {
+                    wrapped_erc20s::nut(&DAI_ERC20_ETH_ADDRESS)
+                } else {
+                    wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS)
+                };
+                let expected_amount =
+                    if is_nut { nut_amount } else { erc20_amount };
+
+                let receiver_balance_key = balance_key(&wdai, &receiver);
+                let wdai_supply_key = minted_balance_key(&wdai);
+
+                for key in vec![receiver_balance_key, wdai_supply_key] {
+                    let value: Option<token::Amount> =
+                        wl_storage.read(&key).unwrap();
+                    if expected_amount.is_zero() {
+                        assert_matches!(value, None);
+                    } else {
+                        assert_matches!(value, Some(amount) if amount == expected_amount);
+                    }
+                }
+            }
         }
+    }
+
+    /// Test that if DAI is never whitelisted, we only mint NUTs.
+    #[test]
+    fn test_minting_dai_when_not_whitelisted() {
+        TestMintDai {
+            dai_token_cap: None,
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
+    }
+
+    /// Test that overrunning the token caps results in minting DAI NUTs,
+    /// along with wDAI.
+    #[test]
+    fn test_minting_dai_on_cap_overrun() {
+        TestMintDai {
+            dai_token_cap: Some(Amount::from(80)),
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
+    }
+
+    /// Test acting on a single "transfer to Namada" Ethereum event
+    /// and minting the first ever wDAI.
+    #[test]
+    fn test_minting_dai_wrapped() {
+        TestMintDai {
+            dai_token_cap: Some(Amount::max()),
+            transferred_amount: Amount::from(100),
+        }
+        .run_test();
     }
 
     #[test]
@@ -810,10 +925,19 @@ mod tests {
         let native_erc20 =
             read_native_erc20_address(&wl_storage).expect("Test failed");
         let random_erc20 = EthAddress([0xff; 20]);
-        let random_erc20_token = wrapped_erc20s::token(&random_erc20);
+        let random_erc20_token = wrapped_erc20s::nut(&random_erc20);
+        let random_erc20_2 = EthAddress([0xee; 20]);
+        let random_erc20_token_2 = wrapped_erc20s::token(&random_erc20_2);
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
-            [native_erc20, random_erc20],
+            [
+                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Erc20),
+                (random_erc20, eth_bridge_pool::TransferToEthereumKind::Nut),
+                (
+                    random_erc20_2,
+                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                ),
+            ],
         );
         init_balance(&mut wl_storage, &pending_transfers);
         let pending_keys: HashSet<Key> =
@@ -822,6 +946,7 @@ mod tests {
         let mut transfers = vec![];
         for transfer in pending_transfers {
             let transfer_to_eth = TransferToEthereum {
+                kind: transfer.transfer.kind,
                 amount: transfer.transfer.amount,
                 asset: transfer.transfer.asset,
                 receiver: transfer.transfer.recipient,
@@ -854,7 +979,16 @@ mod tests {
                 &BRIDGE_POOL_ADDRESS
             ))
         );
+        assert!(
+            changed_keys.remove(&balance_key(
+                &random_erc20_token_2,
+                &BRIDGE_POOL_ADDRESS
+            ))
+        );
         assert!(changed_keys.remove(&minted_balance_key(&random_erc20_token)));
+        assert!(
+            changed_keys.remove(&minted_balance_key(&random_erc20_token_2))
+        );
         assert!(changed_keys.remove(&payer_balance_key));
         assert!(changed_keys.remove(&pool_balance_key));
         assert!(changed_keys.remove(&get_nonce_key()));
@@ -876,7 +1010,7 @@ mod tests {
                 .expect("Test failed: no value in storage"),
         )
         .expect("Test failed");
-        assert_eq!(relayer_balance, Amount::from(2));
+        assert_eq!(relayer_balance, Amount::from(3));
         let bp_balance_post = Amount::try_from_slice(
             &wl_storage
                 .read_bytes(&pool_balance_key)
@@ -885,7 +1019,8 @@ mod tests {
         )
         .expect("Test failed");
         bp_balance_pre.spend(&bp_balance_post);
-        assert_eq!(bp_balance_pre, Amount::from(2));
+        assert_eq!(bp_balance_pre, Amount::from(3));
+        assert_eq!(bp_balance_post, Amount::from(0));
     }
 
     #[test]
@@ -912,6 +1047,7 @@ mod tests {
                 sender: address::testing::established_address_1(),
                 recipient: EthAddress([5; 20]),
                 amount: Amount::from(10),
+                kind: eth_bridge_pool::TransferToEthereumKind::Erc20,
             },
             gas_fee: GasFee {
                 amount: Amount::from(1),
@@ -985,7 +1121,7 @@ mod tests {
                         .expect("Test failed");
                 assert_eq!(escrow_balance, Amount::from(0));
             } else {
-                let token = wrapped_erc20s::token(&transfer.transfer.asset);
+                let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
@@ -1063,13 +1199,31 @@ mod tests {
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [
-                native_erc20,
-                EthAddress([0xaa; 20]),
-                EthAddress([0xbb; 20]),
-                EthAddress([0xcc; 20]),
-                EthAddress([0xdd; 20]),
-                EthAddress([0xee; 20]),
-                EthAddress([0xff; 20]),
+                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Nut),
+                (
+                    EthAddress([0xaa; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                ),
+                (
+                    EthAddress([0xbb; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                ),
+                (
+                    EthAddress([0xcc; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                ),
+                (
+                    EthAddress([0xdd; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                ),
+                (
+                    EthAddress([0xee; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Erc20,
+                ),
+                (
+                    EthAddress([0xff; 20]),
+                    eth_bridge_pool::TransferToEthereumKind::Nut,
+                ),
             ],
         );
         init_balance(&mut wl_storage, &pending_transfers);
@@ -1077,6 +1231,7 @@ mod tests {
             .into_iter()
             .map(|transfer| {
                 let transfer_to_eth = TransferToEthereum {
+                    kind: transfer.transfer.kind,
                     amount: transfer.transfer.amount,
                     asset: transfer.transfer.asset,
                     receiver: transfer.transfer.recipient,
@@ -1106,6 +1261,7 @@ mod tests {
             sent_amount: token::Amount,
             prev_balance: Option<token::Amount>,
             prev_supply: Option<token::Amount>,
+            kind: eth_bridge_pool::TransferToEthereumKind,
         }
 
         test_wrapped_erc20s_aux(|wl_storage, event| {
@@ -1118,29 +1274,48 @@ mod tests {
             let native_erc20 =
                 read_native_erc20_address(wl_storage).expect("Test failed");
             let deltas = transfers
-                .filter_map(|TransferToEthereum { asset, amount, .. }| {
-                    if asset == &native_erc20 {
-                        return None;
-                    }
-                    let erc20_token = wrapped_erc20s::token(asset);
-                    let prev_balance = wl_storage
-                        .read(&balance_key(&erc20_token, &BRIDGE_POOL_ADDRESS))
-                        .expect("Test failed");
-                    let prev_supply = wl_storage
-                        .read(&minted_balance_key(&erc20_token))
-                        .expect("Test failed");
-                    Some(Delta {
-                        asset: *asset,
-                        sent_amount: *amount,
-                        prev_balance,
-                        prev_supply,
-                    })
-                })
+                .filter_map(
+                    |TransferToEthereum {
+                         kind,
+                         asset,
+                         amount,
+                         ..
+                     }| {
+                        if asset == &native_erc20 {
+                            return None;
+                        }
+                        let erc20_token = match kind {
+                            eth_bridge_pool::TransferToEthereumKind::Erc20 => {
+                                wrapped_erc20s::token(asset)
+                            }
+                            eth_bridge_pool::TransferToEthereumKind::Nut => {
+                                wrapped_erc20s::nut(asset)
+                            }
+                        };
+                        let prev_balance = wl_storage
+                            .read(&balance_key(
+                                &erc20_token,
+                                &BRIDGE_POOL_ADDRESS,
+                            ))
+                            .expect("Test failed");
+                        let prev_supply = wl_storage
+                            .read(&minted_balance_key(&erc20_token))
+                            .expect("Test failed");
+                        Some(Delta {
+                            kind: *kind,
+                            asset: *asset,
+                            sent_amount: *amount,
+                            prev_balance,
+                            prev_supply,
+                        })
+                    },
+                )
                 .collect::<Vec<_>>();
 
             _ = act_on(wl_storage, event).unwrap();
 
             for Delta {
+                kind,
                 ref asset,
                 sent_amount,
                 prev_balance,
@@ -1156,7 +1331,14 @@ mod tests {
                     .checked_sub(sent_amount)
                     .expect("Test failed");
 
-                let erc20_token = wrapped_erc20s::token(asset);
+                let erc20_token = match kind {
+                    eth_bridge_pool::TransferToEthereumKind::Erc20 => {
+                        wrapped_erc20s::token(asset)
+                    }
+                    eth_bridge_pool::TransferToEthereumKind::Nut => {
+                        wrapped_erc20s::nut(asset)
+                    }
+                };
 
                 let balance: token::Amount = wl_storage
                     .read(&balance_key(&erc20_token, &BRIDGE_POOL_ADDRESS))

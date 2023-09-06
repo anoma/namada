@@ -5,6 +5,7 @@ use std::num::NonZeroU64;
 
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
+use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
@@ -91,6 +92,8 @@ pub fn bootstrap_ethereum_bridge(
     wl_storage: &mut TestWlStorage,
 ) -> EthereumBridgeConfig {
     let config = EthereumBridgeConfig {
+        // start with empty erc20 whitelist
+        erc20_whitelist: vec![],
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
             // SAFETY: The only way the API contract of `NonZeroU64` can
@@ -112,6 +115,45 @@ pub fn bootstrap_ethereum_bridge(
     };
     config.init_storage(wl_storage);
     config
+}
+
+/// Whitelist metadata to pass to [`whitelist_tokens`].
+pub struct WhitelistMeta {
+    /// Token cap.
+    pub cap: token::Amount,
+    /// Token denomination.
+    pub denom: u8,
+}
+
+/// Whitelist the given Ethereum tokens.
+pub fn whitelist_tokens<L>(wl_storage: &mut TestWlStorage, token_list: L)
+where
+    L: Into<HashMap<EthAddress, WhitelistMeta>>,
+{
+    for (asset, WhitelistMeta { cap, denom }) in token_list.into() {
+        let cap_key = whitelist::Key {
+            asset,
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+        wl_storage.write(&cap_key, cap).expect("Test failed");
+
+        let whitelisted_key = whitelist::Key {
+            asset,
+            suffix: whitelist::KeyType::Whitelisted,
+        }
+        .into();
+        wl_storage
+            .write(&whitelisted_key, true)
+            .expect("Test failed");
+
+        let denom_key = whitelist::Key {
+            asset,
+            suffix: whitelist::KeyType::Denomination,
+        }
+        .into();
+        wl_storage.write(&denom_key, denom).expect("Test failed");
+    }
 }
 
 /// Returns the number of keys in `storage` which have values present.
@@ -172,6 +214,7 @@ pub fn init_storage_with_validators(
     )
     .expect("Test failed");
     let config = EthereumBridgeConfig {
+        erc20_whitelist: vec![],
         eth_start_height: Default::default(),
         min_confirmations: Default::default(),
         contracts: Contracts {

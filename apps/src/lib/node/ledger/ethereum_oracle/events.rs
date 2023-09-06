@@ -7,14 +7,14 @@ pub mod eth_events {
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
     use ethbridge_governance_events::{
-        GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
-        UpgradedContractFilter, ValidatorSetUpdateFilter,
+        GovernanceEvents, NewContractFilter, UpgradedContractFilter,
+        ValidatorSetUpdateFilter,
     };
     use namada::core::types::ethereum_structs;
     use namada::eth_bridge::ethers::contract::EthEvent;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
+        EthAddress, EthereumEvent, TransferToEthereum, TransferToEthereumKind,
         TransferToNamada, Uint,
     };
     use namada::types::keccak::KeccakHash;
@@ -107,31 +107,6 @@ pub mod eth_events {
                     ));
                 }
                 RawEvents::Governance(
-                    GovernanceEvents::UpdateBridgeWhitelistFilter(
-                        UpdateBridgeWhitelistFilter {
-                            nonce,
-                            tokens,
-                            token_cap,
-                        },
-                    ),
-                ) => {
-                    let mut whitelist = vec![];
-
-                    for (token, cap) in
-                        tokens.into_iter().zip(token_cap.into_iter())
-                    {
-                        whitelist.push(TokenWhitelist {
-                            token: token.parse_eth_address()?,
-                            cap: cap.parse_amount()?,
-                        });
-                    }
-
-                    EthereumEvent::UpdateBridgeWhitelist {
-                        nonce: nonce.parse_uint256()?,
-                        whitelist,
-                    }
-                }
-                RawEvents::Governance(
                     GovernanceEvents::UpgradedContractFilter(
                         UpgradedContractFilter { name: _, addr: _ },
                     ),
@@ -180,6 +155,7 @@ pub mod eth_events {
 
     /// Trait to add parsing methods to foreign types.
     trait Parse: Sized {
+        parse_method! { parse_eth_transfer_kind -> TransferToEthereumKind }
         parse_method! { parse_eth_address -> EthAddress }
         parse_method! { parse_address -> Address }
         parse_method! { parse_amount -> Amount }
@@ -196,6 +172,13 @@ pub mod eth_events {
         parse_method! { parse_transfer_to_namada -> TransferToNamada }
         parse_method! { parse_transfer_to_eth_array -> Vec<TransferToEthereum> }
         parse_method! { parse_transfer_to_eth -> TransferToEthereum }
+    }
+
+    impl Parse for u8 {
+        fn parse_eth_transfer_kind(self) -> Result<TransferToEthereumKind> {
+            self.try_into()
+                .map_err(|err| Error::Decode(format!("{:?}", err)))
+        }
     }
 
     impl Parse for ethabi::Address {
@@ -296,6 +279,7 @@ pub mod eth_events {
 
     impl Parse for ethereum_structs::Erc20Transfer {
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
+            let kind = self.kind.parse_eth_transfer_kind()?;
             let asset = self.from.parse_eth_address()?;
             let receiver = self.to.parse_eth_address()?;
             let sender = self.sender.parse_address()?;
@@ -303,6 +287,7 @@ pub mod eth_events {
             let gas_payer = self.fee_from.parse_address()?;
             let gas_amount = self.fee.parse_amount()?;
             Ok(TransferToEthereum {
+                kind,
                 asset,
                 amount,
                 sender,
@@ -332,7 +317,7 @@ pub mod eth_events {
         use ethabi::ethereum_types::{H160, U256};
         use ethbridge_events::{
             TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
-            UPDATE_BRIDGE_WHITELIST_CODEC, VALIDATOR_SET_UPDATE_CODEC,
+            VALIDATOR_SET_UPDATE_CODEC,
         };
         use namada::eth_bridge::ethers::abi::AbiEncode;
 
@@ -524,6 +509,7 @@ pub mod eth_events {
             let eth_transfers = TransferToErcFilter {
                 transfers: vec![
                     ethereum_structs::Erc20Transfer {
+                        kind: TransferToEthereumKind::Erc20 as u8,
                         from: H160([1; 20]),
                         to: H160([2; 20]),
                         sender: address.clone(),
@@ -541,11 +527,6 @@ pub mod eth_events {
                 validator_set_nonce: 0u64.into(),
                 bridge_validator_set_hash: [1; 32],
                 governance_validator_set_hash: [2; 32],
-            };
-            let whitelist = UpdateBridgeWhitelistFilter {
-                nonce: 0u64.into(),
-                tokens: vec![H160([0; 20]); 2],
-                token_cap: vec![0u64.into(); 2],
             };
             assert_eq!(
                 {
@@ -581,18 +562,6 @@ pub mod eth_events {
                     decoded
                 },
                 update
-            );
-            assert_eq!(
-                {
-                    let decoded: UpdateBridgeWhitelistFilter =
-                        UPDATE_BRIDGE_WHITELIST_CODEC
-                            .decode(&get_log(whitelist.clone().encode()))
-                            .expect("Test failed")
-                            .try_into()
-                            .expect("Test failed");
-                    decoded
-                },
-                whitelist
             );
         }
 

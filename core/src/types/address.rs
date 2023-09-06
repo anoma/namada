@@ -99,6 +99,8 @@ const PREFIX_INTERNAL: &str = "ano";
 const PREFIX_IBC: &str = "ibc";
 /// Fixed-length address strings prefix for Ethereum addresses.
 const PREFIX_ETH: &str = "eth";
+/// Fixed-length address strings prefix for Non-Usable-Token addresses.
+const PREFIX_NUT: &str = "nut";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -234,6 +236,11 @@ impl Address {
                             eth_addr.to_canonical().replace("0x", "");
                         format!("{}::{}", PREFIX_ETH, eth_addr)
                     }
+                    InternalAddress::Nut(eth_addr) => {
+                        let eth_addr =
+                            eth_addr.to_canonical().replace("0x", "");
+                        format!("{PREFIX_NUT}::{eth_addr}")
+                    }
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
@@ -330,12 +337,18 @@ impl Address {
                     "Invalid IBC internal address",
                 )),
             },
-            Some((PREFIX_ETH, raw)) => match string {
+            Some((prefix @ (PREFIX_ETH | PREFIX_NUT), raw)) => match string {
                 _ if raw.len() == HASH_HEX_LEN => {
                     match EthAddress::from_str(&format!("0x{}", raw)) {
-                        Ok(eth_addr) => Ok(Address::Internal(
-                            InternalAddress::Erc20(eth_addr),
-                        )),
+                        Ok(eth_addr) => Ok(match prefix {
+                            PREFIX_ETH => Address::Internal(
+                                InternalAddress::Erc20(eth_addr),
+                            ),
+                            PREFIX_NUT => Address::Internal(
+                                InternalAddress::Nut(eth_addr),
+                            ),
+                            _ => unreachable!(),
+                        }),
                         Err(e) => Err(Error::new(
                             ErrorKind::InvalidData,
                             e.to_string(),
@@ -543,6 +556,8 @@ pub enum InternalAddress {
     EthBridgePool,
     /// ERC20 token for Ethereum bridge
     Erc20(EthAddress),
+    /// Non-usable ERC20 tokens
+    Nut(EthAddress),
     /// Replay protection contains transactions' hash
     ReplayProtection,
     /// Multitoken
@@ -566,6 +581,7 @@ impl Display for InternalAddress {
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::EthBridgePool => "EthBridgePool".to_string(),
                 Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
+                Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
@@ -861,6 +877,7 @@ pub mod testing {
             InternalAddress::EthBridge => {}
             InternalAddress::EthBridgePool => {}
             InternalAddress::Erc20(_) => {}
+            InternalAddress::Nut(_) => {}
             InternalAddress::ReplayProtection => {}
             InternalAddress::Pgf => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
@@ -876,6 +893,7 @@ pub mod testing {
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
             Just(arb_erc20()),
+            Just(arb_nut()),
             Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
@@ -900,6 +918,13 @@ pub mod testing {
 
     fn arb_erc20() -> InternalAddress {
         use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        // TODO: generate random erc20 addr data
         InternalAddress::Erc20(arbitrary_eth_address())
+    }
+
+    fn arb_nut() -> InternalAddress {
+        use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        // TODO: generate random erc20 addr data
+        InternalAddress::Nut(arbitrary_eth_address())
     }
 }

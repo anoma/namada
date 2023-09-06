@@ -5,8 +5,10 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
+use crate::ledger::eth_bridge::storage::wrapped_erc20s;
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
+pub use crate::types::ethereum_events::TransferToEthereumKind;
 use crate::types::ethereum_events::{
     EthAddress, TransferToEthereum as TransferToEthereumEvent,
 };
@@ -33,6 +35,8 @@ const NAMESPACE: &str = "transfer";
     BorshSchema,
 )]
 pub struct TransferToEthereum {
+    /// The kind of transfer to Ethereum.
+    pub kind: TransferToEthereumKind,
     /// The type of token
     pub asset: EthAddress,
     /// The recipient address
@@ -67,9 +71,25 @@ pub struct PendingTransfer {
     pub gas_fee: GasFee,
 }
 
+impl PendingTransfer {
+    /// Get a token [`Address`] from this [`PendingTransfer`].
+    #[inline]
+    pub fn token_address(&self) -> Address {
+        match &self.transfer.kind {
+            TransferToEthereumKind::Erc20 => {
+                wrapped_erc20s::token(&self.transfer.asset)
+            }
+            TransferToEthereumKind::Nut => {
+                wrapped_erc20s::nut(&self.transfer.asset)
+            }
+        }
+    }
+}
+
 impl From<PendingTransfer> for ethbridge_structs::Erc20Transfer {
     fn from(pending: PendingTransfer) -> Self {
         Self {
+            kind: pending.transfer.kind as u8,
             from: pending.transfer.asset.0.into(),
             to: pending.transfer.recipient.0.into(),
             amount: pending.transfer.amount.into(),
@@ -98,6 +118,7 @@ impl Encode<8> for PendingTransfer {
 impl From<&TransferToEthereumEvent> for PendingTransfer {
     fn from(event: &TransferToEthereumEvent) -> Self {
         let transfer = TransferToEthereum {
+            kind: event.kind,
             asset: event.asset,
             recipient: event.receiver,
             sender: event.sender.clone(),
