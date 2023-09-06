@@ -221,15 +221,27 @@ where
         BlockResults::default();
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
-    iter.for_each(|(key, value, _gas)| {
-        let key = u64::parse(key).expect("expected integer for block height");
-        let value = BlockResults::try_from_slice(&value)
-            .expect("expected BlockResults bytes");
-        let idx: usize = key
-            .try_into()
-            .expect("expected block height to fit into usize");
+    for (key, value, _gas) in iter {
+        let key = u64::parse(key.clone()).map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("expected integer for block height {}", key),
+            ))
+        })?;
+        let value = BlockResults::try_from_slice(&value).map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "expected BlockResults bytes",
+            ))
+        })?;
+        let idx: usize = key.try_into().map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "expected block height to fit into usize",
+            ))
+        })?;
         results[idx] = value;
-    });
+    }
     Ok(results)
 }
 

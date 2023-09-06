@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use borsh::BorshSerialize;
@@ -17,7 +17,8 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::I32Sum;
 use namada_core::ledger::governance::cli::onchain::{
-    DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
+    DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
+    ProposalVote,
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
@@ -44,6 +45,7 @@ use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
+use crate::ledger::masp::TransferErr::Build;
 use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
@@ -54,7 +56,7 @@ use crate::proto::{MaspBuilder, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
-use crate::types::error::{Error, TxError};
+use crate::types::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
@@ -157,9 +159,9 @@ pub async fn prepare_tx<
     fee_payer: common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<Option<Epoch>, Error> {
+) -> Result<Option<Epoch>> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(client).await;
+        let epoch = rpc::query_epoch(client).await?;
 
         Ok(signing::wrap_tx(
             client,
@@ -188,7 +190,7 @@ pub async fn process_tx<
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: Tx,
-) -> Result<ProcessTxResponse, Error> {
+) -> Result<ProcessTxResponse> {
     // NOTE: use this to print the request JSON body:
 
     // let request =
@@ -245,19 +247,19 @@ pub async fn is_reveal_pk_needed<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
     force: bool,
-) -> Result<bool, Error>
+) -> Result<bool>
 where
     C: crate::ledger::queries::Client + Sync,
 {
     // Check if PK revealed
-    Ok(force || !has_revealed_pk(client, address).await)
+    Ok(force || !has_revealed_pk(client, address).await?)
 }
 
 /// Check if the public key for the given address has been revealed
 pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> bool {
+) -> Result<bool> {
     rpc::is_public_key_revealed(client, address).await
 }
 
@@ -274,7 +276,7 @@ pub async fn build_reveal_pk<
     address: &Address,
     public_key: &common::PublicKey,
     fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     println!(
         "Submitting a tx to reveal the public key for address {address}..."
     );
@@ -300,7 +302,7 @@ pub async fn build_reveal_pk<
 pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
-) -> Result<Response, Error> {
+) -> Result<Response> {
     let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
         TxBroadcastData::Live {
             tx,
@@ -332,7 +334,9 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
         Ok(response)
     } else {
         Err(Error::from(TxError::TxBroadcast(RpcError::server(
-            serde_json::to_string(&response).unwrap(),
+            serde_json::to_string(&response).map_err(|err| {
+                Error::from(EncodingError::Serde(err.to_string()))
+            })?,
         ))))
     }
 }
@@ -348,7 +352,7 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
 pub async fn submit_tx<C>(
     client: &C,
     to_broadcast: TxBroadcastData,
-) -> Result<TxResponse, Error>
+) -> Result<TxResponse>
 where
     C: crate::ledger::queries::Client + Sync,
 {
@@ -383,10 +387,12 @@ where
             .proceed_or(TxError::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
-        println!(
-            "Transaction accepted with result: {}",
-            serde_json::to_string_pretty(&parsed).unwrap()
-        );
+        let tx_to_str = |parsed| {
+            serde_json::to_string_pretty(parsed).map_err(|err| {
+                Error::from(EncodingError::Serde(err.to_string()))
+            })
+        };
+        println!("Transaction accepted with result: {}", tx_to_str(&parsed)?);
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
@@ -400,7 +406,7 @@ where
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
-                serde_json::to_string_pretty(&parsed).unwrap()
+                tx_to_str(&parsed)?
             );
             Ok(parsed)
         } else {
@@ -501,13 +507,13 @@ pub async fn build_validator_commission_change<
         tx_code_path,
     }: args::CommissionRateChange,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
-    let epoch = rpc::query_epoch(client).await;
+) -> Result<(Tx, Option<Epoch>)> {
+    let epoch = rpc::query_epoch(client).await?;
 
-    let params: PosParams = rpc::get_pos_params(client).await;
+    let params: PosParams = rpc::get_pos_params(client).await?;
 
     let validator = validator.clone();
-    if rpc::is_validator(client, &validator).await {
+    if rpc::is_validator(client, &validator).await? {
         if rate < Dec::zero() || rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
             return Err(Error::from(TxError::InvalidCommissionRate(rate)));
@@ -520,7 +526,7 @@ pub async fn build_validator_commission_change<
             &validator,
             Some(pipeline_epoch_minus_one),
         )
-        .await
+        .await?
         {
             Some(CommissionPair {
                 commission_rate,
@@ -592,7 +598,7 @@ pub async fn build_update_steward_commission<
         tx_code_path,
     }: args::UpdateStewardCommission,
     gas_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
@@ -642,7 +648,7 @@ pub async fn build_resign_steward<
         tx_code_path,
     }: args::ResignSteward,
     gas_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
@@ -677,8 +683,8 @@ pub async fn build_unjail_validator<
         tx_code_path,
     }: args::TxUnjailValidator,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
-    if !rpc::is_validator(client, &validator).await {
+) -> Result<(Tx, Option<Epoch>)> {
+    if !rpc::is_validator(client, &validator).await? {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
@@ -687,14 +693,18 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let params: PosParams = rpc::get_pos_params(client).await;
-    let current_epoch = rpc::query_epoch(client).await;
+    let params: PosParams = rpc::get_pos_params(client).await?;
+    let current_epoch = rpc::query_epoch(client).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     let validator_state_at_pipeline =
         rpc::get_validator_state(client, &validator, Some(pipeline_epoch))
-            .await
-            .expect("Validator state should be defined.");
+            .await?
+            .ok_or_else(|| {
+                Error::from(TxError::Other(
+                    "Validator state should be defined.".to_string(),
+                ))
+            })?;
     if validator_state_at_pipeline != ValidatorState::Jailed {
         eprintln!(
             "The given validator address {} is not jailed at the pipeline \
@@ -714,14 +724,7 @@ pub async fn build_unjail_validator<
         rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
             .await;
     match last_slash_epoch {
-        None => {
-            panic!(
-                "No slash found for validator address {} and thus can't be \
-                 unjailed.",
-                &validator
-            )
-        }
-        Some(last_slash_epoch) => {
+        Ok(last_slash_epoch) => {
             let eligible_epoch =
                 last_slash_epoch + params.slash_processing_epoch_offset();
             if current_epoch < eligible_epoch {
@@ -739,6 +742,16 @@ pub async fn build_unjail_validator<
                 }
             }
         }
+        Err(Error::Query(
+            QueryError::NoSuchKey(_) | QueryError::General(_),
+        )) => {
+            return Err(Error::from(TxError::Other(format!(
+                "The given validator address {} is currently frozen and not \
+                 yet eligible to be unjailed.",
+                &validator
+            ))));
+        }
+        Err(err) => return Err(err),
     }
 
     build(
@@ -771,8 +784,8 @@ pub async fn build_withdraw<
         tx_code_path,
     }: args::Withdraw,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
-    let epoch = rpc::query_epoch(client).await;
+) -> Result<(Tx, Option<Epoch>)> {
+    let epoch = rpc::query_epoch(client).await?;
 
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, client)
@@ -788,7 +801,7 @@ pub async fn build_withdraw<
         &validator,
         Some(epoch),
     )
-    .await;
+    .await?;
 
     if tokens.is_zero() {
         eprintln!(
@@ -796,7 +809,7 @@ pub async fn build_withdraw<
              epoch {}.",
             epoch
         );
-        rpc::query_and_print_unbonds(client, &bond_source, &validator).await;
+        rpc::query_and_print_unbonds(client, &bond_source, &validator).await?;
         if !tx_args.force {
             return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
@@ -841,7 +854,7 @@ pub async fn build_unbond<
         tx_code_path,
     }: args::Unbond,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>, Option<(Epoch, token::Amount)>), Error> {
+) -> Result<(Tx, Option<Epoch>, Option<(Epoch, token::Amount)>)> {
     let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -851,7 +864,7 @@ pub async fn build_unbond<
             .await?;
 
         let bond_amount =
-            rpc::query_bond(client, &bond_source, &validator, None).await;
+            rpc::query_bond(client, &bond_source, &validator, None).await?;
         println!(
             "Bond amount available for unbonding: {} NAM",
             bond_amount.to_string_native()
@@ -878,7 +891,8 @@ pub async fn build_unbond<
 
     // Query the unbonds before submitting the tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &validator).await;
+        rpc::query_unbond_with_slashing(client, &bond_source, &validator)
+            .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
@@ -912,7 +926,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: args::Unbond,
     latest_withdrawal_pre: Option<(Epoch, token::Amount)>,
-) -> Result<(), Error> {
+) -> Result<()> {
     let source = args.source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| args.validator.clone());
@@ -920,14 +934,16 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
     // Query the unbonds post-tx
     let unbonds =
         rpc::query_unbond_with_slashing(client, &bond_source, &args.validator)
-            .await;
+            .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
         *to_withdraw += amount;
     }
     let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
-        withdrawable.into_iter().last().unwrap();
+        withdrawable.into_iter().last().ok_or_else(|| {
+            Error::Other("No withdrawable amount".to_string())
+        })?;
 
     if let Some((latest_withdraw_epoch_pre, latest_withdraw_amount_pre)) =
         latest_withdrawal_pre
@@ -987,7 +1003,7 @@ pub async fn build_bond<
         tx_code_path,
     }: args::Bond,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, client)
             .await?;
@@ -1060,15 +1076,14 @@ pub async fn build_default_proposal<
     }: args::InitProposal,
     proposal: DefaultProposal,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let push_data =
         |tx_builder: &mut Tx, init_proposal_data: &mut InitProposalData| {
-            let (_, extra_section_hash) = tx_builder.add_extra_section(
-                proposal.proposal.content.try_to_vec().unwrap(),
-            );
+            let (_, extra_section_hash) = tx_builder
+                .add_extra_section(proposal_to_vec(proposal.proposal)?);
             init_proposal_data.content = extra_section_hash;
 
             if let Some(init_proposal_code) = proposal.data {
@@ -1077,6 +1092,7 @@ pub async fn build_default_proposal<
                 init_proposal_data.r#type =
                     ProposalType::Default(Some(extra_section_hash));
             };
+            Ok(())
         };
     build(
         client,
@@ -1112,13 +1128,15 @@ pub async fn build_vote_proposal<
     }: args::VoteProposal,
     epoch: Epoch,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let proposal_vote = ProposalVote::try_from(vote)
         .map_err(|_| TxError::InvalidProposalVote)?;
 
-    let proposal_id = proposal_id.expect("Proposal id must be defined.");
+    let proposal_id = proposal_id.ok_or_else(|| {
+        Error::Other("Proposal id must be defined.".to_string())
+    })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(client, proposal_id).await
+        rpc::query_proposal_by_id(client, proposal_id).await?
     {
         proposal
     } else {
@@ -1127,9 +1145,13 @@ pub async fn build_vote_proposal<
 
     let storage_vote =
         StorageProposalVote::build(&proposal_vote, &proposal.r#type)
-            .expect("Should be able to build the proposal vote");
+            .ok_or_else(|| {
+                Error::from(TxError::Other(
+                    "Should be able to build the proposal vote".to_string(),
+                ))
+            })?;
 
-    let is_validator = rpc::is_validator(client, &voter).await;
+    let is_validator = rpc::is_validator(client, &voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::from(TxError::InvalidProposalVotingPeriod(
@@ -1142,7 +1164,7 @@ pub async fn build_vote_proposal<
         &voter,
         proposal.voting_start_epoch,
     )
-    .await
+    .await?
     .keys()
     .cloned()
     .collect::<Vec<Address>>();
@@ -1188,14 +1210,15 @@ pub async fn build_pgf_funding_proposal<
     }: args::InitProposal,
     proposal: PgfFundingProposal,
     fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
-        let (_, extra_section_hash) = tx
-            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        let (_, extra_section_hash) =
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
         data.content = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1231,14 +1254,15 @@ pub async fn build_pgf_stewards_proposal<
     }: args::InitProposal,
     proposal: PgfStewardProposal,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let add_section = |tx: &mut Tx, data: &mut InitProposalData| {
-        let (_, extra_section_hash) = tx
-            .add_extra_section(proposal.proposal.content.try_to_vec().unwrap());
+        let (_, extra_section_hash) =
+            tx.add_extra_section(proposal_to_vec(proposal.proposal)?);
         data.content = extra_section_hash;
+        Ok(())
     };
 
     build(
@@ -1266,7 +1290,7 @@ pub async fn build_ibc_transfer<
     shielded: &mut ShieldedContext<V>,
     args: args::TxIbcTransfer,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(args.source.clone(), args.tx.force, client)
@@ -1306,14 +1330,14 @@ pub async fn build_ibc_transfer<
     let tx_code_hash =
         query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
             .await
-            .unwrap();
+            .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     let ibc_denom = match &args.token {
         Address::Internal(InternalAddress::IbcToken(hash)) => {
             let ibc_denom_key = ibc_denom_key(hash);
             rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
                 .await
-                .ok_or_else(|| TxError::TokenDoesNotExist(args.token.clone()))?
+                .map_err(|_e| TxError::TokenDoesNotExist(args.token.clone()))?
         }
         _ => args.token.to_string(),
     };
@@ -1332,18 +1356,26 @@ pub async fn build_ibc_transfer<
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
         Some(h) => {
-            TimeoutHeight::At(IbcHeight::new(0, h).expect("invalid height"))
+            TimeoutHeight::At(IbcHeight::new(0, h).map_err(|err| {
+                Error::Other(format!("Invalid height: {err}"))
+            })?)
         }
         None => TimeoutHeight::Never,
     };
 
-    let now: crate::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
+    let now: std::result::Result<
+        crate::tendermint::Time,
+        namada_core::tendermint::Error,
+    > = DateTimeUtc::now().try_into();
+    let now = now.map_err(|e| Error::Other(e.to_string()))?;
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
-        (now + Duration::new(offset, 0)).unwrap()
+        (now + Duration::new(offset, 0))
+            .map_err(|e| Error::Other(e.to_string()))?
     } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
-        (now + Duration::new(3600, 0)).unwrap()
+        (now + Duration::new(3600, 0))
+            .map_err(|e| Error::Other(e.to_string()))?
     } else {
         IbcTimestamp::none()
     };
@@ -1383,6 +1415,7 @@ pub async fn build_ibc_transfer<
 }
 
 /// Abstraction for helping build transactions
+#[allow(clippy::too_many_arguments)]
 pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1393,9 +1426,9 @@ pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     on_tx: F,
     gas_payer: &common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-) -> Result<(Tx, Option<Epoch>), Error>
+) -> Result<(Tx, Option<Epoch>)>
 where
-    F: FnOnce(&mut Tx, &mut D),
+    F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -1416,6 +1449,7 @@ where
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1427,9 +1461,9 @@ async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     gas_payer: &common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Result<(Tx, Option<Epoch>), Error>
+) -> Result<(Tx, Option<Epoch>)>
 where
-    F: FnOnce(&mut Tx, &mut D),
+    F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -1438,11 +1472,11 @@ where
 
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
 
-    let tx_code_hash = query_wasm_code_hash(client, path.to_str().unwrap())
+    let tx_code_hash = query_wasm_code_hash(client, path.to_string_lossy())
         .await
-        .unwrap();
+        .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
-    on_tx(&mut tx_builder, &mut data);
+    on_tx(&mut tx_builder, &mut data)?;
 
     tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
@@ -1495,7 +1529,7 @@ async fn used_asset_types<
     shielded: &mut ShieldedContext<U>,
     client: &C,
     builder: &Builder<P, R, K, N>,
-) -> Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
+) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
@@ -1545,7 +1579,7 @@ pub async fn build_transfer<
     shielded: &mut ShieldedContext<V>,
     mut args: args::TxTransfer,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1559,9 +1593,7 @@ pub async fn build_transfer<
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, args.tx.force)
-            .await
-            .expect("expected to validate amount");
+        validate_amount(client, args.amount, &token, args.tx.force).await?;
 
     args.amount = InputAmount::Validated(validated_amount);
     let post_balance = check_balance_too_low_err::<C>(
@@ -1607,7 +1639,7 @@ pub async fn build_transfer<
 
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),
-        Err(builder::Error::InsufficientFunds(_)) => {
+        Err(Build(builder::Error::InsufficientFunds(_))) => {
             Err(TxError::NegativeBalanceAfterTransfer(
                 Box::new(source.clone()),
                 validated_amount.amount.to_string_native(),
@@ -1669,6 +1701,7 @@ pub async fn build_transfer<
                 target: masp_tx_hash,
             });
         };
+        Ok(())
     };
     let (tx, unshielding_epoch) = build_pow_flag(
         client,
@@ -1723,11 +1756,8 @@ pub async fn build_init_account<
         threshold,
     }: args::TxInitAccount,
     fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
-    let vp_code_hash =
-        query_wasm_code_hash(client, vp_code_path.to_str().unwrap())
-            .await
-            .unwrap();
+) -> Result<(Tx, Option<Epoch>)> {
+    let vp_code_hash = query_wasm_code_hash_buf(client, &vp_code_path).await?;
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -1750,6 +1780,7 @@ pub async fn build_init_account<
     let add_code_hash = |tx: &mut Tx, data: &mut InitAccount| {
         let extra_section_hash = tx.add_extra_section_from_hash(vp_code_hash);
         data.vp_code_hash = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1783,22 +1814,19 @@ pub async fn build_update_account<
         threshold,
     }: args::TxUpdateAccount,
     fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
-    let addr = if let Some(account) = rpc::get_account_info(client, &addr).await
-    {
-        account.address
-    } else if tx_args.force {
-        addr
-    } else {
-        return Err(Error::from(TxError::LocationDoesNotExist(addr)));
-    };
+) -> Result<(Tx, Option<Epoch>)> {
+    let addr =
+        if let Some(account) = rpc::get_account_info(client, &addr).await? {
+            account.address
+        } else if tx_args.force {
+            addr
+        } else {
+            return Err(Error::from(TxError::LocationDoesNotExist(addr)));
+        };
 
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
-            let vp_hash =
-                query_wasm_code_hash(client, code_path.to_str().unwrap())
-                    .await
-                    .unwrap();
+            let vp_hash = query_wasm_code_hash_buf(client, &code_path).await?;
             Some(vp_hash)
         }
         None => None,
@@ -1820,6 +1848,7 @@ pub async fn build_update_account<
         let extra_section_hash = vp_code_hash
             .map(|vp_code_hash| tx.add_extra_section_from_hash(vp_code_hash));
         data.vp_code_hash = extra_section_hash;
+        Ok(())
     };
     build(
         client,
@@ -1852,16 +1881,18 @@ pub async fn build_custom<
         owner: _,
     }: args::TxCustom,
     fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, Option<Epoch>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
             Error::Other("Invalid tx deserialization.".to_string())
         })?
     } else {
-        let tx_code_hash =
-            query_wasm_code_hash(client, code_path.unwrap().to_str().unwrap())
-                .await
-                .unwrap();
+        let tx_code_hash = query_wasm_code_hash_buf(
+            client,
+            &code_path
+                .ok_or(Error::Other("No code path supplied".to_string()))?,
+        )
+        .await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
         tx.add_code_from_hash(tx_code_hash);
@@ -1888,10 +1919,10 @@ pub async fn build_custom<
 async fn expect_dry_broadcast<C: crate::ledger::queries::Client + Sync>(
     to_broadcast: TxBroadcastData,
     client: &C,
-) -> Result<ProcessTxResponse, Error> {
+) -> Result<ProcessTxResponse> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
-            rpc::dry_run_tx(client, tx.to_bytes()).await;
+            rpc::dry_run_tx(client, tx.to_bytes()).await?;
             Ok(ProcessTxResponse::DryRun)
         }
         TxBroadcastData::Live {
@@ -1902,7 +1933,7 @@ async fn expect_dry_broadcast<C: crate::ledger::queries::Client + Sync>(
     }
 }
 
-fn lift_rpc_error<T>(res: Result<T, RpcError>) -> Result<T, Error> {
+fn lift_rpc_error<T>(res: std::result::Result<T, RpcError>) -> Result<T> {
     res.map_err(|err| Error::from(TxError::TxBroadcast(err)))
 }
 
@@ -1913,9 +1944,9 @@ async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
     validator: Address,
     force: bool,
     client: &C,
-) -> Result<Address, Error> {
+) -> Result<Address> {
     // Check that the validator address exists on chain
-    let is_validator = rpc::is_validator(client, &validator).await;
+    let is_validator = rpc::is_validator(client, &validator).await?;
     if !is_validator {
         if force {
             eprintln!(
@@ -1940,12 +1971,12 @@ async fn address_exists_or_err<C, F>(
     client: &C,
     message: String,
     err: F,
-) -> Result<Address, Error>
+) -> Result<Address>
 where
     C: crate::ledger::queries::Client + Sync,
     F: FnOnce(Address) -> Error,
 {
-    let addr_exists = rpc::known_address::<C>(client, &addr).await;
+    let addr_exists = rpc::known_address::<C>(client, &addr).await?;
     if !addr_exists {
         if force {
             eprintln!("{}", message);
@@ -1965,7 +1996,7 @@ async fn source_exists_or_err<C: crate::ledger::queries::Client + Sync>(
     token: Address,
     force: bool,
     client: &C,
-) -> Result<Address, Error> {
+) -> Result<Address> {
     let message =
         format!("The source address {} doesn't exist on chain.", token);
     address_exists_or_err(token, force, client, message, |err| {
@@ -1981,7 +2012,7 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
     token: Address,
     force: bool,
     client: &C,
-) -> Result<Address, Error> {
+) -> Result<Address> {
     let message =
         format!("The target address {} doesn't exist on chain.", token);
     address_exists_or_err(token, force, client, message, |err| {
@@ -2000,11 +2031,11 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     balance_key: storage::Key,
     force: bool,
     client: &C,
-) -> Result<token::Amount, Error> {
+) -> Result<token::Amount> {
     match rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
         .await
     {
-        Some(balance) => match balance.checked_sub(amount) {
+        Ok(balance) => match balance.checked_sub(amount) {
             Some(diff) => Ok(diff),
             None => {
                 if force {
@@ -2028,7 +2059,9 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 }
             }
         },
-        None => {
+        Err(Error::Query(
+            QueryError::General(_) | QueryError::NoSuchKey(_),
+        )) => {
             if force {
                 eprintln!(
                     "No balance found for the source {} of token {}",
@@ -2042,14 +2075,14 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 )))
             }
         }
+        // We're either facing a no response or a conversion error
+        // either way propigate it up
+        Err(err) => Err(err),
     }
 }
 
 #[allow(dead_code)]
-fn validate_untrusted_code_err(
-    vp_code: &Vec<u8>,
-    force: bool,
-) -> Result<(), Error> {
+fn validate_untrusted_code_err(vp_code: &Vec<u8>, force: bool) -> Result<()> {
     if let Err(err) = vm::validate_untrusted_wasm(vp_code) {
         if force {
             eprintln!("Validity predicate code validation failed with {}", err);
@@ -2061,10 +2094,24 @@ fn validate_untrusted_code_err(
         Ok(())
     }
 }
+async fn query_wasm_code_hash_buf<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    path: &Path,
+) -> Result<Hash> {
+    query_wasm_code_hash(client, path.to_string_lossy()).await
+}
 
 /// A helper for [`fn build`] that can be used for `on_tx` arg that does nothing
-fn do_nothing<D>(_tx: &mut Tx, _data: &mut D)
+fn do_nothing<D>(_tx: &mut Tx, _data: &mut D) -> Result<()>
 where
     D: BorshSerialize,
 {
+    Ok(())
+}
+
+fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>> {
+    proposal
+        .content
+        .try_to_vec()
+        .map_err(|e| Error::from(EncodingError::Conversion(e.to_string())))
 }

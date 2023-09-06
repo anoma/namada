@@ -1,7 +1,6 @@
 //! Functions to sign transactions
 
 use std::collections::{BTreeMap, HashMap};
-use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -42,7 +41,7 @@ pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::types::error::{Error, TxError};
+use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -94,7 +93,7 @@ pub async fn find_pk<
                 addr.encode()
             );
             rpc::get_public_key_at(client, addr, 0)
-                .await
+                .await?
                 .ok_or(Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
@@ -199,7 +198,7 @@ pub fn sign_tx<U: WalletUtils>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-) {
+) -> Result<(), Error> {
     if !args.signatures.is_empty() {
         let signatures = args
             .signatures
@@ -224,8 +223,9 @@ pub fn sign_tx<U: WalletUtils>(
     }
 
     let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.fee_payer).expect("");
+        find_key_by_pk(wallet, args, &signing_data.fee_payer)?;
     tx.sign_wrapper(fee_payer_keypair);
+    Ok(())
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -248,7 +248,7 @@ pub async fn aux_signing_data<
 
     let (account_public_keys_map, threshold) = match owner {
         Some(owner @ Address::Established(_)) => {
-            let account = rpc::get_account_info::<C>(client, owner).await;
+            let account = rpc::get_account_info::<C>(client, owner).await?;
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {
@@ -346,10 +346,13 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
         BTreeMap<Address, Amount>,
     >(client, &gas_cost_key)
     .await
-    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
-    {
-        Some(amount) => amount,
-        None => {
+    .and_then(|map| {
+        map.get(&args.fee_token)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| Error::Other("no fee found".to_string()))
+    }) {
+        Ok(amount) => amount,
+        Err(_e) => {
             eprintln!(
                 "Could not retrieve the gas cost for token {}",
                 args.fee_token
@@ -450,10 +453,13 @@ pub async fn wrap_tx<
         BTreeMap<Address, Amount>,
     >(client, &gas_cost_key)
     .await
-    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
-    {
-        Some(amount) => amount,
-        None => {
+    .and_then(|map| {
+        map.get(&args.fee_token)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| Error::Other("no fee found".to_string()))
+    }) {
+        Ok(amount) => amount,
+        Err(_e) => {
             eprintln!(
                 "Could not retrieve the gas cost for token {}",
                 args.fee_token
@@ -891,7 +897,7 @@ pub async fn generate_test_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) {
+) -> Result<(), Error> {
     use std::env;
     use std::fs::File;
     use std::io::Write;
@@ -901,19 +907,20 @@ pub async fn generate_test_vector<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
+        let decoding = to_ledger_vector(client, wallet, &tx).await?;
         let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
+            .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
         let mut f = File::options()
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
+            .map_err(|e| {
+                Error::Other(format!("failed to open test vector file: {}", e))
+            })?;
+        writeln!(f, "{},", output).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
 
     // Attempt to decode the construction
@@ -926,9 +933,14 @@ pub async fn generate_test_vector<
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
+            .map_err(|_| {
+                Error::Other("unable to write test vector to file".to_string())
+            })?;
+        writeln!(f, "{:x?},", tx).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
+    Ok(())
 }
 
 /// Converts the given transaction to the form that is displayed on the Ledger
@@ -940,41 +952,26 @@ pub async fn to_ledger_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) -> Result<LedgerVector, std::io::Error> {
-    let init_account_hash = query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM)
-        .await
-        .unwrap();
+) -> Result<LedgerVector, Error> {
+    let init_account_hash =
+        query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM).await?;
     let init_validator_hash =
-        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM)
-            .await
-            .unwrap();
-    let init_proposal_hash = query_wasm_code_hash(client, TX_INIT_PROPOSAL)
-        .await
-        .unwrap();
-    let vote_proposal_hash = query_wasm_code_hash(client, TX_VOTE_PROPOSAL)
-        .await
-        .unwrap();
-    let reveal_pk_hash =
-        query_wasm_code_hash(client, TX_REVEAL_PK).await.unwrap();
+        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM).await?;
+    let init_proposal_hash =
+        query_wasm_code_hash(client, TX_INIT_PROPOSAL).await?;
+    let vote_proposal_hash =
+        query_wasm_code_hash(client, TX_VOTE_PROPOSAL).await?;
+    let reveal_pk_hash = query_wasm_code_hash(client, TX_REVEAL_PK).await?;
     let update_account_hash =
-        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM)
-            .await
-            .unwrap();
-    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM)
-        .await
-        .unwrap();
-    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await.unwrap();
-    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await.unwrap();
-    let unbond_hash =
-        query_wasm_code_hash(client, TX_UNBOND_WASM).await.unwrap();
-    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM)
-        .await
-        .unwrap();
+        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM).await?;
+    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM).await?;
+    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await?;
+    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await?;
+    let unbond_hash = query_wasm_code_hash(client, TX_UNBOND_WASM).await?;
+    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
-        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM)
-            .await
-            .unwrap();
-    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await.unwrap();
+        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM).await?;
+    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
@@ -990,8 +987,9 @@ pub async fn to_ledger_vector<
         .collect();
 
     let mut tv = LedgerVector {
-        blob: HEXLOWER
-            .encode(&tx.try_to_vec().expect("unable to serialize transaction")),
+        blob: HEXLOWER.encode(&tx.try_to_vec().map_err(|_| {
+            Error::Other("unable to serialize transaction".to_string())
+        })?),
         index: 0,
         valid: true,
         name: "Custom 0".to_string(),
@@ -1000,26 +998,32 @@ pub async fn to_ledger_vector<
 
     let code_hash = tx
         .get_section(tx.code_sechash())
-        .expect("expected tx code section to be present")
+        .ok_or_else(|| {
+            Error::Other("expected tx code section to be present".to_string())
+        })?
         .code_sec()
-        .expect("expected section to have code tag")
+        .ok_or_else(|| {
+            Error::Other("expected section to have code tag".to_string())
+        })?
         .code
         .hash();
     tv.output_expert
         .push(format!("Code hash : {}", HEXLOWER.encode(&code_hash.0)));
 
     if code_hash == init_account_hash {
-        let init_account =
-            InitAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
-
+        let init_account = InitAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         tv.name = "Init Account 0".to_string();
 
         let extra = tx
             .get_section(&init_account.vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -1039,17 +1043,20 @@ pub async fn to_ledger_vector<
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
-        let init_validator =
-            InitValidator::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_validator = InitValidator::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Validator 0".to_string();
 
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -1085,10 +1092,13 @@ pub async fn to_ledger_vector<
             format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_proposal_hash {
-        let init_proposal_data =
-            InitProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_proposal_data = InitProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Proposal 0".to_string();
 
@@ -1130,10 +1140,13 @@ pub async fn to_ledger_vector<
         tv.output
             .push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
-        let vote_proposal =
-            VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let vote_proposal = VoteProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Vote Proposal 0".to_string();
 
@@ -1159,8 +1172,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == reveal_pk_hash {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Account 0".to_string();
 
@@ -1172,10 +1188,13 @@ pub async fn to_ledger_vector<
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_account_hash {
-        let transfer =
-            UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = UpdateAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Update VP 0".to_string();
 
@@ -1184,7 +1203,9 @@ pub async fn to_ledger_vector<
                 let extra = tx
                     .get_section(hash)
                     .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .expect("unable to load vp code")
+                    .ok_or_else(|| {
+                        Error::Other("unable to load vp code".to_string())
+                    })?
                     .code
                     .hash();
                 let vp_code = if extra == user_hash {
@@ -1206,10 +1227,13 @@ pub async fn to_ledger_vector<
             None => (),
         };
     } else if code_hash == transfer_hash {
-        let transfer =
-            Transfer::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = Transfer::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         // To facilitate lookups of MASP AssetTypes
         let mut asset_types = HashMap::new();
         let builder = if let Some(shielded_hash) = transfer.shielded {
@@ -1218,10 +1242,16 @@ pub async fn to_ledger_vector<
                     if builder.target == shielded_hash =>
                 {
                     for (addr, denom, epoch) in &builder.asset_types {
-                        asset_types.insert(
-                            make_asset_type(Some(*epoch), addr, *denom),
-                            (addr.clone(), *denom, *epoch),
-                        );
+                        match make_asset_type(Some(*epoch), addr, *denom) {
+                            Err(_) => None,
+                            Ok(asset) => {
+                                asset_types.insert(
+                                    asset,
+                                    (addr.clone(), *denom, *epoch),
+                                );
+                                Some(builder)
+                            }
+                        }?;
                     }
                     Some(builder)
                 }
@@ -1255,10 +1285,10 @@ pub async fn to_ledger_vector<
     } else if code_hash == ibc_hash {
         let any_msg = Any::decode(
             tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
                 .as_ref(),
         )
-        .map_err(|x| std::io::Error::new(ErrorKind::Other, x))?;
+        .map_err(|x| Error::from(EncodingError::Conversion(x.to_string())))?;
 
         tv.name = "IBC 0".to_string();
         tv.output.push("Type : IBC".to_string());
@@ -1310,10 +1340,13 @@ pub async fn to_ledger_vector<
             }
         }
     } else if code_hash == bond_hash {
-        let bond =
-            pos::Bond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let bond = pos::Bond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Bond 0".to_string();
 
@@ -1335,10 +1368,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", bond.amount.to_string_native()),
         ]);
     } else if code_hash == unbond_hash {
-        let unbond =
-            pos::Unbond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let unbond = pos::Unbond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Unbond 0".to_string();
 
@@ -1360,10 +1396,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", unbond.amount.to_string_native()),
         ]);
     } else if code_hash == withdraw_hash {
-        let withdraw =
-            pos::Withdraw::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let withdraw = pos::Withdraw::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Withdraw 0".to_string();
 
@@ -1385,8 +1424,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Change Commission 0".to_string();
 
