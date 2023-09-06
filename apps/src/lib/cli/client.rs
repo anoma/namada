@@ -1,8 +1,7 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
-use namada::ledger::signing;
-use namada::sdk::tx as sdk_tx;
 use namada::sdk::tx::dump_tx;
+use namada::sdk::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
 
 use crate::cli;

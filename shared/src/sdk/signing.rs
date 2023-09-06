@@ -24,11 +24,12 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use zeroize::Zeroizing;
 
-use super::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::args;
-use crate::ledger::masp::make_asset_type;
+use crate::ledger::masp::{
+    make_asset_type, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
 use crate::ledger::parameters::storage as parameter_storage;
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};

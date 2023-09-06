@@ -14,11 +14,11 @@ use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
 use namada::ledger::wallet::{Wallet, WalletUtils};
-use namada::ledger::{masp, pos, signing};
+use namada::ledger::{masp, pos};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::sdk::rpc::{TxBroadcastData, TxResponse};
-use namada::sdk::tx;
+use namada::sdk::{signing, tx};
 use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
