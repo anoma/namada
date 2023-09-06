@@ -8,6 +8,7 @@ use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use num_integer::Integer;
+use num_traits::CheckedMul;
 use uint::construct_uint;
 
 use crate::types::token;
@@ -296,6 +297,8 @@ impl I256 {
         self.checked_add(&other.neg())
     }
 
+    ///
+
     /// Changed the inner Uint into a canonical representation.
     fn canonical(self) -> Self {
         Self(self.0.canonical())
@@ -438,6 +441,19 @@ impl Mul<Uint> for I256 {
         let is_neg = self.is_negative();
         let prod = self.abs() * rhs;
         if is_neg { -Self(prod) } else { Self(prod) }
+    }
+}
+
+impl CheckedMul for I256 {
+    fn checked_mul(&self, v: &Self) -> Option<Self> {
+        let is_negative = self.is_negative() != v.is_negative();
+        let unsigned_res =
+            I256::try_from(self.abs().checked_mul(v.abs())?).ok()?;
+        Some(if is_negative {
+            -unsigned_res
+        } else {
+            unsigned_res
+        })
     }
 }
 

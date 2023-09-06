@@ -1332,13 +1332,16 @@ impl Tx {
 
     /// Get the inner section hashes
     pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
-        self.sections
+        let mut sections_hashes = self
+            .sections
             .iter()
             .filter_map(|section| match section {
                 Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
                 _ => None,
             })
-            .collect()
+            .collect::<Vec<crate::types::hash::Hash>>();
+        sections_hashes.sort();
+        sections_hashes
     }
 
     /// Verify that the section with the given hash has been signed by the given
@@ -1464,7 +1467,7 @@ impl Tx {
         secret_keys: &[common::SecretKey],
         public_keys_index_map: &AccountPublicKeysMap,
     ) -> BTreeSet<SignatureIndex> {
-        let targets = [*self.data_sechash(), *self.code_sechash()].to_vec();
+        let targets = self.inner_section_targets();
         MultiSignature::new(targets, secret_keys, public_keys_index_map)
             .signatures
     }
@@ -1727,14 +1730,7 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
     ) -> &mut Self {
         self.protocol_filter();
-        let hashes = self
-            .sections
-            .iter()
-            .filter_map(|section| match section {
-                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
-                _ => None,
-            })
-            .collect();
+        let hashes = self.inner_section_targets();
         self.add_section(Section::SectionSignature(MultiSignature::new(
             hashes,
             &keypairs,

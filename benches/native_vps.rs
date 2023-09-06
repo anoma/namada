@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
@@ -29,7 +30,7 @@ use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
 use namada::types::storage::TxIndex;
 use namada::types::transaction::governance::{
-    InitProposalData, ProposalType, VoteProposalData,
+    InitProposalData, VoteProposalData,
 };
 use namada_apps::wallet::defaults;
 use namada_benches::{

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::ledger::governance::cli::onchain::{
-    PgfAction, PgfContinous, PgfRetro, PgfSteward,
+    PgfAction, PgfContinous, PgfRetro, PgfSteward, StewardsUpdate,
 };
 use crate::ledger::governance::utils::{ProposalStatus, TallyType};
 use crate::ledger::storage_api::token::Amount;
@@ -19,6 +19,32 @@ use crate::types::storage::Epoch;
 pub enum ProposalTypeError {
     #[error("Invalid proposal type.")]
     InvalidProposalType,
+}
+
+/// Storage struture for pgf fundings
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
+pub struct StoragePgfFunding {
+    /// The data about the pgf funding
+    pub detail: PGFTarget,
+    /// The id of the proposal that added this funding
+    pub id: u64,
+}
+
+impl StoragePgfFunding {
+    /// Init a new pgf funding struct
+    pub fn new(detail: PGFTarget, id: u64) -> Self {
+        Self { detail, id }
+    }
 }
 
 /// An add or remove action for PGF
@@ -114,6 +140,22 @@ impl Display for ProposalType {
     }
 }
 
+impl TryFrom<StewardsUpdate> for HashSet<AddRemove<Address>> {
+    type Error = ProposalTypeError;
+
+    fn try_from(value: StewardsUpdate) -> Result<Self, Self::Error> {
+        let mut data = HashSet::default();
+
+        if value.add.is_some() {
+            data.insert(AddRemove::Add(value.add.unwrap()));
+        }
+        for steward in value.remove {
+            data.insert(AddRemove::Remove(steward));
+        }
+        Ok(data)
+    }
+}
+
 impl TryFrom<PgfSteward> for AddRemove<Address> {
     type Error = ProposalTypeError;
 
@@ -195,13 +237,13 @@ impl StorageProposal {
     }
 
     /// Return the type of tally for the proposal
-    pub fn get_tally_type(&self) -> TallyType {
-        TallyType::from(self.r#type.clone())
+    pub fn get_tally_type(&self, is_steward: bool) -> TallyType {
+        TallyType::from(self.r#type.clone(), is_steward)
     }
 
     /// Return the status of a proposal
     pub fn get_status(&self, current_epoch: Epoch) -> ProposalStatus {
-        if self.voting_start_epoch > self.voting_end_epoch {
+        if self.voting_start_epoch > current_epoch {
             ProposalStatus::Pending
         } else if self.voting_start_epoch <= current_epoch
             && current_epoch <= self.voting_end_epoch

@@ -21,11 +21,13 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    PGFTarget, StorageProposal,
+    StoragePgfFunding, StorageProposal,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
+use namada::core::ledger::pgf::parameters::PgfParameters;
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
 use namada::ledger::masp::{
     Conversions, MaspAmount, MaspChange, PinnedBalanceError, ShieldedContext,
@@ -583,7 +585,6 @@ pub async fn query_proposal<C: namada::ledger::queries::Client + Sync>(
             eprintln!("No proposal found with id: {}", id);
         }
     } else {
-        println!("asd2");
         let last_proposal_id_key = governance_storage::get_counter_key();
         let last_proposal_id =
             query_storage_value::<C, u64>(client, &last_proposal_id_key)
@@ -905,7 +906,11 @@ pub async fn query_proposal_result<
             return;
         };
 
-        let tally_type = proposal.get_tally_type();
+        let is_author_steward = query_pgf_stewards(client)
+            .await
+            .iter()
+            .any(|steward| steward.address.eq(&proposal.author));
+        let tally_type = proposal.get_tally_type(is_author_steward);
         let total_voting_power =
             get_total_staked_tokens(client, proposal.voting_end_epoch).await;
 
@@ -949,6 +954,7 @@ pub async fn query_proposal_result<
             let proposal = proposal.validate(
                 &author_account.public_keys_map,
                 author_account.threshold,
+                false,
             );
 
             if proposal.is_ok() {
@@ -1015,23 +1021,31 @@ pub async fn query_pgf<C: namada::ledger::queries::Client + Sync>(
     let stewards = query_pgf_stewards(client).await;
     let fundings = query_pgf_fundings(client).await;
 
-    match stewards.len() {
-        0 => println!("Pgf stewards: no stewards are currectly set."),
-        _ => {
+    match stewards.is_empty() {
+        true => println!("Pgf stewards: no stewards are currectly set."),
+        false => {
             println!("Pgf stewards:");
             for steward in stewards {
-                println!("{:4}- {}", "", steward);
+                println!("{:4}- {}", "", steward.address);
+                println!("{:4}  Reward distribution:", "");
+                for (address, percentage) in steward.reward_distribution {
+                    println!("{:6}- {} to {}", "", percentage, address);
+                }
             }
         }
     }
 
-    match fundings.len() {
-        0 => println!("Pgf fundings: no fundings are currently set."),
-        _ => {
+    match fundings.is_empty() {
+        true => println!("Pgf fundings: no fundings are currently set."),
+        false => {
             println!("Pgf fundings:");
-            for payment in fundings {
-                println!("{:4}- {}", "", payment.target);
-                println!("{:6}{}", "", payment.amount.to_string_native());
+            for funding in fundings {
+                println!(
+                    "{:4}- {} for {}",
+                    "",
+                    funding.detail.target,
+                    funding.detail.amount.to_string_native()
+                );
             }
         }
     }
@@ -1044,7 +1058,43 @@ pub async fn query_protocol_parameters<
     _args: args::QueryProtocolParameters,
 ) {
     let governance_parameters = query_governance_parameters(client).await;
-    println!("Governance Parameters\n {:4}", governance_parameters);
+    println!("Governance Parameters\n");
+    println!(
+        "{:4}Min. proposal fund: {}",
+        "",
+        governance_parameters.min_proposal_fund.to_string_native()
+    );
+    println!(
+        "{:4}Max. proposal code size: {}",
+        "", governance_parameters.max_proposal_code_size
+    );
+    println!(
+        "{:4}Min. proposal voting period: {}",
+        "", governance_parameters.min_proposal_voting_period
+    );
+    println!(
+        "{:4}Max. proposal period: {}",
+        "", governance_parameters.max_proposal_period
+    );
+    println!(
+        "{:4}Max. proposal content size: {}",
+        "", governance_parameters.max_proposal_content_size
+    );
+    println!(
+        "{:4}Min. proposal grace epochs: {}",
+        "", governance_parameters.min_proposal_grace_epochs
+    );
+
+    let pgf_parameters = query_pgf_parameters(client).await;
+    println!("Public Goods Funding Parameters\n");
+    println!(
+        "{:4}Pgf inflation rate: {}",
+        "", pgf_parameters.pgf_inflation_rate
+    );
+    println!(
+        "{:4}Steward inflation rate: {}",
+        "", pgf_parameters.stewards_inflation_rate
+    );
 
     println!("Protocol parameters");
     let key = param_storage::get_epoch_duration_storage_key();
@@ -1178,18 +1228,20 @@ pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
 
 pub async fn query_pgf_stewards<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> BTreeSet<Address> {
-    unwrap_client_response::<C, BTreeSet<Address>>(
-        RPC.vp().pgf().stewards(client).await,
-    )
+) -> Vec<StewardDetail> {
+    unwrap_client_response::<C, _>(RPC.vp().pgf().stewards(client).await)
 }
 
 pub async fn query_pgf_fundings<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-) -> BTreeSet<PGFTarget> {
-    unwrap_client_response::<C, BTreeSet<PGFTarget>>(
-        RPC.vp().pgf().funding(client).await,
-    )
+) -> Vec<StoragePgfFunding> {
+    unwrap_client_response::<C, _>(RPC.vp().pgf().funding(client).await)
+}
+
+pub async fn query_pgf_parameters<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+) -> PgfParameters {
+    unwrap_client_response::<C, _>(RPC.vp().pgf().parameters(client).await)
 }
 
 pub async fn query_and_print_unbonds<

@@ -308,6 +308,37 @@ impl<IO> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         tx::submit_unjail_validator(&client, ctx, args).await?;
                     }
+                    Sub::TxUpdateStewardCommission(
+                        TxUpdateStewardCommission(mut args),
+                    ) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_update_steward_commission(
+                            &client, ctx, args,
+                        )
+                        .await?;
+                    }
+                    Sub::TxResignSteward(TxResignSteward(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_resign_steward(&client, ctx, args).await?;
+                    }
                     // Ledger queries
                     Sub::QueryEpoch(QueryEpoch(mut args)) => {
                         let client = client.unwrap_or_else(|| {

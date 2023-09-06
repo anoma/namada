@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
-use namada::core::ledger::pgf::storage::keys as pgf_storage;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -11,7 +10,7 @@ use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
 use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
@@ -849,14 +848,19 @@ where
         }
 
         // Pgf inflation
-        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
-        let pgf_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_inflation_rate_key)
-            .unwrap_or_default();
+        let pgf_parameters = pgf::get_parameters(&self.wl_storage)?;
 
-        let pgf_pd_rate = pgf_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_pd_rate =
+            pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
         let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
-        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
+
+        let pgf_stewards_pd_rate =
+            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
+        let pgf_inflation_amount =
+            token::Amount::from(pgf_inflation + pgf_steward_inflation);
 
         credit_tokens(
             &mut self.wl_storage,
@@ -871,43 +875,71 @@ where
             pgf_inflation_amount.to_string_native()
         );
 
-        // Pgf steward inflation
-        let pgf_stewards_inflation_rate_key =
-            pgf_storage::get_steward_inflation_rate_key();
-        let pgf_stewards_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_stewards_inflation_rate_key)
-            .unwrap_or_default();
+        let mut pgf_fundings = pgf::get_payments(&self.wl_storage)?;
+        // we want to pay first the oldest fundings
+        pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
-        let pgf_stewards_pd_rate =
-            pgf_stewards_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_steward_inflation =
-            Dec::from(total_tokens) * pgf_stewards_pd_rate;
-
-        let pgf_stewards_key = pgf_storage::get_stewards_key();
-        let pgf_stewards: BTreeSet<Address> =
-            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
-
-        let pgf_steward_reward = match pgf_stewards.len() {
-            0 => Dec::zero(),
-            _ => pgf_steward_inflation
-                .trunc_div(&Dec::from(pgf_stewards.len()))
-                .unwrap_or_default(),
-        };
-        let pgf_steward_reward = token::Amount::from(pgf_steward_reward);
-
-        for steward in pgf_stewards {
-            credit_tokens(
+        for funding in pgf_fundings {
+            if credit_tokens(
                 &mut self.wl_storage,
                 &staking_token,
-                &steward,
-                pgf_steward_reward,
-            )?;
-            tracing::info!(
-                "Minting {} tokens for PGF Steward rewards distribution into \
-                 the steward address {}.",
-                pgf_steward_reward.to_string_native(),
-                steward,
-            );
+                &funding.detail.target,
+                funding.detail.amount,
+            )
+            .is_ok()
+            {
+                tracing::info!(
+                    "Minted {} tokens for {} project.",
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
+                );
+            } else {
+                tracing::warn!(
+                    "Failed Minting {} tokens for {} project.",
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
+                );
+            }
+        }
+
+        // Pgf steward inflation
+        let stewards = pgf::get_stewards(&self.wl_storage)?;
+
+        let pgf_steward_reward = match stewards.len() {
+            0 => Dec::zero(),
+            _ => pgf_steward_inflation
+                .trunc_div(&Dec::from(stewards.len()))
+                .unwrap_or_default(),
+        };
+
+        for steward in stewards {
+            for (address, percentage) in steward.reward_distribution {
+                let pgf_steward_reward = pgf_steward_reward
+                    .checked_mul(&percentage)
+                    .unwrap_or_default();
+                let reward_amount = token::Amount::from(pgf_steward_reward);
+
+                if credit_tokens(
+                    &mut self.wl_storage,
+                    &staking_token,
+                    &address,
+                    reward_amount,
+                )
+                .is_ok()
+                {
+                    tracing::info!(
+                        "Minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                } else {
+                    tracing::warn!(
+                        "Failed minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                }
+            }
         }
 
         Ok(())
