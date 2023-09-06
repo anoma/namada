@@ -1,6 +1,5 @@
 //! The ledger modules
 
-pub mod args;
 pub mod eth_bridge;
 pub mod events;
 pub mod governance;

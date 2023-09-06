@@ -26,11 +26,11 @@ use namada_proof_of_stake::types::{
 };
 use serde::Serialize;
 
-use crate::ledger::args::InputAmount;
 use crate::ledger::events::Event;
 use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
+use crate::sdk::args::InputAmount;
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;

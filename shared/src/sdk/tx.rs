@@ -41,10 +41,10 @@ use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
-use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Tx};
+use crate::sdk::args::{self, InputAmount};
 use crate::sdk::masp::TransferErr::Build;
 use crate::sdk::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::sdk::rpc::{
@@ -1419,7 +1419,7 @@ pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
-    tx_args: &crate::ledger::args::Tx,
+    tx_args: &crate::sdk::args::Tx,
     path: PathBuf,
     data: D,
     on_tx: F,
@@ -1453,7 +1453,7 @@ async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
-    tx_args: &crate::ledger::args::Tx,
+    tx_args: &crate::sdk::args::Tx,
     path: PathBuf,
     mut data: D,
     on_tx: F,

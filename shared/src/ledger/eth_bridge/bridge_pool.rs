@@ -18,12 +18,12 @@ use serde::{Deserialize, Serialize};
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
-use crate::ledger::args;
 use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
 };
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
+use crate::sdk::args;
 use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
 use crate::sdk::tx::prepare_tx;

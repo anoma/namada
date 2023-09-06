@@ -18,8 +18,8 @@ use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
 use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
-use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
+use crate::sdk::args;
 use crate::types::control_flow::time::{self, Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,

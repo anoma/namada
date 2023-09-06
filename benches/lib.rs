@@ -62,7 +62,6 @@ use namada::ibc::core::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
-use namada::ledger::args::InputAmount;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
@@ -71,6 +70,7 @@ use namada::ledger::queries::{
 use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
+use namada::sdk::args::InputAmount;
 use namada::sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
