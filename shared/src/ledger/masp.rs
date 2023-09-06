@@ -59,12 +59,13 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
+use crate::ledger::args;
 use crate::ledger::args::InputAmount;
 use crate::ledger::queries::Client;
-use crate::ledger::rpc::{query_conversion, query_storage_value};
 use crate::ledger::tx::decode_component;
-use crate::ledger::{args, rpc};
 use crate::proto::Tx;
+use crate::sdk::rpc;
+use crate::sdk::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};

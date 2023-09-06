@@ -35,13 +35,13 @@ use namada::ledger::masp::{
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{CommissionPair, PosParams, Slash};
 use namada::ledger::queries::RPC;
-use namada::ledger::rpc::{
-    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
-    TxResponse,
-};
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
+use namada::sdk::rpc::{
+    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    TxResponse,
+};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::error::{is_pinned_error, Error, PinnedBalanceError};
@@ -65,10 +65,10 @@ use crate::wallet::CliWalletUtils;
 /// error.
 pub async fn query_tx_status<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    status: namada::ledger::rpc::TxEventQuery<'_>,
+    status: namada::sdk::rpc::TxEventQuery<'_>,
     deadline: Instant,
 ) -> Event {
-    namada::ledger::rpc::query_tx_status(client, status, deadline)
+    namada::sdk::rpc::query_tx_status(client, status, deadline)
         .await
         .proceed()
 }
@@ -79,7 +79,7 @@ pub async fn query_and_print_epoch<
 >(
     client: &C,
 ) -> Epoch {
-    let epoch = namada::ledger::rpc::query_epoch(client).await.unwrap();
+    let epoch = namada::sdk::rpc::query_epoch(client).await.unwrap();
     println!("Last committed epoch: {}", epoch);
     epoch
 }
@@ -88,7 +88,7 @@ pub async fn query_and_print_epoch<
 pub async fn query_block<C: namada::ledger::queries::Client + Sync>(
     client: &C,
 ) {
-    let block = namada::ledger::rpc::query_block(client).await.unwrap();
+    let block = namada::sdk::rpc::query_block(client).await.unwrap();
     match block {
         Some(block) => {
             println!(
@@ -625,7 +625,7 @@ pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Option<StorageProposal>, error::Error> {
-    namada::ledger::rpc::query_proposal_by_id(client, proposal_id).await
+    namada::sdk::rpc::query_proposal_by_id(client, proposal_id).await
 }
 
 /// Query token shielded balance(s)
@@ -905,7 +905,7 @@ pub async fn get_token_balance<C: namada::ledger::queries::Client + Sync>(
     token: &Address,
     owner: &Address,
 ) -> token::Amount {
-    namada::ledger::rpc::get_token_balance(client, token, owner)
+    namada::sdk::rpc::get_token_balance(client, token, owner)
         .await
         .unwrap()
 }
@@ -1802,7 +1802,7 @@ where
 {
     println!(
         "Dry-run result: {}",
-        namada::ledger::rpc::dry_run_tx(client, tx_bytes).await?
+        namada::sdk::rpc::dry_run_tx(client, tx_bytes).await?
     );
     Ok(())
 }
@@ -1813,7 +1813,7 @@ pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
     address: &Address,
     index: u8,
 ) -> Result<Option<common::PublicKey>, error::Error> {
-    namada::ledger::rpc::get_public_key_at(client, address, index).await
+    namada::sdk::rpc::get_public_key_at(client, address, index).await
 }
 
 /// Check if the given address is a known validator.
@@ -1821,7 +1821,7 @@ pub async fn is_validator<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    namada::ledger::rpc::is_validator(client, address)
+    namada::sdk::rpc::is_validator(client, address)
         .await
         .unwrap()
 }
@@ -1831,7 +1831,7 @@ pub async fn is_delegator<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    namada::ledger::rpc::is_delegator(client, address)
+    namada::sdk::rpc::is_delegator(client, address)
         .await
         .unwrap()
 }
@@ -1841,7 +1841,7 @@ pub async fn is_delegator_at<C: namada::ledger::queries::Client + Sync>(
     address: &Address,
     epoch: Epoch,
 ) -> bool {
-    namada::ledger::rpc::is_delegator_at(client, address, epoch)
+    namada::sdk::rpc::is_delegator_at(client, address, epoch)
         .await
         .unwrap()
 }
@@ -1853,7 +1853,7 @@ pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
-    namada::ledger::rpc::known_address(client, address)
+    namada::sdk::rpc::known_address(client, address)
         .await
         .unwrap()
 }
@@ -1933,7 +1933,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     masp_primitives::transaction::components::I32Sum,
     MerklePath<Node>,
 )> {
-    namada::ledger::rpc::query_conversion(client, asset_type).await
+    namada::sdk::rpc::query_conversion(client, asset_type).await
 }
 
 /// Query a wasm code hash
@@ -1941,7 +1941,7 @@ pub async fn query_wasm_code_hash<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
-    namada::ledger::rpc::query_wasm_code_hash(client, code_path).await
+    namada::sdk::rpc::query_wasm_code_hash(client, code_path).await
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
@@ -1952,7 +1952,7 @@ pub async fn query_storage_value<C: namada::ledger::queries::Client + Sync, T>(
 where
     T: BorshDeserialize,
 {
-    namada::ledger::rpc::query_storage_value(client, key).await
+    namada::sdk::rpc::query_storage_value(client, key).await
 }
 
 /// Query a storage value and the proof without decoding.
@@ -1964,7 +1964,7 @@ pub async fn query_storage_value_bytes<
     height: Option<BlockHeight>,
     prove: bool,
 ) -> (Option<Vec<u8>>, Option<Proof>) {
-    namada::ledger::rpc::query_storage_value_bytes(client, key, height, prove)
+    namada::sdk::rpc::query_storage_value_bytes(client, key, height, prove)
         .await
         .unwrap()
 }
@@ -1982,7 +1982,7 @@ pub async fn query_storage_prefix<
 where
     T: BorshDeserialize,
 {
-    namada::ledger::rpc::query_storage_prefix(client, key)
+    namada::sdk::rpc::query_storage_prefix(client, key)
         .await
         .unwrap()
 }
@@ -1994,7 +1994,7 @@ pub async fn query_has_storage_key<
     client: &C,
     key: &storage::Key,
 ) -> bool {
-    namada::ledger::rpc::query_has_storage_key(client, key)
+    namada::sdk::rpc::query_has_storage_key(client, key)
         .await
         .unwrap()
 }
@@ -2003,21 +2003,21 @@ pub async fn query_has_storage_key<
 /// the current status of a transation.
 pub async fn query_tx_events<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    tx_event_query: namada::ledger::rpc::TxEventQuery<'_>,
+    tx_event_query: namada::sdk::rpc::TxEventQuery<'_>,
 ) -> std::result::Result<
     Option<Event>,
     <C as namada::ledger::queries::Client>::Error,
 > {
-    namada::ledger::rpc::query_tx_events(client, tx_event_query).await
+    namada::sdk::rpc::query_tx_events(client, tx_event_query).await
 }
 
 /// Lookup the full response accompanying the specified transaction event
 // TODO: maybe remove this in favor of `query_tx_status`
 pub async fn query_tx_response<C: namada::ledger::queries::Client + Sync>(
     client: &C,
-    tx_query: namada::ledger::rpc::TxEventQuery<'_>,
+    tx_query: namada::sdk::rpc::TxEventQuery<'_>,
 ) -> Result<TxResponse, TError> {
-    namada::ledger::rpc::query_tx_response(client, tx_query).await
+    namada::sdk::rpc::query_tx_response(client, tx_query).await
 }
 
 /// Lookup the results of applying the specified transaction to the
@@ -2029,7 +2029,7 @@ pub async fn query_result<C: namada::ledger::queries::Client + Sync>(
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
         client,
-        namada::ledger::rpc::TxEventQuery::Applied(&args.tx_hash),
+        namada::sdk::rpc::TxEventQuery::Applied(&args.tx_hash),
     )
     .await;
     match tx_response {
@@ -2043,7 +2043,7 @@ pub async fn query_result<C: namada::ledger::queries::Client + Sync>(
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
                 client,
-                namada::ledger::rpc::TxEventQuery::Accepted(&args.tx_hash),
+                namada::sdk::rpc::TxEventQuery::Accepted(&args.tx_hash),
             )
             .await;
             match tx_response {
@@ -2096,7 +2096,7 @@ pub async fn get_all_validators<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
-    namada::ledger::rpc::get_all_validators(client, epoch)
+    namada::sdk::rpc::get_all_validators(client, epoch)
         .await
         .unwrap()
 }
@@ -2107,7 +2107,7 @@ pub async fn get_total_staked_tokens<
     client: &C,
     epoch: Epoch,
 ) -> token::Amount {
-    namada::ledger::rpc::get_total_staked_tokens(client, epoch)
+    namada::sdk::rpc::get_total_staked_tokens(client, epoch)
         .await
         .unwrap()
 }
@@ -2135,7 +2135,7 @@ pub async fn get_delegators_delegation<
     client: &C,
     address: &Address,
 ) -> HashSet<Address> {
-    namada::ledger::rpc::get_delegators_delegation(client, address)
+    namada::sdk::rpc::get_delegators_delegation(client, address)
         .await
         .unwrap()
 }
@@ -2147,7 +2147,7 @@ pub async fn get_delegators_delegation_at<
     address: &Address,
     epoch: Epoch,
 ) -> HashMap<Address, token::Amount> {
-    namada::ledger::rpc::get_delegators_delegation_at(client, address, epoch)
+    namada::sdk::rpc::get_delegators_delegation_at(client, address, epoch)
         .await
         .unwrap()
 }
@@ -2157,7 +2157,7 @@ pub async fn query_governance_parameters<
 >(
     client: &C,
 ) -> GovernanceParameters {
-    namada::ledger::rpc::query_governance_parameters(client).await
+    namada::sdk::rpc::query_governance_parameters(client).await
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
@@ -2241,7 +2241,7 @@ pub async fn compute_proposal_votes<
     proposal_id: u64,
     epoch: Epoch,
 ) -> ProposalVotes {
-    let votes = namada::ledger::rpc::query_proposal_votes(client, proposal_id)
+    let votes = namada::sdk::rpc::query_proposal_votes(client, proposal_id)
         .await
         .unwrap();
 

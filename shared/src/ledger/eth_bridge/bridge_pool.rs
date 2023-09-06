@@ -23,10 +23,10 @@ use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
 };
-use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::prepare_tx;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
+use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{

@@ -13,7 +13,6 @@ pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
 pub mod queries;
-pub mod rpc;
 pub mod signing;
 pub mod storage;
 #[allow(clippy::result_large_err)]

@@ -25,12 +25,11 @@ use sha2::Digest;
 use zeroize::Zeroizing;
 
 use super::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
-use super::rpc::validate_amount;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
+use crate::ledger::args;
 use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
-use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
     TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
@@ -39,8 +38,11 @@ use crate::ledger::tx::{
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Tx};
+use crate::sdk::rpc;
+use crate::sdk::rpc::{
+    format_denominated_amount, query_wasm_code_hash, validate_amount,
+};
 use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};

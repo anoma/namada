@@ -34,7 +34,6 @@ use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 
-use super::rpc::query_wasm_code_hash;
 use super::signing::{self, TxSourcePostBalance};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::packet::PacketData;
@@ -47,12 +46,12 @@ use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::ledger::masp::TransferErr::Build;
 use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
-use crate::ledger::rpc::{
-    self, format_denominated_amount, validate_amount, TxBroadcastData,
-    TxResponse,
-};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Tx};
+use crate::sdk::rpc::{
+    self, format_denominated_amount, query_wasm_code_hash, validate_amount,
+    TxBroadcastData, TxResponse,
+};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
@@ -381,7 +380,7 @@ where
 
     let parsed = {
         let wrapper_query =
-            crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+            crate::sdk::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event = rpc::query_tx_status(client, wrapper_query, deadline)
             .await
             .proceed_or(TxError::AcceptTimeout)?;
