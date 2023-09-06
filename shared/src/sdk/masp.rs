@@ -59,9 +59,9 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::ledger::queries::Client;
 use crate::proto::Tx;
 use crate::sdk::args::InputAmount;
+use crate::sdk::queries::Client;
 use crate::sdk::rpc::{query_conversion, query_storage_value};
 use crate::sdk::tx::decode_component;
 use crate::sdk::{args, rpc};

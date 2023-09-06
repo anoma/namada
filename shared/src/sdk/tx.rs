@@ -146,7 +146,7 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
 /// to it.
 #[allow(clippy::too_many_arguments)]
 pub async fn prepare_tx<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -182,7 +182,7 @@ pub async fn prepare_tx<
 /// Submit transaction and wait for result. Returns a list of addresses
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -242,20 +242,20 @@ pub async fn process_tx<
 }
 
 /// Check if a reveal public key transaction is needed
-pub async fn is_reveal_pk_needed<C: crate::ledger::queries::Client + Sync>(
+pub async fn is_reveal_pk_needed<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
     force: bool,
 ) -> Result<bool>
 where
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
 {
     // Check if PK revealed
     Ok(force || !has_revealed_pk(client, address).await?)
 }
 
 /// Check if the public key for the given address has been revealed
-pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
+pub async fn has_revealed_pk<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool> {
@@ -264,7 +264,7 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
 
 /// Submit transaction to reveal the given public key
 pub async fn build_reveal_pk<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -298,7 +298,7 @@ pub async fn build_reveal_pk<
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn broadcast_tx<C: crate::sdk::queries::Client + Sync>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response> {
@@ -353,7 +353,7 @@ pub async fn submit_tx<C>(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse>
 where
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
 {
     let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
         TxBroadcastData::Live {
@@ -492,7 +492,7 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 
 /// Submit validator comission rate change
 pub async fn build_validator_commission_change<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -583,7 +583,7 @@ pub async fn build_validator_commission_change<
 
 /// Craft transaction to update a steward commission
 pub async fn build_update_steward_commission<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -634,7 +634,7 @@ pub async fn build_update_steward_commission<
 
 /// Craft transaction to resign as a steward
 pub async fn build_resign_steward<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -669,7 +669,7 @@ pub async fn build_resign_steward<
 
 /// Submit transaction to unjail a jailed validator
 pub async fn build_unjail_validator<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -769,7 +769,7 @@ pub async fn build_unjail_validator<
 
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -838,7 +838,7 @@ pub async fn build_withdraw<
 
 /// Submit a transaction to unbond
 pub async fn build_unbond<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -921,7 +921,7 @@ pub async fn build_unbond<
 }
 
 /// Query the unbonds post-tx
-pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
+pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     args: args::Unbond,
     latest_withdrawal_pre: Option<(Epoch, token::Amount)>,
@@ -986,7 +986,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
 
 /// Submit a transaction to bond
 pub async fn build_bond<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1057,7 +1057,7 @@ pub async fn build_bond<
 
 /// Build a default proposal governance
 pub async fn build_default_proposal<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1109,7 +1109,7 @@ pub async fn build_default_proposal<
 
 /// Build a proposal vote
 pub async fn build_vote_proposal<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1191,7 +1191,7 @@ pub async fn build_vote_proposal<
 
 /// Build a pgf funding proposal governance
 pub async fn build_pgf_funding_proposal<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1235,7 +1235,7 @@ pub async fn build_pgf_funding_proposal<
 
 /// Build a pgf funding proposal governance
 pub async fn build_pgf_stewards_proposal<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1280,7 +1280,7 @@ pub async fn build_pgf_stewards_proposal<
 
 /// Submit an IBC transfer
 pub async fn build_ibc_transfer<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1415,7 +1415,7 @@ pub async fn build_ibc_transfer<
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
+pub async fn build<C: crate::sdk::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
@@ -1449,7 +1449,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
+async fn build_pow_flag<C: crate::sdk::queries::Client + Sync, U, V, F, D>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
@@ -1497,7 +1497,7 @@ where
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: ShieldedUtils,
 >(
     asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
@@ -1518,7 +1518,7 @@ async fn add_asset_type<
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
 async fn used_asset_types<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: ShieldedUtils,
     P,
     R,
@@ -1569,7 +1569,7 @@ async fn used_asset_types<
 
 /// Submit an ordinary transfer
 pub async fn build_transfer<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1740,7 +1740,7 @@ pub async fn build_transfer<
 
 /// Submit a transaction to initialize an account
 pub async fn build_init_account<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1797,7 +1797,7 @@ pub async fn build_init_account<
 
 /// Submit a transaction to update a VP
 pub async fn build_update_account<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1865,7 +1865,7 @@ pub async fn build_update_account<
 
 /// Submit a custom transaction
 pub async fn build_custom<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 >(
@@ -1915,7 +1915,7 @@ pub async fn build_custom<
     Ok((tx, epoch))
 }
 
-async fn expect_dry_broadcast<C: crate::ledger::queries::Client + Sync>(
+async fn expect_dry_broadcast<C: crate::sdk::queries::Client + Sync>(
     to_broadcast: TxBroadcastData,
     client: &C,
 ) -> Result<ProcessTxResponse> {
@@ -1939,7 +1939,7 @@ fn lift_rpc_error<T>(res: std::result::Result<T, RpcError>) -> Result<T> {
 /// Returns the given validator if the given address is a validator,
 /// otherwise returns an error, force forces the address through even
 /// if it isn't a validator
-async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
+async fn known_validator_or_err<C: crate::sdk::queries::Client + Sync>(
     validator: Address,
     force: bool,
     client: &C,
@@ -1972,7 +1972,7 @@ async fn address_exists_or_err<C, F>(
     err: F,
 ) -> Result<Address>
 where
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     F: FnOnce(Address) -> Error,
 {
     let addr_exists = rpc::known_address::<C>(client, &addr).await?;
@@ -1991,7 +1991,7 @@ where
 /// Returns the given source address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn source_exists_or_err<C: crate::ledger::queries::Client + Sync>(
+async fn source_exists_or_err<C: crate::sdk::queries::Client + Sync>(
     token: Address,
     force: bool,
     client: &C,
@@ -2007,7 +2007,7 @@ async fn source_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 /// Returns the given target address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
+async fn target_exists_or_err<C: crate::sdk::queries::Client + Sync>(
     token: Address,
     force: bool,
     client: &C,
@@ -2023,7 +2023,7 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 /// Checks the balance at the given address is enough to transfer the
 /// given amount, along with the balance even existing. Force
 /// overrides this. Returns the updated balance for fee check if necessary
-async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
+async fn check_balance_too_low_err<C: crate::sdk::queries::Client + Sync>(
     token: &Address,
     source: &Address,
     amount: token::Amount,
@@ -2093,7 +2093,7 @@ fn validate_untrusted_code_err(vp_code: &Vec<u8>, force: bool) -> Result<()> {
         Ok(())
     }
 }
-async fn query_wasm_code_hash_buf<C: crate::ledger::queries::Client + Sync>(
+async fn query_wasm_code_hash_buf<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     path: &Path,
 ) -> Result<Hash> {

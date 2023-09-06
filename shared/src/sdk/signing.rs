@@ -79,10 +79,7 @@ pub struct SigningTxData {
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_pk<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
->(
+pub async fn find_pk<C: crate::sdk::queries::Client + Sync, U: WalletUtils>(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
@@ -149,7 +146,7 @@ pub fn find_key_by_pk<U: WalletUtils>(
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
 pub async fn tx_signers<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -233,7 +230,7 @@ pub fn sign_tx<U: WalletUtils>(
 /// Return the necessary data regarding an account to be able to generate a
 /// multisignature section
 pub async fn aux_signing_data<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -296,7 +293,7 @@ pub async fn aux_signing_data<
 #[cfg(not(feature = "mainnet"))]
 /// Solve the PoW challenge if balance is insufficient to pay transaction fees
 /// or if solution is explicitly requested.
-pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
+pub async fn solve_pow_challenge<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     requires_pow: bool,
@@ -335,7 +332,7 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
 #[cfg(not(feature = "mainnet"))]
 /// Update the PoW challenge inside the given transaction
-pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
+pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
@@ -435,7 +432,7 @@ pub struct TxSourcePostBalance {
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
 pub async fn wrap_tx<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     V: ShieldedUtils,
 >(
     client: &C,
@@ -719,7 +716,7 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<C: crate::ledger::queries::Client + Sync>(
+async fn make_ledger_amount_asset<C: crate::sdk::queries::Client + Sync>(
     client: &C,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
@@ -816,7 +813,7 @@ fn format_outputs(output: &mut Vec<String>) {
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
 pub async fn make_ledger_masp_endpoints<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
 >(
     client: &C,
     tokens: &HashMap<Address, String>,
@@ -893,7 +890,7 @@ pub async fn make_ledger_masp_endpoints<
 /// Internal method used to generate transaction test vectors
 #[cfg(feature = "std")]
 pub async fn generate_test_vector<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,
@@ -948,7 +945,7 @@ pub async fn generate_test_vector<
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector<
-    C: crate::ledger::queries::Client + Sync,
+    C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
 >(
     client: &C,

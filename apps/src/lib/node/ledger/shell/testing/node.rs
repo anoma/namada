@@ -8,7 +8,7 @@ use data_encoding::HEXUPPER;
 use lazy_static::lazy_static;
 use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
@@ -19,6 +19,7 @@ use namada::proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
+use namada::sdk::queries::Client;
 use namada::tendermint_proto::abci::VoteInfo;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;

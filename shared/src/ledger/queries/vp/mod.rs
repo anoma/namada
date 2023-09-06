@@ -33,7 +33,9 @@ pub mod client_only_methods {
 
     use super::Vp;
     #[cfg(not(feature = "mainnet"))]
-    use crate::ledger::queries::{Client, RPC};
+    use crate::ledger::queries::RPC;
+    #[cfg(not(feature = "mainnet"))]
+    use crate::sdk::queries::Client;
     #[cfg(not(feature = "mainnet"))]
     use crate::types::address::Address;
 

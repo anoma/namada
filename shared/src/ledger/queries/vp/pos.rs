@@ -531,7 +531,8 @@ where
 #[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use super::*;
-    use crate::ledger::queries::{Client, RPC};
+    use crate::ledger::queries::RPC;
+    use crate::sdk::queries::Client;
 
     impl Pos {
         /// Get bonds and unbonds with all details (slashes and rewards, if any)
