@@ -10,7 +10,7 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::ledger::wallet::Wallet;
+use namada::sdk::wallet::Wallet;
 use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;

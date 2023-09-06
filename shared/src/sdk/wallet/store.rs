@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
-use crate::ledger::wallet::{StoredKeypair, WalletUtils};
+use crate::sdk::wallet::{StoredKeypair, WalletUtils};
 use crate::types::address::{Address, ImplicitAddress};
 use crate::types::key::dkg_session_keys::DkgKeypair;
 use crate::types::key::*;

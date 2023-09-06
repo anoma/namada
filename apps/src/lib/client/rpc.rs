@@ -33,7 +33,6 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{CommissionPair, PosParams, Slash};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
-use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::sdk::masp::{
     Conversions, MaspAmount, MaspChange, ShieldedContext, ShieldedUtils,
@@ -42,6 +41,7 @@ use namada::sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
     TxResponse,
 };
+use namada::sdk::wallet::{AddressVpType, Wallet};
 use namada::types::address::{masp, Address};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::error::{is_pinned_error, Error, PinnedBalanceError};

@@ -9,10 +9,10 @@ use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use fd_lock::RwLock;
 #[cfg(not(feature = "dev"))]
-use namada::ledger::wallet::store::AddressVpType;
+use namada::sdk::wallet::store::AddressVpType;
 #[cfg(feature = "dev")]
-use namada::ledger::wallet::StoredKeypair;
-use namada::ledger::wallet::{gen_sk_rng, Store, ValidatorKeys};
+use namada::sdk::wallet::StoredKeypair;
+use namada::sdk::wallet::{gen_sk_rng, Store, ValidatorKeys};
 #[cfg(not(feature = "dev"))]
 use namada::types::address::Address;
 use namada::types::key::*;

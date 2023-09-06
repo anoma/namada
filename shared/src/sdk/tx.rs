@@ -42,7 +42,6 @@ use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ledger::ibc::storage::ibc_denom_key;
-use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
 use crate::sdk::masp::TransferErr::Build;
@@ -52,6 +51,7 @@ use crate::sdk::rpc::{
     TxBroadcastData, TxResponse,
 };
 use crate::sdk::signing::{self, TxSourcePostBalance};
+use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};

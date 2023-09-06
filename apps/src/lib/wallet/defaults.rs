@@ -8,8 +8,8 @@ pub use dev::{
     validator_keys,
 };
 use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pgf, pos};
+use namada::sdk::wallet::alias::Alias;
 use namada::types::address::Address;
 use namada::types::key::*;
 
@@ -77,8 +77,8 @@ mod dev {
     use std::collections::HashMap;
 
     use borsh::BorshDeserialize;
-    use namada::ledger::wallet::alias::Alias;
     use namada::ledger::{governance, pgf, pos};
+    use namada::sdk::wallet::alias::Alias;
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };

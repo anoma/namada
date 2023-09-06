@@ -8,3 +8,4 @@ pub mod signing;
 pub mod tx;
 
 pub mod queries;
+pub mod wallet;

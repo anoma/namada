@@ -21,12 +21,12 @@ use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
 };
-use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::sdk::args;
 use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
 use crate::sdk::tx::prepare_tx;
+use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{

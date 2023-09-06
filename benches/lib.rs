@@ -67,13 +67,13 @@ use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
-use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::sdk::args::InputAmount;
 use namada::sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
+use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
