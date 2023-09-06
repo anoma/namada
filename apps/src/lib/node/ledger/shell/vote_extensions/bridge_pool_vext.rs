@@ -134,19 +134,16 @@ where
             VoteExtensionError::VerifySigFailed
         })?;
 
-        let bp_root = if cfg!(feature = "abcipp") {
-            self.wl_storage.ethbridge_queries().get_bridge_pool_root().0
-        } else {
-            self.wl_storage
-                .ethbridge_queries()
-                .get_bridge_pool_root_at_height(ext.data.block_height)
-                .expect("We asserted that the queried height is correct")
-                .0
-        };
+        let bp_root = self
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_pool_root_at_height(ext.data.block_height)
+            .expect("We asserted that the queried height is correct")
+            .0;
         let nonce = self
             .wl_storage
             .ethbridge_queries()
-            .get_bridge_pool_nonce()
+            .get_bridge_pool_nonce_at_height(ext.data.block_height)
             .to_bytes();
         let signed = Signed::<_, SignableEthMessage>::new_from(
             keccak_hash([bp_root, nonce].concat()),

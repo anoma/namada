@@ -342,6 +342,21 @@ where
             ))
             .into_storage_result()?;
 
+        // make sure a relay attempt won't happen before the new signed
+        // root has had time to be generated
+        let latest_bp_nonce =
+            ctx.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        if latest_bp_nonce != signed_root.data.1 {
+            return Err(storage_api::Error::Custom(CustomError(
+                format!(
+                    "Mismatch between the nonce in the Bridge pool root proof \
+                     ({}) and the latest Bridge pool nonce in storage ({})",
+                    signed_root.data.1, latest_bp_nonce,
+                )
+                .into(),
+            )));
+        }
+
         // get the merkle tree corresponding to the above root.
         let tree = ctx
             .wl_storage

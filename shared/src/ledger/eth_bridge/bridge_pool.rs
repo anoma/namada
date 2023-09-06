@@ -225,7 +225,7 @@ where
     let warnings: Vec<_> = in_progress
         .into_iter()
         .filter_map(|(ref transfer, voting_power)| {
-            if voting_power > FractionalVotingPower::ONE_THIRD {
+            if voting_power >= FractionalVotingPower::ONE_THIRD {
                 let hash = transfer.keccak256();
                 args.transfers.contains(&hash).then_some(hash)
             } else {
@@ -281,7 +281,7 @@ where
 struct BridgePoolProofResponse {
     hashes: Vec<KeccakHash>,
     relayer_address: Address,
-    total_fees: Amount,
+    total_fees: HashMap<Address, Amount>,
     abi_encoded_proof: Vec<u8>,
 }
 
@@ -312,12 +312,20 @@ where
         relayer_address: args.relayer,
         total_fees: appendices
             .map(|appendices| {
-                appendices
-                    .into_iter()
-                    .map(|app| app.gas_fee.amount)
-                    .sum::<Amount>()
+                appendices.into_iter().fold(
+                    HashMap::new(),
+                    |mut total_fees, app| {
+                        let GasFee { token, amount, .. } =
+                            app.gas_fee.into_owned();
+                        let fees = total_fees
+                            .entry(token)
+                            .or_insert_with(Amount::zero);
+                        fees.receive(&amount);
+                        total_fees
+                    },
+                )
             })
-            .unwrap_or(Amount::zero()),
+            .unwrap_or_default(),
         abi_encoded_proof: bp_proof_bytes,
     };
     println!("{}", serde_json::to_string(&resp).unwrap());
@@ -443,12 +451,17 @@ where
 }
 
 mod recommendations {
+    use std::collections::BTreeSet;
+
     use borsh::BorshDeserialize;
     use namada_core::types::uint::{self, Uint, I256};
 
     use super::*;
-    use crate::eth_bridge::storage::bridge_pool::get_signed_root_key;
+    use crate::eth_bridge::storage::bridge_pool::{
+        get_nonce_key, get_signed_root_key,
+    };
     use crate::eth_bridge::storage::proof::BridgePoolRootProof;
+    use crate::types::ethereum_events::Uint as EthUint;
     use crate::types::storage::BlockHeight;
     use crate::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
@@ -493,6 +506,40 @@ mod recommendations {
         Generous,
     }
 
+    /// Transfer to Ethereum that is eligible to be recommended
+    /// for a relay operation, generating a profit.
+    ///
+    /// This means that the underlying Ethereum event has not
+    /// been "seen" yet, and that the user provided appropriate
+    /// conversion rates to gwei for the gas fee token in
+    /// the transfer.
+    #[derive(Debug, Eq, PartialEq)]
+    struct EligibleRecommendation {
+        /// Pending transfer to Ethereum.
+        pending_transfer: PendingTransfer,
+        /// Hash of the [`PendingTransfer`].
+        transfer_hash: String,
+        /// Cost of relaying the transfer, in gwei.
+        cost: I256,
+    }
+
+    /// Batch of recommended transfers to Ethereum that generate
+    /// a profit after a relay operation.
+    #[derive(Debug, Eq, PartialEq)]
+    struct RecommendedBatch {
+        /// Hashes of the recommended transfers to be relayed.
+        transfer_hashes: Vec<String>,
+        /// Estimate of the total fees, measured in gwei, that will be paid
+        /// on Ethereum.
+        ethereum_gas_fees: Uint,
+        /// Net profitt in gwei, based on the conversion rates provided
+        /// to the algorithm.
+        net_profit: I256,
+        /// Gas fees paid by the transfers considered for relaying,
+        /// paid in various token types.
+        bridge_pool_gas_fees: HashMap<String, Uint>,
+    }
+
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
@@ -512,7 +559,8 @@ mod recommendations {
             .await
             .unwrap()
             .into_keys()
-            .collect::<Vec<_>>();
+            .map(|pending| pending.keccak256().to_string())
+            .collect::<BTreeSet<_>>();
 
         // get the signed bridge pool root so we can analyze the signatures
         // the estimate the gas cost of verifying them.
@@ -522,15 +570,41 @@ mod recommendations {
                     .storage_value(
                         client,
                         None,
-                        Some(0.into()),
+                        None,
                         false,
                         &get_signed_root_key(),
                     )
                     .await
-                    .unwrap()
+                    .try_halt(|err| {
+                        eprintln!("Failed to query Bridge pool proof: {err}");
+                    })?
                     .data,
             )
-            .unwrap();
+            .try_halt(|err| {
+                eprintln!("Failed to decode Bridge pool proof: {err}");
+            })?;
+
+        // get the latest bridge pool nonce
+        let latest_bp_nonce = EthUint::try_from_slice(
+            &RPC.shell()
+                .storage_value(client, None, None, false, &get_nonce_key())
+                .await
+                .try_halt(|err| {
+                    eprintln!("Failed to query Bridge pool nonce: {err}");
+                })?
+                .data,
+        )
+        .try_halt(|err| {
+            eprintln!("Failed to decode Bridge pool nonce: {err}");
+        })?;
+
+        if latest_bp_nonce != bp_root.data.1 {
+            eprintln!(
+                "The signed Bridge pool nonce is not up to date, repeat this \
+                 query at a later time"
+            );
+            return control_flow::halt();
+        }
 
         // Get the voting powers of each of validator who signed
         // the above root.
@@ -547,43 +621,47 @@ mod recommendations {
         let validator_gas = signature_fee()
             * signature_checks(voting_powers, &bp_root.signatures)
             + valset_fee() * valset_size;
-        // This is the amount of gwei a single name is worth
-        let gwei_per_nam = Uint::from_u64(
-            (10u64.pow(9) as f64 / args.nam_per_eth).floor() as u64,
-        );
 
         // we don't recommend transfers that have already been relayed
-        let mut contents: Vec<(String, I256, PendingTransfer)> =
-            query_signed_bridge_pool(client)
-                .await?
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    if !in_progress.contains(&v) {
-                        Some((
-                            k,
-                            I256::try_from(v.gas_fee.amount * gwei_per_nam)
-                                .map(|cost| transfer_fee() - cost)
-                                .try_halt(|err| {
-                                    tracing::debug!(%err, "Failed to convert value to I256");
-                                }),
-                            v,
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .try_fold(Vec::new(), |mut accum, (hash, cost, transf)| {
-                    accum.push((hash, cost?, transf));
-                    control_flow::proceed(accum)
-                })?;
-
-        // sort transfers in decreasing amounts of profitability
-        contents.sort_by_key(|(_, cost, _)| *cost);
+        let eligible = generate_eligible(
+            &args.conversion_table,
+            &in_progress,
+            query_signed_bridge_pool(client).await?,
+        )?;
 
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
-        generate(contents, validator_gas, max_gas, max_cost)?;
+
+        generate_recommendations(
+            eligible,
+            &args.conversion_table,
+            validator_gas,
+            max_gas,
+            max_cost,
+        )?
+        .map(
+            |RecommendedBatch {
+                 transfer_hashes,
+                 ethereum_gas_fees,
+                 net_profit,
+                 bridge_pool_gas_fees,
+             }| {
+                println!("Recommended batch: {transfer_hashes:#?}");
+                println!(
+                    "Estimated Ethereum transaction gas (in gwei): \
+                     {ethereum_gas_fees}",
+                );
+                println!("Estimated net profit (in gwei): {net_profit}");
+                println!("Total fees: {bridge_pool_gas_fees:#?}");
+            },
+        )
+        .unwrap_or_else(|| {
+            println!(
+                "Unable to find a recommendation satisfying the input \
+                 parameters."
+            );
+        });
 
         control_flow::proceed(())
     }
@@ -622,14 +700,94 @@ mod recommendations {
         )
     }
 
+    /// Generate eligible recommendations.
+    fn generate_eligible(
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
+        in_progress: &BTreeSet<String>,
+        signed_pool: HashMap<String, PendingTransfer>,
+    ) -> Halt<Vec<EligibleRecommendation>> {
+        let mut eligible: Vec<_> = signed_pool
+            .into_iter()
+            .filter_map(|(pending_hash, pending)| {
+                if in_progress.contains(&pending_hash) {
+                    return None;
+                }
+
+                let conversion_rate = conversion_table
+                    .get(&pending.gas_fee.token)
+                    .and_then(|entry| match entry.conversion_rate {
+                        r if r == 0.0f64 => {
+                            eprintln!(
+                                "{}: Ignoring null conversion rate",
+                                pending.gas_fee.token,
+                            );
+                            None
+                        }
+                        r if r < 0.0f64 => {
+                            eprintln!(
+                                "{}: Ignoring negative conversion rate: {r:.1}",
+                                pending.gas_fee.token,
+                            );
+                            None
+                        }
+                        r if r > 1e9 => {
+                            eprintln!(
+                                "{}: Ignoring high conversion rate: {r:.1} > \
+                                 10^9",
+                                pending.gas_fee.token,
+                            );
+                            None
+                        }
+                        r => Some(r),
+                    })?;
+
+                // This is the amount of gwei a single gas token is worth
+                let gwei_per_gas_token =
+                    Uint::from_u64((1e9 / conversion_rate).floor() as u64);
+
+                Some(
+                    Uint::from(pending.gas_fee.amount)
+                        .checked_mul(gwei_per_gas_token)
+                        .ok_or_else(|| {
+                            "Overflowed calculating earned gwei".into()
+                        })
+                        .and_then(I256::try_from)
+                        .map_err(|err| err.to_string())
+                        .and_then(|amt_of_earned_gwei| {
+                            transfer_fee()
+                                .checked_sub(&amt_of_earned_gwei)
+                                .ok_or_else(|| {
+                                    "Underflowed calculating relaying cost"
+                                        .into()
+                                })
+                        })
+                        .map(|cost| EligibleRecommendation {
+                            cost,
+                            pending_transfer: pending,
+                            transfer_hash: pending_hash,
+                        }),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .try_halt(|err| {
+                tracing::debug!(%err, "Failed to calculate relaying cost");
+            })?;
+
+        // sort transfers in increasing amounts of profitability
+        eligible.sort_by_key(|EligibleRecommendation { cost, .. }| *cost);
+
+        control_flow::proceed(eligible)
+    }
+
     /// Generates the actual recommendation from restrictions given by the
     /// input parameters.
-    fn generate(
-        contents: Vec<(String, I256, PendingTransfer)>,
+    fn generate_recommendations(
+        contents: Vec<EligibleRecommendation>,
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         validator_gas: Uint,
         max_gas: Uint,
         max_cost: I256,
-    ) -> Halt<Option<Vec<String>>> {
+    ) -> Halt<Option<RecommendedBatch>> {
         let mut state = AlgorithState {
             profitable: true,
             feasible_region: false,
@@ -645,13 +803,16 @@ mod recommendations {
         let mut total_cost = I256::try_from(validator_gas).try_halt(|err| {
             tracing::debug!(%err, "Failed to convert value to I256");
         })?;
-        let mut total_fees = uint::ZERO;
+        let mut total_fees = HashMap::new();
         let mut recommendation = vec![];
-        for (hash, cost, transfer) in contents.into_iter() {
+        for EligibleRecommendation {
+            cost,
+            transfer_hash: hash,
+            pending_transfer: transfer,
+        } in contents.into_iter()
+        {
             let next_total_gas = total_gas + unsigned_transfer_fee();
             let next_total_cost = total_cost + cost;
-            let next_total_fees =
-                total_fees + Uint::from(transfer.gas_fee.amount);
             if cost.is_negative() {
                 if next_total_gas <= max_gas && next_total_cost <= max_cost {
                     state.feasible_region = true;
@@ -676,27 +837,38 @@ mod recommendations {
             }
             total_cost = next_total_cost;
             total_gas = next_total_gas;
-            total_fees = next_total_fees;
+            update_total_fees(&mut total_fees, transfer, conversion_table);
         }
 
         control_flow::proceed(
             if state.feasible_region && !recommendation.is_empty() {
-                println!("Recommended batch: {:#?}", recommendation);
-                println!(
-                    "Estimated Ethereum transaction gas (in gwei): {}",
-                    total_gas
-                );
-                println!("Estimated net profit (in gwei): {}", -total_cost);
-                println!("Total fees (in NAM): {}", total_fees);
-                Some(recommendation)
+                Some(RecommendedBatch {
+                    transfer_hashes: recommendation,
+                    ethereum_gas_fees: total_gas,
+                    net_profit: -total_cost,
+                    bridge_pool_gas_fees: total_fees,
+                })
             } else {
-                println!(
-                    "Unable to find a recommendation satisfying the input \
-                     parameters."
-                );
                 None
             },
         )
+    }
+
+    fn update_total_fees(
+        total_fees: &mut HashMap<String, Uint>,
+        transfer: PendingTransfer,
+        conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
+    ) {
+        let GasFee { token, amount, .. } = transfer.gas_fee;
+        let fees = total_fees
+            .entry(
+                conversion_table
+                    .get(&token)
+                    .map(|entry| entry.alias.clone())
+                    .unwrap_or_else(|| token.to_string()),
+            )
+            .or_insert(uint::ZERO);
+        *fees += Uint::from(amount);
     }
 
     #[cfg(test)]
@@ -734,19 +906,17 @@ mod recommendations {
             }
         }
 
-        /// Convert transfers into a format that the `generate` function
-        /// understands.
+        /// Convert transfers into a format that the
+        /// [`generate_recommendations`] function understands.
         fn process_transfers(
             transfers: Vec<PendingTransfer>,
-        ) -> Vec<(String, I256, PendingTransfer)> {
+        ) -> Vec<EligibleRecommendation> {
             transfers
                 .into_iter()
-                .map(|t| {
-                    (
-                        t.keccak256().to_string(),
-                        transfer_fee() - t.gas_fee.amount.change(),
-                        t,
-                    )
+                .map(|t| EligibleRecommendation {
+                    cost: transfer_fee() - t.gas_fee.amount.change(),
+                    transfer_hash: t.keccak256().to_string(),
+                    pending_transfer: t,
                 })
                 .collect()
         }
@@ -756,6 +926,114 @@ mod recommendations {
                 hot_key_addr: EthAddress([i; 20]),
                 cold_key_addr: EthAddress([i; 20]),
             }
+        }
+
+        /// Data to pass to the [`test_generate_eligible_aux`] callback.
+        struct TestGenerateEligible<'a> {
+            pending: &'a PendingTransfer,
+            conversion_table:
+                &'a mut HashMap<Address, args::BpConversionTableEntry>,
+            in_progress: &'a mut BTreeSet<String>,
+            signed_pool: &'a mut HashMap<String, PendingTransfer>,
+            expected_eligible: &'a mut Vec<EligibleRecommendation>,
+        }
+
+        impl TestGenerateEligible<'_> {
+            /// Add ETH to a conversion table.
+            fn add_eth_to_conversion_table(&mut self) {
+                self.conversion_table.insert(
+                    namada_core::types::address::eth(),
+                    args::BpConversionTableEntry {
+                        alias: "ETH".into(),
+                        conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
+                    },
+                );
+            }
+        }
+
+        /// Helper function to test [`generate_eligible`].
+        fn test_generate_eligible_aux<F>(
+            mut callback: F,
+        ) -> Vec<EligibleRecommendation>
+        where
+            F: FnMut(TestGenerateEligible<'_>),
+        {
+            let pending = PendingTransfer {
+                transfer: TransferToEthereum {
+                    kind: TransferToEthereumKind::Erc20,
+                    asset: EthAddress([1; 20]),
+                    recipient: EthAddress([2; 20]),
+                    sender: bertha_address(),
+                    amount: Default::default(),
+                },
+                gas_fee: GasFee {
+                    token: namada_core::types::address::eth(),
+                    amount: 1_000_000_000_u64.into(), // 1 GWEI
+                    payer: bertha_address(),
+                },
+            };
+            let mut table = HashMap::new();
+            let mut in_progress = BTreeSet::new();
+            let mut signed_pool = HashMap::new();
+            let mut expected = vec![];
+            callback(TestGenerateEligible {
+                pending: &pending,
+                conversion_table: &mut table,
+                in_progress: &mut in_progress,
+                signed_pool: &mut signed_pool,
+                expected_eligible: &mut expected,
+            });
+            let eligible =
+                generate_eligible(&table, &in_progress, signed_pool).proceed();
+            assert_eq!(eligible, expected);
+            eligible
+        }
+
+        /// Test the happy path of generating eligible recommendations
+        /// for Bridge pool relayed transfers.
+        #[test]
+        fn test_generate_eligible_happy_path() {
+            test_generate_eligible_aux(|mut ctx| {
+                ctx.add_eth_to_conversion_table();
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
+                ctx.expected_eligible.push(EligibleRecommendation {
+                    transfer_hash: ctx.pending.keccak256().to_string(),
+                    cost: transfer_fee()
+                        - I256::try_from(ctx.pending.gas_fee.amount)
+                            .expect("Test failed"),
+                    pending_transfer: ctx.pending.clone(),
+                });
+            });
+        }
+
+        /// Test that a transfer is not recommended if it
+        /// is in the process of being relayed (has >0 voting
+        /// power behind it).
+        #[test]
+        fn test_generate_eligible_with_in_progress() {
+            test_generate_eligible_aux(|mut ctx| {
+                ctx.add_eth_to_conversion_table();
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
+                ctx.in_progress.insert(ctx.pending.keccak256().to_string());
+            });
+        }
+
+        /// Test that a transfer is not recommended if its gas
+        /// token is not found in the conversion table.
+        #[test]
+        fn test_generate_eligible_no_gas_token() {
+            test_generate_eligible_aux(|ctx| {
+                ctx.signed_pool.insert(
+                    ctx.pending.keccak256().to_string(),
+                    ctx.pending.clone(),
+                );
+            });
         }
 
         #[test]
@@ -796,14 +1074,16 @@ mod recommendations {
             let profitable = vec![transfer(100_000); 17];
             let hash = profitable[0].keccak256().to_string();
             let expected = vec![hash; 17];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(profitable),
+                &Default::default(),
                 Uint::from_u64(800_000),
                 uint::MAX_VALUE,
                 I256::zero(),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -813,14 +1093,16 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             transfers.push(transfer(0));
             let expected: Vec<_> = vec![hash; 17];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(800_000),
                 uint::MAX_VALUE,
                 I256::zero(),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -829,14 +1111,16 @@ mod recommendations {
             let transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 2];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(50_000),
                 Uint::from_u64(150_000),
                 I256(uint::MAX_SIGNED_VALUE),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -849,14 +1133,16 @@ mod recommendations {
                 .map(|t| t.keccak256().to_string())
                 .take(5)
                 .collect();
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(150_000),
                 uint::MAX_VALUE,
                 I256::from(20_000),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
@@ -866,28 +1152,122 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 4];
             transfers.extend([transfer(17_500), transfer(17_500)]);
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(150_000),
                 Uint::from_u64(330_000),
                 I256::from(20_000),
             )
             .proceed()
-            .expect("Test failed");
+            .expect("Test failed")
+            .transfer_hashes;
             assert_eq!(recommendation, expected);
         }
 
         #[test]
         fn test_wholly_infeasible() {
             let transfers = vec![transfer(75_000); 4];
-            let recommendation = generate(
+            let recommendation = generate_recommendations(
                 process_transfers(transfers),
+                &Default::default(),
                 Uint::from_u64(300_000),
                 uint::MAX_VALUE,
                 I256::from(20_000),
             )
             .proceed();
             assert!(recommendation.is_none())
+        }
+
+        /// Test the profit margin obtained from relaying two
+        /// Bridge pool transfers with two distinct token types,
+        /// whose relation is 1:2 in value.
+        #[test]
+        fn test_conversion_table_profit_margin() {
+            // apfel is worth twice as much as schnitzel
+            const APF_RATE: f64 = 5e8;
+            const SCH_RATE: f64 = 1e9;
+            const APFEL: &str = "APF";
+            const SCHNITZEL: &str = "SCH";
+
+            let conversion_table = {
+                let mut t = HashMap::new();
+                t.insert(
+                    namada_core::types::address::apfel(),
+                    args::BpConversionTableEntry {
+                        alias: APFEL.into(),
+                        conversion_rate: APF_RATE,
+                    },
+                );
+                t.insert(
+                    namada_core::types::address::schnitzel(),
+                    args::BpConversionTableEntry {
+                        alias: SCHNITZEL.into(),
+                        conversion_rate: SCH_RATE,
+                    },
+                );
+                t
+            };
+
+            let eligible = test_generate_eligible_aux(|ctx| {
+                ctx.conversion_table.clone_from(&conversion_table);
+                // tune the pending transfer provided by the ctx
+                let transfer_paid_in_apfel = {
+                    let mut pending = ctx.pending.clone();
+                    pending.transfer.amount = 1.into();
+                    pending.gas_fee.token =
+                        namada_core::types::address::apfel();
+                    pending
+                };
+                let transfer_paid_in_schnitzel = {
+                    let mut pending = ctx.pending.clone();
+                    pending.transfer.amount = 2.into();
+                    pending.gas_fee.token =
+                        namada_core::types::address::schnitzel();
+                    pending
+                };
+                // add the transfers to the pool, and expect them to
+                // be eligible transfers
+                for (pending, rate) in [
+                    (transfer_paid_in_apfel, APF_RATE),
+                    (transfer_paid_in_schnitzel, SCH_RATE),
+                ] {
+                    ctx.signed_pool.insert(
+                        pending.keccak256().to_string(),
+                        pending.clone(),
+                    );
+                    ctx.expected_eligible.push(EligibleRecommendation {
+                        transfer_hash: pending.keccak256().to_string(),
+                        cost: transfer_fee()
+                            - I256::from((1e9 / rate).floor() as u64)
+                                * I256::try_from(pending.gas_fee.amount)
+                                    .expect("Test failed"),
+                        pending_transfer: pending,
+                    });
+                }
+            });
+
+            const VALIDATOR_GAS_FEE: Uint = Uint::from_u64(100_000);
+
+            let recommended_batch = generate_recommendations(
+                eligible,
+                &conversion_table,
+                // gas spent by validator signature checks
+                VALIDATOR_GAS_FEE,
+                // unlimited amount of gas
+                uint::MAX_VALUE,
+                // only profitable
+                I256::zero(),
+            )
+            .proceed()
+            .expect("Test failed");
+
+            assert_eq!(
+                recommended_batch.net_profit,
+                I256::from(1_000_000_000_u64) + I256::from(2_000_000_000_u64)
+                    - I256(VALIDATOR_GAS_FEE)
+                    - transfer_fee() * I256::from(2_u64)
+            );
         }
     }
 }
