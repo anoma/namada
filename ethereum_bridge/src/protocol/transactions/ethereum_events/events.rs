@@ -19,7 +19,9 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::Address;
-use namada_core::types::eth_bridge_pool::PendingTransfer;
+use namada_core::types::eth_bridge_pool::{
+    PendingTransfer, TransferToEthereumKind,
+};
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
@@ -145,14 +147,14 @@ where
             // TODO: query denomination of the whitelisted token from storage,
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
-            if !asset_count.erc20_amount.is_zero() {
+            if asset_count.should_mint_erc20s() {
                 tracing::info!(
                     "Minted wrapped ERC20s - (asset - {asset}, receiver - \
                      {receiver}, amount - {})",
                     asset_count.erc20_amount.to_string_native(),
                 );
             }
-            if !asset_count.nut_amount.is_zero() {
+            if asset_count.should_mint_nuts() {
                 tracing::info!(
                     "Minted NUTs - (asset - {asset}, receiver - {receiver}, \
                      amount - {})",
@@ -161,7 +163,12 @@ where
             }
             changed
         } else {
-            redeem_native_token(wl_storage, receiver, amount)?
+            redeem_native_token(
+                wl_storage,
+                &wrapped_native_erc20,
+                receiver,
+                amount,
+            )?
         };
         changed_keys.append(&mut changed)
     }
@@ -171,6 +178,7 @@ where
 /// Redeems `amount` of the native token for `receiver` from escrow.
 fn redeem_native_token<D, H>(
     wl_storage: &mut WlStorage<D, H>,
+    native_erc20: &EthAddress,
     receiver: &Address,
     amount: &token::Amount,
 ) -> Result<BTreeSet<Key>>
@@ -182,51 +190,66 @@ where
         token::balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
     let receiver_native_token_balance_key =
         token::balance_key(&wl_storage.storage.native_token, receiver);
+    let native_werc20_supply_key =
+        minted_balance_key(&wrapped_erc20s::token(native_erc20));
 
-    let eth_bridge_native_token_balance_pre: token::Amount =
-        StorageRead::read(wl_storage, &eth_bridge_native_token_balance_key)?
-            .expect(
-                "Ethereum bridge must always have an explicit balance of the \
-                 native token",
-            );
-    let receiver_native_token_balance_pre: token::Amount =
-        StorageRead::read(wl_storage, &receiver_native_token_balance_key)?
-            .unwrap_or_default();
-
-    let eth_bridge_native_token_balance_post =
-        eth_bridge_native_token_balance_pre
-            .checked_sub(*amount)
-            .expect(
-                "Ethereum bridge should always have enough native tokens to \
-                 redeem any confirmed transfers",
-            );
-    let receiver_native_token_balance_post = receiver_native_token_balance_pre
-        .checked_add(*amount)
-        .expect("Receiver's balance is full");
-
-    StorageWrite::write(
+    update::amount(
         wl_storage,
         &eth_bridge_native_token_balance_key,
-        eth_bridge_native_token_balance_post,
+        |balance| {
+            tracing::debug!(
+                %eth_bridge_native_token_balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.spend(amount);
+            tracing::debug!(
+                %eth_bridge_native_token_balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        },
     )?;
-    StorageWrite::write(
+    update::amount(
         wl_storage,
         &receiver_native_token_balance_key,
-        receiver_native_token_balance_post,
+        |balance| {
+            tracing::debug!(
+                %receiver_native_token_balance_key,
+                ?balance,
+                "Existing value found",
+            );
+            balance.receive(amount);
+            tracing::debug!(
+                %receiver_native_token_balance_key,
+                ?balance,
+                "New value calculated",
+            );
+        },
     )?;
+    update::amount(wl_storage, &native_werc20_supply_key, |balance| {
+        tracing::debug!(
+            %native_werc20_supply_key,
+            ?balance,
+            "Existing value found",
+        );
+        balance.spend(amount);
+        tracing::debug!(
+            %native_werc20_supply_key,
+            ?balance,
+            "New value calculated",
+        );
+    })?;
 
     tracing::info!(
         amount = %amount.to_string_native(),
         %receiver,
-        eth_bridge_native_token_balance_pre = %eth_bridge_native_token_balance_pre.to_string_native(),
-        eth_bridge_native_token_balance_post = %eth_bridge_native_token_balance_post.to_string_native(),
-        receiver_native_token_balance_pre = %receiver_native_token_balance_pre.to_string_native(),
-        receiver_native_token_balance_post = %receiver_native_token_balance_post.to_string_native(),
         "Redeemed native token for wrapped ERC20 token"
     );
     Ok(BTreeSet::from([
         eth_bridge_native_token_balance_key,
         receiver_native_token_balance_key,
+        native_werc20_supply_key,
     ]))
 }
 
@@ -254,10 +277,12 @@ where
 
     let assets_to_mint = [
         // check if we should mint nuts
-        (!asset_count.nut_amount.is_zero())
+        asset_count
+            .should_mint_nuts()
             .then(|| (wrapped_erc20s::nut(asset), asset_count.nut_amount)),
         // check if we should mint erc20s
-        (!asset_count.erc20_amount.is_zero())
+        asset_count
+            .should_mint_erc20s()
             .then(|| (wrapped_erc20s::token(asset), asset_count.erc20_amount)),
     ]
     .into_iter()
@@ -356,7 +381,7 @@ where
                 "Valid transfer to Ethereum detected, compensating the \
                  relayer and burning any Ethereum assets in Namada"
             );
-            changed_keys.append(&mut burn_transferred_assets(
+            changed_keys.append(&mut update_transferred_asset_balances(
                 wl_storage,
                 &pending_transfer,
             )?);
@@ -528,7 +553,9 @@ where
     Ok(changed_keys)
 }
 
-fn burn_transferred_assets<D, H>(
+/// Burns any transferred ERC20s other than wNAM. If NAM is transferred,
+/// update the wNAM supply key.
+fn update_transferred_asset_balances<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     transfer: &PendingTransfer,
 ) -> Result<BTreeSet<Key>>
@@ -543,12 +570,26 @@ where
         return Err(eyre::eyre!("Could not read wNam key from storage"));
     };
 
+    let token = transfer.token_address();
+
+    // the wrapped NAM supply increases when we transfer to Ethereum
     if transfer.transfer.asset == native_erc20_addr {
-        tracing::debug!(?transfer, "Keeping wrapped NAM in escrow");
+        if hints::unlikely(matches!(
+            &transfer.transfer.kind,
+            TransferToEthereumKind::Nut
+        )) {
+            unreachable!("Attempted to mint wNAM NUTs!");
+        }
+        let supply_key = minted_balance_key(&token);
+        update::amount(wl_storage, &supply_key, |supply| {
+            supply.receive(&transfer.transfer.amount);
+        })?;
+        _ = changed_keys.insert(supply_key);
+        tracing::debug!(?transfer, "Updated wrapped NAM supply");
         return Ok(changed_keys);
     }
 
-    let token = transfer.token_address();
+    // other asset kinds must be burned
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
     update::amount(wl_storage, &escrow_balance_key, |balance| {
@@ -578,7 +619,7 @@ mod tests {
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage::types::encode;
     use namada_core::types::address::testing::gen_implicit_address;
-    use namada_core::types::address::{gen_established_address, nam};
+    use namada_core::types::address::{gen_established_address, nam, wnam};
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
         arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
@@ -601,10 +642,8 @@ mod tests {
         update_epoch_parameter(wl_storage, &epoch_duration)
             .expect("Test failed");
         // set native ERC20 token
-        let native_erc20_key = bridge_storage::native_erc20_key();
-        let native_erc20 = EthAddress([0; 20]);
         wl_storage
-            .write_bytes(&native_erc20_key, encode(&native_erc20))
+            .write_bytes(&bridge_storage::native_erc20_key(), encode(&wnam()))
             .expect("Test failed");
     }
 
@@ -686,7 +725,7 @@ mod tests {
             .expect("Test failed");
 
         for transfer in pending_transfers {
-            if transfer.transfer.asset == EthAddress([0; 20]) {
+            if transfer.transfer.asset == wnam() {
                 // native ERC20
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
@@ -985,6 +1024,10 @@ mod tests {
                 &BRIDGE_POOL_ADDRESS
             ))
         );
+        assert!(
+            changed_keys
+                .remove(&minted_balance_key(&wrapped_erc20s::token(&wnam())))
+        );
         assert!(changed_keys.remove(&minted_balance_key(&random_erc20_token)));
         assert!(
             changed_keys.remove(&minted_balance_key(&random_erc20_token_2))
@@ -1105,7 +1148,7 @@ mod tests {
 
         // Check the balances
         for transfer in pending_transfers {
-            if transfer.transfer.asset == EthAddress([0; 20]) {
+            if transfer.transfer.asset == wnam() {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let value =
                     wl_storage.read_bytes(&sender_key).expect("Test failed");
@@ -1147,27 +1190,45 @@ mod tests {
         let receiver = address::testing::established_address_1();
         let amount = Amount::from(100);
 
+        // pre wNAM balance - 0
+        let receiver_wnam_balance_key =
+            token::balance_key(&wrapped_erc20s::token(&wnam()), &receiver);
+        assert!(
+            wl_storage
+                .read_bytes(&receiver_wnam_balance_key)
+                .unwrap()
+                .is_none()
+        );
+
         let bridge_pool_initial_balance = Amount::from(100_000_000);
         let bridge_pool_native_token_balance_key = token::balance_key(
             &wl_storage.storage.native_token,
             &BRIDGE_ADDRESS,
         );
+        let bridge_pool_native_erc20_supply_key =
+            minted_balance_key(&wrapped_erc20s::token(&wnam()));
         StorageWrite::write(
             &mut wl_storage,
             &bridge_pool_native_token_balance_key,
             bridge_pool_initial_balance,
         )?;
+        StorageWrite::write(
+            &mut wl_storage,
+            &bridge_pool_native_erc20_supply_key,
+            amount,
+        )?;
         let receiver_native_token_balance_key =
             token::balance_key(&wl_storage.storage.native_token, &receiver);
 
         let changed_keys =
-            redeem_native_token(&mut wl_storage, &receiver, &amount)?;
+            redeem_native_token(&mut wl_storage, &wnam(), &receiver, &amount)?;
 
         assert_eq!(
             changed_keys,
             BTreeSet::from([
                 bridge_pool_native_token_balance_key.clone(),
-                receiver_native_token_balance_key.clone()
+                receiver_native_token_balance_key.clone(),
+                bridge_pool_native_erc20_supply_key.clone(),
             ])
         );
         assert_eq!(
@@ -1180,6 +1241,23 @@ mod tests {
         assert_eq!(
             StorageRead::read(&wl_storage, &receiver_native_token_balance_key)?,
             Some(amount)
+        );
+        assert_eq!(
+            StorageRead::read(
+                &wl_storage,
+                &bridge_pool_native_erc20_supply_key
+            )?,
+            Some(Amount::zero())
+        );
+
+        // post wNAM balance - 0
+        //
+        // wNAM is never minted, it's converted back to NAM
+        assert!(
+            wl_storage
+                .read_bytes(&receiver_wnam_balance_key)
+                .unwrap()
+                .is_none()
         );
 
         Ok(())
@@ -1199,7 +1277,7 @@ mod tests {
         let pending_transfers = init_bridge_pool_transfers(
             &mut wl_storage,
             [
-                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Nut),
+                (native_erc20, eth_bridge_pool::TransferToEthereumKind::Erc20),
                 (
                     EthAddress([0xaa; 20]),
                     eth_bridge_pool::TransferToEthereumKind::Erc20,
@@ -1389,18 +1467,20 @@ mod tests {
 
             _ = act_on(wl_storage, event).unwrap();
 
-            // check post supply
+            // check post supply - the wNAM minted supply should increase
+            // by the transferred amount
             assert!(
                 wl_storage
                     .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
-            assert!(
+            assert_eq!(
                 wl_storage
-                    .read_bytes(&minted_balance_key(&wnam))
-                    .expect("Test failed")
-                    .is_none()
+                    .read::<Amount>(&minted_balance_key(&wnam))
+                    .expect("Reading from storage should not fail")
+                    .expect("The wNAM supply should have been updated"),
+                Amount::from_u64(10),
             );
 
             // check post balance
@@ -1411,5 +1491,31 @@ mod tests {
 
             assert_eq!(pre_escrowed_balance, post_escrowed_balance);
         })
+    }
+
+    /// Test that the ledger appropriately panics when we try to mint
+    /// wrapped NAM NUTs. Under normal circumstances, this should never
+    /// happen.
+    #[test]
+    #[should_panic(expected = "Attempted to mint wNAM NUTs!")]
+    fn test_wnam_doesnt_mint_nuts() {
+        let mut wl_storage = TestWlStorage::default();
+        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+
+        let transfer = PendingTransfer {
+            transfer: eth_bridge_pool::TransferToEthereum {
+                asset: wnam(),
+                sender: address::testing::established_address_1(),
+                recipient: EthAddress([5; 20]),
+                amount: Amount::from(10),
+                kind: eth_bridge_pool::TransferToEthereumKind::Nut,
+            },
+            gas_fee: GasFee {
+                amount: Amount::from(1),
+                payer: address::testing::established_address_1(),
+            },
+        };
+
+        _ = update_transferred_asset_balances(&mut wl_storage, &transfer);
     }
 }

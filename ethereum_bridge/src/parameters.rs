@@ -11,7 +11,7 @@ use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::ethereum_structs;
 use namada_core::types::storage::Key;
-use namada_core::types::token::DenominatedAmount;
+use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::eth_bridge_queries::{
@@ -218,6 +218,15 @@ impl EthereumBridgeConfig {
             token_cap: DenominatedAmount { amount: cap, denom },
         } in erc20_whitelist
         {
+            if addr == native_erc20
+                && denom != &NATIVE_MAX_DECIMAL_PLACES.into()
+            {
+                panic!(
+                    "Error writing Ethereum bridge config: The native token \
+                     should have {NATIVE_MAX_DECIMAL_PLACES} decimal places"
+                );
+            }
+
             let key = whitelist::Key {
                 asset: *addr,
                 suffix: whitelist::KeyType::Whitelisted,
