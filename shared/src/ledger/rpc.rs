@@ -954,6 +954,7 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
     force: bool,
 ) -> Option<token::DenominatedAmount> {
     let input_amount = match amount {
+        InputAmount::Unvalidated(amt) if amt.is_zero() => return Some(amt),
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return Some(amt),
     };

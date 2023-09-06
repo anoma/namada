@@ -9,7 +9,7 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use owo_colors::OwoColorize;
@@ -58,20 +58,32 @@ pub async fn build_bridge_pool_tx<
         amount,
         fee_amount,
         fee_payer,
+        fee_token,
         code_path,
     }: args::EthereumBridgePool,
     wrapper_fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
-    let DenominatedAmount { amount, .. } =
-        validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
-            .await
-            .expect("Failed to validate amount");
-
+    let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
+    let DenominatedAmount { amount, .. } = validate_amount(
+        client,
+        amount,
+        &wrapped_erc20s::token(&asset),
+        tx_args.force,
+    )
+    .await
+    .ok_or_else(|| Error::Other("Failed to validate amount".into()))?;
+    let DenominatedAmount {
+        amount: fee_amount, ..
+    } = validate_amount(client, fee_amount, &fee_token, tx_args.force)
+        .await
+        .ok_or_else(|| {
+            Error::Other("Failed to validate Bridge pool fee amount".into())
+        })?;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
             recipient,
-            sender: sender.clone(),
+            sender,
             amount,
             kind: if nut {
                 TransferToEthereumKind::Nut
@@ -80,6 +92,7 @@ pub async fn build_bridge_pool_tx<
             },
         },
         gas_fee: GasFee {
+            token: fee_token,
             amount: fee_amount,
             payer: fee_payer,
         },
@@ -94,7 +107,7 @@ pub async fn build_bridge_pool_tx<
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     tx.add_code_from_hash(tx_code_hash).add_data(transfer);
 
-    // TODO: validate balance of sender and fee payer
+    // TODO(namada#1800): validate the tx on the client side
 
     let epoch = prepare_tx::<C, U, V>(
         client,
@@ -714,6 +727,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
+                    token: namada_core::types::address::nam(),
                     amount: gas_amount.into(),
                     payer: bertha_address(),
                 },
