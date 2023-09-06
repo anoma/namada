@@ -6,7 +6,6 @@ pub mod events;
 pub mod governance;
 pub mod ibc;
 pub mod inflation;
-pub mod masp;
 pub mod native_vp;
 pub mod pgf;
 pub mod pos;

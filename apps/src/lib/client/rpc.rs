@@ -29,15 +29,15 @@ use namada::core::ledger::governance::utils::{
 use namada::core::ledger::pgf::parameters::PgfParameters;
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
-use namada::ledger::masp::{
-    Conversions, MaspAmount, MaspChange, ShieldedContext, ShieldedUtils,
-};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{CommissionPair, PosParams, Slash};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
 use namada::ledger::wallet::{AddressVpType, Wallet};
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
+use namada::sdk::masp::{
+    Conversions, MaspAmount, MaspChange, ShieldedContext, ShieldedUtils,
+};
 use namada::sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
     TxResponse,

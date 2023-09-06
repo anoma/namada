@@ -1881,7 +1881,7 @@ where
         // TODO: once the runtime gas meter is implemented we need to benchmark
         // this funcion and charge the gas here. For the moment, the cost of
         // this is included in the benchmark of the masp vp
-        HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
+        HostEnvResult::from(crate::sdk::masp::verify_shielded_tx(&shielded))
             .to_i64(),
     )
 }

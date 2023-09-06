@@ -27,13 +27,13 @@ use zeroize::Zeroizing;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::args;
-use crate::ledger::masp::{
-    make_asset_type, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
 use crate::ledger::parameters::storage as parameter_storage;
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Section, Tx};
+use crate::sdk::masp::{
+    make_asset_type, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
 use crate::sdk::rpc;
 use crate::sdk::rpc::{
     format_denominated_amount, query_wasm_code_hash, validate_amount,

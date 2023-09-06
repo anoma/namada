@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
-use namada::ledger::masp::ShieldedContext;
 use namada::ledger::wallet::Wallet;
+use namada::sdk::masp::ShieldedContext;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;

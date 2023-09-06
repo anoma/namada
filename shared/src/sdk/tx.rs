@@ -43,10 +43,10 @@ use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
-use crate::ledger::masp::TransferErr::Build;
-use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Tx};
+use crate::sdk::masp::TransferErr::Build;
+use crate::sdk::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::sdk::rpc::{
     self, format_denominated_amount, query_wasm_code_hash, validate_amount,
     TxBroadcastData, TxResponse,
