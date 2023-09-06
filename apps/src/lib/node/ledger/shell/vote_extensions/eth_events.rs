@@ -466,9 +466,9 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TransferToEthereum, TransferToEthereumKind,
-        Uint,
+        EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
+    use namada::types::hash::Hash;
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::keccak_hash;
     #[cfg(feature = "abcipp")]
@@ -600,13 +600,10 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 0.into(),
             transfers: vec![TransferToEthereum {
-                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -614,13 +611,10 @@ mod test_vote_extensions {
         let event_2 = EthereumEvent::TransfersToEthereum {
             nonce: 1.into(),
             transfers: vec![TransferToEthereum {
-                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -666,13 +660,10 @@ mod test_vote_extensions {
         let event_1 = EthereumEvent::TransfersToEthereum {
             nonce: 0.into(),
             transfers: vec![TransferToEthereum {
-                kind: TransferToEthereumKind::Erc20,
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -729,13 +720,10 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -824,13 +812,10 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -932,13 +917,10 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -1015,13 +997,10 @@ mod test_vote_extensions {
             ethereum_events: vec![EthereumEvent::TransfersToEthereum {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),

@@ -569,9 +569,8 @@ mod test_oracle {
     use namada::eth_bridge::ethers::types::H160;
     use namada::eth_bridge::structs::Erc20Transfer;
     use namada::types::address::testing::gen_established_address;
-    use namada::types::ethereum_events::{
-        EthAddress, TransferToEthereum, TransferToEthereumKind,
-    };
+    use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
+    use namada::types::hash::Hash;
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
@@ -828,13 +827,10 @@ mod test_oracle {
         let gas_payer = gen_established_address();
         let second_event = TransferToErcFilter {
             transfers: vec![Erc20Transfer {
-                kind: TransferToEthereumKind::Erc20 as u8,
                 amount: 0.into(),
                 from: H160([0; 20]),
-                sender: gas_payer.to_string(),
                 to: H160([1; 20]),
-                fee: 0.into(),
-                fee_from: gas_payer.to_string(),
+                namada_data_digest: [0; 32],
             }],
             valid_map: vec![true],
             relayer_address: gas_payer.to_string(),
@@ -898,13 +894,10 @@ mod test_oracle {
             assert_eq!(
                 transfer,
                 TransferToEthereum {
-                    kind: TransferToEthereumKind::Erc20,
                     amount: Default::default(),
                     asset: EthAddress([0; 20]),
-                    sender: gas_payer.clone(),
                     receiver: EthAddress([1; 20]),
-                    gas_amount: Default::default(),
-                    gas_payer: gas_payer.clone(),
+                    checksum: Hash::default(),
                 }
             );
         } else {

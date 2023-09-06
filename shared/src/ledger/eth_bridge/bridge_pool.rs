@@ -1,5 +1,6 @@
 //! Bridge pool SDK functionality.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Write;
@@ -19,7 +20,9 @@ use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
 use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
-use crate::ledger::queries::{Client, RPC};
+use crate::ledger::queries::{
+    Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
+};
 use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::{prepare_tx, Error};
 use crate::ledger::wallet::{Wallet, WalletUtils};
@@ -194,9 +197,8 @@ where
 /// bridge pool.
 async fn construct_bridge_pool_proof<C>(
     client: &C,
-    transfers: &[KeccakHash],
-    relayer: Address,
-) -> Halt<Vec<u8>>
+    args: GenBridgePoolProofReq<'_, '_>,
+) -> Halt<GenBridgePoolProofRsp>
 where
     C: Client + Sync,
 {
@@ -211,8 +213,8 @@ where
         .into_iter()
         .filter_map(|(ref transfer, voting_power)| {
             if voting_power > FractionalVotingPower::ONE_THIRD {
-                let hash = PendingTransfer::from(transfer).keccak256();
-                transfers.contains(&hash).then_some(hash)
+                let hash = transfer.keccak256();
+                args.transfers.contains(&hash).then_some(hash)
             } else {
                 None
             }
@@ -249,7 +251,7 @@ where
         }
     }
 
-    let data = (transfers, relayer).try_to_vec().unwrap();
+    let data = args.try_to_vec().unwrap();
     let response = RPC
         .shell()
         .eth_bridge()
@@ -257,7 +259,7 @@ where
         .await;
 
     response.map(|response| response.data).try_halt(|e| {
-        println!("Encountered error constructing proof:\n{:?}", e);
+        println!("Encountered error constructing proof:\n{e}");
     })
 }
 
@@ -280,25 +282,29 @@ pub async fn construct_proof<C>(
 where
     C: Client + Sync,
 {
-    let bp_proof_bytes = construct_bridge_pool_proof(
+    let GenBridgePoolProofRsp {
+        abi_encoded_proof: bp_proof_bytes,
+        appendices,
+    } = construct_bridge_pool_proof(
         client,
-        &args.transfers,
-        args.relayer.clone(),
+        GenBridgePoolProofReq {
+            transfers: args.transfers.as_slice().into(),
+            relayer: Cow::Borrowed(&args.relayer),
+            with_appendix: true,
+        },
     )
     .await?;
-    let bp_proof: RelayProof =
-        AbiDecode::decode(&bp_proof_bytes).try_halt(|error| {
-            println!("Unable to decode the generated proof: {:?}", error);
-        })?;
     let resp = BridgePoolProofResponse {
         hashes: args.transfers,
         relayer_address: args.relayer,
-        total_fees: bp_proof
-            .transfers
-            .iter()
-            .map(|t| t.fee.as_u64())
-            .sum::<u64>()
-            .into(),
+        total_fees: appendices
+            .map(|appendices| {
+                appendices
+                    .into_iter()
+                    .map(|app| app.gas_fee.amount)
+                    .sum::<Amount>()
+            })
+            .unwrap_or(Amount::zero()),
         abi_encoded_proof: bp_proof_bytes,
     };
     println!("{}", serde_json::to_string(&resp).unwrap());
@@ -331,9 +337,18 @@ where
         eth_sync_or_exit(&*eth_client).await?;
     }
 
-    let bp_proof =
-        construct_bridge_pool_proof(nam_client, &args.transfers, args.relayer)
-            .await?;
+    let GenBridgePoolProofRsp {
+        abi_encoded_proof: bp_proof,
+        ..
+    } = construct_bridge_pool_proof(
+        nam_client,
+        GenBridgePoolProofReq {
+            transfers: Cow::Owned(args.transfers),
+            relayer: Cow::Owned(args.relayer),
+            with_appendix: false,
+        },
+    )
+    .await?;
     let bridge = match RPC
         .shell()
         .eth_bridge()
@@ -483,8 +498,7 @@ mod recommendations {
             .transfer_to_ethereum_progress(client)
             .await
             .unwrap()
-            .keys()
-            .map(PendingTransfer::from)
+            .into_keys()
             .collect::<Vec<_>>();
 
         // get the signed bridge pool root so we can analyze the signatures
