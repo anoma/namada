@@ -590,8 +590,7 @@ impl super::SigScheme for SigScheme {
         #[cfg(any(test, feature = "secp256k1-sign"))]
         {
             let message =
-                libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
-                    .expect("Message encoding should not fail");
+                libsecp256k1::Message::parse(&data.signable_hash::<H>());
             let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
             Signature(sig, recovery_id)
         }
@@ -605,9 +604,7 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        let message =
-            libsecp256k1::Message::parse_slice(&data.signable_hash::<H>())
-                .expect("Message encoding should not fail");
+        let message = libsecp256k1::Message::parse(&data.signable_hash::<H>());
         let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
         if is_valid {
             Ok(())
