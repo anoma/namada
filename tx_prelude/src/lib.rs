@@ -330,4 +330,24 @@ impl TxEnv for Ctx {
         unsafe { namada_tx_charge_gas(used_gas) };
         Ok(())
     }
+
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<ibc::IbcEvent>, Error> {
+        let event_type = event_type.as_ref().to_string();
+        let read_result = unsafe {
+            namada_tx_get_ibc_event(
+                event_type.as_ptr() as _,
+                event_type.len() as _,
+            )
+        };
+        match read_from_buffer(read_result, namada_tx_result_buffer) {
+            Some(value) => Ok(Some(
+                ibc::IbcEvent::try_from_slice(&value[..])
+                    .expect("The conversion shouldn't fail"),
+            )),
+            None => Ok(None),
+        }
+    }
 }

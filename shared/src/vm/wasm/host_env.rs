@@ -76,6 +76,7 @@ where
             "namada_tx_update_validity_predicate" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_validity_predicate),
             "namada_tx_init_account" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_init_account),
             "namada_tx_emit_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_ibc_event),
+            "namada_tx_get_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_ibc_event),
             "namada_tx_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_chain_id),
             "namada_tx_get_tx_index" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_tx_index),
             "namada_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
