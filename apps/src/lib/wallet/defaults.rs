@@ -7,6 +7,7 @@ pub use dev::{
     ester_address, ester_keypair, keys, validator_address, validator_keypair,
     validator_keys,
 };
+use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
 use namada::ledger::wallet::alias::Alias;
 use namada::ledger::{eth_bridge, governance, pgf, pos};
 use namada::types::address::Address;
@@ -22,6 +23,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), governance::ADDRESS),
         ("eth_bridge".into(), eth_bridge::ADDRESS),
+        ("bridge_pool".into(), BRIDGE_POOL_ADDRESS),
         ("pgf".into(), pgf::ADDRESS),
     ];
     // Genesis validators
