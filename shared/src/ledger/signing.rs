@@ -1,6 +1,8 @@
 //! Functions to sign transactions
-use std::collections::HashMap;
+
+use std::collections::{BTreeMap, HashMap};
 use std::io::ErrorKind;
+use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -19,8 +21,11 @@ use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use zeroize::Zeroizing;
 
+use super::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
+use super::rpc::validate_amount;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
@@ -64,7 +69,7 @@ pub struct SigningTxData {
     /// The public keys to index map associated to an account
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public keys of the fee payer
-    pub gas_payer: common::PublicKey,
+    pub fee_payer: common::PublicKey,
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -163,6 +168,7 @@ pub async fn tx_signers<
     // Now actually fetch the signing key and apply it
     match signer {
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
+
         Some(signer) => Ok(vec![
             find_pk::<C, U>(client, wallet, &signer, args.password.clone())
                 .await?,
@@ -178,6 +184,9 @@ pub async fn tx_signers<
 /// Sign a transaction with a given signing key or public key of a given signer.
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
+///
+/// It also takes a second, optional keypair to sign the wrapper header
+/// separately.
 ///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
@@ -213,7 +222,7 @@ pub fn sign_tx<U: WalletUtils>(
     }
 
     let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
+        find_key_by_pk(wallet, args, &signing_data.fee_payer).expect("");
     tx.sign_wrapper(fee_payer_keypair);
 }
 
@@ -229,7 +238,7 @@ pub async fn aux_signing_data<
     owner: &Option<Address>,
     default_signer: Option<Address>,
 ) -> Result<SigningTxData, Error> {
-    let public_keys = if owner.is_some() || args.gas_payer.is_none() {
+    let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
         tx_signers::<C, U>(client, wallet, args, default_signer.clone()).await?
     } else {
         vec![]
@@ -254,16 +263,27 @@ pub async fn aux_signing_data<
         None => (None, 0u8),
     };
 
-    let gas_payer = match &args.gas_payer {
-        Some(keypair) => keypair.ref_to(),
-        None => public_keys.get(0).ok_or(Error::InvalidFeePayer)?.clone(),
+    let fee_payer = if args.disposable_signing_key {
+        wallet.generate_disposable_signing_key().to_public()
+    } else {
+        match &args.wrapper_fee_payer {
+            Some(keypair) => keypair.to_public(),
+            None => public_keys.get(0).ok_or(Error::InvalidFeePayer)?.clone(),
+        }
     };
+
+    if fee_payer == masp_tx_key().to_public() {
+        panic!(
+            "The gas payer cannot be the MASP, please provide a different gas \
+             payer."
+        );
+    }
 
     Ok(SigningTxData {
         public_keys,
         threshold,
         account_public_keys_map,
-        gas_payer,
+        fee_payer,
     })
 }
 
@@ -273,40 +293,24 @@ pub async fn aux_signing_data<
 pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
-) -> (Option<crate::core::ledger::testnet_pow::Solution>, Fee) {
-    let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-    let gas_amount = rpc::query_storage_value::<C, token::Amount>(
-        client,
-        &wrapper_tx_fees_key,
-    )
-    .await
-    .unwrap_or_default();
-    let gas_token = &args.gas_token;
-    let source = Address::from(keypair);
-    let balance_key = token::balance_key(gas_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-    let is_bal_sufficient = gas_amount <= balance;
+    total_fee: Amount,
+    balance: Amount,
+    source: Address,
+) -> Option<crate::core::ledger::testnet_pow::Solution> {
+    let is_bal_sufficient = total_fee <= balance;
     if !is_bal_sufficient {
-        let token_addr = args.gas_token.clone();
+        let token_addr = args.fee_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, gas_amount).await,
+            format_denominated_amount(client, &token_addr, total_fee).await,
             format_denominated_amount(client, &token_addr, balance).await,
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
         }
     }
-    let fee = Fee {
-        amount: gas_amount,
-        token: gas_token.clone(),
-    };
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
@@ -317,9 +321,9 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
-        (Some(solution), fee)
+        Some(solution)
     } else {
-        (None, fee)
+        None
     }
 }
 
@@ -329,40 +333,342 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
+    source: Address,
 ) {
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
+    {
+        Some(amount) => amount,
+        None => {
+            eprintln!(
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
+            } else {
+                token::Amount::default()
+            }
+        }
+    };
+    let fee_amount = match args.fee_amount {
+        Some(amount) => {
+            let validated_fee_amount =
+                validate_amount(client, amount, &args.fee_token, args.force)
+                    .await
+                    .expect("Expected to be able to validate fee");
+
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
+
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                println!(
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
+        }
+        None => minimum_fee,
+    };
+    let total_fee = fee_amount * u64::from(args.gas_limit);
+
+    let balance_key = token::balance_key(&args.fee_token, &source);
+    let balance =
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+            .await
+            .unwrap_or_default();
+
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
-        let (pow_solution, fee) =
-            solve_pow_challenge(client, args, keypair, requires_pow).await;
-        wrapper.fee = fee;
+        let pow_solution = solve_pow_challenge(
+            client,
+            args,
+            requires_pow,
+            total_fee,
+            balance,
+            source,
+        )
+        .await;
+        wrapper.fee = Fee {
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
+        };
         wrapper.pow_solution = pow_solution;
     }
+}
+
+/// Informations about the post-tx balance of the tx's source. Used to correctly
+/// handle fee validation in the wrapper tx
+pub struct TxSourcePostBalance {
+    /// The balance of the tx source after the tx has been applied
+    pub post_balance: Amount,
+    /// The source address of the tx
+    pub source: Address,
+    /// The token of the tx
+    pub token: Address,
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
-pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync>(
+#[allow(clippy::too_many_arguments)]
+pub async fn wrap_tx<
+    C: crate::ledger::queries::Client + Sync,
+    V: ShieldedUtils,
+>(
     client: &C,
+    shielded: &mut ShieldedContext<V>,
     tx: &mut Tx,
     args: &args::Tx,
+    tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
-    gas_payer: common::PublicKey,
+    fee_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) {
+) -> Option<Epoch> {
+    let fee_payer_address = Address::from(&fee_payer);
+    // Validate fee amount and token
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .and_then(|map| map.get(&args.fee_token).map(ToOwned::to_owned))
+    {
+        Some(amount) => amount,
+        None => {
+            eprintln!(
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
+            } else {
+                token::Amount::default()
+            }
+        }
+    };
+    let fee_amount = match args.fee_amount {
+        Some(amount) => {
+            let validated_fee_amount =
+                validate_amount(client, amount, &args.fee_token, args.force)
+                    .await
+                    .expect("Expected to be able to validate fee");
+
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
+
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                println!(
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
+        }
+        None => minimum_fee,
+    };
+
+    let mut updated_balance = match tx_source_balance {
+        Some(TxSourcePostBalance {
+            post_balance: balance,
+            source,
+            token,
+        }) if token == args.fee_token && source == fee_payer_address => balance,
+        _ => {
+            let balance_key =
+                token::balance_key(&args.fee_token, &fee_payer_address);
+
+            rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+                .await
+                .unwrap_or_default()
+        }
+    };
+
+    let total_fee = fee_amount * u64::from(args.gas_limit);
+
+    let (unshield, unshielding_epoch) = match total_fee
+        .checked_sub(updated_balance)
+    {
+        Some(diff) if !diff.is_zero() => {
+            if let Some(spending_key) = args.fee_unshield.clone() {
+                // Unshield funds for fee payment
+                let transfer_args = args::TxTransfer {
+                    tx: args.to_owned(),
+                    source: spending_key,
+                    target: namada_core::types::masp::TransferTarget::Address(
+                        fee_payer_address.clone(),
+                    ),
+                    token: args.fee_token.clone(),
+                    amount: args::InputAmount::Validated(DenominatedAmount {
+                        // NOTE: must unshield the total fee amount, not the
+                        // diff, because the ledger evaluates the transaction in
+                        // reverse (wrapper first, inner second) and cannot know
+                        // ahead of time if the inner will modify the balance of
+                        // the gas payer
+                        amount: total_fee,
+                        denom: 0.into(),
+                    }),
+                    // These last two fields are not used in the function, mock
+                    // them
+                    native_token: args.fee_token.clone(),
+                    tx_code_path: PathBuf::new(),
+                };
+
+                match shielded
+                    .gen_shielded_transfer(client, transfer_args)
+                    .await
+                {
+                    Ok(Some(ShieldedTransfer {
+                        builder: _,
+                        masp_tx: transaction,
+                        metadata: _data,
+                        epoch: unshielding_epoch,
+                    })) => {
+                        let spends = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_spends
+                            .len();
+                        let converts = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_converts
+                            .len();
+                        let outs = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_outputs
+                            .len();
+
+                        let descriptions = spends + converts + outs;
+
+                        let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
+                        let descriptions_limit =
+                            rpc::query_storage_value::<C, u64>(
+                                client,
+                                &descriptions_limit_key,
+                            )
+                            .await
+                            .unwrap();
+
+                        if u64::try_from(descriptions).unwrap()
+                            > descriptions_limit
+                            && !args.force
+                            && cfg!(feature = "mainnet")
+                        {
+                            panic!(
+                                "Fee unshielding descriptions exceed the limit"
+                            );
+                        }
+
+                        updated_balance += total_fee;
+                        (Some(transaction), Some(unshielding_epoch))
+                    }
+                    Ok(None) => {
+                        eprintln!("Missing unshielding transaction");
+                        if !args.force && cfg!(feature = "mainnet") {
+                            panic!();
+                        }
+
+                        (None, None)
+                    }
+                    Err(e) => {
+                        eprintln!("Error in fee unshielding generation: {}", e);
+                        if !args.force && cfg!(feature = "mainnet") {
+                            panic!();
+                        }
+
+                        (None, None)
+                    }
+                }
+            } else {
+                let token_addr = args.fee_token.clone();
+                let err_msg = format!(
+                    "The wrapper transaction source doesn't have enough \
+                     balance to pay fee {}, balance: {}.",
+                    format_denominated_amount(client, &token_addr, total_fee)
+                        .await,
+                    format_denominated_amount(
+                        client,
+                        &token_addr,
+                        updated_balance
+                    )
+                    .await,
+                );
+                eprintln!("{}", err_msg);
+                if !args.force && cfg!(feature = "mainnet") {
+                    panic!("{}", err_msg);
+                }
+
+                (None, None)
+            }
+        }
+        _ => {
+            if args.fee_unshield.is_some() {
+                println!(
+                    "Enough transparent balance to pay fees: the fee \
+                     unshielding spending key will be ignored"
+                );
+            }
+            (None, None)
+        }
+    };
+
+    let unshield_section_hash = unshield.map(|masp_tx| {
+        let section = Section::MaspTx(masp_tx);
+        let mut hasher = sha2::Sha256::new();
+        section.hash(&mut hasher);
+        tx.add_section(section);
+        namada_core::types::hash::Hash(hasher.finalize().into())
+    });
+
     #[cfg(not(feature = "mainnet"))]
-    let (pow_solution, fee) =
-        solve_pow_challenge(client, args, &gas_payer, requires_pow).await;
+    let pow_solution = solve_pow_challenge(
+        client,
+        args,
+        requires_pow,
+        total_fee,
+        updated_balance,
+        fee_payer_address,
+    )
+    .await;
 
     tx.add_wrapper(
-        fee,
-        gas_payer,
+        Fee {
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
+        },
+        fee_payer,
         epoch,
-        args.gas_limit.clone(),
+        // TODO: partially validate the gas limit in client
+        args.gas_limit,
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
+        unshield_section_hash,
     );
+
+    unshielding_epoch
 }
 
 #[allow(clippy::result_large_err)]
@@ -1100,9 +1406,12 @@ pub async fn to_ledger_vector<
             Amount::from(wrapper.gas_limit),
         )
         .await;
-        let gas_amount =
-            format_denominated_amount(client, &gas_token, wrapper.fee.amount)
-                .await;
+        let fee_amount_per_gas_unit = format_denominated_amount(
+            client,
+            &gas_token,
+            wrapper.fee.amount_per_gas_unit,
+        )
+        .await;
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("PK : {}", wrapper.pk),
@@ -1111,11 +1420,15 @@ pub async fn to_ledger_vector<
             format!("Fee token : {}", gas_token),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
-            tv.output_expert
-                .push(format!("Fee amount : {} {}", token, gas_amount));
+            tv.output_expert.push(format!(
+                "Fee amount per gas unit : {} {}",
+                token, fee_amount_per_gas_unit
+            ));
         } else {
-            tv.output_expert
-                .push(format!("Fee amount : {}", gas_amount));
+            tv.output_expert.push(format!(
+                "Fee amount per gas unit : {}",
+                fee_amount_per_gas_unit
+            ));
         }
     }
 

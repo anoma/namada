@@ -87,15 +87,26 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
-    let targets = &[*tx.data_sechash(), *tx.code_sechash()];
-    tx.verify_section_signatures(
-        targets,
-        public_keys_index_map,
-        threshold,
-        max_signatures_per_transaction,
-    )
-    .map_err(|_e| Error::SimpleMessage("Invalid signatures"))
-    .map(|_| true)
+    let targets = [*tx.data_sechash(), *tx.code_sechash()];
+
+    // Serialize parameters
+    let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();
+    let public_keys_map = public_keys_index_map.try_to_vec().unwrap();
+    let targets = targets.try_to_vec().unwrap();
+
+    let valid = unsafe {
+        namada_vp_verify_tx_section_signature(
+            targets.as_ptr() as _,
+            targets.len() as _,
+            public_keys_map.as_ptr() as _,
+            public_keys_map.len() as _,
+            threshold,
+            max_signatures.as_ptr() as _,
+            max_signatures.len() as _,
+        )
+    };
+
+    Ok(HostEnvResult::is_success(valid))
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:
@@ -295,12 +306,12 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(&self, vp_code: Hash, input_data: Tx) -> Result<bool, Error> {
+    fn eval(&self, vp_code_hash: Hash, input_data: Tx) -> Result<bool, Error> {
         let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
-                vp_code.0.as_ptr() as _,
-                vp_code.0.len() as _,
+                vp_code_hash.0.as_ptr() as _,
+                vp_code_hash.0.len() as _,
                 input_data_bytes.as_ptr() as _,
                 input_data_bytes.len() as _,
             )
@@ -330,6 +341,11 @@ impl<'view> VpEnv<'view> for Ctx {
         let valid =
             unsafe { namada_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
         Ok(HostEnvResult::is_success(valid))
+    }
+
+    fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
+        unsafe { namada_vp_charge_gas(used_gas) };
+        Ok(())
     }
 }
 

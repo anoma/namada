@@ -34,6 +34,7 @@ mod tests {
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
     use namada::types::{address, key};
+    use namada_core::ledger::gas::{TxGasMeter, VpGasMeter};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_test_utils::TestWasms;
@@ -479,7 +480,10 @@ mod tests {
                         ],
                         pks_map,
                         1,
-                        None
+                        None,
+                        &mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        )
                     )
                     .is_ok()
             );
@@ -496,7 +500,10 @@ mod tests {
                             other_keypair.ref_to()
                         ]),
                         1,
-                        None
+                        None,
+                        &mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        )
                     )
                     .is_err()
             );
@@ -567,10 +574,16 @@ mod tests {
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash)
@@ -584,10 +597,16 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash)

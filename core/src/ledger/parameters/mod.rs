@@ -1,12 +1,15 @@
 //! Protocol parameters
 pub mod storage;
 
+use std::collections::BTreeMap;
+
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use thiserror::Error;
 
 use super::storage::types;
+use super::storage_api::token::Amount;
 use super::storage_api::{self, ResultExt, StorageRead, StorageWrite};
-use crate::ledger::storage::{self as ledger_storage};
+use crate::ledger::storage as ledger_storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::chain::ProposalBytes;
 use crate::types::dec::Dec;
@@ -38,6 +41,8 @@ pub struct Parameters {
     pub max_expected_time_per_block: DurationSecs,
     /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
+    /// Max gas for block
+    pub max_block_gas: u64,
     /// Whitelisted validity predicate hashes (read only)
     pub vp_whitelist: Vec<String>,
     /// Whitelisted tx hashes (read only)
@@ -59,9 +64,12 @@ pub struct Parameters {
     #[cfg(not(feature = "mainnet"))]
     /// Faucet account for free token withdrawal
     pub faucet_account: Option<Address>,
-    #[cfg(not(feature = "mainnet"))]
-    /// Fixed fees for a wrapper tx to be accepted
-    pub wrapper_tx_fees: Option<token::Amount>,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
+    /// Map of the cost per gas unit for every token allowed for fee payment
+    pub gas_cost: BTreeMap<Address, token::Amount>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -115,6 +123,7 @@ impl Parameters {
             epoch_duration,
             max_expected_time_per_block,
             max_proposal_bytes,
+            max_block_gas,
             vp_whitelist,
             tx_whitelist,
             implicit_vp_code_hash,
@@ -126,17 +135,36 @@ impl Parameters {
             pos_inflation_amount,
             #[cfg(not(feature = "mainnet"))]
             faucet_account,
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees,
+            gas_cost,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
         } = self;
 
         // write max proposal bytes parameter
         let max_proposal_bytes_key = storage::get_max_proposal_bytes_key();
         storage.write(&max_proposal_bytes_key, max_proposal_bytes)?;
 
+        // write max block gas parameter
+        let max_block_gas_key = storage::get_max_block_gas_key();
+        storage.write(&max_block_gas_key, max_block_gas)?;
+
         // write epoch parameters
         let epoch_key = storage::get_epoch_duration_storage_key();
         storage.write(&epoch_key, epoch_duration)?;
+
+        // write fee unshielding gas limit
+        let fee_unshielding_gas_limit_key =
+            storage::get_fee_unshielding_gas_limit_key();
+        storage
+            .write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
+
+        // write fee unshielding descriptions limit
+        let fee_unshielding_descriptions_limit_key =
+            storage::get_fee_unshielding_descriptions_limit_key();
+        storage.write(
+            &fee_unshielding_descriptions_limit_key,
+            fee_unshielding_descriptions_limit,
+        )?;
 
         // write vp whitelist parameter
         let vp_whitelist_key = storage::get_vp_whitelist_storage_key();
@@ -196,13 +224,9 @@ impl Parameters {
             storage.write(&faucet_account_key, faucet_account)?;
         }
 
-        #[cfg(not(feature = "mainnet"))]
-        {
-            let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
-            let wrapper_tx_fees =
-                wrapper_tx_fees.unwrap_or(token::Amount::native_whole(100));
-            storage.write(&wrapper_tx_fees_key, wrapper_tx_fees)?;
-        }
+        let gas_cost_key = storage::get_gas_cost_key();
+        storage.write(&gas_cost_key, gas_cost)?;
+
         Ok(())
     }
 }
@@ -402,16 +426,19 @@ where
     storage.read(&faucet_account_key)
 }
 
-#[cfg(not(feature = "mainnet"))]
-/// Read the wrapper tx fees amount, if any
-pub fn read_wrapper_tx_fees_parameter<S>(
+/// Read the cost per unit of gas for the provided token
+pub fn read_gas_cost<S>(
     storage: &S,
-) -> storage_api::Result<Option<token::Amount>>
+    token: &Address,
+) -> storage_api::Result<Option<Amount>>
 where
     S: StorageRead,
 {
-    let wrapper_tx_fees_key = storage::get_wrapper_tx_fees_key();
-    storage.read(&wrapper_tx_fees_key)
+    let gas_cost_table: BTreeMap<Address, Amount> = storage
+        .read(&storage::get_gas_cost_key())?
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+    Ok(gas_cost_table.get(token).map(|amount| amount.to_owned()))
 }
 
 /// Read all the parameters from storage. Returns the parameters and gas
@@ -423,6 +450,15 @@ where
     // read max proposal bytes
     let max_proposal_bytes: ProposalBytes = {
         let key = storage::get_max_proposal_bytes_key();
+        let value = storage.read(&key)?;
+        value
+            .ok_or(ReadError::ParametersMissing)
+            .into_storage_result()?
+    };
+
+    // read max block gas
+    let max_block_gas: u64 = {
+        let key = storage::get_max_block_gas_key();
         let value = storage.read(&key)?;
         value
             .ok_or(ReadError::ParametersMissing)
@@ -461,6 +497,22 @@ where
         .into_storage_result()?;
     let implicit_vp_code_hash =
         Hash::try_from(&value[..]).into_storage_result()?;
+
+    // read fee unshielding gas limit
+    let fee_unshielding_gas_limit_key =
+        storage::get_fee_unshielding_gas_limit_key();
+    let value = storage.read(&fee_unshielding_gas_limit_key)?;
+    let fee_unshielding_gas_limit: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
+    // read fee unshielding descriptions limit
+    let fee_unshielding_descriptions_limit_key =
+        storage::get_fee_unshielding_descriptions_limit_key();
+    let value = storage.read(&fee_unshielding_descriptions_limit_key)?;
+    let fee_unshielding_descriptions_limit: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
 
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
@@ -510,14 +562,18 @@ where
     #[cfg(not(feature = "mainnet"))]
     let faucet_account = read_faucet_account_parameter(storage)?;
 
-    // read faucet account
-    #[cfg(not(feature = "mainnet"))]
-    let wrapper_tx_fees = read_wrapper_tx_fees_parameter(storage)?;
+    // read gas cost
+    let gas_cost_key = storage::get_gas_cost_key();
+    let value = storage.read(&gas_cost_key)?;
+    let gas_cost: BTreeMap<Address, token::Amount> = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
 
     Ok(Parameters {
         epoch_duration,
         max_expected_time_per_block,
         max_proposal_bytes,
+        max_block_gas,
         vp_whitelist,
         tx_whitelist,
         implicit_vp_code_hash,
@@ -529,7 +585,8 @@ where
         pos_inflation_amount,
         #[cfg(not(feature = "mainnet"))]
         faucet_account,
-        #[cfg(not(feature = "mainnet"))]
-        wrapper_tx_fees,
+        gas_cost,
+        fee_unshielding_gas_limit,
+        fee_unshielding_descriptions_limit,
     })
 }

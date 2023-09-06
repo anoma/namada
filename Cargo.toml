@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "apps",
+  "benches",
   "core",
   "ethereum_bridge",
   "proof_of_stake",

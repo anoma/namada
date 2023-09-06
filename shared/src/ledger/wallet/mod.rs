@@ -265,6 +265,30 @@ impl<U: WalletUtils> Wallet<U> {
         ))
     }
 
+    /// Generate a disposable signing key for fee payment and store it under the
+    /// precomputed alias in the wallet. This is simply a wrapper around
+    /// `gen_key` to manage the alias
+    pub fn generate_disposable_signing_key(&mut self) -> common::SecretKey {
+        // Create the alias
+        let mut ctr = 1;
+        let mut alias = format!("disposable_{ctr}");
+
+        while self.store().contains_alias(&Alias::from(&alias)) {
+            ctr += 1;
+            alias = format!("disposable_{ctr}");
+        }
+        // Generate a disposable keypair to sign the wrapper if requested
+        // TODO: once the wrapper transaction has been accepted, this key can be
+        // deleted from wallet
+        let (alias, disposable_keypair) = self
+            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
+            .expect("Failed to initialize disposable keypair")
+            .expect("Missing alias and secret key");
+
+        println!("Created disposable keypair with alias {alias}");
+        disposable_keypair
+    }
+
     /// Generate a spending key and store it under the given alias in the wallet
     pub fn gen_spending_key(
         &mut self,

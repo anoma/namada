@@ -1,4 +1,4 @@
-//! All the states of the [`BlockSpaceAllocator`] state machine,
+//! All the states of the [`BlockAllocator`] state machine,
 //! over the extent of a Tendermint consensus round
 //! block proposal.
 //!
@@ -23,17 +23,17 @@ mod decrypted_txs;
 mod encrypted_txs;
 mod protocol_txs;
 
-use super::{AllocFailure, BlockSpaceAllocator};
+use super::{AllocFailure, BlockAllocator};
 
-/// Convenience wrapper for a [`BlockSpaceAllocator`] state that allocates
+/// Convenience wrapper for a [`BlockAllocator`] state that allocates
 /// encrypted transactions.
 #[allow(dead_code)]
 pub enum EncryptedTxBatchAllocator {
     WithEncryptedTxs(
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
+        BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>,
     ),
     WithoutEncryptedTxs(
-        BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
+        BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>,
     ),
 }
 
@@ -41,21 +41,21 @@ pub enum EncryptedTxBatchAllocator {
 /// a new batch of DKG decrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum BuildingDecryptedTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of Namada protocol transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum BuildingProtocolTxBatch {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of DKG encrypted transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub struct BuildingEncryptedTxBatch<Mode> {
     /// One of [`WithEncryptedTxs`] and [`WithoutEncryptedTxs`].
     _mode: Mode,
@@ -64,36 +64,41 @@ pub struct BuildingEncryptedTxBatch<Mode> {
 /// Allow block proposals to include encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum WithEncryptedTxs {}
 
 /// Prohibit block proposals from including encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub enum WithoutEncryptedTxs {}
 
-/// Try to allocate a new transaction on a [`BlockSpaceAllocator`] state.
+/// Try to allocate a new transaction on a [`BlockAllocator`] state.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait TryAlloc {
-    /// Try to allocate space for a new transaction.
-    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure>;
+    type Resources<'tx>;
+
+    /// Try to allocate resources for a new transaction.
+    fn try_alloc(
+        &mut self,
+        resource_required: Self::Resources<'_>,
+    ) -> Result<(), AllocFailure>;
 }
 
-/// Represents a state transition in the [`BlockSpaceAllocator`] state machine.
+/// Represents a state transition in the [`BlockAllocator`] state machine.
 ///
 /// This trait should not be used directly. Instead, consider using
 /// [`NextState`].
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextStateImpl<Transition = ()> {
-    /// The next state in the [`BlockSpaceAllocator`] state machine.
+    /// The next state in the [`BlockAllocator`] state machine.
     type Next;
 
-    /// Transition to the next state in the [`BlockSpaceAllocator`] state
+    /// Transition to the next state in the [`BlockAllocator`] state
     /// machine.
     fn next_state_impl(self) -> Self::Next;
 }
@@ -102,9 +107,9 @@ pub trait NextStateImpl<Transition = ()> {
 /// state with a null transition function.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_space_alloc::states`].
+/// [`crate::node::ledger::shell::block_alloc::states`].
 pub trait NextState: NextStateImpl {
-    /// Transition to the next state in the [`BlockSpaceAllocator`] state,
+    /// Transition to the next state in the [`BlockAllocator`] state,
     /// using a null transiiton function.
     #[inline]
     fn next_state(self) -> Self::Next

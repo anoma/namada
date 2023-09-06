@@ -1,12 +1,16 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
 use namada::core::hints;
+use namada::core::ledger::gas::TxGasMeter;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
-use namada::proto::Tx;
+use namada::proof_of_stake::find_validator_by_raw_hash;
+use namada::proto::{Section, Tx};
+use namada::types::address::Address;
 use namada::types::internal::TxInQueue;
+use namada::types::key::tm_raw_hash_to_string;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::wrapper::wrapper_tx::PairingEngine;
 use namada::types::transaction::{
@@ -14,13 +18,15 @@ use namada::types::transaction::{
 };
 #[cfg(feature = "abcipp")]
 use namada::types::vote_extensions::VoteExtensionDigest;
+use namada::vm::wasm::{TxCache, VpCache};
+use namada::vm::WasmCacheAccess;
 
 use super::super::*;
-use super::block_space_alloc::states::{
+use super::block_alloc::states::{
     BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
     EncryptedTxBatchAllocator, NextState, TryAlloc,
 };
-use super::block_space_alloc::{AllocFailure, BlockSpaceAllocator};
+use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -39,8 +45,8 @@ where
 {
     /// Begin a new block.
     ///
-    /// Block construction is documented in `block_space_alloc`
-    /// and `block_space_alloc::states` (private modules).
+    /// Block construction is documented in `block_alloc`
+    /// and `block_alloc::states` (private modules).
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
@@ -52,11 +58,26 @@ where
         let txs = if let ShellMode::Validator { .. } = self.mode {
             // start counting allotted space for txs
             let alloc = self.get_encrypted_txs_allocator();
-            // add encrypted txs
-            let (encrypted_txs, alloc) =
-                self.build_encrypted_txs(alloc, &req.txs, req.time);
-            let mut txs = encrypted_txs;
 
+            // add encrypted txs
+            let tm_raw_hash_string =
+                tm_raw_hash_to_string(req.proposer_address);
+            let block_proposer = find_validator_by_raw_hash(
+                &self.wl_storage,
+                tm_raw_hash_string,
+            )
+            .unwrap()
+            .expect(
+                "Unable to find native validator address of block proposer \
+                 from tendermint raw hash",
+            );
+            let (encrypted_txs, alloc) = self.build_encrypted_txs(
+                alloc,
+                &req.txs,
+                req.time,
+                &block_proposer,
+            );
+            let mut txs = encrypted_txs;
             // decrypt the wrapper txs included in the previous block
             let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
             txs.append(&mut decrypted_txs);
@@ -127,50 +148,52 @@ where
         mut alloc: EncryptedTxBatchAllocator,
         txs: &[TxBytes],
         block_time: Option<Timestamp>,
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingDecryptedTxBatch>) {
-        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
+        block_proposer: &Address,
+    ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
         let pos_queries = self.wl_storage.pos_queries();
         let block_time = block_time.and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
             // valid because of mempool check
             TryInto::<DateTimeUtc>::try_into(block_time).ok()
         });
+        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
+        let mut vp_wasm_cache = self.vp_wasm_cache.clone();
+        let mut tx_wasm_cache = self.tx_wasm_cache.clone();
+
         let txs = txs
             .iter()
             .filter_map(|tx_bytes| {
-                if let Ok(tx) = Tx::try_from(tx_bytes.as_slice()) {
-                    // If tx doesn't have an expiration it is valid. If time cannot be
-                    // retrieved from block default to last block datetime which has
-                    // already been checked by mempool_validate, so it's valid
-                    if let (Some(block_time), Some(exp)) = (block_time.as_ref(), &tx.header.expiration) {
-                        if block_time > exp { return None }
-                    }
-                    if tx.validate_tx().is_ok() && tx.header().wrapper().is_some() && self.replay_protection_checks(&tx, tx_bytes.as_slice(), &mut temp_wl_storage).is_ok() {
-                        return Some(tx_bytes.clone());
+                match self.validate_wrapper_bytes(tx_bytes, block_time, &mut temp_wl_storage, &mut vp_wasm_cache, &mut tx_wasm_cache, block_proposer) {
+                    Ok(gas) => {
+                        temp_wl_storage.write_log.commit_tx();
+                        Some((tx_bytes.to_owned(), gas))
+                    },
+                    Err(()) => {
+                        temp_wl_storage.write_log.drop_tx();
+                        None
                     }
                 }
-                None
             })
-            .take_while(|tx_bytes| {
-                alloc.try_alloc(&tx_bytes[..])
+            .take_while(|(tx_bytes, tx_gas)| {
+                alloc.try_alloc(BlockResources::new(&tx_bytes[..], tx_gas.to_owned()))
                     .map_or_else(
                         |status| match status {
-                            AllocFailure::Rejected { bin_space_left } => {
+                            AllocFailure::Rejected { bin_resource_left} => {
                                 tracing::debug!(
                                     ?tx_bytes,
-                                    bin_space_left,
+                                    bin_resource_left,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
                                     "Dropping encrypted tx from the current proposal",
                                 );
                                 false
                             }
-                            AllocFailure::OverflowsBin { bin_size } => {
+                            AllocFailure::OverflowsBin { bin_resource} => {
                                 // TODO: handle tx whose size is greater
                                 // than bin size
                                 tracing::warn!(
                                     ?tx_bytes,
-                                    bin_size,
+                                    bin_resource,
                                     proposal_height =
                                         ?pos_queries.get_current_decision_height(),
                                     "Dropping large encrypted tx from the current proposal",
@@ -181,10 +204,75 @@ where
                         |()| true,
                     )
             })
+            .map(|(tx, _)| tx)
             .collect();
         let alloc = alloc.next_state();
 
         (txs, alloc)
+    }
+
+    /// Validity checks on a wrapper tx
+    #[allow(clippy::too_many_arguments)]
+    fn validate_wrapper_bytes<CA>(
+        &self,
+        tx_bytes: &[u8],
+        block_time: Option<DateTimeUtc>,
+        temp_wl_storage: &mut TempWlStorage<D, H>,
+        vp_wasm_cache: &mut VpCache<CA>,
+        tx_wasm_cache: &mut TxCache<CA>,
+        block_proposer: &Address,
+    ) -> Result<u64, ()>
+    where
+        CA: 'static + WasmCacheAccess + Sync,
+    {
+        let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+
+        // If tx doesn't have an expiration it is valid. If time cannot be
+        // retrieved from block default to last block datetime which has
+        // already been checked by mempool_validate, so it's valid
+        if let (Some(block_time), Some(exp)) =
+            (block_time.as_ref(), &tx.header().expiration)
+        {
+            if block_time > exp {
+                return Err(());
+            }
+        }
+
+        tx.validate_tx().map_err(|_| ())?;
+        if let TxType::Wrapper(wrapper) = tx.header().tx_type {
+            // Check tx gas limit for tx size
+            let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+            tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
+
+            // Check replay protection
+            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage)
+                .map_err(|_| ())?;
+
+            // Check fees
+            let fee_unshield =
+                wrapper.unshield_section_hash.and_then(|ref hash| {
+                    tx.get_section(hash).and_then(|section| {
+                        if let Section::MaspTx(transaction) = section.as_ref() {
+                            Some(transaction.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                });
+            match self.wrapper_fee_check(
+                &wrapper,
+                fee_unshield,
+                temp_wl_storage,
+                vp_wasm_cache,
+                tx_wasm_cache,
+                Some(block_proposer),
+            ) {
+                Ok(()) => Ok(u64::from(wrapper.gas_limit)),
+                Err(_) => Err(()),
+            }
+        } else {
+            Err(())
+        }
     }
 
     /// Builds a batch of DKG decrypted transactions.
@@ -197,8 +285,8 @@ where
     // - https://github.com/anoma/ferveo
     fn build_decrypted_txs(
         &self,
-        mut alloc: BlockSpaceAllocator<BuildingDecryptedTxBatch>,
-    ) -> (Vec<TxBytes>, BlockSpaceAllocator<BuildingProtocolTxBatch>) {
+        mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
+    ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
         // TODO: This should not be hardcoded
         let privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -211,6 +299,7 @@ where
             .map(
                 |TxInQueue {
                      tx,
+                     gas: _,
                      #[cfg(not(feature = "mainnet"))]
                      has_valid_pow,
                 }| {
@@ -239,7 +328,7 @@ where
             .take_while(|tx_bytes| {
                 alloc.try_alloc(&tx_bytes[..]).map_or_else(
                     |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
+                        AllocFailure::Rejected { bin_resource_left: bin_space_left } => {
                             tracing::warn!(
                                 ?tx_bytes,
                                 bin_space_left,
@@ -249,7 +338,7 @@ where
                             );
                             false
                         }
-                        AllocFailure::OverflowsBin { bin_size } => {
+                        AllocFailure::OverflowsBin { bin_resource: bin_size } => {
                             tracing::warn!(
                                 ?tx_bytes,
                                 bin_size,
@@ -273,7 +362,7 @@ where
     #[cfg(feature = "abcipp")]
     fn build_protocol_txs(
         &self,
-        _alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        _alloc: BlockAllocator<BuildingProtocolTxBatch>,
         local_last_commit: Option<ExtendedCommitInfo>,
     ) -> Vec<TxBytes> {
         // genesis should not contain vote extensions.
@@ -344,7 +433,7 @@ where
     #[cfg(not(feature = "abcipp"))]
     fn build_protocol_txs(
         &self,
-        mut alloc: BlockSpaceAllocator<BuildingProtocolTxBatch>,
+        mut alloc: BlockAllocator<BuildingProtocolTxBatch>,
         txs: &[TxBytes],
     ) -> Vec<TxBytes> {
         if self.wl_storage.storage.last_block.is_none() {
@@ -363,7 +452,7 @@ where
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
-                        AllocFailure::Rejected { bin_space_left } => {
+                        AllocFailure::Rejected { bin_resource_left} => {
                             // TODO: maybe we should find a way to include
                             // validator set updates all the time. for instance,
                             // we could have recursive bins -> bin space within
@@ -374,19 +463,19 @@ where
                             // changes (issue #367)
                             tracing::debug!(
                                 ?tx_bytes,
-                                bin_space_left,
+                                bin_resource_left,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
                                 "Dropping protocol tx from the current proposal",
                             );
                             false
                         }
-                        AllocFailure::OverflowsBin { bin_size } => {
+                        AllocFailure::OverflowsBin { bin_resource} => {
                             // TODO: handle tx whose size is greater
                             // than bin size
                             tracing::warn!(
                                 ?tx_bytes,
-                                bin_size,
+                                bin_resource,
                                 proposal_height =
                                     ?pos_queries.get_current_decision_height(),
                                 "Dropping large protocol tx from the current proposal",
@@ -414,6 +503,7 @@ const fn not_enough_voting_power_msg() -> &'static str {
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
+    use std::collections::BTreeSet;
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
@@ -421,17 +511,25 @@ mod test_prepare_proposal {
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
+    use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::replay_protection;
-    use namada::proof_of_stake::{consensus_validator_set_handle, Epoch};
+    use namada::proof_of_stake::btree_set::BTreeSetShims;
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, Epoch,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
     use namada::proto::{Code, Data, Header, Section, Signature, Signed};
+    use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
     use namada::types::key::common;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
+    use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, TxType, WrapperTx};
@@ -453,8 +551,9 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use crate::node::ledger::shell::test_utils::setup_at_height;
     use crate::node::ledger::shell::test_utils::{
-        self, gen_keypair, TestShell,
+        self, gen_keypair, get_pkh_from_address, TestShell,
     };
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
 
     #[cfg(feature = "abcipp")]
@@ -537,6 +636,8 @@ mod test_prepare_proposal {
         }
     }
 
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
+
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
     /// proposed block.
@@ -565,13 +666,14 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: Default::default(),
+                    amount_per_gas_unit: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -787,14 +889,21 @@ mod test_prepare_proposal {
         should_panic(expected = "A Tendermint quorum should never")
     )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
+        use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
+
         const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
 
         let (mut shell, _recv, _, _oracle_control_recv) =
-            test_utils::setup_at_height(FIRST_HEIGHT);
+            test_utils::setup_with_cfg(test_utils::SetupCfg {
+                last_height: FIRST_HEIGHT,
+                num_validators: 2,
+            });
+
+        let params = shell.wl_storage.pos_queries().get_pos_params();
 
         // artificially change the voting power of the default validator to
-        // zero, change the block height, and commit a dummy block,
+        // one, change the block height, and commit a dummy block,
         // to move to a new epoch
         let events_epoch = shell
             .wl_storage
@@ -817,18 +926,71 @@ mod test_prepare_proposal {
                 (stake, position, address)
             })
             .collect::<Vec<_>>();
-        for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
-            validators_handle
-                .at(&val_stake)
-                .remove(&mut shell.wl_storage, &val_position)
-                .expect("Test failed");
-            validators_handle
-                .at(&0.into())
-                .insert(&mut shell.wl_storage, val_position, address)
-                .expect("Test failed");
-        }
 
-        shell.start_new_epoch();
+        let mut consensus_set: BTreeSet<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+        let val1 = consensus_set.pop_first_shim().unwrap();
+        let val2 = consensus_set.pop_first_shim().unwrap();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+        let pkh2 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val2.address.clone(),
+            Epoch::default(),
+        );
+
+        for (val_stake, val_position, address) in consensus_in_mem.into_iter() {
+            if address == wallet::defaults::validator_address() {
+                validators_handle
+                    .at(&val_stake)
+                    .remove(&mut shell.wl_storage, &val_position)
+                    .expect("Test failed");
+                validators_handle
+                    .at(&1.into())
+                    .insert(&mut shell.wl_storage, val_position, address)
+                    .expect("Test failed");
+            }
+        }
+        // Insert some stake for the second validator to prevent total stake
+        // from going to 0
+
+        let votes = vec![
+            VoteInfo {
+                validator: Some(Validator {
+                    address: pkh1.clone(),
+                    power: u128::try_from(val1.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
+                }),
+                signed_last_block: true,
+            },
+            VoteInfo {
+                validator: Some(Validator {
+                    address: pkh2,
+                    power: u128::try_from(val2.bonded_stake)
+                        .expect("Test failed")
+                        as i64,
+                }),
+                signed_last_block: true,
+            },
+        ];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()
+        };
+        shell.start_new_epoch(Some(req));
         assert_eq!(
             shell.wl_storage.pos_queries().get_epoch(
                 shell.wl_storage.pos_queries().get_current_decision_height()
@@ -932,6 +1094,20 @@ mod test_prepare_proposal {
         let mut expected_wrapper = vec![];
         let mut expected_decrypted = vec![];
 
+        // Load some tokens to tx signer to pay fees
+        let balance_key = token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.ref_to()),
+        );
+        shell
+            .wl_storage
+            .storage
+            .write(
+                &balance_key,
+                Amount::native_whole(1_000).try_to_vec().unwrap(),
+            )
+            .unwrap();
+
         let mut req = RequestPrepareProposal {
             txs: vec![],
             ..Default::default()
@@ -942,13 +1118,14 @@ mod test_prepare_proposal {
             let mut tx =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount: Default::default(),
+                        amount_per_gas_unit: 1.into(),
                         token: shell.wl_storage.storage.native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
-                    Default::default(),
+                    GAS_LIMIT_MULTIPLIER.into(),
                     #[cfg(not(feature = "mainnet"))]
+                    None,
                     None,
                 ))));
             tx.header.chain_id = shell.chain_id.clone();
@@ -961,7 +1138,12 @@ mod test_prepare_proposal {
                 &keypair,
             )));
 
-            shell.enqueue_tx(tx.clone());
+            let gas = Gas::from(
+                tx.header().wrapper().expect("Wrong tx type").gas_limit,
+            )
+            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
+            .unwrap();
+            shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
@@ -1011,13 +1193,14 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount_per_gas_unit: 0.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1063,13 +1246,14 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1104,13 +1288,14 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: Amount::zero(),
+                    amount_per_gas_unit: Amount::zero(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1157,44 +1342,42 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         let tx_code = Code::new("wasm_code".as_bytes().to_owned());
-        wrapper.set_code(tx_code.clone());
+        wrapper.set_code(tx_code);
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
-        wrapper.set_data(tx_data.clone());
+        wrapper.set_data(tx_data);
+        let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
             &keypair,
         )));
 
-        let mut new_wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount: 0.into(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                keypair_2.ref_to(),
-                Epoch(0),
-                Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
-            ))));
-        new_wrapper.header.chain_id = shell.chain_id.clone();
-        new_wrapper.header.timestamp = wrapper.header.timestamp;
-        new_wrapper.set_code(tx_code);
-        new_wrapper.set_data(tx_data);
+        new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            keypair_2.ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            &keypair_2,
         )));
 
         let req = RequestPrepareProposal {
@@ -1216,11 +1399,10 @@ mod test_prepare_proposal {
     fn test_expired_wrapper_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
         let keypair = gen_keypair();
-        let tx_time = DateTimeUtc::now();
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: 0.into(),
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1228,9 +1410,10 @@ mod test_prepare_proposal {
                 Default::default(),
                 #[cfg(not(feature = "mainnet"))]
                 None,
+                None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.header.expiration = Some(tx_time);
+        wrapper_tx.header.expiration = Some(DateTimeUtc::default());
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1254,5 +1437,245 @@ mod test_prepare_proposal {
         let result = shell.prepare_proposal(req);
         eprintln!("Proposal: {:?}", result.txs);
         assert_eq!(result.txs.len(), 0);
+    }
+
+    /// Check that a tx requiring more gas than the block limit is not included
+    /// in the block
+    #[test]
+    fn test_exceeding_max_block_gas_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let block_gas_limit =
+            namada::core::ledger::gas::get_max_block_gas(&shell.wl_storage)
+                .unwrap();
+        let keypair = gen_keypair();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            keypair.ref_to(),
+            Epoch(0),
+            (block_gas_limit + 1).into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &keypair,
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper requiring more gas than its limit is not included in
+    // the block
+    #[test]
+    fn test_exceeding_gas_limit_wrapper() {
+        let (shell, _recv, _, _) = test_utils::setup();
+        let keypair = gen_keypair();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            keypair.ref_to(),
+            Epoch(0),
+            0.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &keypair,
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper using a non-whitelisted token for fee payment is not
+    // included in the block
+    #[test]
+    fn test_fee_non_whitelisted_token() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: address::btc(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum required
+    // is not included in the block
+    #[test]
+    fn test_fee_wrong_minimum_amount() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper transactions whose fees cannot be paid is rejected
+    #[test]
+    fn test_insufficient_balance_for_fee() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 1_000_000_000.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a fee overflow in the wrapper transaction is rejected
+    #[test]
+    fn test_wrapper_fee_overflow() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: token::Amount::max(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            #[cfg(not(feature = "mainnet"))]
+            None,
+            None,
+        );
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
     }
 }

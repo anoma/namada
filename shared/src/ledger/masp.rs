@@ -1386,8 +1386,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     pub async fn gen_shielded_transfer<C: Client + Sync>(
         &mut self,
         client: &C,
-        args: &args::TxTransfer,
-        shielded_gas: bool,
+        args: args::TxTransfer,
     ) -> Result<
         Option<ShieldedTransfer>,
         builder::Error<std::convert::Infallible>,
@@ -1452,28 +1451,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let (asset_types, amount) =
             convert_amount(epoch, &args.token, amt.amount);
 
-        let tx_fee =
         // If there are shielded inputs
         if let Some(sk) = spending_key {
-            let InputAmount::Validated(fee) = args.tx.gas_amount else {
-                unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
-            };
-            // Transaction fees need to match the amount in the wrapper Transfer
-            // when MASP source is used
-            let (_, shielded_fee) =
-                convert_amount(epoch, &args.tx.gas_token, fee.amount);
-            let required_amt = if shielded_gas {
-                amount + shielded_fee.clone()
-            } else {
-                amount
-            };
-
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = self
                 .collect_unspent_notes(
                     client,
                     &to_viewing_key(&sk).vk,
-                    required_amt,
+                    amount,
                     epoch,
                 )
                 .await;
@@ -1486,15 +1471,15 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Commit the conversion notes used during summation
             for (conv, wit, value) in used_convs.values() {
                 if value.is_positive() {
-                    builder.add_sapling_convert(
-                        conv.clone(),
-                        *value as u64,
-                        wit.clone(),
-                    )
-                    .map_err(builder::Error::SaplingBuild)?;
+                    builder
+                        .add_sapling_convert(
+                            conv.clone(),
+                            *value as u64,
+                            wit.clone(),
+                        )
+                        .map_err(builder::Error::SaplingBuild)?;
                 }
             }
-            shielded_fee
         } else {
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
@@ -1509,7 +1494,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 source_enc.as_ref(),
             ));
             let script = TransparentAddress(hash.into());
-            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter()) {
+            for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
+            {
                 builder
                     .add_transparent_input(TxOut {
                         asset_type: *asset_type,
@@ -1518,10 +1504,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     })
                     .map_err(builder::Error::TransparentBuild)?;
             }
-            // No transfer fees come from the shielded transaction for non-MASP
-            // sources
-            Amount::zero()
-        };
+        }
 
         // Now handle the outputs of this transaction
         // If there is a shielded output
@@ -1570,12 +1553,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Represents the amount of inputs we are short by
             let mut additional = Amount::zero();
-            // The change left over from this transaction
-            let value_balance = builder
+            for (asset_type, amt) in builder
                 .value_balance()
-                .expect("unable to compute value balance")
-                - tx_fee.clone();
-            for (asset_type, amt) in value_balance.components() {
+                .expect("Unable to compute value balance")
+                .components()
+            {
                 if *amt >= 0 {
                     // Send the change in this asset type back to the sender
                     builder
@@ -1659,7 +1641,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // Build and return the constructed transaction
             let (masp_tx, metadata) = builder.build(
                 &self.utils.local_tx_prover(),
-                &FeeRule::non_standard(tx_fee),
+                // Fees are always paid outside of MASP
+                &FeeRule::non_standard(Amount::zero()),
             )?;
             let built = ShieldedTransfer {
                 builder: builder_clone,

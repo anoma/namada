@@ -10,6 +10,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_core::types::key::common;
+use namada_core::types::storage::Epoch;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
@@ -17,9 +18,11 @@ use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
+use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::queries::{Client, RPC};
 use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::{prepare_tx, Error};
+use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
@@ -35,8 +38,14 @@ use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn build_bridge_pool_tx<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
+>(
     client: &C,
+    wallet: &mut Wallet<U>,
+    shielded: &mut ShieldedContext<V>,
     args::EthereumBridgePool {
         tx: tx_args,
         asset,
@@ -47,8 +56,8 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
         fee_payer,
         code_path,
     }: args::EthereumBridgePool,
-    gas_payer: common::PublicKey,
-) -> Result<Tx, Error> {
+    wrapper_fee_payer: common::PublicKey,
+) -> Result<(Tx, Option<Epoch>), Error> {
     let DenominatedAmount { amount, .. } =
         validate_amount(client, amount, &BRIDGE_ADDRESS, tx_args.force)
             .await
@@ -76,16 +85,22 @@ pub async fn build_bridge_pool_tx<C: crate::ledger::queries::Client + Sync>(
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     tx.add_code_from_hash(tx_code_hash).add_data(transfer);
 
-    prepare_tx::<C>(
+    // TODO: validate balance of sender and fee payer
+
+    let epoch = prepare_tx::<C, U, V>(
         client,
+        wallet,
+        shielded,
         &tx_args,
         &mut tx,
-        gas_payer.clone(),
+        wrapper_fee_payer,
+        None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
-    .await;
-    Ok(tx)
+    .await?;
+
+    Ok((tx, epoch))
 }
 
 /// A json serializable representation of the Ethereum

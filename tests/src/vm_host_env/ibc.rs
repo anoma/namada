@@ -82,6 +82,7 @@ use namada::types::storage::{
 use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount};
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_core::ledger::gas::TxGasMeter;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerialize;
 
@@ -151,7 +152,9 @@ pub fn validate_ibc_vp_from_tx<'a>(
         &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
-        VpGasMeter::new(0),
+        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+            1_000_000.into(),
+        )),
         &keys_changed,
         &verifiers,
         vp_wasm_cache,
@@ -187,7 +190,9 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         &tx_env.wl_storage.write_log,
         tx,
         &TxIndex(0),
-        VpGasMeter::new(0),
+        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+            1_000_000.into(),
+        )),
         &keys_changed,
         &verifiers,
         vp_wasm_cache,

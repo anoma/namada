@@ -7,9 +7,8 @@ use thiserror::Error;
 use crate::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
-use crate::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType,
-};
+pub use crate::ledger::governance::storage::proposal::ProposalType;
+use crate::ledger::governance::storage::proposal::{AddRemove, PGFAction};
 use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
 use crate::types::hash::Hash;

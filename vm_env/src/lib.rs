@@ -101,6 +101,9 @@ pub mod tx {
 
         // Requires a node running with "Info" log level
         pub fn namada_tx_log_string(str_ptr: u64, str_len: u64);
+
+        /// Charge the provided amount of gas for the current tx
+        pub fn namada_tx_charge_gas(used_gas: u64);
     }
 }
 
@@ -187,9 +190,20 @@ pub mod vp {
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 
+        // Verify the signatures of a tx
+        pub fn namada_vp_verify_tx_section_signature(
+            hash_list_ptr: u64,
+            hash_list_len: u64,
+            public_keys_map_ptr: u64,
+            public_keys_map_len: u64,
+            threshold: u8,
+            max_signatures_ptr: u64,
+            max_signatures_len: u64,
+        ) -> i64;
+
         pub fn namada_vp_eval(
-            vp_code_ptr: u64,
-            vp_code_len: u64,
+            vp_code_hash_ptr: u64,
+            vp_code_hash_len: u64,
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64;
@@ -197,6 +211,9 @@ pub mod vp {
         pub fn namada_vp_verify_masp(tx_ptr: u64, tx_len: u64) -> i64;
 
         pub fn namada_vp_has_valid_pow() -> i64;
+
+        /// Charge the provided amount of gas for the current vp
+        pub fn namada_vp_charge_gas(used_gas: u64);
     }
 }
 
