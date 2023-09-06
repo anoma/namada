@@ -1001,12 +1001,12 @@ pub async fn to_ledger_vector<
                         .iter()
                         .map(|k| format!("Public key : {}", k.to_string())),
                 );
-                tv.output.extend(vec![format!("Threshold : {}", {
-                    match update_account.threshold {
-                        Some(t) => t.to_string(),
-                        _ => "none".to_string(),
-                    }
-                })]);
+                if update_account.threshold.is_some() {
+                    tv.output.extend(vec![format!(
+                        "Threshold : {}",
+                        update_account.threshold.unwrap()
+                    )])
+                }
                 tv.output.extend(vec![format!("VP type : {}", vp_code)]);
 
                 tv.output_expert
@@ -1017,12 +1017,12 @@ pub async fn to_ledger_vector<
                         .iter()
                         .map(|k| format!("Public key : {}", k.to_string())),
                 );
-                tv.output_expert.extend(vec![format!("Threshold : {}", {
-                    match update_account.threshold {
-                        Some(t) => t.to_string(),
-                        _ => "none".to_string(),
-                    }
-                })]);
+                if update_account.threshold.is_some() {
+                    tv.output_expert.extend(vec![format!(
+                        "Threshold : {}",
+                        update_account.threshold.unwrap()
+                    )])
+                }
                 tv.output_expert.extend(vec![format!(
                     "VP type : {}",
                     HEXLOWER.encode(&extra.0)
