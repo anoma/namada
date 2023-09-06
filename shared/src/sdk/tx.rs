@@ -34,7 +34,6 @@ use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 
-use super::signing::{self, TxSourcePostBalance};
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::packet::PacketData;
 use crate::ibc::applications::transfer::PrefixedCoin;
@@ -46,6 +45,7 @@ use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::ledger::masp::TransferErr::Build;
 use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
+use crate::ledger::signing::{self, TxSourcePostBalance};
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::rpc::{

@@ -15,8 +15,6 @@ pub mod protocol;
 pub mod queries;
 pub mod signing;
 pub mod storage;
-#[allow(clippy::result_large_err)]
-pub mod tx;
 pub mod vp_host_fns;
 pub mod wallet;
 
