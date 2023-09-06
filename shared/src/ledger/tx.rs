@@ -30,8 +30,6 @@ use namada_core::types::transaction::governance::{
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
-use prost::EncodeError;
-use thiserror::Error;
 
 use super::rpc::query_wasm_code_hash;
 use super::signing::{self, TxSourcePostBalance};
@@ -54,6 +52,7 @@ use crate::proto::{MaspBuilder, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
+use crate::types::error::{Error, TxError};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
@@ -62,7 +61,6 @@ use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::{pos, TxType};
 use crate::types::{storage, token};
 use crate::vm;
-use crate::vm::WasmValidationError;
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -95,169 +93,6 @@ pub const TX_CHANGE_COMMISSION_WASM: &str =
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
-
-/// Errors to do with transaction events.
-#[derive(Error, Debug, Clone)]
-pub enum Error {
-    /// Accepted tx timeout
-    #[error("Timed out waiting for tx to be accepted")]
-    AcceptTimeout,
-    /// Applied tx timeout
-    #[error("Timed out waiting for tx to be applied")]
-    AppliedTimeout,
-    /// Expect a dry running transaction
-    #[error(
-        "Expected a dry-run transaction, received a wrapper transaction \
-         instead: {0:?}"
-    )]
-    ExpectDryRun(Tx),
-    /// Expect a live running transaction
-    #[error("Cannot broadcast a dry-run transaction")]
-    ExpectLiveRun(Tx),
-    /// Error during broadcasting a transaction
-    #[error("Encountered error while broadcasting transaction: {0}")]
-    TxBroadcast(RpcError),
-    /// Invalid comission rate set
-    #[error("Invalid new commission rate, received {0}")]
-    InvalidCommissionRate(Dec),
-    /// Invalid validator address
-    #[error("The address {0} doesn't belong to any known validator account.")]
-    InvalidValidatorAddress(Address),
-    /// Not jailed at pipeline epoch
-    #[error(
-        "The validator address {0} is not jailed at epoch when it would be \
-         restored."
-    )]
-    ValidatorNotCurrentlyJailed(Address),
-    /// Validator still frozen and ineligible to be unjailed
-    #[error(
-        "The validator address {0} is currently frozen and ineligible to be \
-         unjailed."
-    )]
-    ValidatorFrozenFromUnjailing(Address),
-    /// The commission for the steward are not valid
-    #[error("Invalid steward commission: {0}.")]
-    InvalidStewardCommission(String),
-    /// The address is not a valid steward
-    #[error("The address {0} is not a valid steward.")]
-    InvalidSteward(Address),
-    /// Rate of epoch change too large for current epoch
-    #[error(
-        "New rate, {0}, is too large of a change with respect to the \
-         predecessor epoch in which the rate will take effect."
-    )]
-    TooLargeOfChange(Dec),
-    /// Error retrieving from storage
-    #[error("Error retrieving from storage")]
-    Retrieval,
-    /// No unbonded bonds ready to withdraw in the current epoch
-    #[error(
-        "There are no unbonded bonds ready to withdraw in the current epoch \
-         {0}."
-    )]
-    NoUnbondReady(Epoch),
-    /// No unbonded bonds found
-    #[error("No unbonded bonds found")]
-    NoUnbondFound,
-    /// No bonds found
-    #[error("No bonds found")]
-    NoBondFound,
-    /// Lower bond amount than the unbond
-    #[error(
-        "The total bonds of the source {0} is lower than the amount to be \
-         unbonded. Amount to unbond is {1} and the total bonds is {2}."
-    )]
-    LowerBondThanUnbond(Address, String, String),
-    /// Balance is too low
-    #[error(
-        "The balance of the source {0} of token {1} is lower than the amount \
-         to be transferred. Amount to transfer is {2} and the balance is {3}."
-    )]
-    BalanceTooLow(Address, Address, String, String),
-    /// Token Address does not exist on chain
-    #[error("The token address {0} doesn't exist on chain.")]
-    TokenDoesNotExist(Address),
-    /// Source address does not exist on chain
-    #[error("The address {0} doesn't exist on chain.")]
-    LocationDoesNotExist(Address),
-    /// Target Address does not exist on chain
-    #[error("The source address {0} doesn't exist on chain.")]
-    SourceDoesNotExist(Address),
-    /// Source Address does not exist on chain
-    #[error("The target address {0} doesn't exist on chain.")]
-    TargetLocationDoesNotExist(Address),
-    /// No Balance found for token
-    #[error("No balance found for the source {0} of token {1}")]
-    NoBalanceForToken(Address, Address),
-    /// Negative balance after transfer
-    #[error(
-        "The balance of the source {0} is lower than the amount to be \
-         transferred. Amount to transfer is {1} {2}"
-    )]
-    NegativeBalanceAfterTransfer(Box<Address>, String, Box<Address>),
-    /// No Balance found for token
-    #[error("{0}")]
-    MaspError(String),
-    /// Wasm validation failed
-    #[error("Validity predicate code validation failed with {0}")]
-    WasmValidationFailure(WasmValidationError),
-    /// Encoding transaction failure
-    #[error("Encoding tx data, {0}, shouldn't fail")]
-    EncodeTxFailure(String),
-    /// Like EncodeTxFailure but for the encode error type
-    #[error("Encoding tx data, {0}, shouldn't fail")]
-    EncodeFailure(EncodeError),
-    /// Failed to deserialize the proposal data from json
-    #[error("Failed to deserialize the proposal data: {0}")]
-    FailedGovernaneProposalDeserialize(String),
-    /// The proposal data are invalid
-    #[error("Proposal data are invalid: {0}")]
-    InvalidProposal(String),
-    /// The proposal vote is not valid
-    #[error("Proposal vote is invalid")]
-    InvalidProposalVote,
-    /// The proposal can't be voted
-    #[error("Proposal {0} can't be voted")]
-    InvalidProposalVotingPeriod(u64),
-    /// The proposal can't be found
-    #[error("Proposal {0} can't be found")]
-    ProposalDoesNotExist(u64),
-    /// Updating an VP of an implicit account
-    #[error(
-        "A validity predicate of an implicit address cannot be directly \
-         updated. You can use an established address for this purpose."
-    )]
-    ImplicitUpdate,
-    // This should be removed? or rather refactored as it communicates
-    // the same information as the ImplicitUpdate
-    /// Updating a VP of an internal implicit address
-    #[error(
-        "A validity predicate of an internal address cannot be directly \
-         updated."
-    )]
-    ImplicitInternalError,
-    /// Unexpected Error
-    #[error("Unexpected behavior reading the unbonds data has occurred")]
-    UnboundError,
-    /// Epoch not in storage
-    #[error("Proposal end epoch is not in the storage.")]
-    EpochNotInStorage,
-    /// Couldn't understand who the fee payer is
-    #[error("Either --signing-keys or --gas-payer must be available.")]
-    InvalidFeePayer,
-    /// Account threshold is not set
-    #[error("Account threshold must be set.")]
-    MissingAccountThreshold,
-    /// Not enough signature
-    #[error("Account threshold is {0} but the valid signatures are {1}.")]
-    MissingSigningKeys(u8, u8),
-    /// Invalid owner account
-    #[error("The source account {0} is not valid or doesn't exist.")]
-    InvalidAccount(String),
-    /// Other Errors that may show up when using the interface
-    #[error("{0}")]
-    Other(String),
-}
 
 /// Capture the result of running a transaction
 pub enum ProcessTxResponse {
@@ -484,7 +319,7 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(Error::ExpectLiveRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => Err(TxError::ExpectLiveRun(tx.clone())),
     }?;
 
     tracing::debug!(
@@ -508,9 +343,9 @@ pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync>(
         }
         Ok(response)
     } else {
-        Err(Error::TxBroadcast(RpcError::server(
+        Err(Error::from(TxError::TxBroadcast(RpcError::server(
             serde_json::to_string(&response).unwrap(),
-        )))
+        ))))
     }
 }
 
@@ -535,7 +370,7 @@ where
             wrapper_hash,
             decrypted_hash,
         } => Ok((tx, wrapper_hash, decrypted_hash)),
-        TxBroadcastData::DryRun(tx) => Err(Error::ExpectLiveRun(tx.clone())),
+        TxBroadcastData::DryRun(tx) => Err(TxError::ExpectLiveRun(tx.clone())),
     }?;
 
     // Broadcast the supplied transaction
@@ -557,7 +392,7 @@ where
             crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event = rpc::query_tx_status(client, wrapper_query, deadline)
             .await
-            .proceed_or(Error::AcceptTimeout)?;
+            .proceed_or(TxError::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
 
         println!(
@@ -573,7 +408,7 @@ where
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event = rpc::query_tx_status(client, decrypted_query, deadline)
                 .await
-                .proceed_or(Error::AppliedTimeout)?;
+                .proceed_or(TxError::AppliedTimeout)?;
             let parsed = TxResponse::from_event(event);
             println!(
                 "Transaction applied with result: {}",
@@ -692,7 +527,7 @@ pub async fn build_validator_commission_change<
     if rpc::is_validator(client, &validator).await {
         if rate < Dec::zero() || rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
-            return Err(Error::InvalidCommissionRate(rate));
+            return Err(Error::from(TxError::InvalidCommissionRate(rate)));
         }
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
@@ -717,21 +552,25 @@ pub async fn build_validator_commission_change<
                          effect."
                     );
                     if !tx_args.force {
-                        return Err(Error::InvalidCommissionRate(rate));
+                        return Err(Error::from(
+                            TxError::InvalidCommissionRate(rate),
+                        ));
                     }
                 }
             }
             None => {
                 eprintln!("Error retrieving from storage");
                 if !tx_args.force {
-                    return Err(Error::Retrieval);
+                    return Err(Error::from(TxError::Retrieval));
                 }
             }
         }
     } else {
         eprintln!("The given address {validator} is not a validator.");
         if !tx_args.force {
-            return Err(Error::InvalidValidatorAddress(validator));
+            return Err(Error::from(TxError::InvalidValidatorAddress(
+                validator,
+            )));
         }
     }
 
@@ -779,17 +618,17 @@ pub async fn build_update_steward_commission<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
-        return Err(Error::InvalidSteward(steward.clone()));
+        return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
     let commission = Commission::try_from(commission.as_ref())
-        .map_err(|e| Error::InvalidStewardCommission(e.to_string()))?;
+        .map_err(|e| TxError::InvalidStewardCommission(e.to_string()))?;
 
     if !commission.is_valid() && !tx_args.force {
         eprintln!("The sum of all percentage must not be greater than 1.");
-        return Err(Error::InvalidStewardCommission(
+        return Err(Error::from(TxError::InvalidStewardCommission(
             "Commission sum is greater than 1.".to_string(),
-        ));
+        )));
     }
 
     let tx_code_hash =
@@ -840,7 +679,7 @@ pub async fn build_resign_steward<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
-        return Err(Error::InvalidSteward(steward.clone()));
+        return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
     let tx_code_hash =
@@ -888,7 +727,9 @@ pub async fn build_unjail_validator<
     if !rpc::is_validator(client, &validator).await {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
-            return Err(Error::InvalidValidatorAddress(validator.clone()));
+            return Err(Error::from(TxError::InvalidValidatorAddress(
+                validator.clone(),
+            )));
         }
     }
 
@@ -907,7 +748,9 @@ pub async fn build_unjail_validator<
             &validator
         );
         if !tx_args.force {
-            return Err(Error::ValidatorNotCurrentlyJailed(validator.clone()));
+            return Err(Error::from(TxError::ValidatorNotCurrentlyJailed(
+                validator.clone(),
+            )));
         }
     }
 
@@ -934,8 +777,10 @@ pub async fn build_unjail_validator<
                     &validator
                 );
                 if !tx_args.force {
-                    return Err(Error::ValidatorFrozenFromUnjailing(
-                        validator.clone(),
+                    return Err(Error::from(
+                        TxError::ValidatorFrozenFromUnjailing(
+                            validator.clone(),
+                        ),
                     ));
                 }
             }
@@ -950,7 +795,7 @@ pub async fn build_unjail_validator<
     let _data = validator
         .clone()
         .try_to_vec()
-        .map_err(|err| Error::EncodeTxFailure(err.to_string()))?;
+        .map_err(|err| TxError::EncodeTxFailure(err.to_string()))?;
 
     let chain_id = tx_args.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, tx_args.expiration);
@@ -1021,7 +866,7 @@ pub async fn build_withdraw<
         );
         rpc::query_and_print_unbonds(client, &bond_source, &validator).await;
         if !tx_args.force {
-            return Err(Error::NoUnbondReady(epoch));
+            return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
     } else {
         println!(
@@ -1101,11 +946,11 @@ pub async fn build_unbond<
                 bond_amount.to_string_native()
             );
             if !tx_args.force {
-                return Err(Error::LowerBondThanUnbond(
+                return Err(Error::from(TxError::LowerBondThanUnbond(
                     bond_source,
                     amount.to_string_native(),
                     bond_amount.to_string_native(),
-                ));
+                )));
             }
         }
     }
@@ -1179,7 +1024,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
                          occurred"
                     );
                 } else {
-                    return Err(Error::UnboundError);
+                    return Err(Error::from(TxError::UnboundError));
                 }
             }
             std::cmp::Ordering::Equal => {
@@ -1313,7 +1158,7 @@ pub async fn build_default_proposal<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     let mut init_proposal_data =
         InitProposalData::try_from(proposal.clone())
-            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
@@ -1376,8 +1221,8 @@ pub async fn build_vote_proposal<
     epoch: Epoch,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
-    let proposal_vote =
-        ProposalVote::try_from(vote).map_err(|_| Error::InvalidProposalVote)?;
+    let proposal_vote = ProposalVote::try_from(vote)
+        .map_err(|_| TxError::InvalidProposalVote)?;
 
     let proposal_id = proposal_id.expect("Proposal id must be defined.");
     let proposal = if let Some(proposal) =
@@ -1385,7 +1230,7 @@ pub async fn build_vote_proposal<
     {
         proposal
     } else {
-        return Err(Error::ProposalDoesNotExist(proposal_id));
+        return Err(Error::from(TxError::ProposalDoesNotExist(proposal_id)));
     };
 
     let storage_vote =
@@ -1395,7 +1240,9 @@ pub async fn build_vote_proposal<
     let is_validator = rpc::is_validator(client, &voter).await;
 
     if !proposal.can_be_voted(epoch, is_validator) {
-        return Err(Error::InvalidProposalVotingPeriod(proposal_id));
+        return Err(Error::from(TxError::InvalidProposalVotingPeriod(
+            proposal_id,
+        )));
     }
 
     let delegations = rpc::get_delegators_delegation_at(
@@ -1464,7 +1311,7 @@ pub async fn build_pgf_funding_proposal<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     let mut init_proposal_data =
         InitProposalData::try_from(proposal.clone())
-            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
@@ -1522,7 +1369,7 @@ pub async fn build_pgf_stewards_proposal<
 ) -> Result<(Tx, Option<Epoch>), Error> {
     let mut init_proposal_data =
         InitProposalData::try_from(proposal.clone())
-            .map_err(|e| Error::InvalidProposal(e.to_string()))?;
+            .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
     let tx_code_hash =
         query_wasm_code_hash(client, tx_code_path.to_str().unwrap())
@@ -1615,7 +1462,7 @@ pub async fn build_ibc_transfer<
             let ibc_denom_key = ibc_denom_key(hash);
             rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
                 .await
-                .ok_or_else(|| Error::TokenDoesNotExist(args.token.clone()))?
+                .ok_or_else(|| TxError::TokenDoesNotExist(args.token.clone()))?
         }
         _ => args.token.to_string(),
     };
@@ -1661,7 +1508,7 @@ pub async fn build_ibc_transfer<
     let any_msg = msg.to_any();
     let mut data = vec![];
     prost::Message::encode(&any_msg, &mut data)
-        .map_err(Error::EncodeFailure)?;
+        .map_err(TxError::EncodeFailure)?;
 
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
@@ -1836,13 +1683,13 @@ pub async fn build_transfer<
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),
         Err(builder::Error::InsufficientFunds(_)) => {
-            Err(Error::NegativeBalanceAfterTransfer(
+            Err(TxError::NegativeBalanceAfterTransfer(
                 Box::new(source.clone()),
                 validated_amount.amount.to_string_native(),
                 Box::new(token.clone()),
             ))
         }
-        Err(err) => Err(Error::MaspError(err.to_string())),
+        Err(err) => Err(TxError::MaspError(err.to_string())),
     }?;
 
     let chain_id = args.tx.chain_id.clone().unwrap();
@@ -1964,7 +1811,7 @@ pub async fn build_init_account<
             if public_keys.len() == 1 {
                 1u8
             } else {
-                return Err(Error::MissingAccountThreshold);
+                return Err(Error::from(TxError::MissingAccountThreshold));
             }
         }
     };
@@ -2020,7 +1867,7 @@ pub async fn build_update_account<
     } else if tx_args.force {
         addr
     } else {
-        return Err(Error::LocationDoesNotExist(addr));
+        return Err(Error::from(TxError::LocationDoesNotExist(addr)));
     };
 
     let vp_code_hash = match vp_code_path {
@@ -2132,12 +1979,12 @@ async fn expect_dry_broadcast<C: crate::ledger::queries::Client + Sync>(
             tx,
             wrapper_hash: _,
             decrypted_hash: _,
-        } => Err(Error::ExpectDryRun(tx)),
+        } => Err(Error::from(TxError::ExpectDryRun(tx))),
     }
 }
 
 fn lift_rpc_error<T>(res: Result<T, RpcError>) -> Result<T, Error> {
-    res.map_err(Error::TxBroadcast)
+    res.map_err(|err| Error::from(TxError::TxBroadcast(err)))
 }
 
 /// Returns the given validator if the given address is a validator,
@@ -2158,7 +2005,7 @@ async fn known_validator_or_err<C: crate::ledger::queries::Client + Sync>(
             );
             Ok(validator)
         } else {
-            Err(Error::InvalidValidatorAddress(validator))
+            Err(Error::from(TxError::InvalidValidatorAddress(validator)))
         }
     } else {
         Ok(validator)
@@ -2202,13 +2049,9 @@ async fn source_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 ) -> Result<Address, Error> {
     let message =
         format!("The source address {} doesn't exist on chain.", token);
-    address_exists_or_err(
-        token,
-        force,
-        client,
-        message,
-        Error::SourceDoesNotExist,
-    )
+    address_exists_or_err(token, force, client, message, |err| {
+        Error::from(TxError::SourceDoesNotExist(err))
+    })
     .await
 }
 
@@ -2222,13 +2065,9 @@ async fn target_exists_or_err<C: crate::ledger::queries::Client + Sync>(
 ) -> Result<Address, Error> {
     let message =
         format!("The target address {} doesn't exist on chain.", token);
-    address_exists_or_err(
-        token,
-        force,
-        client,
-        message,
-        Error::TargetLocationDoesNotExist,
-    )
+    address_exists_or_err(token, force, client, message, |err| {
+        Error::from(TxError::TargetLocationDoesNotExist(err))
+    })
     .await
 }
 
@@ -2261,12 +2100,12 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                     );
                     Ok(token::Amount::default())
                 } else {
-                    Err(Error::BalanceTooLow(
+                    Err(Error::from(TxError::BalanceTooLow(
                         source.clone(),
                         token.clone(),
                         amount.to_string_native(),
                         balance.to_string_native(),
-                    ))
+                    )))
                 }
             }
         },
@@ -2278,7 +2117,10 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                 );
                 Ok(token::Amount::default())
             } else {
-                Err(Error::NoBalanceForToken(source.clone(), token.clone()))
+                Err(Error::from(TxError::NoBalanceForToken(
+                    source.clone(),
+                    token.clone(),
+                )))
             }
         }
     }
@@ -2294,7 +2136,7 @@ fn validate_untrusted_code_err(
             eprintln!("Validity predicate code validation failed with {}", err);
             Ok(())
         } else {
-            Err(Error::WasmValidationFailure(err))
+            Err(Error::from(TxError::WasmValidationFailure(err)))
         }
     } else {
         Ok(())
