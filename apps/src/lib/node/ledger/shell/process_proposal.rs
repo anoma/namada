@@ -6,6 +6,7 @@ use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
+use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::TempWlStorage;
 use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::types::internal::TxInQueue;
@@ -889,22 +890,9 @@ where
                     }
 
                     // Check that the fee payer has sufficient balance.
-                    let fee_unshield =
-                        wrapper.unshield_section_hash.and_then(|ref hash| {
-                            tx.get_section(hash).and_then(|section| {
-                                if let Section::MaspTx(transaction) =
-                                    section.as_ref()
-                                {
-                                    Some(transaction.to_owned())
-                                } else {
-                                    None
-                                }
-                            })
-                        });
-
                     match self.wrapper_fee_check(
                         &wrapper,
-                        fee_unshield,
+                        get_fee_unshielding_transaction(&tx, &wrapper),
                         temp_wl_storage,
                         vp_wasm_cache,
                         tx_wasm_cache,
