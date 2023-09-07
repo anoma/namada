@@ -27,6 +27,25 @@ interaction with the protocol.
 
 ## 💾 Installing
 
+You can use the node installation script available in this [repository](https://github.com/anoma/namada/blob/main/scripts/namadascript/README.md).
+
+### Script Features
+
+1. **Monitoring**
+The script automatically fetches and displays:
+   - Validator Details: Moniker, address, and balance.
+   - Wallet Information: Name, address, and balance.
+   - Node Block Height: Current block height.
+   - Synchronization Status: Indicates if the node is still syncing or if it's already synchronized.
+   - Service Status: Shows if the service is active or not.
+
+2. **Main Management Menu**
+   - Node Management: Options to install, uninstall, or restart the node.
+   - Node Status Check: Features for checking the node logs, error journal, and service status.
+   - Validator Management: Tools to check the validator's balance, initialize the validator, inspect staking, and facilitate delegation from the wallet or validator's address.
+   - Token Request: A function to request tokens.
+   - Exit: Option to close the script.
+
 There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [CometBFT](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
 
 ```shell
