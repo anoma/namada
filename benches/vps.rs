@@ -149,7 +149,7 @@ fn vp_user(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     run::vp(
-                        &vp_code_hash,
+                        vp_code_hash,
                         signed_tx,
                         &TxIndex(0),
                         &defaults::albert_address(),
@@ -296,7 +296,7 @@ fn vp_implicit(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     run::vp(
-                        &vp_code_hash,
+                        vp_code_hash,
                         tx,
                         &TxIndex(0),
                         &Address::from(&implicit_account.to_public()),
@@ -447,7 +447,7 @@ fn vp_validator(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     run::vp(
-                        &vp_code_hash,
+                        vp_code_hash,
                         signed_tx,
                         &TxIndex(0),
                         &defaults::validator_address(),
@@ -538,7 +538,7 @@ fn vp_masp(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     run::vp(
-                        &vp_code_hash,
+                        vp_code_hash,
                         &signed_tx,
                         &TxIndex(0),
                         &defaults::validator_address(),
