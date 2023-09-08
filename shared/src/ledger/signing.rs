@@ -943,7 +943,7 @@ pub async fn to_ledger_vector<
             format!("Voter : {}", vote_proposal.voter),
         ]);
         for delegation in &vote_proposal.delegations {
-            tv.output.push(format!("Delegations : {}", delegation));
+            tv.output.push(format!("Delegation : {}", delegation));
         }
 
         tv.output_expert.extend(vec![
@@ -953,7 +953,7 @@ pub async fn to_ledger_vector<
         ]);
         for delegation in vote_proposal.delegations {
             tv.output_expert
-                .push(format!("Delegations : {}", delegation));
+                .push(format!("Delegation : {}", delegation));
         }
     } else if code_hash == reveal_pk_hash {
         let public_key = common::PublicKey::try_from_slice(
