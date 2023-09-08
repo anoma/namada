@@ -1287,7 +1287,7 @@ mod tests {
                 faucet_account: None,
                 fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
-                gas_cost: BTreeMap::default(),
+                minimum_gas_price: BTreeMap::default(),
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 
