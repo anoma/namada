@@ -4,6 +4,10 @@
 
 This is a smart script developed by the [NODERS]TEAM to simplify the management and monitoring of the NAMADA node.
 
+## Attention!
+This script is developed for installation on Ubuntu only.
+Support for Mac and Windows will be added in the future.
+
 ## Features
 
 ### 1. **Monitoring**
