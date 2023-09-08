@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use namada::ledger::queries::Client;
-use namada::ledger::rpc::wait_until_node_is_synched;
+use namada::sdk::queries::Client;
+use namada::sdk::rpc::wait_until_node_is_synched;
 use namada::tendermint_rpc::HttpClient;
 use namada::types::control_flow::Halt;
 use tendermint_config::net::Address as TendermintAddress;

@@ -4,8 +4,6 @@
 // Re-export to show in rustdoc!
 pub use shell::Shell;
 use shell::SHELL;
-#[cfg(any(test, feature = "async-client"))]
-pub use types::Client;
 pub use types::{
     EncodedResponseQuery, Error, RequestCtx, RequestQuery, ResponseQuery,
     Router,
@@ -18,6 +16,8 @@ pub use self::shell::eth_bridge::{
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};
 use super::storage_api;
+#[cfg(any(test, feature = "async-client"))]
+pub use crate::sdk::queries::Client;
 use crate::types::storage::BlockHeight;
 
 #[macro_use]

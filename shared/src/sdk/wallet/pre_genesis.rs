@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use crate::ledger::wallet;
-use crate::ledger::wallet::{store, StoredKeypair};
+use crate::sdk::wallet;
+use crate::sdk::wallet::{store, StoredKeypair};
 use crate::types::key::{common, SchemeType};
 
 /// Ways in which wallet store operations can fail

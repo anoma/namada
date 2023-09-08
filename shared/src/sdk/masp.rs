@@ -59,18 +59,16 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::ledger::args::InputAmount;
-use crate::ledger::queries::Client;
-use crate::ledger::rpc::{query_conversion, query_storage_value};
-use crate::ledger::tx::decode_component;
-use crate::ledger::{args, rpc};
 use crate::proto::Tx;
+use crate::sdk::args::InputAmount;
+use crate::sdk::error::{EncodingError, Error, PinnedBalanceError, QueryError};
+use crate::sdk::queries::Client;
+use crate::sdk::rpc::{query_conversion, query_storage_value};
+use crate::sdk::tx::decode_component;
+use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
-use crate::types::error::{
-    EncodingError, Error, PinnedBalanceError, QueryError,
-};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;

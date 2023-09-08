@@ -9,7 +9,7 @@ use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;
 use thiserror::Error;
 
-use crate::types::error::Error::Pinned;
+use crate::sdk::error::Error::Pinned;
 use crate::vm::WasmValidationError;
 
 /// The standard Result type that most code ought to return

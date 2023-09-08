@@ -11,8 +11,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde_json::Value;
 
 use crate::ledger::governance::utils::ProposalEvent;
+use crate::sdk::error::{EncodingError, Error, EventError};
 use crate::tendermint_proto::abci::EventAttribute;
-use crate::types::error::{EncodingError, Error, EventError};
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::TxType;

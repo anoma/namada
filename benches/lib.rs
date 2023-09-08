@@ -62,18 +62,18 @@ use namada::ibc::core::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
-use namada::ledger::args::InputAmount;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
-use namada::ledger::masp::{
-    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
-use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
+use namada::sdk::args::InputAmount;
+use namada::sdk::masp::{
+    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
+use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
@@ -700,7 +700,7 @@ impl Default for BenchShieldedCtx {
                     .fvk
                     .vk;
             let (div, _g_d) =
-                namada::ledger::masp::find_valid_diversifier(&mut OsRng);
+                namada::sdk::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = ctx
                 .wallet
