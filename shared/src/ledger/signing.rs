@@ -277,10 +277,11 @@ pub async fn aux_signing_data<
     };
 
     if fee_payer == masp_tx_key().to_public() {
-        panic!(
+        other_err(
             "The gas payer cannot be the MASP, please provide a different gas \
              payer."
-        );
+                .to_string(),
+        )?;
     }
 
     Ok(SigningTxData {
@@ -301,18 +302,18 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     total_fee: Amount,
     balance: Amount,
     source: Address,
-) -> Option<crate::core::ledger::testnet_pow::Solution> {
+) -> Result<Option<crate::core::ledger::testnet_pow::Solution>, Error> {
     let is_bal_sufficient = total_fee <= balance;
     if !is_bal_sufficient {
         let token_addr = args.fee_token.clone();
-        let err_msg = format!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, total_fee).await,
-            format_denominated_amount(client, &token_addr, balance).await,
-        );
         if !args.force && cfg!(feature = "mainnet") {
-            panic!("{}", err_msg);
+            let fee_amount =
+                format_denominated_amount(client, &token_addr, total_fee).await;
+            let balance =
+                format_denominated_amount(client, &token_addr, balance).await;
+            return Err(Error::from(TxError::BalanceTooLow(
+                source, token_addr, fee_amount, balance,
+            )));
         }
     }
     // A PoW solution can be used to allow zero-fee testnet transactions
@@ -325,9 +326,9 @@ pub async fn solve_pow_challenge<C: crate::ledger::queries::Client + Sync>(
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
-        Some(solution)
+        Ok(Some(solution))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -339,7 +340,7 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     tx: &mut Tx,
     requires_pow: bool,
     source: Address,
-) {
+) -> Result<(), Error> {
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
         C,
@@ -349,16 +350,17 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
     .and_then(|map| {
         map.get(&args.fee_token)
             .map(ToOwned::to_owned)
-            .ok_or_else(|| Error::Other("no fee found".to_string()))
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "Could not retrieve from storage the gas cost for token {}",
+                    args.fee_token
+                ))
+            })
     }) {
         Ok(amount) => amount,
-        Err(_e) => {
-            eprintln!(
-                "Could not retrieve the gas cost for token {}",
-                args.fee_token
-            );
+        Err(e) => {
             if !args.force {
-                panic!();
+                return Err(e);
             } else {
                 token::Amount::default()
             }
@@ -408,13 +410,15 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
             balance,
             source,
         )
-        .await;
+        .await?;
         wrapper.fee = Fee {
             amount_per_gas_unit: fee_amount,
             token: args.fee_token.clone(),
         };
         wrapper.pow_solution = pow_solution;
     }
+
+    Ok(())
 }
 
 /// Informations about the post-tx balance of the tx's source. Used to correctly
@@ -444,7 +448,7 @@ pub async fn wrap_tx<
     epoch: Epoch,
     fee_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) -> Option<Epoch> {
+) -> Result<Option<Epoch>, Error> {
     let fee_payer_address = Address::from(&fee_payer);
     // Validate fee amount and token
     let gas_cost_key = parameter_storage::get_gas_cost_key();
@@ -456,16 +460,17 @@ pub async fn wrap_tx<
     .and_then(|map| {
         map.get(&args.fee_token)
             .map(ToOwned::to_owned)
-            .ok_or_else(|| Error::Other("no fee found".to_string()))
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "Could not retrieve from storage the gas cost for token {}",
+                    args.fee_token
+                ))
+            })
     }) {
         Ok(amount) => amount,
-        Err(_e) => {
-            eprintln!(
-                "Could not retrieve the gas cost for token {}",
-                args.fee_token
-            );
+        Err(e) => {
             if !args.force {
-                panic!();
+                return Err(e);
             } else {
                 token::Amount::default()
             }
@@ -587,26 +592,35 @@ pub async fn wrap_tx<
                             && !args.force
                             && cfg!(feature = "mainnet")
                         {
-                            panic!(
-                                "Fee unshielding descriptions exceed the limit"
-                            );
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(format!(
+                                    "Descriptions exceed the limit: found \
+                                     {descriptions}, limit \
+                                     {descriptions_limit}"
+                                )),
+                            ));
                         }
 
                         updated_balance += total_fee;
                         (Some(transaction), Some(unshielding_epoch))
                     }
                     Ok(None) => {
-                        eprintln!("Missing unshielding transaction");
                         if !args.force && cfg!(feature = "mainnet") {
-                            panic!();
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(
+                                    "Missing unshielding transaction"
+                                        .to_string(),
+                                ),
+                            ));
                         }
 
                         (None, None)
                     }
                     Err(e) => {
-                        eprintln!("Error in fee unshielding generation: {}", e);
                         if !args.force && cfg!(feature = "mainnet") {
-                            panic!();
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(e.to_string()),
+                            ));
                         }
 
                         (None, None)
@@ -614,21 +628,26 @@ pub async fn wrap_tx<
                 }
             } else {
                 let token_addr = args.fee_token.clone();
-                let err_msg = format!(
-                    "The wrapper transaction source doesn't have enough \
-                     balance to pay fee {}, balance: {}.",
-                    format_denominated_amount(client, &token_addr, total_fee)
-                        .await,
-                    format_denominated_amount(
+                if !args.force && cfg!(feature = "mainnet") {
+                    let fee_amount = format_denominated_amount(
                         client,
                         &token_addr,
-                        updated_balance
+                        total_fee,
                     )
-                    .await,
-                );
-                eprintln!("{}", err_msg);
-                if !args.force && cfg!(feature = "mainnet") {
-                    panic!("{}", err_msg);
+                    .await;
+
+                    let balance = format_denominated_amount(
+                        client,
+                        &token_addr,
+                        updated_balance,
+                    )
+                    .await;
+                    return Err(Error::from(TxError::BalanceTooLowForFees(
+                        fee_payer_address,
+                        token_addr,
+                        fee_amount,
+                        balance,
+                    )));
                 }
 
                 (None, None)
@@ -662,7 +681,7 @@ pub async fn wrap_tx<
         updated_balance,
         fee_payer_address,
     )
-    .await;
+    .await?;
 
     tx.add_wrapper(
         Fee {
@@ -678,7 +697,7 @@ pub async fn wrap_tx<
         unshield_section_hash,
     );
 
-    unshielding_epoch
+    Ok(unshielding_epoch)
 }
 
 #[allow(clippy::result_large_err)]
