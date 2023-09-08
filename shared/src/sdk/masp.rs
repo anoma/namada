@@ -61,6 +61,7 @@ use thiserror::Error;
 
 use crate::proto::Tx;
 use crate::sdk::args::InputAmount;
+use crate::sdk::error::{EncodingError, Error, PinnedBalanceError, QueryError};
 use crate::sdk::queries::Client;
 use crate::sdk::rpc::{query_conversion, query_storage_value};
 use crate::sdk::tx::decode_component;
@@ -68,9 +69,6 @@ use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
-use crate::types::error::{
-    EncodingError, Error, PinnedBalanceError, QueryError,
-};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;

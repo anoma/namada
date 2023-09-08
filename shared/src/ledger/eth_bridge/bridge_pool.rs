@@ -23,6 +23,7 @@ use crate::ledger::queries::{
 };
 use crate::proto::Tx;
 use crate::sdk::args;
+use crate::sdk::error::Error;
 use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
 use crate::sdk::tx::prepare_tx;
@@ -32,7 +33,6 @@ use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
-use crate::types::error::Error;
 use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,

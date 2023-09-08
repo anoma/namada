@@ -31,17 +31,18 @@ use crate::ledger::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::ledger::queries::RPC;
 use crate::proto::Tx;
 use crate::sdk::args::InputAmount;
+use crate::sdk::error;
+use crate::sdk::error::{EncodingError, Error, QueryError};
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::Proof;
 use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
-use crate::types::error::{EncodingError, Error, QueryError};
 use crate::types::hash::Hash;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::{error, storage, token};
+use crate::types::{storage, token};
 
 /// Query the status of a given transaction.
 ///

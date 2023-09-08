@@ -18,11 +18,10 @@ use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::sdk::rpc::{TxBroadcastData, TxResponse};
 use namada::sdk::wallet::{Wallet, WalletUtils};
-use namada::sdk::{masp, signing, tx};
+use namada::sdk::{error, masp, signing, tx};
 use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
-use namada::types::error;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
 

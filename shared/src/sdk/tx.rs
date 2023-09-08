@@ -44,6 +44,7 @@ use crate::ibc::Height as IbcHeight;
 use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
+use crate::sdk::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::sdk::masp::TransferErr::Build;
 use crate::sdk::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
 use crate::sdk::rpc::{
@@ -55,7 +56,6 @@ use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
-use crate::types::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
