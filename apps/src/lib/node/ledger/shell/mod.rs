@@ -988,7 +988,6 @@ where
             let config = namada::eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
-                governance_contract: config.contracts.governance.address,
                 start_block,
             };
             tracing::info!(
@@ -2189,7 +2188,6 @@ mod abciplus_mempool_tests {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
             transfers: vec![],
-            valid_transfers_map: vec![],
         };
         let eth_vext = EthereumTxData::EthEventsVext(
             ethereum_events::Vext {
@@ -2242,7 +2240,6 @@ mod abciplus_mempool_tests {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
             transfers: vec![],
-            valid_transfers_map: vec![],
         };
         let ext = {
             let ext = ethereum_events::Vext {
@@ -2276,7 +2273,6 @@ mod abciplus_mempool_tests {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
             transfers: vec![],
-            valid_transfers_map: vec![],
         };
         let ext = {
             let ext = ethereum_events::Vext {

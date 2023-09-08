@@ -45,29 +45,17 @@ where
     H: 'static + StorageHasher + Sync,
 {
     match event {
-        EthereumEvent::TransfersToNamada {
-            transfers,
-            valid_transfers_map,
-            nonce,
-        } => act_on_transfers_to_namada(
-            wl_storage,
-            TransfersToNamada {
-                transfers,
-                valid_transfers_map,
-                nonce,
-            },
-        ),
+        EthereumEvent::TransfersToNamada { transfers, nonce } => {
+            act_on_transfers_to_namada(
+                wl_storage,
+                TransfersToNamada { transfers, nonce },
+            )
+        }
         EthereumEvent::TransfersToEthereum {
             ref transfers,
             ref relayer,
-            ref valid_transfers_map,
             ..
-        } => act_on_transfers_to_eth(
-            wl_storage,
-            transfers,
-            valid_transfers_map,
-            relayer,
-        ),
+        } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(BTreeSet::default())
@@ -93,28 +81,11 @@ where
         .transfers_to_namada
         .push_and_iter(transfer_event)
         .collect();
-    for TransfersToNamada {
-        transfers,
-        valid_transfers_map,
-        ..
-    } in confirmed_events
-    {
+    for TransfersToNamada { transfers, .. } in confirmed_events {
         update_transfers_to_namada_state(
             wl_storage,
             &mut changed_keys,
-            transfers.iter().zip(valid_transfers_map.iter()).filter_map(
-                |(transfer, &valid)| {
-                    if valid {
-                        Some(transfer)
-                    } else {
-                        tracing::debug!(
-                            ?transfer,
-                            "Ignoring invalid transfer to Namada event"
-                        );
-                        None
-                    }
-                },
-            ),
+            transfers.iter(),
         )?;
     }
     Ok(changed_keys)
@@ -329,18 +300,13 @@ where
 fn act_on_transfers_to_eth<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     transfers: &[TransferToEthereum],
-    valid_transfers: &[bool],
     relayer: &Address,
 ) -> Result<BTreeSet<Key>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    tracing::debug!(
-        ?transfers,
-        ?valid_transfers,
-        "Acting on transfers to Ethereum"
-    );
+    tracing::debug!(?transfers, "Acting on transfers to Ethereum");
     let mut changed_keys = BTreeSet::default();
 
     // the BP nonce should always be incremented, even if no valid
@@ -362,9 +328,7 @@ where
         .filter(is_pending_transfer_key)
         .collect();
     // Remove the completed transfers from the bridge pool
-    for (event, is_valid) in
-        transfers.iter().zip(valid_transfers.iter().copied())
-    {
+    for event in transfers {
         let (pending_transfer, key) = if let Some((pending, key)) =
             wl_storage.ethbridge_queries().lookup_transfer_to_eth(event)
         {
@@ -373,27 +337,15 @@ where
             hints::cold();
             unreachable!("The transfer should exist in the bridge pool");
         };
-        if hints::likely(is_valid) {
-            tracing::debug!(
-                ?pending_transfer,
-                "Valid transfer to Ethereum detected, compensating the \
-                 relayer and burning any Ethereum assets in Namada"
-            );
-            changed_keys.append(&mut update_transferred_asset_balances(
-                wl_storage,
-                &pending_transfer,
-            )?);
-        } else {
-            tracing::debug!(
-                ?pending_transfer,
-                "Invalid transfer to Ethereum detected, compensating the \
-                 relayer and refunding assets in Namada"
-            );
-            changed_keys.append(&mut refund_transferred_assets(
-                wl_storage,
-                &pending_transfer,
-            )?);
-        }
+        tracing::debug!(
+            ?pending_transfer,
+            "Valid transfer to Ethereum detected, compensating the relayer \
+             and burning any Ethereum assets in Namada"
+        );
+        changed_keys.append(&mut update_transferred_asset_balances(
+            wl_storage,
+            &pending_transfer,
+        )?);
         let pool_balance_key =
             balance_key(&pending_transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
         let relayer_rewards_key =
@@ -625,8 +577,7 @@ mod tests {
     use namada_core::types::address::{gen_established_address, nam, wnam};
     use namada_core::types::eth_bridge_pool::GasFee;
     use namada_core::types::ethereum_events::testing::{
-        arbitrary_eth_address, arbitrary_keccak_hash, arbitrary_nonce,
-        DAI_ERC20_ETH_ADDRESS,
+        arbitrary_keccak_hash, arbitrary_nonce, DAI_ERC20_ETH_ADDRESS,
     };
     use namada_core::types::time::DurationSecs;
     use namada_core::types::token::Amount;
@@ -860,21 +811,11 @@ mod tests {
         let mut wl_storage = TestWlStorage::default();
         test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let initial_stored_keys_count = stored_keys_count(&wl_storage);
-        let events = vec![
-            EthereumEvent::NewContract {
-                name: "bridge".to_string(),
-                address: arbitrary_eth_address(),
-            },
-            EthereumEvent::UpgradedContract {
-                name: "bridge".to_string(),
-                address: arbitrary_eth_address(),
-            },
-            EthereumEvent::ValidatorSetUpdate {
-                nonce: arbitrary_nonce(),
-                bridge_validator_hash: arbitrary_keccak_hash(),
-                governance_validator_hash: arbitrary_keccak_hash(),
-            },
-        ];
+        let events = vec![EthereumEvent::ValidatorSetUpdate {
+            nonce: arbitrary_nonce(),
+            bridge_validator_hash: arbitrary_keccak_hash(),
+            governance_validator_hash: arbitrary_keccak_hash(),
+        }];
 
         for event in events {
             act_on(&mut wl_storage, event.clone()).unwrap();
@@ -904,7 +845,6 @@ mod tests {
         }];
         let event = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
-            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
         };
 
@@ -1084,7 +1024,6 @@ mod tests {
             .collect();
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
-            valid_transfers_map: transfers.iter().map(|_| true).collect(),
             transfers,
             relayer: relayer.clone(),
         };
@@ -1235,7 +1174,6 @@ mod tests {
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
             transfers: vec![],
-            valid_transfers_map: vec![],
             relayer: gen_implicit_address(),
         };
         let _ = act_on(&mut wl_storage, event).unwrap();
@@ -1428,17 +1366,16 @@ mod tests {
             ],
         );
         init_balance(&mut wl_storage, &pending_transfers);
-        let (transfers, valid_transfers_map) = pending_transfers
+        let transfers = pending_transfers
             .into_iter()
             .map(|ref transfer| {
                 let transfer_to_eth: TransferToEthereum = transfer.into();
-                (transfer_to_eth, true)
+                transfer_to_eth
             })
-            .unzip();
+            .collect();
         let relayer = gen_established_address("random");
         let event = EthereumEvent::TransfersToEthereum {
             nonce: arbitrary_nonce(),
-            valid_transfers_map,
             transfers,
             relayer,
         };

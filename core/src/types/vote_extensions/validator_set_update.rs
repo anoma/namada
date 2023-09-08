@@ -297,6 +297,24 @@ fn compute_hash(
     ])
 }
 
+/// Given a validator's [`EthAddress`] and its respective
+/// [`EthBridgeVotingPower`], return an encoded representation
+/// of this data, understood by the smart contract.
+#[inline]
+fn encode_validator_data(
+    address: EthAddress,
+    voting_power: EthBridgeVotingPower,
+) -> [u8; 32] {
+    let address = address.0;
+    let voting_power = u128::from(voting_power).to_be_bytes();
+
+    let mut buffer = [0u8; 32];
+    buffer[..20].copy_from_slice(&address);
+    buffer[20..].copy_from_slice(&voting_power[4..]);
+
+    buffer
+}
+
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
@@ -322,13 +340,10 @@ impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
             epoch,
         } = valset;
         ethbridge_structs::ValidatorSetArgs {
-            validators: validators
+            validator_set: validators
                 .into_iter()
-                .map(|addr| addr.0.into())
-                .collect(),
-            powers: voting_powers
-                .into_iter()
-                .map(|power| u128::from(power).into())
+                .zip(voting_powers.into_iter())
+                .map(|(addr, power)| encode_validator_data(addr, power))
                 .collect(),
             nonce: epoch.0.into(),
         }
@@ -337,20 +352,17 @@ impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
 
 impl Encode<1> for ValidatorSetArgs {
     fn tokenize(&self) -> [Token; 1] {
-        let addrs = Token::Array(
+        let validator_set = Token::Array(
             self.validators
                 .iter()
-                .map(|addr| Token::Address(addr.0.into()))
-                .collect(),
-        );
-        let powers = Token::Array(
-            self.voting_powers
-                .iter()
-                .map(|&power| Token::Uint(power.into()))
+                .zip(self.voting_powers.iter())
+                .map(|(&addr, &power)| {
+                    Token::FixedBytes(encode_validator_data(addr, power).into())
+                })
                 .collect(),
         );
         let nonce = Token::Uint(self.epoch.0.into());
-        [Token::Tuple(vec![addrs, powers, nonce])]
+        [Token::Tuple(vec![validator_set, nonce])]
     }
 }
 

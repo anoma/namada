@@ -235,8 +235,6 @@ pub struct TransfersToNamada {
     pub nonce: Uint,
     /// The batch of transfers
     pub transfers: Vec<TransferToNamada>,
-    /// The indices of the transfers which succeeded or failed
-    pub valid_transfers_map: Vec<bool>,
 }
 
 impl GetEventNonce for TransfersToNamada {
@@ -249,16 +247,8 @@ impl GetEventNonce for TransfersToNamada {
 impl From<TransfersToNamada> for EthereumEvent {
     #[inline]
     fn from(event: TransfersToNamada) -> Self {
-        let TransfersToNamada {
-            nonce,
-            transfers,
-            valid_transfers_map,
-        } = event;
-        Self::TransfersToNamada {
-            nonce,
-            transfers,
-            valid_transfers_map,
-        }
+        let TransfersToNamada { nonce, transfers } = event;
+        Self::TransfersToNamada { nonce, transfers }
     }
 }
 
@@ -285,9 +275,6 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToNamada>,
-        /// The indices of the transfers which succeeded or failed
-        #[allow(dead_code)]
-        valid_transfers_map: Vec<bool>,
     },
     /// A confirmation event that a batch of transfers have been made
     /// from Namada to Ethereum
@@ -298,9 +285,6 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
-        /// The indices of the transfers which succeeded or failed
-        #[allow(dead_code)]
-        valid_transfers_map: Vec<bool>,
         /// The Namada address that receives the gas fees
         /// for relaying a batch of transfers
         #[allow(dead_code)]
@@ -318,25 +302,6 @@ pub enum EthereumEvent {
         /// Hash of the validators in the governance contract
         #[allow(dead_code)]
         governance_validator_hash: KeccakHash,
-    },
-    /// Event indication that a new smart contract has been
-    /// deployed
-    NewContract {
-        /// Name of the contract
-        #[allow(dead_code)]
-        name: String,
-        /// Address of the contract on Ethereum
-        #[allow(dead_code)]
-        address: EthAddress,
-    },
-    /// Event indicating that a smart contract has been updated
-    UpgradedContract {
-        /// Name of the contract
-        #[allow(dead_code)]
-        name: String,
-        /// Address of the contract on Ethereum
-        #[allow(dead_code)]
-        address: EthAddress,
     },
 }
 
@@ -417,7 +382,7 @@ impl From<Erc20Transfer> for TransferToEthereum {
             },
             asset: EthAddress(transfer.from.0),
             receiver: EthAddress(transfer.to.0),
-            checksum: Hash(transfer.namada_data_digest),
+            checksum: Hash(transfer.data_digest),
         }
     }
 }
@@ -530,7 +495,6 @@ pub mod testing {
                 asset: arbitrary_eth_address(),
                 receiver,
             }],
-            valid_transfers_map: vec![true],
         }
     }
 }

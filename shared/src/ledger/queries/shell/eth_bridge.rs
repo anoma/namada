@@ -16,7 +16,7 @@ use namada_core::types::eth_bridge_pool::PendingTransferAppendix;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
-use namada_core::types::ethereum_structs::RelayProof;
+use namada_core::types::ethereum_structs;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
 use namada_core::types::token::Amount;
 use namada_core::types::vote_extensions::validator_set_update::{
@@ -31,8 +31,7 @@ use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
-    bridge_contract_key, governance_contract_key, native_erc20_key,
-    vote_tallies,
+    bridge_contract_key, native_erc20_key, vote_tallies,
 };
 use namada_proof_of_stake::pos_queries::PosQueries;
 
@@ -69,11 +68,18 @@ pub struct GenBridgePoolProofReq<'transfers, 'relayer> {
     pub with_appendix: bool,
 }
 
+/// Arguments to pass to `transfer_to_erc`.
+pub type TransferToErcArgs = (
+    ethereum_structs::ValidatorSetArgs,
+    Vec<ethereum_structs::Signature>,
+    ethereum_structs::RelayProof,
+);
+
 /// Response data returned by `generate_bridge_pool_proof`.
 #[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct GenBridgePoolProofRsp {
-    /// Ethereum ABI encoded [`RelayProof`].
-    pub abi_encoded_proof: Vec<u8>,
+    /// Ethereum ABI encoded arguments to pass to `transfer_to_erc`.
+    pub abi_encoded_args: Vec<u8>,
     /// Appendix data of all requested pending transfers.
     pub appendices: Option<Vec<PendingTransferAppendix<'static>>>,
 }
@@ -81,9 +87,9 @@ pub struct GenBridgePoolProofRsp {
 impl GenBridgePoolProofRsp {
     /// Retrieve all [`PendingTransfer`] instances returned from the RPC server.
     pub fn pending_transfers(self) -> impl Iterator<Item = PendingTransfer> {
-        RelayProof::decode(&self.abi_encoded_proof)
+        TransferToErcArgs::decode(&self.abi_encoded_args)
             .into_iter()
-            .flat_map(|proof| proof.transfers)
+            .flat_map(|(_, _, proof)| proof.transfers)
             .zip(self.appendices.into_iter().flatten())
             .map(|(event, appendix)| {
                 let event: TransferToEthereum = event.into();
@@ -126,11 +132,6 @@ router! {ETH_BRIDGE,
     // The request may fail if no validator set exists at that epoch.
     ( "validator_set" / "consensus" / [epoch: Epoch] )
         -> EncodeCell<ValidatorSetArgs> = read_consensus_valset,
-
-    // Read the address and version of the Ethereum bridge's Governance
-    // smart contract.
-    ( "contracts" / "governance" )
-        -> UpgradeableContract = read_governance_contract,
 
     // Read the address and version of the Ethereum bridge's Bridge
     // smart contract.
@@ -200,19 +201,6 @@ where
         ));
     };
     Ok(contract)
-}
-
-/// Read the address and version of the Ethereum bridge's Governance
-/// smart contract.
-#[inline]
-fn read_governance_contract<D, H>(
-    ctx: RequestCtx<'_, D, H>,
-) -> storage_api::Result<UpgradeableContract>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    read_contract(&governance_contract_key(), ctx)
 }
 
 /// Read the address and version of the Ethereum bridge's Bridge
@@ -411,12 +399,7 @@ where
                     .wl_storage
                     .ethbridge_queries()
                     .get_validator_set_args(None);
-                let relay_proof = RelayProof {
-                    validator_set_args: validator_args.into(),
-                    signatures: sort_sigs(
-                        &voting_powers,
-                        &signed_root.signatures,
-                    ),
+                let relay_proof = ethereum_structs::RelayProof {
                     transfers,
                     pool_root: signed_root.data.0.0,
                     proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
@@ -424,10 +407,16 @@ where
                     batch_nonce: signed_root.data.1.into(),
                     relayer_address: relayer.to_string(),
                 };
+                let validator_set: ethereum_structs::ValidatorSetArgs =
+                    validator_args.into();
+                let signatures =
+                    sort_sigs(&voting_powers, &signed_root.signatures);
                 let rsp = GenBridgePoolProofRsp {
-                    abi_encoded_proof: ethers::abi::AbiEncode::encode(
+                    abi_encoded_args: ethers::abi::AbiEncode::encode((
+                        validator_set,
+                        signatures,
                         relay_proof,
-                    ),
+                    )),
                     appendices: with_appendix.then_some(appendices),
                 };
                 let data = rsp.try_to_vec().into_storage_result()?;
@@ -1072,9 +1061,7 @@ mod test_ethbridge_router {
             .wl_storage
             .ethbridge_queries()
             .get_validator_set_args(None);
-        let data = RelayProof {
-            validator_set_args: validator_args.into(),
-            signatures: sort_sigs(&voting_powers, &signed_root.signatures),
+        let relay_proof = ethereum_structs::RelayProof {
             transfers: vec![(&transfer).into()],
             pool_root: signed_root.data.0.0,
             proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
@@ -1082,8 +1069,15 @@ mod test_ethbridge_router {
             batch_nonce: Default::default(),
             relayer_address: bertha_address().to_string(),
         };
-        let proof = ethers::abi::AbiEncode::encode(data);
-        assert_eq!(proof, resp.data.abi_encoded_proof);
+        let signatures = sort_sigs(&voting_powers, &signed_root.signatures);
+        let validator_set: ethereum_structs::ValidatorSetArgs =
+            validator_args.into();
+        let encoded = ethers::abi::AbiEncode::encode((
+            validator_set,
+            signatures,
+            relay_proof,
+        ));
+        assert_eq!(encoded, resp.data.abi_encoded_args);
     }
 
     /// Test if the merkle tree including a transfer has not had its
@@ -1291,7 +1285,6 @@ mod test_ethbridge_router {
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
             transfers: vec![event_transfer.clone()],
-            valid_transfers_map: vec![true],
             relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);

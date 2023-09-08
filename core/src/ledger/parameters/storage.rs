@@ -23,8 +23,6 @@ struct Keys {
     native_erc20: &'static str,
     /// Sub-lkey for storing the Ethereum address of the bridge contract.
     bridge_contract_address: &'static str,
-    /// Sub-key for storing the Ethereum address of the governance contract.
-    governance_contract_address: &'static str,
     // ========================================
     // PoS parameters
     // ========================================

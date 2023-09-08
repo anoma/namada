@@ -107,10 +107,6 @@ pub fn bootstrap_ethereum_bridge(
                 address: EthAddress([2; 20]),
                 version: ContractVersion::default(),
             },
-            governance: UpgradeableContract {
-                address: EthAddress([3; 20]),
-                version: ContractVersion::default(),
-            },
         },
     };
     config.init_storage(wl_storage);
@@ -221,10 +217,6 @@ pub fn init_storage_with_validators(
             native_erc20: wnam(),
             bridge: UpgradeableContract {
                 address: EthAddress([42; 20]),
-                version: Default::default(),
-            },
-            governance: UpgradeableContract {
-                address: EthAddress([18; 20]),
                 version: Default::default(),
             },
         },

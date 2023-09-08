@@ -860,10 +860,6 @@ mod test_bridge_pool_vp {
                     address: EthAddress([42; 20]),
                     version: Default::default(),
                 },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
-                    version: Default::default(),
-                },
             },
         };
         let mut wl_storage = WlStorage {
