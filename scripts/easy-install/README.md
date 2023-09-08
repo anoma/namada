@@ -25,7 +25,7 @@ The script automatically fetches and showcases:
 <pre>
 sudo apt-get update
 sudo apt-get install subversion
-svn export https://github.com/anoma/namada/trunk/scripts/namadascript
+svn export https://github.com/anoma/namada/trunk/scripts/easy-install
 </pre>
 
 ## Usage
