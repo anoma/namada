@@ -36,7 +36,7 @@ svn export https://github.com/anoma/namada/trunk/scripts/easy-install
 To start the script, navigate to the directory containing the script and run:
 
 <pre>
-cd namadascript
+cd easy-install
 . menu.sh
 </pre>
 
