@@ -2106,8 +2106,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
+version = "0.24.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -2117,8 +2117,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
+version = "0.24.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -2128,40 +2128,17 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-events"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
+version = "0.24.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
 dependencies = [
  "ethbridge-bridge-events",
- "ethbridge-governance-events",
  "ethers",
-]
-
-[[package]]
-name = "ethbridge-governance-contract"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
-dependencies = [
- "ethbridge-governance-events",
- "ethbridge-structs",
- "ethers",
- "ethers-contract",
-]
-
-[[package]]
-name = "ethbridge-governance-events"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
-dependencies = [
- "ethabi",
- "ethbridge-structs",
- "ethers",
- "ethers-contract",
 ]
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.23.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
+version = "0.24.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
 dependencies = [
  "ethabi",
  "ethers",
@@ -4088,7 +4065,6 @@ dependencies = [
  "derivation-path",
  "derivative",
  "ethbridge-bridge-contract",
- "ethbridge-governance-contract",
  "ethers",
  "eyre",
  "futures",
@@ -4167,7 +4143,6 @@ dependencies = [
  "ethabi",
  "ethbridge-bridge-events",
  "ethbridge-events",
- "ethbridge-governance-events",
  "eyre",
  "fd-lock",
  "ferveo",

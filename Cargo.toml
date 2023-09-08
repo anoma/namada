@@ -67,12 +67,10 @@ directories = "4.0.1"
 ed25519-consensus = "1.2.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
-ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
-ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
-ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0" }
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
+ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
 ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.5"
