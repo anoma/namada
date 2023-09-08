@@ -328,7 +328,7 @@ impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
                 .collect(),
             powers: voting_powers
                 .into_iter()
-                .map(|power| u64::from(power).into())
+                .map(|power| u128::from(power).into())
                 .collect(),
             nonce: epoch.0.into(),
         }

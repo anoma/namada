@@ -198,7 +198,7 @@ mod tests {
                 )
                 .expect("Test failed"),
             ],
-            voting_powers: vec![8828299.try_into().unwrap()],
+            voting_powers: vec![8828299u64.into()],
             epoch: 0.into(),
         };
         let encoded = valset_update.encode().into_inner();
