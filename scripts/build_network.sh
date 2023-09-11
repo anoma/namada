@@ -97,6 +97,15 @@ validate_arguments() {
 
     SCRIPT_DIR="$(dirname $0)"
     NETWORK_CONFIG_PATH="$SCRIPT_DIR/../genesis/e2e-tests-single-node.toml"
+
+    echo "Would you like to provide a custom genesis file? (y/n)"
+    read -r answer
+    if [ "$answer" = "y" ]; then
+        echo "Please provide the path to the genesis file:"
+        read -r genesis_path
+        NETWORK_CONFIG_PATH="$genesis_path"
+    fi
+    
     NAMADA_BIN_DIR=$1
 
     local current_directory="$(pwd)"
@@ -146,7 +155,7 @@ validate_arguments() {
         BASE_DIR="$($NAMADA_BIN_DIR/namadac utils default-base-dir)"
         echo "Using default BASE_DIR: $BASE_DIR"
     else [ "$#" -eq 2 ];
-        BASE_DIR="$3"
+        BASE_DIR="$2"
     fi
 }
 
