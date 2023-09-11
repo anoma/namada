@@ -16,6 +16,9 @@ use serde::{Deserialize, Serialize};
 
 use super::toml_utils::{read_toml, write_toml};
 use super::transactions::{self, Transactions};
+use crate::config::genesis::transactions::{
+    BondTx, SignedBondTx, SignedTransferTx, TransferTx,
+};
 use crate::wallet::Alias;
 
 pub const BALANCES_FILE_NAME: &str = "balances.toml";
@@ -26,7 +29,9 @@ pub const TRANSACTIONS_FILE_NAME: &str = "transactions.toml";
 
 const MAX_TOKEN_BALANCE_SUM: u64 = i64::MAX as u64;
 
-pub fn read_balances(path: &Path) -> eyre::Result<Balances> {
+/// Note that these balances must be crossed-checked with the token configs
+/// to correctly represent the underlying amounts.
+pub fn read_balances(path: &Path) -> eyre::Result<UndenominatedBalances> {
     read_toml(path, "Balances")
 }
 
@@ -44,7 +49,9 @@ pub fn read_tokens(path: &Path) -> eyre::Result<Tokens> {
     read_toml(path, "Tokens")
 }
 
-pub fn read_transactions(path: &Path) -> eyre::Result<Transactions> {
+pub fn read_transactions(
+    path: &Path,
+) -> eyre::Result<Transactions<Unvalidated>> {
     read_toml(path, "Transactions")
 }
 
@@ -59,7 +66,57 @@ pub fn read_transactions(path: &Path) -> eyre::Result<Transactions> {
     PartialEq,
     Eq,
 )]
-pub struct Balances {
+pub struct UndenominatedBalances {
+    token: BTreeMap<Alias, RawTokenBalances>,
+}
+
+impl UndenominatedBalances {
+    /// Use the denom in `TokenConfig` to correctly interpret the balances
+    /// to the right denomination.
+    pub fn denominate(
+        self,
+        tokens: &Tokens,
+    ) -> eyre::Result<DenominatedBalances> {
+        let mut balances = DenominatedBalances {
+            token: BTreeMap::new(),
+        };
+        for (alias, bals) in self.token {
+            let denom = tokens
+                .token
+                .get(&alias)
+                .ok_or_else(|| {
+                    eyre::eyre!(
+                        "A balance of token {} was found, but this token was \
+                         not found in the `tokens.toml` file",
+                        alias
+                    )
+                })?
+                .denom;
+            let mut denominated_bals = BTreeMap::new();
+            for (pk, bal) in bals.0.into_iter() {
+                let denominated = bal.increase_precision(denom)?;
+                denominated_bals.insert(pk, denominated);
+            }
+            balances
+                .token
+                .insert(alias, TokenBalances(denominated_bals));
+        }
+        Ok(balances)
+    }
+}
+
+/// Genesis balances of all tokens
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct DenominatedBalances {
     pub token: BTreeMap<Alias, TokenBalances>,
 }
 
@@ -74,8 +131,23 @@ pub struct Balances {
     PartialEq,
     Eq,
 )]
+pub struct RawTokenBalances(
+    pub BTreeMap<StringEncoded<common::PublicKey>, token::DenominatedAmount>,
+);
+
+/// Genesis balances for a given token
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
 pub struct TokenBalances(
-    pub BTreeMap<StringEncoded<common::PublicKey>, token::Amount>,
+    pub BTreeMap<StringEncoded<common::PublicKey>, token::DenominatedAmount>,
 );
 
 /// Genesis validity predicates
@@ -299,10 +371,70 @@ pub struct EthBridgeParams {
 }
 
 impl TokenBalances {
-    pub fn get(&self, pk: common::PublicKey) -> Option<&token::Amount> {
+    pub fn get(&self, pk: common::PublicKey) -> Option<token::Amount> {
         let pk = StringEncoded { raw: pk };
-        self.0.get(&pk)
+        self.0.get(&pk).map(|amt| amt.amount)
     }
+}
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct Unvalidated {}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct Validated {}
+
+pub trait TemplateValidation {
+    type Balances: for<'a> Deserialize<'a>
+        + Serialize
+        + Clone
+        + std::fmt::Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + PartialEq
+        + Eq;
+    type TransferTx: for<'a> Deserialize<'a>
+        + Serialize
+        + Clone
+        + std::fmt::Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + PartialEq
+        + Eq;
+    type BondTx: for<'a> Deserialize<'a>
+        + Serialize
+        + Clone
+        + std::fmt::Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + PartialEq
+        + Eq;
+}
+impl TemplateValidation for Unvalidated {
+    type Balances = UndenominatedBalances;
+    type BondTx = SignedBondTx;
+    type TransferTx = SignedTransferTx;
+}
+impl TemplateValidation for Validated {
+    type Balances = DenominatedBalances;
+    type BondTx = BondTx<Validated>;
+    type TransferTx = TransferTx<Validated>;
 }
 
 #[derive(
@@ -315,15 +447,15 @@ impl TokenBalances {
     PartialEq,
     Eq,
 )]
-pub struct All {
+pub struct All<T: TemplateValidation> {
     pub vps: ValidityPredicates,
     pub tokens: Tokens,
-    pub balances: Balances,
+    pub balances: T::Balances,
     pub parameters: Parameters,
-    pub transactions: Transactions,
+    pub transactions: Transactions<T>,
 }
 
-impl All {
+impl<T: TemplateValidation> All<T> {
     pub fn write_toml_files(&self, output_dir: &Path) -> eyre::Result<()> {
         let All {
             vps,
@@ -346,7 +478,9 @@ impl All {
         write_toml(transactions, &transactions_file, "Transactions")?;
         Ok(())
     }
+}
 
+impl All<Unvalidated> {
     pub fn read_toml_files(input_dir: &Path) -> eyre::Result<Self> {
         let vps_file = input_dir.join(VPS_FILE_NAME);
         let tokens_file = input_dir.join(TOKENS_FILE_NAME);
@@ -375,7 +509,7 @@ impl All {
 /// Note that the validation rules for these templates won't enforce that there
 /// is at least one validator with positive voting power. This must be checked
 /// when the templates are being used to `init-network`.
-pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
+pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
     let mut is_valid = true;
     // We don't reuse `All::read_toml_files` here to allow to validate config
     // without all files present.
@@ -455,7 +589,7 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
         }
     }
 
-    if let Some(tokens) = tokens.as_ref() {
+    let balances = if let Some(tokens) = tokens.as_ref() {
         if tokens.token.is_empty() {
             is_valid = false;
             eprintln!(
@@ -463,14 +597,19 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
             );
         }
         println!("Tokens file is valid.");
-    }
-
-    if let Some(balances) = balances.as_ref() {
-        if validate_balances(balances, tokens.as_ref()) {
-            println!("Balances file is valid.");
-        } else {
-            is_valid = false;
-        }
+        balances
+            .and_then(|raw| raw.denominate(tokens).ok())
+            .and_then(|balances| {
+                validate_balances(&balances, Some(tokens)).then(|| {
+                    println!("Balances file is valid.");
+                    balances
+                })
+            })
+    } else {
+        None
+    };
+    if balances.is_none() {
+        is_valid = false;
     }
 
     if let Some(parameters) = parameters.as_ref() {
@@ -481,18 +620,26 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
         }
     }
 
-    if let Some(transactions) = transactions.as_ref() {
-        if transactions::validate(
-            transactions,
-            vps.as_ref(),
-            balances.as_ref(),
-            parameters.as_ref(),
-        ) {
+    let txs = if let Some(tokens) = tokens.as_ref() {
+        if let Some(txs) = transactions.and_then(|txs| {
+            transactions::validate(
+                txs,
+                vps.as_ref(),
+                balances.as_ref(),
+                tokens,
+                parameters.as_ref(),
+            )
+        }) {
             println!("Transactions file is valid.");
+            Some(txs)
         } else {
             is_valid = false;
+            None
         }
-    }
+    } else {
+        is_valid = false;
+        None
+    };
 
     match vps {
         Some(vps) if is_valid => Some(All {
@@ -500,7 +647,7 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All> {
             tokens: tokens.unwrap(),
             balances: balances.unwrap(),
             parameters: parameters.unwrap(),
-            transactions: transactions.unwrap(),
+            transactions: txs.unwrap(),
         }),
         _ => None,
     }
@@ -539,8 +686,13 @@ pub fn validate_parameters(
     is_valid
 }
 
-pub fn validate_balances(balances: &Balances, tokens: Option<&Tokens>) -> bool {
+pub fn validate_balances(
+    balances: &DenominatedBalances,
+    tokens: Option<&Tokens>,
+) -> bool {
     let mut is_valid = true;
+    use std::str::FromStr;
+    let native_alias = Alias::from_str("nam").expect("Infalllible");
     balances.token.iter().for_each(|(token, next)| {
         // Every token alias used in Balances file must be present in
         // the Tokens file
@@ -560,7 +712,7 @@ pub fn validate_balances(balances: &Balances, tokens: Option<&Tokens>) -> bool {
         let sum = next.0.values().try_fold(
             token::Amount::default(),
             |acc, amount| {
-                let res = acc.checked_add(*amount);
+                let res = acc.checked_add(amount.amount);
                 if res.as_ref().is_none() {
                     is_valid = false;
                     eprintln!(
@@ -571,12 +723,13 @@ pub fn validate_balances(balances: &Balances, tokens: Option<&Tokens>) -> bool {
             },
         );
         if sum.is_none()
-            || sum.unwrap()
-                > Amount::from_uint(
-                    MAX_TOKEN_BALANCE_SUM,
-                    NATIVE_MAX_DECIMAL_PLACES,
-                )
-                .unwrap()
+            || (*token == native_alias
+                && sum.unwrap()
+                    > Amount::from_uint(
+                        MAX_TOKEN_BALANCE_SUM,
+                        NATIVE_MAX_DECIMAL_PLACES,
+                    )
+                    .unwrap())
         {
             eprintln!(
                 "The sum of balances for token {token} is greater than \
@@ -644,6 +797,13 @@ mod tests {
 
         let balances = read_balances(&path).unwrap();
         let example_balance = balances.token.get(&token_alias).unwrap();
-        assert_eq!(&balance, example_balance.get(pk).unwrap());
+        assert_eq!(
+            balance,
+            example_balance
+                .0
+                .get(&StringEncoded { raw: pk })
+                .unwrap()
+                .amount
+        );
     }
 }

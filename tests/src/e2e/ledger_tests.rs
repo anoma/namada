@@ -3014,7 +3014,7 @@ fn test_genesis_validators() -> Result<()> {
         ),
     ]);
     let genesis_file = test_dir.path().join("e2e-test-genesis-src.toml");
-    genesis_config::write_genesis_config(&genesis, &genesis_file);
+    // genesis_config::write_genesis_config(&genesis, &genesis_file);
     let genesis_path = genesis_file.to_string_lossy();
 
     let archive_dir = test_dir.path().to_string_lossy().to_string();
@@ -3170,12 +3170,7 @@ fn test_genesis_validators() -> Result<()> {
 
     // Copy WASMs to each node's chain dir
     let chain_dir = test.test_dir.path().join(chain_id.as_str());
-    setup::copy_wasm_to_chain_dir(
-        &working_dir,
-        &chain_dir,
-        &chain_id,
-        test.genesis.validator.keys(),
-    );
+    setup::copy_wasm_to_chain_dir(&working_dir, &chain_dir, &chain_id);
 
     let mut validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;

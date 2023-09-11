@@ -1424,7 +1424,11 @@ pub async fn build_transfer<
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
-        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
+        TransferTarget::PaymentAddress { address: pa, .. }
+            if pa.is_pinned() =>
+        {
+            Some(pa.hash())
+        }
         _ => None,
     };
 
@@ -1813,23 +1817,24 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
     {
         Some(balance) => {
             if balance < amount {
+                let amount =
+                    format_denominated_amount(client, token, amount).await;
+                let balance =
+                    format_denominated_amount(client, token, balance).await;
                 if force {
                     eprintln!(
                         "The balance of the source {} of token {} is lower \
                          than the amount to be transferred. Amount to \
                          transfer is {} and the balance is {}.",
-                        source,
-                        token,
-                        format_denominated_amount(client, token, amount).await,
-                        format_denominated_amount(client, token, balance).await,
+                        source, token, amount, balance
                     );
                     Ok(())
                 } else {
                     Err(Error::BalanceTooLow(
                         source.clone(),
                         token.clone(),
-                        amount.to_string_native(),
-                        balance.to_string_native(),
+                        amount,
+                        balance,
                     ))
                 }
             } else {

@@ -6,7 +6,6 @@ pub mod toml_utils;
 pub mod transactions;
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -17,7 +16,7 @@ use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
-use namada::types::chain::{ChainId, ProposalBytes};
+use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
@@ -37,28 +36,28 @@ pub mod genesis_config {
     use std::str::FromStr;
 
     use data_encoding::HEXLOWER;
-    use eyre::Context;
     #[cfg(not(feature = "mainnet"))]
     use namada::core::ledger::testnet_pow;
-    use namada::ledger::governance::parameters::GovParams;
-    use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
-    use namada::types::address::Address;
+    use namada::ledger::pos::Dec;
     use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
-    use namada::types::token::Denomination;
+    use namada::types::token::{self, Denomination};
     use namada::types::uint::Uint;
-    use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
 
     use super::{
         EstablishedAccount, EthereumBridgeParams, Genesis, ImplicitAccount,
-        Parameters, TokenAccount, Validator,
+        TokenAccount, Validator,
     };
-    use crate::cli;
+
+    macro_rules! to_remove {
+        () => {
+            todo!()
+        };
+    }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct HexString(pub String);
@@ -299,388 +298,47 @@ pub mod genesis_config {
         pub sha256: Option<HexString>,
     }
 
+    #[allow(dead_code)]
     fn load_validator(
-        config: &ValidatorConfig,
-        wasm: &HashMap<String, WasmConfig>,
+        _: &ValidatorConfig,
+        _: &HashMap<String, WasmConfig>,
     ) -> Validator {
-        let validator_vp_name = config.validator_vp.as_ref().unwrap();
-        let validator_vp_config = wasm.get(validator_vp_name).unwrap();
-
-        Validator {
-            pos_data: GenesisValidator {
-                address: Address::decode(config.address.as_ref().unwrap())
-                    .unwrap(),
-                tokens: token::Amount::native_whole(
-                    config.tokens.unwrap_or_default(),
-                ),
-                consensus_key: config
-                    .consensus_public_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                eth_cold_key: config
-                    .eth_cold_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                eth_hot_key: config
-                    .eth_hot_key
-                    .as_ref()
-                    .unwrap()
-                    .to_public_key()
-                    .unwrap(),
-                commission_rate: config
-                    .commission_rate
-                    .and_then(|rate| {
-                        if rate <= Dec::one() { Some(rate) } else { None }
-                    })
-                    .expect("Commission rate must be between 0.0 and 1.0"),
-                max_commission_rate_change: config
-                    .max_commission_rate_change
-                    .and_then(|rate| {
-                        if rate <= Dec::one() { Some(rate) } else { None }
-                    })
-                    .expect(
-                        "Max commission rate change must be between 0.0 and \
-                         1.0",
-                    ),
-            },
-            account_key: config
-                .account_public_key
-                .as_ref()
-                .unwrap()
-                .to_public_key()
-                .unwrap(),
-            protocol_key: config
-                .protocol_public_key
-                .as_ref()
-                .unwrap()
-                .to_public_key()
-                .unwrap(),
-            dkg_public_key: config
-                .dkg_public_key
-                .as_ref()
-                .unwrap()
-                .to_dkg_public_key()
-                .unwrap(),
-            non_staked_balance: token::Amount::native_whole(
-                config.non_staked_balance.unwrap_or_default(),
-            ),
-            validator_vp_code_path: validator_vp_config.filename.to_owned(),
-            validator_vp_sha256: validator_vp_config
-                .sha256
-                .clone()
-                .unwrap()
-                .to_sha256_bytes()
-                .unwrap(),
-        }
+        to_remove!()
     }
 
+    #[allow(dead_code)]
     fn load_token(
-        config: &TokenAccountConfig,
-        validators: &HashMap<String, Validator>,
-        established_accounts: &HashMap<String, EstablishedAccount>,
-        implicit_accounts: &HashMap<String, ImplicitAccount>,
+        _config: &TokenAccountConfig,
+        _validators: &HashMap<String, Validator>,
+        _established_accounts: &HashMap<String, EstablishedAccount>,
+        _implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
-        TokenAccount {
-            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
-            denom: config.denom,
-            balances: config
-                .balances
-                .as_ref()
-                .unwrap_or(&HashMap::default())
-                .iter()
-                .map(|(alias_or_address, amount)| {
-                    (
-                        match Address::decode(alias_or_address) {
-                            Ok(address) => address,
-                            Err(decode_err) => {
-                                if let Some(alias) =
-                                    alias_or_address.strip_suffix(".public_key")
-                                {
-                                    if let Some(established) =
-                                        established_accounts.get(alias)
-                                    {
-                                        established
-                                            .public_key
-                                            .as_ref()
-                                            .unwrap()
-                                            .into()
-                                    } else if let Some(validator) =
-                                        validators.get(alias)
-                                    {
-                                        (&validator.account_key).into()
-                                    } else {
-                                        eprintln!(
-                                            "No established or validator \
-                                             account with alias {} found",
-                                            alias
-                                        );
-                                        cli::safe_exit(1)
-                                    }
-                                } else if let Some(established) =
-                                    established_accounts.get(alias_or_address)
-                                {
-                                    established.address.clone()
-                                } else if let Some(validator) =
-                                    validators.get(alias_or_address)
-                                {
-                                    validator.pos_data.address.clone()
-                                } else if let Some(implicit) =
-                                    implicit_accounts.get(alias_or_address)
-                                {
-                                    (&implicit.public_key).into()
-                                } else {
-                                    eprintln!(
-                                        "{} is unknown alias and not a valid \
-                                         address: {}",
-                                        alias_or_address, decode_err
-                                    );
-                                    cli::safe_exit(1)
-                                }
-                            }
-                        },
-                        token::Amount::from_uint(*amount, config.denom).expect(
-                            "expected a balance that fits into 256 bits",
-                        ),
-                    )
-                })
-                .collect(),
-        }
+        to_remove!()
     }
 
+    #[allow(dead_code)]
     fn load_established(
-        config: &EstablishedAccountConfig,
-        wasm: &HashMap<String, WasmConfig>,
+        _config: &EstablishedAccountConfig,
+        _wasm: &HashMap<String, WasmConfig>,
     ) -> EstablishedAccount {
-        let account_vp_name = config.vp.as_ref().unwrap();
-        let account_vp_config = wasm.get(account_vp_name).unwrap();
-
-        EstablishedAccount {
-            address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
-            vp_code_path: account_vp_config.filename.to_owned(),
-            vp_sha256: account_vp_config
-                .sha256
-                .clone()
-                .unwrap_or_else(|| {
-                    eprintln!("Unknown user VP WASM sha256");
-                    cli::safe_exit(1);
-                })
-                .to_sha256_bytes()
-                .unwrap(),
-            public_key: config
-                .public_key
-                .as_ref()
-                .map(|hex| hex.to_public_key().unwrap()),
-            storage: config
-                .storage
-                .as_ref()
-                .unwrap_or(&HashMap::default())
-                .iter()
-                .map(|(address, hex)| {
-                    (
-                        storage::Key::parse(address).unwrap(),
-                        hex.to_bytes().unwrap(),
-                    )
-                })
-                .collect(),
-        }
+        to_remove!()
     }
 
-    fn load_implicit(config: &ImplicitAccountConfig) -> ImplicitAccount {
-        ImplicitAccount {
-            public_key: config
-                .public_key
-                .as_ref()
-                .unwrap()
-                .to_public_key()
-                .unwrap(),
-        }
+    #[allow(dead_code)]
+    fn load_implicit(_config: &ImplicitAccountConfig) -> ImplicitAccount {
+        to_remove!()
     }
 
-    pub fn load_genesis_config(config: GenesisConfig) -> Genesis {
-        let GenesisConfig {
-            genesis_time,
-            native_token,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_pow_difficulty,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_withdrawal_limit,
-            validator,
-            token,
-            established,
-            implicit,
-            parameters,
-            pos_params,
-            gov_params,
-            wasm,
-            ethereum_bridge_params,
-        } = config;
-
-        let native_token = Address::decode(
-            token
-                .get(&native_token)
-                .expect(
-                    "Native token's alias must be present in the declared \
-                     tokens",
-                )
-                .address
-                .as_ref()
-                .expect("Missing native token address"),
-        )
-        .expect("Invalid address");
-        let validators: HashMap<String, Validator> = validator
-            .iter()
-            .map(|(name, cfg)| (name.clone(), load_validator(cfg, &wasm)))
-            .collect();
-        let established_accounts: HashMap<String, EstablishedAccount> =
-            established
-                .unwrap_or_default()
-                .iter()
-                .map(|(name, cfg)| (name.clone(), load_established(cfg, &wasm)))
-                .collect();
-        let implicit_accounts: HashMap<String, ImplicitAccount> = implicit
-            .unwrap_or_default()
-            .iter()
-            .map(|(name, cfg)| (name.clone(), load_implicit(cfg)))
-            .collect();
-        #[allow(clippy::iter_kv_map)]
-        let token_accounts = token
-            .iter()
-            .map(|(_name, cfg)| {
-                load_token(
-                    cfg,
-                    &validators,
-                    &established_accounts,
-                    &implicit_accounts,
-                )
-            })
-            .collect();
-
-        let implicit_vp_config = wasm.get(&parameters.implicit_vp).unwrap();
-        let implicit_vp_code_path = implicit_vp_config.filename.to_owned();
-        let implicit_vp_sha256 = implicit_vp_config
-            .sha256
-            .clone()
-            .unwrap_or_else(|| {
-                eprintln!("Unknown implicit VP WASM sha256");
-                cli::safe_exit(1);
-            })
-            .to_sha256_bytes()
-            .unwrap();
-
-        let min_duration: i64 =
-            60 * 60 * 24 * 365 / (parameters.epochs_per_year as i64);
-        let parameters = Parameters {
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: parameters.min_num_of_blocks,
-                min_duration: namada::types::time::Duration::seconds(
-                    min_duration,
-                )
-                .into(),
-            },
-            max_expected_time_per_block:
-                namada::types::time::Duration::seconds(
-                    parameters.max_expected_time_per_block,
-                )
-                .into(),
-            max_proposal_bytes: parameters.max_proposal_bytes,
-            vp_whitelist: parameters.vp_whitelist.unwrap_or_default(),
-            tx_whitelist: parameters.tx_whitelist.unwrap_or_default(),
-            implicit_vp_code_path,
-            implicit_vp_sha256,
-            epochs_per_year: parameters.epochs_per_year,
-            pos_gain_p: parameters.pos_gain_p,
-            pos_gain_d: parameters.pos_gain_d,
-            staked_ratio: Dec::zero(),
-            pos_inflation_amount: token::Amount::zero(),
-            wrapper_tx_fees: parameters.wrapper_tx_fees,
-        };
-
-        let GovernanceParamsConfig {
-            min_proposal_fund,
-            max_proposal_code_size,
-            min_proposal_period,
-            max_proposal_content_size,
-            min_proposal_grace_epochs,
-            max_proposal_period,
-        } = gov_params;
-        let gov_params = GovParams {
-            min_proposal_fund,
-            max_proposal_code_size,
-            min_proposal_period,
-            max_proposal_content_size,
-            min_proposal_grace_epochs,
-            max_proposal_period,
-        };
-
-        let PosParamsConfig {
-            max_validator_slots,
-            pipeline_len,
-            unbonding_len,
-            tm_votes_per_token,
-            block_proposer_reward,
-            block_vote_reward,
-            max_inflation_rate,
-            target_staked_ratio,
-            duplicate_vote_min_slash_rate,
-            light_client_attack_min_slash_rate,
-            cubic_slashing_window_length,
-            validator_stake_threshold,
-        } = pos_params;
-        let pos_params = PosParams {
-            max_validator_slots,
-            pipeline_len,
-            unbonding_len,
-            tm_votes_per_token,
-            block_proposer_reward,
-            block_vote_reward,
-            max_inflation_rate,
-            target_staked_ratio,
-            duplicate_vote_min_slash_rate,
-            light_client_attack_min_slash_rate,
-            cubic_slashing_window_length,
-            validator_stake_threshold,
-        };
-
-        let mut genesis = Genesis {
-            genesis_time: genesis_time.try_into().unwrap(),
-            native_token,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_pow_difficulty,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_withdrawal_limit,
-            validators: validators.into_values().collect(),
-            token_accounts,
-            established_accounts: established_accounts.into_values().collect(),
-            implicit_accounts: implicit_accounts.into_values().collect(),
-            parameters,
-            pos_params,
-            gov_params,
-            ethereum_bridge_params,
-        };
-        genesis.init();
-        genesis
+    #[allow(dead_code)]
+    pub fn load_genesis_config(_config: GenesisConfig) -> Genesis {
+        to_remove!()
     }
 
+    #[allow(dead_code)]
     pub fn open_genesis_config(
-        path: impl AsRef<Path>,
+        _path: impl AsRef<Path>,
     ) -> color_eyre::eyre::Result<GenesisConfig> {
-        let config_file =
-            std::fs::read_to_string(&path).wrap_err_with(|| {
-                format!(
-                    "couldn't read genesis config file from {}",
-                    path.as_ref().to_string_lossy()
-                )
-            })?;
-        toml::from_str(&config_file).wrap_err_with(|| {
-            format!(
-                "couldn't parse TOML from {}",
-                path.as_ref().to_string_lossy()
-            )
-        })
+        to_remove!()
     }
 
     pub fn write_genesis_config(
@@ -852,13 +510,6 @@ pub struct Parameters {
     pub wrapper_tx_fees: Option<token::Amount>,
 }
 
-pub fn genesis(base_dir: impl AsRef<Path>, chain_id: &ChainId) -> Genesis {
-    let path = base_dir
-        .as_ref()
-        .join(format!("{}.toml", chain_id.as_str()));
-    genesis_config::read_genesis_config(path)
-}
-
 /// Modify the default genesis file (namada/genesis/localnet/) to
 /// accommodate testing.
 ///
@@ -877,6 +528,7 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
+    use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
     use crate::config::genesis::chain::finalize;
     use crate::wallet::defaults;
@@ -890,7 +542,7 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     }
     current_path.pop();
     let chain_dir = current_path.join("genesis").join("localnet");
-    let templates = templates::All::read_toml_files(&chain_dir)
+    let templates = templates::load_and_validate(&chain_dir)
         .expect("Missing genesis files");
     let mut genesis = finalize(
         templates,
@@ -930,7 +582,7 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     // remove Albert's bond since it messes up existing unit test math
     if let Some(bonds) = genesis.transactions.bond.as_mut() {
         bonds.retain(|bond| {
-            bond.data.source
+            bond.source
                 != transactions::AliasOrPk::Alias(
                     Alias::from_str("albert").unwrap(),
                 )
@@ -1002,36 +654,37 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                 StringEncoded {
                     raw: account_keypair.ref_to(),
                 },
-                token::Amount::native_whole(200_000),
+                token::DenominatedAmount {
+                    amount: token::Amount::native_whole(200_000),
+                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+                },
             );
         }
         // transfer funds from implicit key to validator
         if let Some(trans) = genesis.transactions.transfer.as_mut() {
-            trans.push(transactions::SignedTransferTx {
-                data: transactions::TransferTx {
-                    token: Alias::from_str("nam").expect("infallible"),
-                    source: StringEncoded {
-                        raw: account_keypair.ref_to(),
-                    },
-                    target: alias.clone(),
-                    amount: token::Amount::native_whole(200_000),
+            trans.push(transactions::TransferTx {
+                token: Alias::from_str("nam").expect("infallible"),
+                source: StringEncoded {
+                    raw: account_keypair.ref_to(),
                 },
-                // these signatures won't be checked, so we can put whatever
-                // here
-                signature: sign_pk(&account_keypair).authorization,
+                target: alias.clone(),
+                amount: token::DenominatedAmount {
+                    amount: token::Amount::native_whole(200_000),
+                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+                },
+                valid: Default::default(),
             })
         }
         // self bond
         if let Some(bonds) = genesis.transactions.bond.as_mut() {
-            bonds.push(transactions::SignedBondTx {
-                data: transactions::BondTx {
-                    source: transactions::AliasOrPk::Alias(alias.clone()),
-                    validator: alias,
+            bonds.push(transactions::BondTx {
+                source: transactions::AliasOrPk::Alias(alias.clone()),
+                validator: alias,
+                amount: token::DenominatedAmount {
                     amount: token::Amount::native_whole(100_000),
+                    denom: NATIVE_MAX_DECIMAL_PLACES.into(),
                 },
-                // these signatures won't be checked, so we can put whatever
-                // here
-                signature: sign_pk(&account_keypair).authorization,
+                valid: Default::default(),
             })
         }
     }

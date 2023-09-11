@@ -377,7 +377,12 @@ pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
-    PaymentAddress(PaymentAddress),
+    PaymentAddress {
+        /// The actual shielded address
+        address: PaymentAddress,
+        /// The address of the masp account
+        masp: Address,
+    },
 }
 
 impl TransferTarget {
@@ -387,14 +392,14 @@ impl TransferTarget {
             Self::Address(x) => x.clone(),
             // An ExtendedSpendingKey for a source effectively means that
             // assets will be drawn from the MASP
-            Self::PaymentAddress(_) => masp(),
+            Self::PaymentAddress { masp, .. } => masp.clone(),
         }
     }
 
     /// Get the contained PaymentAddress, if any
     pub fn payment_address(&self) -> Option<PaymentAddress> {
         match self {
-            Self::PaymentAddress(x) => Some(*x),
+            Self::PaymentAddress { address, .. } => Some(*address),
             _ => None,
         }
     }
@@ -412,7 +417,7 @@ impl Display for TransferTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::PaymentAddress(x) => x.fmt(f),
+            Self::PaymentAddress { address, .. } => address.fmt(f),
         }
     }
 }

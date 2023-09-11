@@ -101,3 +101,15 @@ token = "Apfel"
 source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
 target = "albert"
 amount = "1000000"
+
+# transfer NAM to Bertha
+[[transfer]]
+token = "NAM"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+
+[[bond]]
+source = "albert"
+validator = "validator-0"
+amount = "20000"

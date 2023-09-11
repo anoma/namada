@@ -25,8 +25,7 @@ use crate::config::genesis::chain::{
 };
 use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
-    BondTx, EstablishedAccountTx, SignedBondTx, SignedTransferTx, TransferTx,
-    ValidatorAccountTx,
+    BondTx, EstablishedAccountTx, TransferTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
@@ -271,12 +270,17 @@ where
                 self.wl_storage
                     .write(&pk_storage_key, owner_pk.try_to_vec().unwrap())
                     .unwrap();
-
+                tracing::info!(
+                    "Crediting {} {} tokens to {}",
+                    balance,
+                    token_alias,
+                    owner_pk.raw
+                );
                 credit_tokens(
                     &mut self.wl_storage,
                     token_address,
                     &owner,
-                    *balance,
+                    balance.amount,
                 )
                 .expect("Couldn't credit initial balance");
             }
@@ -428,15 +432,12 @@ where
         genesis: &genesis::chain::Finalized,
     ) {
         if let Some(txs) = &genesis.transactions.transfer {
-            for SignedTransferTx {
-                data:
-                    TransferTx {
-                        token,
-                        source,
-                        target,
-                        amount,
-                    },
-                signature: _,
+            for TransferTx {
+                token,
+                source,
+                target,
+                amount,
+                ..
             } in txs
             {
                 let token = match genesis.get_token_address(token) {
@@ -445,8 +446,6 @@ where
                             "Applying genesis tx to transfer {} of token \
                              {token} from {source} to {target}",
                             amount
-                                .denominated(token, &self.wl_storage)
-                                .unwrap(),
                         );
                         token
                     }
@@ -479,7 +478,7 @@ where
                     token,
                     &source,
                     target,
-                    *amount,
+                    amount.amount,
                 ) {
                     tracing::warn!(
                         "Genesis token transfer tx failed with: {err}. \
@@ -495,20 +494,17 @@ where
     fn apply_genesis_txs_bonds(&mut self, genesis: &genesis::chain::Finalized) {
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         if let Some(txs) = &genesis.transactions.bond {
-            for SignedBondTx {
-                data:
-                    BondTx {
-                        source,
-                        validator,
-                        amount,
-                    },
-                signature: _,
+            for BondTx {
+                source,
+                validator,
+                amount,
+                ..
             } in txs
             {
                 tracing::debug!(
                     "Applying genesis tx to bond {} native tokens from \
                      {source} to {validator}",
-                    amount.to_string_native(),
+                    amount,
                 );
 
                 let source = match source {
@@ -544,7 +540,7 @@ where
                     &mut self.wl_storage,
                     Some(&source),
                     validator,
-                    *amount,
+                    amount.amount,
                     current_epoch,
                     Some(0),
                 ) {

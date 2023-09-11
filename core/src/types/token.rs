@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+use std::cmp::Ordering;
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -268,8 +269,6 @@ impl From<Denomination> for u8 {
     Hash,
     PartialEq,
     Eq,
-    PartialOrd,
-    Ord,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -297,6 +296,10 @@ impl DenominatedAmount {
     pub fn to_string_precise(&self) -> String {
         let decimals = self.denom.0 as usize;
         let mut string = self.amount.raw.to_string();
+        // escape hatch if there are no decimal places
+        if decimals == 0 {
+            return string;
+        }
         if string.len() > decimals {
             string.insert(string.len() - decimals, '.');
         } else {
@@ -352,7 +355,11 @@ impl DenominatedAmount {
 impl Display for DenominatedAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = self.to_string_precise();
-        let string = string.trim_end_matches(&['0']);
+        let string = if self.denom.0 > 0 {
+            string.trim_end_matches(&['0'])
+        } else {
+            &string
+        };
         let string = string.trim_end_matches(&['.']);
         f.write_str(string)
     }
@@ -399,6 +406,50 @@ impl FromStr for DenominatedAmount {
             amount: Amount { raw: value },
             denom,
         })
+    }
+}
+
+impl PartialOrd for DenominatedAmount {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.denom < other.denom {
+            let diff = other.denom.0 - self.denom.0;
+            let (div, rem) =
+                other.amount.raw.div_mod(Uint::exp10(diff as usize));
+            let div_ceil = if rem.is_zero() {
+                div
+            } else {
+                div + Uint::one()
+            };
+            let ord = self.amount.raw.partial_cmp(&div_ceil);
+            if let Some(Ordering::Equal) = ord {
+                if rem.is_zero() {
+                    Some(Ordering::Equal)
+                } else {
+                    Some(Ordering::Greater)
+                }
+            } else {
+                ord
+            }
+        } else {
+            let diff = self.denom.0 - other.denom.0;
+            let (div, rem) =
+                self.amount.raw.div_mod(Uint::exp10(diff as usize));
+            let div_ceil = if rem.is_zero() {
+                div
+            } else {
+                div + Uint::one()
+            };
+            let ord = div_ceil.partial_cmp(&other.amount.raw);
+            if let Some(Ordering::Equal) = ord {
+                if rem.is_zero() {
+                    Some(Ordering::Equal)
+                } else {
+                    Some(Ordering::Less)
+                }
+            } else {
+                ord
+            }
+        }
     }
 }
 
@@ -1009,6 +1060,13 @@ mod tests {
         };
         assert_eq!("0.0112", amount.to_string());
         assert_eq!("0.01120", amount.to_string_precise());
+
+        let amount = DenominatedAmount {
+            amount: Amount::from_uint(200, 0).expect("Test failed"),
+            denom: 0.into(),
+        };
+        assert_eq!("200", amount.to_string());
+        assert_eq!("200", amount.to_string_precise());
     }
 
     #[test]
@@ -1123,6 +1181,62 @@ mod tests {
 
         let non_zero = Amount::from_uint(1, 0).expect("Test failed");
         assert!(!non_zero.is_zero());
+    }
+
+    #[test]
+    fn test_denominated_amt_ord() {
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1500, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        // The psychedelic case. Partial ordering works on the underlying
+        // amounts but `Eq` also checks the equality of denoms.
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Equal
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Equal
+        );
+        assert_ne!(denom_1, denom_2);
+
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1501, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Less
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Greater
+        );
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1499, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Greater
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Less
+        );
     }
 }
 

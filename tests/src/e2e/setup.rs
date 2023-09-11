@@ -56,7 +56,7 @@ pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
 /// This file must contain a single validator with alias "validator-0".
 /// To add more validators, use the [`set_validators`] function in the call to
 /// setup the [`network`].
-pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/e2e-tests-single-node.toml";
+pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/localnet";
 /// An E2E test network.
 #[derive(Debug)]
 pub struct Network {
@@ -389,12 +389,7 @@ pub fn network(
     let genesis = genesis_config::open_genesis_config(
         working_dir.join(SINGLE_NODE_NET_GENESIS),
     )?;
-    copy_wasm_to_chain_dir(
-        &working_dir,
-        test_dir.path(),
-        &net.chain_id,
-        validator_aliases.iter(),
-    );
+    copy_wasm_to_chain_dir(&working_dir, test_dir.path(), &net.chain_id);
 
     Ok(Test {
         working_dir,
@@ -1045,7 +1040,7 @@ pub fn copy_wasm_to_chain_dir<'a>(
     working_dir: &Path,
     test_dir: &Path,
     chain_id: &ChainId,
-    genesis_validator_keys: impl Iterator<Item = &'a String>,
+    // genesis_validator_keys: impl Iterator<Item = &'a String>,
 ) {
     // Copy the built WASM files from "wasm" directory in the root of the
     // project.
@@ -1080,26 +1075,26 @@ pub fn copy_wasm_to_chain_dir<'a>(
     }
 
     // Copy the built WASM files from "wasm" directory to each validator dir
-    for validator_name in genesis_validator_keys {
-        let target_wasm_dir = test_dir
-            .join(utils::NET_ACCOUNTS_DIR)
-            .join(validator_name)
-            .join(chain_id.as_str())
-            .join(config::DEFAULT_WASM_DIR);
-        for file in &wasm_files {
-            let src = working_dir.join("wasm").join(file);
-            let dst = target_wasm_dir.join(file);
-            std::fs::copy(&src, &dst)
-                .wrap_err_with(|| {
-                    format!(
-                        "copying {} to {}",
-                        &src.to_string_lossy(),
-                        &dst.to_string_lossy(),
-                    )
-                })
-                .unwrap();
-        }
-    }
+    // for validator_name in genesis_validator_keys {
+    // let target_wasm_dir = test_dir
+    // .join(utils::NET_ACCOUNTS_DIR)
+    // .join(validator_name)
+    // .join(chain_id.as_str())
+    // .join(config::DEFAULT_WASM_DIR);
+    // for file in &wasm_files {
+    // let src = working_dir.join("wasm").join(file);
+    // let dst = target_wasm_dir.join(file);
+    // std::fs::copy(&src, &dst)
+    // .wrap_err_with(|| {
+    // format!(
+    // "copying {} to {}",
+    // &src.to_string_lossy(),
+    // &dst.to_string_lossy(),
+    // )
+    // })
+    // .unwrap();
+    // }
+    // }
 }
 
 pub fn get_all_wasms_hashes(

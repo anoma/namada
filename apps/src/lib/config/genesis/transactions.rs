@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -9,16 +10,22 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::types::string_encoding::StringEncoded;
 use namada::ledger::wallet::pre_genesis::ValidatorWallet;
 use namada::ledger::wallet::{FindKeyError, Wallet, WalletUtils};
-use namada::proto::{verify_standalone_sig, SerializeWithBorsh};
+use namada::proto::{
+    standalone_signature, verify_standalone_sig, SerializeWithBorsh,
+};
 use namada::types::dec::Dec;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
-use namada::types::key::{common, RefTo};
+use namada::types::key::{common, RefTo, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
+use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use serde::{Deserialize, Serialize};
 
 use super::templates::{
-    Balances, Parameters, TokenBalances, ValidityPredicates,
+    DenominatedBalances, Parameters, TokenBalances, ValidityPredicates,
+};
+use crate::config::genesis::templates::{
+    TemplateValidation, Tokens, Unvalidated, Validated,
 };
 use crate::wallet::Alias;
 
@@ -30,8 +37,8 @@ pub struct GenesisValidatorData {
     pub commission_rate: Dec,
     pub max_commission_rate_change: Dec,
     pub net_address: SocketAddr,
-    pub transfer_from_source_amount: token::Amount,
-    pub self_bond_amount: token::Amount,
+    pub transfer_from_source_amount: token::DenominatedAmount,
+    pub self_bond_amount: token::DenominatedAmount,
 }
 
 /// Panics if given `txs.validator_accounts` is not empty, because validator
@@ -40,7 +47,7 @@ pub struct GenesisValidatorData {
 pub fn sign_txs<U: WalletUtils>(
     txs: UnsignedTransactions,
     wallet: &mut Wallet<U>,
-) -> Transactions {
+) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
         validator_account,
@@ -114,7 +121,7 @@ pub fn init_validator<U: WalletUtils>(
     }: GenesisValidatorData,
     source_wallet: &mut Wallet<U>,
     validator_wallet: &ValidatorWallet,
-) -> Transactions {
+) -> Transactions<Unvalidated> {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
         alias: alias.clone(),
         account_key: StringEncoded::new(validator_wallet.account_key.ref_to()),
@@ -156,7 +163,7 @@ pub fn init_validator<U: WalletUtils>(
         validator_wallet,
     )]);
 
-    let transfer = if transfer_from_source_amount == token::Amount::default() {
+    let transfer = if transfer_from_source_amount.amount.is_zero() {
         None
     } else {
         let unsigned_transfer_tx = TransferTx {
@@ -165,18 +172,20 @@ pub fn init_validator<U: WalletUtils>(
             source: StringEncoded::new(source_key.ref_to()),
             target: alias.clone(),
             amount: transfer_from_source_amount,
+            valid: Default::default(),
         };
         let transfer_tx = sign_transfer_tx(unsigned_transfer_tx, source_wallet);
         Some(vec![transfer_tx])
     };
 
-    let bond = if self_bond_amount == token::Amount::default() {
+    let bond = if self_bond_amount.amount.is_zero() {
         None
     } else {
         let unsigned_bond_tx = BondTx {
             source: AliasOrPk::Alias(alias.clone()),
             validator: alias,
             amount: self_bond_amount,
+            valid: Default::default(),
         };
         let bond_tx = sign_self_bond_tx(unsigned_bond_tx, validator_wallet);
         Some(vec![bond_tx])
@@ -294,33 +303,24 @@ pub fn sign_validator_account_tx(
 }
 
 pub fn sign_transfer_tx<U: WalletUtils>(
-    unsigned_tx: TransferTx,
+    unsigned_tx: TransferTx<Unvalidated>,
     source_wallet: &mut Wallet<U>,
 ) -> SignedTransferTx {
     let source_key = source_wallet
         .find_key_by_pk(&unsigned_tx.source, None)
         .expect("Key for source must be present to sign with it.");
-
-    let source_sig = sign_tx(&unsigned_tx, &source_key);
-    Signed {
-        data: unsigned_tx,
-        signature: source_sig,
-    }
+    unsigned_tx.sign(&source_key)
 }
 
 pub fn sign_self_bond_tx(
-    unsigned_tx: BondTx,
+    unsigned_tx: BondTx<Unvalidated>,
     validator_wallet: &ValidatorWallet,
 ) -> SignedBondTx {
-    let source_sig = sign_tx(&unsigned_tx, &validator_wallet.account_key);
-    Signed {
-        data: unsigned_tx,
-        signature: source_sig,
-    }
+    unsigned_tx.sign(&validator_wallet.account_key)
 }
 
 pub fn sign_delegation_bond_tx<U: WalletUtils>(
-    unsigned_tx: BondTx,
+    unsigned_tx: BondTx<Unvalidated>,
     wallet: &mut Wallet<U>,
     established_accounts: &Option<Vec<EstablishedAccountTx<SignedPk>>>,
 ) -> SignedBondTx {
@@ -391,12 +391,7 @@ pub fn sign_delegation_bond_tx<U: WalletUtils>(
              from wallet with {err}."
         ),
     };
-
-    let source_sig = sign_tx(&unsigned_tx, &source_key);
-    Signed {
-        data: unsigned_tx,
-        signature: source_sig,
-    }
+    unsigned_tx.sign(&source_key)
 }
 
 fn sign_tx<T: BorshSerialize>(
@@ -412,7 +407,6 @@ fn sign_tx<T: BorshSerialize>(
 #[derive(
     Clone,
     Debug,
-    Default,
     Deserialize,
     Serialize,
     BorshDeserialize,
@@ -420,14 +414,25 @@ fn sign_tx<T: BorshSerialize>(
     PartialEq,
     Eq,
 )]
-pub struct Transactions {
+pub struct Transactions<T: TemplateValidation> {
     pub established_account: Option<Vec<SignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<SignedValidatorAccountTx>>,
-    pub transfer: Option<Vec<SignedTransferTx>>,
-    pub bond: Option<Vec<SignedBondTx>>,
+    pub transfer: Option<Vec<T::TransferTx>>,
+    pub bond: Option<Vec<T::BondTx>>,
 }
 
-impl Transactions {
+impl<T: TemplateValidation> Default for Transactions<T> {
+    fn default() -> Self {
+        Self {
+            established_account: None,
+            validator_account: None,
+            transfer: None,
+            bond: None,
+        }
+    }
+}
+
+impl Transactions<Validated> {
     /// Check that there is at least one validator.
     pub fn has_at_least_one_validator(&self) -> bool {
         self.validator_account
@@ -449,8 +454,8 @@ impl Transactions {
                 let mut stakes: BTreeMap<&Alias, token::Amount> =
                     BTreeMap::new();
                 for tx in txs {
-                    let entry = stakes.entry(&tx.data.validator).or_default();
-                    *entry += tx.data.amount;
+                    let entry = stakes.entry(&tx.validator).or_default();
+                    *entry += tx.amount.amount;
                 }
 
                 stakes.into_iter().any(|(_validator, stake)| {
@@ -473,8 +478,8 @@ impl Transactions {
 pub struct UnsignedTransactions {
     pub established_account: Option<Vec<UnsignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<UnsignedValidatorAccountTx>>,
-    pub transfer: Option<Vec<TransferTx>>,
-    pub bond: Option<Vec<BondTx>>,
+    pub transfer: Option<Vec<TransferTx<Unvalidated>>>,
+    pub bond: Option<Vec<BondTx<Unvalidated>>>,
 }
 
 pub type UnsignedValidatorAccountTx =
@@ -534,7 +539,24 @@ pub struct EstablishedAccountTx<PK> {
     pub public_key: Option<PK>,
 }
 
-pub type SignedTransferTx = Signed<TransferTx>;
+pub type SignedTransferTx = Signed<TransferTx<Unvalidated>>;
+
+impl SignedTransferTx {
+    /// Verify the signature of `TransferTx`. This should not depend
+    /// on whether the contained amount is denominated or not.
+    ///
+    /// Since we denominate amounts as part of validation, we can
+    /// only verify signatures on [`SignedTransferTx`]
+    /// types.
+    pub fn verify_sig(&self) -> Result<(), VerifySigError> {
+        let Self { data, signature } = self;
+        verify_standalone_sig::<_, SerializeWithBorsh>(
+            &data.data_to_sign(),
+            &data.source.raw,
+            signature,
+        )
+    }
+}
 
 #[derive(
     Clone,
@@ -546,14 +568,119 @@ pub type SignedTransferTx = Signed<TransferTx>;
     PartialEq,
     Eq,
 )]
-pub struct TransferTx {
+pub struct TransferTx<T: TemplateValidation> {
     pub token: Alias,
     pub source: StringEncoded<common::PublicKey>,
     pub target: Alias,
-    pub amount: token::Amount,
+    pub amount: token::DenominatedAmount,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(test)]
+    pub valid: PhantomData<T>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(not(test))]
+    valid: PhantomData<T>,
 }
 
-pub type SignedBondTx = Signed<BondTx>;
+impl TransferTx<Unvalidated> {
+    /// Add the correct denomination to the contained amount
+    pub fn denominate(
+        self,
+        tokens: &Tokens,
+    ) -> eyre::Result<TransferTx<Validated>> {
+        let TransferTx {
+            token,
+            source,
+            target,
+            amount,
+            ..
+        } = self;
+        let denom =
+            if let Some(super::templates::TokenConfig { denom, .. }) =
+                tokens.token.get(&token)
+            {
+                *denom
+            } else {
+                eprintln!(
+                    "Genesis files contained transfer of token {}, which is \
+                     not in the `tokens.toml` file",
+                    token
+                );
+                return Err(eyre::eyre!(
+                    "Genesis files contained transfer of token {}, which is \
+                     not in the `tokens.toml` file",
+                    token
+                ));
+            };
+        let amount = amount.increase_precision(denom).map_err(|e| {
+            eprintln!(
+                "A bond amount in the transactions.toml file was incorrectly \
+                 formatted:\n{}",
+                e.to_string()
+            );
+            e
+        })?;
+
+        Ok(TransferTx {
+            token,
+            source,
+            target,
+            amount,
+            valid: Default::default(),
+        })
+    }
+
+    /// The signable data. This does not include the phantom data.
+    fn data_to_sign(&self) -> Vec<u8> {
+        [
+            self.token.try_to_vec().unwrap(),
+            self.source.try_to_vec().unwrap(),
+            self.target.try_to_vec().unwrap(),
+            self.amount.try_to_vec().unwrap(),
+        ]
+        .concat()
+    }
+
+    /// Sign the transfer.
+    ///
+    /// Since we denominate amounts as part of validation, we can
+    /// only verify signatures on [`SignedTransferTx`]
+    /// types. Thus we only allow signing of [`TransferTx<Unvalidated>`]
+    /// types.
+    pub fn sign(self, key: &common::SecretKey) -> SignedTransferTx {
+        let sig = standalone_signature::<_, SerializeWithBorsh>(
+            key,
+            &self.data_to_sign(),
+        );
+        SignedTransferTx {
+            data: self,
+            signature: StringEncoded { raw: sig },
+        }
+    }
+}
+
+pub type SignedBondTx = Signed<BondTx<Unvalidated>>;
+
+impl SignedBondTx {
+    /// Verify the signature of `BondTx`. This should not depend
+    /// on whether the contained amount is denominated or not.
+    ///
+    /// Since we denominate amounts as part of validation, we can
+    /// only verify signatures on [`SignedBondTx`]
+    /// types.
+    pub fn verify_sig(
+        &self,
+        pk: &common::PublicKey,
+    ) -> Result<(), VerifySigError> {
+        let Self { data, signature } = self;
+        verify_standalone_sig::<_, SerializeWithBorsh>(
+            &data.data_to_sign(),
+            pk,
+            signature,
+        )
+    }
+}
 
 #[derive(
     Clone,
@@ -565,10 +692,73 @@ pub type SignedBondTx = Signed<BondTx>;
     PartialEq,
     Eq,
 )]
-pub struct BondTx {
+pub struct BondTx<T: TemplateValidation> {
     pub source: AliasOrPk,
     pub validator: Alias,
-    pub amount: token::Amount,
+    pub amount: token::DenominatedAmount,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(test)]
+    pub valid: PhantomData<T>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(not(test))]
+    valid: PhantomData<T>,
+}
+
+impl BondTx<Unvalidated> {
+    /// Add the correct denomination to the contained amount
+    pub fn denominate(self) -> eyre::Result<BondTx<Validated>> {
+        let BondTx {
+            source,
+            validator,
+            amount,
+            ..
+        } = self;
+        let amount = amount
+            .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
+            .map_err(|e| {
+                eprintln!(
+                    "A bond amount in the transactions.toml file was \
+                     incorrectly formatted:\n{}",
+                    e.to_string()
+                );
+                e
+            })?;
+        Ok(BondTx {
+            source,
+            validator,
+            amount,
+            valid: Default::default(),
+        })
+    }
+
+    /// The signable data. This does not include the phantom data.
+    fn data_to_sign(&self) -> Vec<u8> {
+        [
+            self.source.try_to_vec().unwrap(),
+            self.validator.try_to_vec().unwrap(),
+            self.amount.try_to_vec().unwrap(),
+        ]
+        .concat()
+    }
+
+    /// Sign the transfer.
+    ///
+    /// Since we denominate amounts as part of validation, we can
+    /// only verify signatures on [`SignedBondTx`]
+    /// types. Thus we only allow signing of [`BondTx<Unvalidated>`]
+    /// types.
+    pub fn sign(self, key: &common::SecretKey) -> SignedBondTx {
+        let sig = standalone_signature::<_, SerializeWithBorsh>(
+            key,
+            &self.data_to_sign(),
+        );
+        SignedBondTx {
+            data: self,
+            signature: StringEncoded { raw: sig },
+        }
+    }
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
@@ -671,11 +861,12 @@ pub struct SignedPk {
 }
 
 pub fn validate(
-    transactions: &Transactions,
+    transactions: Transactions<Unvalidated>,
     vps: Option<&ValidityPredicates>,
-    balances: Option<&Balances>,
+    balances: Option<&DenominatedBalances>,
+    tokens: &Tokens,
     parameters: Option<&Parameters>,
-) -> bool {
+) -> Option<Transactions<Validated>> {
     let mut is_valid = true;
 
     let mut all_used_aliases: BTreeSet<Alias> = BTreeSet::default();
@@ -685,9 +876,9 @@ pub fn validate(
         BTreeMap::default();
 
     let Transactions {
-        established_account,
-        validator_account,
-        transfer,
+        ref established_account,
+        ref validator_account,
+        ref transfer,
         bond,
     } = transactions;
 
@@ -739,28 +930,51 @@ pub fn validate(
             })
             .unwrap_or_default();
 
-    if let Some(txs) = transfer {
-        for tx in txs {
-            if !validate_transfer(tx, &mut token_balances, &all_used_aliases) {
-                is_valid = false;
-            }
+    let validated_txs = if let Some(txs) = transfer {
+        let validated_txs: Vec<_> = txs
+            .iter()
+            .filter_map(|tx| {
+                validate_transfer(
+                    tx,
+                    &mut token_balances,
+                    &all_used_aliases,
+                    tokens,
+                )
+            })
+            .collect();
+        if validated_txs.len() != txs.len() {
+            is_valid = false;
+            None
+        } else {
+            Some(validated_txs)
         }
-    }
+    } else {
+        is_valid = false;
+        None
+    };
 
-    if let Some(txs) = bond {
+    let validated_bonds = if let Some(txs) = bond {
         if !txs.is_empty() {
             match parameters {
                 Some(parameters) => {
-                    for tx in txs {
-                        if !validate_bond(
-                            tx,
-                            &mut token_balances,
-                            &established_accounts,
-                            &validator_accounts,
-                            parameters,
-                        ) {
-                            is_valid = false;
-                        }
+                    let bond_number = txs.len();
+                    let validated_bonds: Vec<_> = txs
+                        .into_iter()
+                        .filter_map(|tx| {
+                            validate_bond(
+                                tx,
+                                &mut token_balances,
+                                &established_accounts,
+                                &validator_accounts,
+                                parameters,
+                            )
+                        })
+                        .collect();
+                    if validated_bonds.len() != bond_number {
+                        is_valid = false;
+                        None
+                    } else {
+                        Some(validated_bonds)
                     }
                 }
                 None => {
@@ -769,59 +983,69 @@ pub fn validate(
                          file."
                     );
                     is_valid = false;
+                    None
                 }
             }
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
-    is_valid
+    is_valid.then_some(Transactions {
+        established_account: transactions.established_account,
+        validator_account: transactions.validator_account,
+        transfer: validated_txs,
+        bond: validated_bonds,
+    })
 }
 
 fn validate_bond(
-    tx: &SignedBondTx,
+    tx: SignedBondTx,
     balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
     established_accounts: &BTreeMap<Alias, Option<common::PublicKey>>,
     validator_accounts: &BTreeMap<Alias, common::PublicKey>,
     parameters: &Parameters,
-) -> bool {
-    let mut is_valid = true;
-
-    let SignedBondTx {
-        data:
-            BondTx {
-                source,
-                validator,
-                amount,
-            },
-        signature,
-    } = tx;
-
-    let unsigned: BondTx = tx.into();
-
+) -> Option<BondTx<Validated>> {
     // Check signature
-    if let Some(source_pk) = match source {
-        AliasOrPk::Alias(alias) => {
-            // Try to find the source's PK in either established_accounts or
-            // validator_accounts
-            established_accounts
-                .get(alias)
-                .cloned()
-                .flatten()
-                .or_else(|| validator_accounts.get(alias).cloned())
+    let mut is_valid = {
+        let source = &tx.data.source;
+        if let Some(source_pk) = match source {
+            AliasOrPk::Alias(alias) => {
+                // Try to find the source's PK in either established_accounts or
+                // validator_accounts
+                established_accounts
+                    .get(alias)
+                    .cloned()
+                    .flatten()
+                    .or_else(|| validator_accounts.get(alias).cloned())
+            }
+            AliasOrPk::PublicKey(pk) => Some(pk.raw.clone()),
+        } {
+            if tx.verify_sig(&source_pk).is_err() {
+                eprintln!("Invalid bond tx signature.",);
+                false
+            } else {
+                true
+            }
+        } else {
+            eprintln!(
+                "Invalid bond tx. Couldn't verify bond's signature, because \
+                 the source accounts \"{source}\" public key cannot be found."
+            );
+            false
         }
-        AliasOrPk::PublicKey(pk) => Some(pk.raw.clone()),
-    } {
-        if !validate_signature(&unsigned, &source_pk, &signature.raw) {
-            eprintln!("Invalid bond tx signature.",);
-            is_valid = false;
-        }
-    } else {
-        eprintln!(
-            "Invalid bond tx. Couldn't verify bond's signature, because the \
-             source accounts \"{source}\" public key cannot be found."
-        );
-        is_valid = false;
-    }
+    };
+
+    // Make sure the native token amount is denominated correctly
+    let validated_bond = tx.data.denominate().ok()?;
+    let BondTx {
+        source,
+        validator,
+        amount,
+        ..
+    } = &validated_bond;
 
     // Check that the validator exists
     if !validator_accounts.contains_key(validator) {
@@ -847,8 +1071,7 @@ fn validate_bond(
                             "Invalid bond tx. Source {source} doesn't have \
                              enough balance of token \"{native_token}\" to \
                              transfer {}. Got {}.",
-                            amount.to_string_native(),
-                            balance.to_string_native(),
+                            amount, balance,
                         );
                         is_valid = false;
                     } else {
@@ -863,7 +1086,7 @@ fn validate_bond(
                                 }
                             }
                         } else {
-                            *balance -= *amount;
+                            balance.amount -= amount.amount;
                         }
                     }
                 }
@@ -885,13 +1108,13 @@ fn validate_bond(
         }
     }
 
-    is_valid
+    is_valid.then_some(validated_bond)
 }
 
 #[derive(Clone, Debug)]
 pub struct TokenBalancesForValidation {
     /// Accumulator for tokens transferred to aliases
-    pub aliases: BTreeMap<Alias, token::Amount>,
+    pub aliases: BTreeMap<Alias, token::DenominatedAmount>,
     /// Token balances from the balances file, associated with PKs
     pub pks: TokenBalances,
 }
@@ -1070,27 +1293,24 @@ pub fn validate_transfer(
     tx: &SignedTransferTx,
     balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
     all_used_aliases: &BTreeSet<Alias>,
-) -> bool {
+    tokens: &Tokens,
+) -> Option<TransferTx<Validated>> {
     let mut is_valid = true;
-
-    let SignedTransferTx {
-        data:
-            TransferTx {
-                token,
-                source,
-                target,
-                amount,
-            },
-        signature,
-    } = tx;
-
-    let unsigned: TransferTx = tx.into();
-
     // Check signature
-    if !validate_signature(&unsigned, &source.raw, &signature.raw) {
+    if tx.verify_sig().is_err() {
         eprintln!("Invalid transfer tx signature.",);
         is_valid = false;
     }
+
+    let unsigned: TransferTx<Unvalidated> = tx.into();
+    let validated = unsigned.denominate(tokens).ok()?;
+    let TransferTx {
+        token,
+        source,
+        target,
+        amount,
+        ..
+    } = &validated;
 
     // Check that the target exists
     if !all_used_aliases.contains(target) {
@@ -1106,27 +1326,31 @@ pub fn validate_transfer(
     match balances.get_mut(token) {
         Some(balances) => match balances.pks.0.get_mut(source) {
             Some(balance) => {
-                if *balance < *amount {
+                if balance.amount < amount.amount {
                     eprintln!(
                         "Invalid transfer tx. Source {source} doesn't have \
                          enough balance of token \"{token}\" to transfer {}. \
                          Got {}.",
-                        amount.to_string_native(),
-                        balance.to_string_native(),
+                        amount, balance,
                     );
                     is_valid = false;
                 } else {
                     // Deduct the amount from source
-                    if amount == balance {
+                    if amount.amount == balance.amount {
                         balances.pks.0.remove(source);
                     } else {
-                        *balance -= *amount;
+                        balance.amount -= amount.amount;
                     }
 
                     // Add the amount to target
-                    let target_balance =
-                        balances.aliases.entry(target.clone()).or_default();
-                    *target_balance += *amount;
+                    let target_balance = balances
+                        .aliases
+                        .entry(target.clone())
+                        .or_insert_with(|| DenominatedAmount {
+                            amount: token::Amount::zero(),
+                            denom: amount.denom,
+                        });
+                    target_balance.amount += amount.amount;
                 }
             }
             None => {
@@ -1145,7 +1369,7 @@ pub fn validate_transfer(
         }
     }
 
-    is_valid
+    is_valid.then_some(validated)
 }
 
 fn validate_signature<T: BorshSerialize + Debug>(
@@ -1213,14 +1437,14 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
     }
 }
 
-impl From<&SignedTransferTx> for TransferTx {
+impl From<&SignedTransferTx> for TransferTx<Unvalidated> {
     fn from(tx: &SignedTransferTx) -> Self {
         let SignedTransferTx { data, signature: _ } = tx;
         data.clone()
     }
 }
 
-impl From<&SignedBondTx> for BondTx {
+impl From<&SignedBondTx> for BondTx<Unvalidated> {
     fn from(tx: &SignedBondTx) -> Self {
         let SignedBondTx { data, signature: _ } = tx;
         data.clone()

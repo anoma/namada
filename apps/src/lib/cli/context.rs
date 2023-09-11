@@ -104,7 +104,10 @@ impl Context {
                 let wallet = if wallet::exists(&chain_dir) {
                     wallet::load(&chain_dir).unwrap()
                 } else {
-                    genesis.derive_wallet(&chain_dir, None, None)
+                    panic!(
+                        "Could not find wallet at {}.",
+                        chain_dir.to_string_lossy()
+                    );
                 };
 
                 // If the WASM dir specified, put it in the config
@@ -483,7 +486,13 @@ impl ArgFromContext for TransferTarget {
         Address::arg_from_ctx(ctx, raw)
             .map(Self::Address)
             .or_else(|_| {
-                PaymentAddress::arg_from_ctx(ctx, raw).map(Self::PaymentAddress)
+                let masp = ctx
+                    .wallet
+                    .find_address("masp")
+                    .expect("MASP address should exist in the wallet.")
+                    .clone();
+                PaymentAddress::arg_from_ctx(ctx, raw)
+                    .map(|address| Self::PaymentAddress { address, masp })
             })
     }
 }

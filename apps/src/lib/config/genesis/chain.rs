@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 use super::toml_utils::{read_toml, write_toml};
 use super::{templates, transactions};
+use crate::config::genesis::templates::Validated;
 use crate::config::utils::{set_ip, set_port};
 use crate::config::{Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
@@ -430,7 +431,7 @@ impl Finalized {
 /// Invariant: The output must deterministic. For the same input this function
 /// must return the same output.
 pub fn finalize(
-    templates: templates::All,
+    templates: templates::All<Validated>,
     chain_id_prefix: ChainIdPrefix,
     genesis_time: DateTimeUtc,
     consensus_timeout_commit: crate::facade::tendermint::Timeout,
@@ -532,7 +533,7 @@ fn gen_address(gen: &mut EstablishedAddressGen) -> Address {
 )]
 pub struct GenesisToGenAddresses {
     /// Filled-in templates
-    pub templates: templates::All,
+    pub templates: templates::All<Validated>,
     /// Chain metadata
     pub metadata: Metadata<ChainIdPrefix>,
 }
@@ -558,7 +559,7 @@ pub type Finalized = Chain<ChainId>;
 pub struct Chain<ID> {
     pub vps: templates::ValidityPredicates,
     pub tokens: FinalizedTokens,
-    pub balances: templates::Balances,
+    pub balances: templates::DenominatedBalances,
     pub parameters: templates::Parameters,
     pub transactions: FinalizedTransactions,
     /// Chain metadata
@@ -626,13 +627,13 @@ pub struct FinalizedTokenConfig {
 pub struct FinalizedTransactions {
     pub established_account: Option<Vec<FinalizedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<FinalizedValidatorAccountTx>>,
-    pub transfer: Option<Vec<transactions::SignedTransferTx>>,
-    pub bond: Option<Vec<transactions::SignedBondTx>>,
+    pub transfer: Option<Vec<transactions::TransferTx<Validated>>>,
+    pub bond: Option<Vec<transactions::BondTx<Validated>>>,
 }
 
 impl FinalizedTransactions {
     fn finalize_from(
-        transactions: transactions::Transactions,
+        transactions: transactions::Transactions<Validated>,
         addr_gen: &mut EstablishedAddressGen,
     ) -> FinalizedTransactions {
         let transactions::Transactions {

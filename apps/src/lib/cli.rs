@@ -5258,8 +5258,8 @@ pub mod args {
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
-        pub transfer_from_source_amount: token::Amount,
-        pub self_bond_amount: token::Amount,
+        pub transfer_from_source_amount: token::DenominatedAmount,
+        pub self_bond_amount: token::DenominatedAmount,
     }
 
     impl Args for InitGenesisValidator {
@@ -5272,18 +5272,14 @@ pub mod args {
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
+            // The denomination validation is handled by validating genesis
+            // files later.
+            // At this stage, we treat amounts as opaque and pass them on
+            // verbatim.
+            let transfer_from_source_amount =
+                TRANSFER_FROM_SOURCE_AMOUNT.parse(matches);
             // this must be an amount of native tokens
-            let transfer_from_source_amount = TRANSFER_FROM_SOURCE_AMOUNT
-                .parse(matches)
-                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
-                .unwrap()
-                .amount;
-            // this must be an amount of native tokens
-            let self_bond_amount = SELF_BOND_AMOUNT
-                .parse(matches)
-                .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
-                .unwrap()
-                .amount;
+            let self_bond_amount = SELF_BOND_AMOUNT.parse(matches);
             Self {
                 source,
                 alias,
