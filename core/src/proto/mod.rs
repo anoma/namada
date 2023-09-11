@@ -6,7 +6,7 @@ mod types;
 pub use types::{
     Code, Commitment, Data, Dkg, Error, Header, MaspBuilder, MultiSignature,
     Section, Signable, SignableEthMessage, Signature, SignatureIndex, Signed,
-    Tx, TxError,
+    Signer, Tx, TxError,
 };
 
 #[cfg(test)]

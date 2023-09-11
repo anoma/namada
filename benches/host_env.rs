@@ -5,6 +5,7 @@ use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
 use namada::proto::{Data, MultiSignature, Section};
 use namada_apps::wallet::defaults;
+use std::collections::HashSet;
 
 /// Benchmarks the validation of a single signature on a single `Section` of a
 /// transaction
@@ -26,15 +27,14 @@ fn tx_section_signature_validation(c: &mut Criterion) {
 
     let multisig = MultiSignature::new(
         vec![section_hash],
-        &[defaults::albert_keypair()],
-        &pkim,
+        pkim.index_secret_keys(vec![defaults::albert_keypair()]),
+        None,
     );
-    let signature_index = multisig.signatures.first().unwrap().clone();
 
     c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
-            signature_index
-                .verify(&pkim, &multisig.get_raw_hash())
+            multisig
+                .verify_signature(&mut HashSet::new(), &pkim)
                 .unwrap()
         })
     });

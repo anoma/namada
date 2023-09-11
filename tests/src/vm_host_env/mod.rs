@@ -466,7 +466,7 @@ mod tests {
                 let mut tx = Tx::new(chain_id, expiration);
                 tx.add_code(code.clone())
                     .add_serialized_data(data.to_vec())
-                    .sign_raw(keypairs.clone(), pks_map.clone())
+                    .sign_raw(keypairs.clone(), pks_map.clone(), None)
                     .sign_wrapper(keypair.clone());
                 env.tx = tx;
                 env.tx.clone()
@@ -567,7 +567,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(input_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
@@ -589,7 +589,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash)
             .add_serialized_data(input_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
@@ -612,7 +612,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash)
             .add_serialized_data(input_data)
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
@@ -637,7 +637,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
 
         // create a client with the message
@@ -671,7 +671,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -714,7 +714,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -747,7 +747,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -791,7 +791,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -824,7 +824,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -870,7 +870,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -903,7 +903,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -949,7 +949,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -983,7 +983,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1032,7 +1032,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
@@ -1089,7 +1089,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // close the channel with the message
@@ -1143,7 +1143,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs.clone(), pks_map.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1190,7 +1190,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1280,7 +1280,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1353,7 +1353,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1432,7 +1432,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // Receive the packet, but no token is received
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1536,7 +1536,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1641,7 +1641,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1741,7 +1741,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // timeout the packet
@@ -1830,7 +1830,7 @@ mod tests {
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![])
             .add_serialized_data(tx_data.clone())
-            .sign_raw(keypairs, pks_map)
+            .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // timeout the packet

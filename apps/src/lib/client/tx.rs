@@ -42,7 +42,7 @@ pub async fn aux_signing_data<C: namada::ledger::queries::Client + Sync>(
     client: &C,
     wallet: &mut Wallet<CliWalletUtils>,
     args: &args::Tx,
-    owner: &Option<Address>,
+    owner: Option<Address>,
     default_signer: Option<Address>,
 ) -> Result<signing::SigningTxData, error::Error> {
     let signing_data =
@@ -88,7 +88,7 @@ pub async fn submit_reveal_aux<C: namada::ledger::queries::Client + Sync>(
 
         if tx::is_reveal_pk_needed::<C>(client, address, args.force).await? {
             let signing_data =
-                aux_signing_data(client, &mut ctx.wallet, &args, &None, None)
+                aux_signing_data(client, &mut ctx.wallet, &args, None, None)
                     .await?;
 
             let (mut tx, _epoch) = tx::build_reveal_pk(
@@ -126,7 +126,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.owner.clone()),
+        Some(args.owner.clone()),
         default_signer,
     )
     .await?;
@@ -168,7 +168,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.addr.clone()),
+        Some(args.addr.clone()),
         default_signer,
     )
     .await?;
@@ -203,7 +203,7 @@ where
     C::Error: std::fmt::Display,
 {
     let signing_data =
-        aux_signing_data(client, &mut ctx.wallet, &args.tx, &None, None)
+        aux_signing_data(client, &mut ctx.wallet, &args.tx, None, None)
             .await?;
 
     let (mut tx, _epoch) = tx::build_init_account(
@@ -429,7 +429,7 @@ pub async fn submit_init_validator<
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
     let signing_data =
-        aux_signing_data(client, &mut ctx.wallet, &tx_args, &None, None)
+        aux_signing_data(client, &mut ctx.wallet, &tx_args, None, None)
             .await?;
 
     tx::prepare_tx(
@@ -647,7 +647,7 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
             client,
             &mut ctx.wallet,
             &args.tx,
-            &Some(args.source.effective_address()),
+            Some(args.source.effective_address()),
             default_signer,
         )
         .await?;
@@ -720,7 +720,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.source.clone()),
+        Some(args.source.clone()),
         default_signer,
     )
     .await?;
@@ -775,7 +775,7 @@ where
             client,
             &mut ctx.wallet,
             &args.tx,
-            &Some(proposal.author.clone()),
+            Some(proposal.author.clone()),
             default_signer,
         )
         .await?;
@@ -810,7 +810,7 @@ where
             client,
             &mut ctx.wallet,
             &args.tx,
-            &Some(proposal.proposal.author.clone()),
+            Some(proposal.proposal.author.clone()),
             default_signer,
         )
         .await?;
@@ -862,7 +862,7 @@ where
             client,
             &mut ctx.wallet,
             &args.tx,
-            &Some(proposal.proposal.author.clone()),
+            Some(proposal.proposal.author.clone()),
             default_signer,
         )
         .await?;
@@ -912,7 +912,7 @@ where
             client,
             &mut ctx.wallet,
             &args.tx,
-            &Some(proposal.proposal.author.clone()),
+            Some(proposal.proposal.author.clone()),
             default_signer,
         )
         .await?;
@@ -971,7 +971,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.voter.clone()),
+        Some(args.voter.clone()),
         default_signer.clone(),
     )
     .await?;
@@ -1070,7 +1070,7 @@ where
         client,
         &mut ctx.wallet,
         &tx_args,
-        &Some(owner),
+        Some(owner.clone()),
         default_signer,
     )
     .await?;
@@ -1097,13 +1097,13 @@ where
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
         let signatures =
-            tx.compute_section_signature(secret_keys, &account_public_keys_map);
+            tx.compute_section_signature(secret_keys, &account_public_keys_map, Some(owner));
 
         for signature in &signatures {
             let filename = format!(
                 "offline_signature_{}_{}.tx",
                 tx.header_hash(),
-                signature.index
+                signature.pubkey,
             );
             let output_path = match &tx_args.output_folder {
                 Some(path) => path.join(filename),
@@ -1120,9 +1120,7 @@ where
             .expect("Signature should be deserializable.");
             println!(
                 "Signature for {} serialized at {}",
-                &account_public_keys_map
-                    .get_public_key_from_index(signature.index)
-                    .unwrap(),
+                signature.pubkey,
                 output_path.display()
             );
         }
@@ -1158,7 +1156,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(default_address.clone()),
+        Some(default_address.clone()),
         default_signer,
     )
     .await?;
@@ -1200,7 +1198,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(default_address),
+        Some(default_address),
         default_signer,
     )
     .await?;
@@ -1243,7 +1241,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(default_address),
+        Some(default_address),
         default_signer,
     )
     .await?;
@@ -1284,7 +1282,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.validator.clone()),
+        Some(args.validator.clone()),
         default_signer,
     )
     .await?;
@@ -1325,7 +1323,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.validator.clone()),
+        Some(args.validator.clone()),
         default_signer,
     )
     .await?;
@@ -1367,7 +1365,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.steward.clone()),
+        Some(args.steward.clone()),
         default_signer,
     )
     .await?;
@@ -1407,7 +1405,7 @@ where
         client,
         &mut ctx.wallet,
         &args.tx,
-        &Some(args.steward.clone()),
+        Some(args.steward.clone()),
         default_signer,
     )
     .await?;

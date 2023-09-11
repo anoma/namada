@@ -268,8 +268,8 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::SectionSignature(MultiSignature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
-            &[keypair],
-            &pks_map,
+            pks_map.index_secret_keys(vec![keypair]),
+            None,
         )));
         let signed_tx = tx.clone();
         vp_env.tx = signed_tx.clone();
@@ -451,8 +451,8 @@ mod tests {
             tx.set_code(Code::new(vec![]));
             tx.add_section(Section::SectionSignature(MultiSignature::new(
                 vec![*tx.data_sechash(), *tx.code_sechash()],
-                &[keypair],
-                &pks_map,
+                pks_map.index_secret_keys(vec![keypair]),
+                None,
             )));
             let signed_tx = tx.clone();
             vp_env.tx = signed_tx.clone();
