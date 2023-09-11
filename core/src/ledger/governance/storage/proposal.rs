@@ -226,7 +226,7 @@ impl StorageProposal {
         is_validator: bool,
     ) -> bool {
         if is_validator {
-            self.voting_start_epoch < self.voting_end_epoch
+            self.voting_start_epoch <= current_epoch
                 && current_epoch * 3
                     <= self.voting_start_epoch + self.voting_end_epoch * 2
         } else {
