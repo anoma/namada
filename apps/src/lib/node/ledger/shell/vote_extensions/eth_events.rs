@@ -524,22 +524,6 @@ mod test_vote_extensions {
                 transfers: vec![],
             })
             .expect_err("Test failed");
-
-        // either kind of transfer with different validity map and transfer
-        // array length are invalid
-        shell
-            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
-                nonce,
-                transfers: vec![],
-                relayer: gen_established_address(),
-            })
-            .expect_err("Test failed");
-        shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
-                nonce,
-                transfers: vec![],
-            })
-            .expect_err("Test failed");
     }
 
     /// Test that we successfully receive ethereum events
@@ -580,22 +564,30 @@ mod test_vote_extensions {
             .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
             .expect("Test failed");
-        let [event_first, event_second]: [EthereumEvent; 2] =
-            shell.new_ethereum_events().try_into().expect("Test failed");
 
-        assert_eq!(event_first, event_1);
-        assert_eq!(event_second, event_3);
+        let got_events: [EthereumEvent; 2] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        let expected_events: Vec<_> = std::collections::BTreeSet::from([
+            event_1.clone(),
+            event_3.clone(),
+        ])
+        .into_iter()
+        .collect();
+        assert_eq!(expected_events, got_events);
+
         // check that we queue and de-duplicate events
         tokio_test::block_on(oracle.send(event_2.clone()))
             .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
             .expect("Test failed");
-        let [event_first, event_second, event_third]: [EthereumEvent; 3] =
-            shell.new_ethereum_events().try_into().expect("Test failed");
 
-        assert_eq!(event_first, event_1);
-        assert_eq!(event_second, event_2);
-        assert_eq!(event_third, event_3);
+        let got_events: [EthereumEvent; 3] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        let expected_events: Vec<_> =
+            std::collections::BTreeSet::from([event_1, event_2, event_3])
+                .into_iter()
+                .collect();
+        assert_eq!(expected_events, got_events);
     }
 
     /// Test that ethereum events are added to vote extensions.
