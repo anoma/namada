@@ -799,8 +799,8 @@ pub fn init_network(
             config.ledger.cometbft.p2p.addr_book_strict = !localhost;
             // Clear the net address from the config and use it to set ports
             let net_address = validator_config.net_address.take().unwrap();
-            let _ip = SocketAddr::from_str(&net_address).unwrap().ip();
-            let first_port = SocketAddr::from_str(&net_address).unwrap().port();
+            let split: Vec<&str> = net_address.split(':').collect();
+            let first_port = split[1].parse::<u16>().unwrap();
             if localhost {
                 config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
                     &format!("127.0.0.1:{}", first_port),
