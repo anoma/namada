@@ -150,7 +150,7 @@ mod tests {
     };
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::storage::ibc_token;
-    use crate::proto::{Code, Data, Section, Signature, Tx};
+    use crate::proto::{Code, Data, Signature, Section, Tx};
     use crate::types::address::{Address, InternalAddress};
     use crate::types::key::testing::keypair_1;
     use crate::types::storage::TxIndex;
@@ -171,7 +171,8 @@ mod tests {
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         tx
     }

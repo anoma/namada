@@ -108,7 +108,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
-    use namada::proto::{Code, Data, MultiSignature, Signature};
+    use namada::proto::{Code, Data, Signature};
     use namada::types::transaction::TxType;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
@@ -266,7 +266,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
-        tx.add_section(Section::SectionSignature(MultiSignature::new(
+        tx.add_section(Section::Signature(Signature::new(
             vec![*tx.data_sechash(), *tx.code_sechash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
@@ -399,7 +399,11 @@ mod tests {
         let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(solution_bytes));
         tx_data.set_code(Code::new(vec![]));
-        tx_data.add_section(Section::Signature(Signature::new(vec![*tx_data.data_sechash(), *tx_data.code_sechash()], &target_key)));
+        tx_data.add_section(Section::Signature(Signature::new(
+            vec![*tx_data.data_sechash(), *tx_data.code_sechash()],
+            [(0, target_key)].into_iter().collect(),
+            None,
+        )));
         let keys_changed: BTreeSet<storage::Key> =
         vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -449,7 +453,7 @@ mod tests {
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
             tx.set_code(Code::new(vec![]));
-            tx.add_section(Section::SectionSignature(MultiSignature::new(
+            tx.add_section(Section::Signature(Signature::new(
                 vec![*tx.data_sechash(), *tx.code_sechash()],
                 pks_map.index_secret_keys(vec![keypair]),
                 None,

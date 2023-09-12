@@ -32,7 +32,7 @@ mod protocol_txs {
     use serde_json;
 
     use super::*;
-    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
+    use crate::proto::{Code, Data, Signature, Section, Tx, TxError};
     use crate::types::chain::ChainId;
     use crate::types::key::*;
     use crate::types::transaction::{Digest, EllipticCurve, Sha256, TxType};
@@ -201,7 +201,8 @@ mod protocol_txs {
             outer_tx.set_data(Data::new(tx_data));
             outer_tx.add_section(Section::Signature(Signature::new(
                 outer_tx.sechashes(),
-                signing_key,
+                [(0, signing_key.clone())].into_iter().collect(),
+                None,
             )));
             outer_tx
         }
@@ -339,7 +340,8 @@ mod protocol_txs {
                     *outer_tx.code_sechash(),
                     *outer_tx.data_sechash(),
                 ],
-                signing_key,
+                [(0, signing_key.clone())].into_iter().collect(),
+                None,
             )));
             outer_tx
         }

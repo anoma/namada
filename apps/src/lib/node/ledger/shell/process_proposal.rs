@@ -1002,7 +1002,7 @@ mod test_process_proposal {
     use assert_matches::assert_matches;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
-        Code, Data, Section, SignableEthMessage, Signature, Signed,
+        Code, Data, Signature, Section, SignableEthMessage, Signed,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
@@ -1660,7 +1660,8 @@ mod test_process_proposal {
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
             outer_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
@@ -1733,7 +1734,8 @@ mod test_process_proposal {
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
             outer_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let response = {
@@ -1799,7 +1801,8 @@ mod test_process_proposal {
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.add_section(Section::Signature(Signature::new(
             outer_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let response = {
@@ -2164,7 +2167,8 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Write wrapper hash to storage
@@ -2241,7 +2245,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2300,7 +2305,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
@@ -2365,7 +2371,8 @@ mod test_process_proposal {
         let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
@@ -2384,7 +2391,8 @@ mod test_process_proposal {
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
             new_wrapper.sechashes(),
-            &keypair_2,
+            [(0, keypair_2)].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2437,7 +2445,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
@@ -2506,7 +2515,8 @@ mod test_process_proposal {
         }));
         decrypted.add_section(Section::Signature(Signature::new(
             decrypted.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
             .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
@@ -2567,7 +2577,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2617,7 +2628,8 @@ mod test_process_proposal {
         }));
         decrypted.add_section(Section::Signature(Signature::new(
             decrypted.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let gas_limit = Gas::from(wrapper.header.wrapper().unwrap().gas_limit)
             .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
@@ -2674,7 +2686,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2717,7 +2730,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2759,7 +2773,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2801,7 +2816,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2843,7 +2859,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2885,7 +2902,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            None,
         )));
 
         // Run validation
@@ -2930,7 +2948,8 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let wrapper = wrapper.to_bytes();
         for height in [1u64, 2] {

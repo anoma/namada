@@ -474,16 +474,17 @@ mod tests {
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
                 signed_tx_data
-                    .verify_section_signatures(
+                    .verify_signatures(
                         &[
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
                         ],
                         pks_map,
+                        &None,
                         1,
                         None,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        Some(&mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into()))
                         )
                     )
                     .is_ok()
@@ -492,7 +493,7 @@ mod tests {
             let other_keypair = key::testing::keypair_2();
             assert!(
                 signed_tx_data
-                    .verify_section_signatures(
+                    .verify_signatures(
                         &[
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
@@ -500,10 +501,11 @@ mod tests {
                         AccountPublicKeysMap::from_iter([
                             other_keypair.ref_to()
                         ]),
+                        &None,
                         1,
                         None,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        Some(&mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into()))
                         )
                     )
                     .is_err()

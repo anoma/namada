@@ -414,7 +414,7 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
-        use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
+        use crate::proto::{Code, Data, Signature, Section, Tx, TxError};
         use crate::types::address::nam;
         use crate::types::transaction::{Hash, TxType};
 
@@ -452,7 +452,8 @@ pub mod wrapper_tx {
             encrypted_tx.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
                 vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
-                &keypair,
+                [(0, keypair)].into_iter().collect(),
+                None,
             )));
             assert!(encrypted_tx.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -489,7 +490,8 @@ pub mod wrapper_tx {
             wrapper.encrypt(&Default::default());
             wrapper.add_section(Section::Signature(Signature::new(
                 vec![wrapper.header_hash(), wrapper.sections[0].get_hash()],
-                &keypair,
+                [(0, keypair)].into_iter().collect(),
+                None,
             )));
             assert!(wrapper.validate_ciphertext());
             let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
@@ -523,7 +525,8 @@ pub mod wrapper_tx {
             tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
             tx.add_section(Section::Signature(Signature::new(
                 tx.sechashes(),
-                &keypair,
+                [(0, keypair.clone())].into_iter().collect(),
+                None,
             )));
 
             // we now try to alter the inner tx maliciously

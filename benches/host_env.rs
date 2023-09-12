@@ -3,7 +3,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
-use namada::proto::{Data, MultiSignature, Section};
+use namada::proto::{Data, Signature, Section};
 use namada_apps::wallet::defaults;
 use std::collections::HashSet;
 
@@ -25,7 +25,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         defaults::albert_keypair().to_public()
     ]);
 
-    let multisig = MultiSignature::new(
+    let multisig = Signature::new(
         vec![section_hash],
         pkim.index_secret_keys(vec![defaults::albert_keypair()]),
         None,
@@ -34,7 +34,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
     c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
             multisig
-                .verify_signature(&mut HashSet::new(), &pkim)
+                .verify_signature(&mut HashSet::new(), &pkim, &None)
                 .unwrap()
         })
     });
