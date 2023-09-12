@@ -102,14 +102,13 @@ pub fn sort_sigs(
 impl Encode<1> for EthereumProof<(Epoch, VotingPowersMap)> {
     fn tokenize(&self) -> [eth_abi::Token; 1] {
         let signatures = sort_sigs(&self.data.1, &self.signatures);
-        let (hot_key_addrs, cold_key_addrs, voting_powers) =
+        let (bridge_validators, governance_validators) =
             self.data.1.get_abi_encoded();
         let (KeccakHash(bridge_hash), KeccakHash(gov_hash)) =
             valset_upd_toks_to_hashes(
                 self.data.0,
-                hot_key_addrs,
-                cold_key_addrs,
-                voting_powers,
+                bridge_validators,
+                governance_validators,
             );
         [eth_abi::Token::Tuple(vec![
             eth_abi::Token::FixedBytes(bridge_hash.to_vec()),
