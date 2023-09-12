@@ -287,13 +287,62 @@ pub async fn query_validator_set_update_proof<C>(
     println!("0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
 }
 
-/// Query an ABI encoding of the validator set at a given epoch.
-pub async fn query_validator_set_args<C>(
+/// Query an ABI encoding of the Bridge validator set at a given epoch.
+pub async fn query_bridge_validator_set<C>(
     client: &C,
-    args: args::ConsensusValidatorSet,
-) where
+    args: args::BridgeValidatorSet,
+) -> Halt<()>
+where
     C: Client + Sync,
 {
+    let epoch = if let Some(epoch) = args.epoch {
+        epoch
+    } else {
+        RPC.shell().epoch(client).await.unwrap()
+    };
+
+    let args = RPC
+        .shell()
+        .eth_bridge()
+        .read_bridge_valset(client, &epoch)
+        .await
+        .try_halt(|err| {
+            tracing::error!(%err, "Failed to fetch Bridge validator set");
+        })?;
+
+    display_validator_set(args);
+    control_flow::proceed(())
+}
+
+/// Query an ABI encoding of the Governance validator set at a given epoch.
+pub async fn query_governnace_validator_set<C>(
+    client: &C,
+    args: args::GovernanceValidatorSet,
+) -> Halt<()>
+where
+    C: Client + Sync,
+{
+    let epoch = if let Some(epoch) = args.epoch {
+        epoch
+    } else {
+        RPC.shell().epoch(client).await.unwrap()
+    };
+
+    let args = RPC
+        .shell()
+        .eth_bridge()
+        .read_governance_valset(client, &epoch)
+        .await
+        .try_halt(|err| {
+            tracing::error!(%err, "Failed to fetch Governance validator set");
+        })?;
+
+    display_validator_set(args);
+    control_flow::proceed(())
+}
+
+/// Display the given [`ValidatorSetArgs`].
+fn display_validator_set(args: ValidatorSetArgs) {
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -307,22 +356,11 @@ pub async fn query_validator_set_args<C>(
         set: Vec<Validator>,
     }
 
-    let epoch = if let Some(epoch) = args.epoch {
-        epoch
-    } else {
-        RPC.shell().epoch(client).await.unwrap()
-    };
-
     let ValidatorSetArgs {
         validators,
         voting_powers,
         ..
-    } = RPC
-        .shell()
-        .eth_bridge()
-        .read_bridge_valset(client, &epoch)
-        .await
-        .unwrap();
+    } = args;
     let validator_set = ValidatorSet {
         set: validators
             .into_iter()

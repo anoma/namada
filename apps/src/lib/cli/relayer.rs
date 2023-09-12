@@ -124,7 +124,7 @@ impl<IO> CliApi<IO> {
                 }
             },
             cli::NamadaRelayer::ValidatorSet(sub) => match sub {
-                ValidatorSet::ConsensusValidatorSet(ConsensusValidatorSet(
+                ValidatorSet::BridgeValidatorSet(BridgeValidatorSet(
                     mut args,
                 )) => {
                     let client = client.unwrap_or_else(|| {
@@ -137,8 +137,26 @@ impl<IO> CliApi<IO> {
                         .await
                         .proceed_or_else(error)?;
                     let args = args.to_sdk_ctxless();
-                    validator_set::query_validator_set_args(&client, args)
+                    validator_set::query_bridge_validator_set(&client, args)
                         .await;
+                }
+                ValidatorSet::GovernanceValidatorSet(
+                    GovernanceValidatorSet(mut args),
+                ) => {
+                    let client = client.unwrap_or_else(|| {
+                        C::from_tendermint_address(
+                            &mut args.query.ledger_address,
+                        )
+                    });
+                    client
+                        .wait_until_node_is_synced()
+                        .await
+                        .proceed_or_else(error)?;
+                    let args = args.to_sdk_ctxless();
+                    validator_set::query_governnace_validator_set(
+                        &client, args,
+                    )
+                    .await;
                 }
                 ValidatorSet::ValidatorSetProof(ValidatorSetProof(
                     mut args,
