@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -124,7 +123,7 @@ where
     let other_validators = validator_0.clone();
     let validator_0_target = validator_0.net_address.clone().unwrap();
     let split: Vec<&str> = validator_0_target.split(':').collect();
-    let (mut net_target_0, net_address_port_0) =
+    let (net_target_0, net_address_port_0) =
         (split[0], split[1].parse::<u16>().unwrap());
     for ix in 0..num {
         let mut validator = other_validators.clone();

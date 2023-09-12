@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -1050,7 +1049,7 @@ pub fn init_genesis_validator(
                 tendermint_node_key: Some(HexString(
                     pre_genesis.tendermint_node_key.ref_to().to_string(),
                 )),
-                net_address: Some(net_address.to_string()),
+                net_address: Some(net_address),
                 ..Default::default()
             },
         )]),
