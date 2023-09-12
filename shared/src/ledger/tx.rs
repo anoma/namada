@@ -1154,9 +1154,13 @@ pub async fn build_vote_proposal<
     let is_validator = rpc::is_validator(client, &voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
-        return Err(Error::from(TxError::InvalidProposalVotingPeriod(
-            proposal_id,
-        )));
+        if tx.force {
+            eprintln!("Invalid proposal {} vote period.", proposal_id);
+        } else {
+            return Err(Error::from(TxError::InvalidProposalVotingPeriod(
+                proposal_id,
+            )));
+        }
     }
 
     let delegations = rpc::get_delegators_delegation_at(
