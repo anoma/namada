@@ -398,7 +398,7 @@ mod tag {
                 ext.voting_powers.get_bridge_and_gov_hashes(next_epoch);
             AbiEncode::signable_keccak256(&[
                 Token::Uint(GOVERNANCE_CONTRACT_VERSION.into()),
-                Token::String("updateValidatorsSet".into()),
+                Token::String("updateValidatorSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
                 epoch_to_token(next_epoch),
