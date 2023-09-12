@@ -1728,7 +1728,7 @@ pub async fn build_transfer<
             // inner tx will fail, so abort tx creation
             if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
                 return Err(Error::Other(
-                    "Fee unshilding masp tx and inner tx masp transaction \
+                    "Fee unshielding masp tx and inner tx masp transaction \
                      were crafted on an epoch boundary"
                         .to_string(),
                 ));
