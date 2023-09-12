@@ -354,12 +354,16 @@ where
         }
     }
 
-    /// Query the consensus [`ValidatorSetArgs`] at the given [`Epoch`].
+    /// Query a chosen [`ValidatorSetArgs`] at the given [`Epoch`].
     /// Also returns a map of each validator's voting power.
-    pub fn get_validator_set_args(
+    fn get_validator_set_args<F>(
         self,
         epoch: Option<Epoch>,
-    ) -> (ValidatorSetArgs, VotingPowersMap) {
+        mut select_validator: F,
+    ) -> (ValidatorSetArgs, VotingPowersMap)
+    where
+        F: FnMut(&EthAddrBook) -> EthAddress,
+    {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
 
@@ -377,12 +381,12 @@ where
         let (validators, voting_powers) = voting_powers_map
             .get_sorted()
             .into_iter()
-            .map(|(&EthAddrBook { hot_key_addr, .. }, &power)| {
+            .map(|(addr_book, &power)| {
                 let voting_power: EthBridgeVotingPower =
                     FractionalVotingPower::new(power.into(), total_power)
                         .expect("Fractional voting power should be >1")
                         .into();
-                (hot_key_addr, voting_power)
+                (select_validator(addr_book), voting_power)
             })
             .unzip();
 
@@ -393,6 +397,32 @@ where
                 voting_powers,
             },
             voting_powers_map,
+        )
+    }
+
+    /// Query the Bridge [`ValidatorSetArgs`] at the given [`Epoch`].
+    /// Also returns a map of each validator's voting power.
+    #[inline]
+    pub fn get_bridge_validator_set(
+        self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap) {
+        self.get_validator_set_args(
+            epoch,
+            |&EthAddrBook { hot_key_addr, .. }| hot_key_addr,
+        )
+    }
+
+    /// Query the Governance [`ValidatorSetArgs`] at the given [`Epoch`].
+    /// Also returns a map of each validator's voting power.
+    #[inline]
+    pub fn get_governance_validator_set(
+        self,
+        epoch: Option<Epoch>,
+    ) -> (ValidatorSetArgs, VotingPowersMap) {
+        self.get_validator_set_args(
+            epoch,
+            |&EthAddrBook { cold_key_addr, .. }| cold_key_addr,
         )
     }
 

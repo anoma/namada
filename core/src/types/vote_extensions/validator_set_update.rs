@@ -318,7 +318,16 @@ fn encode_validator_data(
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
 // TODO: find a new home for this type
 pub struct ValidatorSetArgs {
     /// Ethereum addresses of the validators.

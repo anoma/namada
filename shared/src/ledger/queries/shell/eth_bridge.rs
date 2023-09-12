@@ -127,11 +127,17 @@ router! {ETH_BRIDGE,
         -> EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>
         = read_valset_upd_proof,
 
-    // Request the set of consensus validator at the given epoch.
+    // Request the set of bridge validators at the given epoch.
     //
     // The request may fail if no validator set exists at that epoch.
-    ( "validator_set" / "consensus" / [epoch: Epoch] )
-        -> EncodeCell<ValidatorSetArgs> = read_consensus_valset,
+    ( "validator_set" / "bridge" / [epoch: Epoch] )
+        -> ValidatorSetArgs = read_bridge_valset,
+
+    // Request the set of governance validators at the given epoch.
+    //
+    // The request may fail if no validator set exists at that epoch.
+    ( "validator_set" / "governance" / [epoch: Epoch] )
+        -> ValidatorSetArgs = read_governance_valset,
 
     // Read the address and version of the Ethereum bridge's Bridge
     // smart contract.
@@ -398,7 +404,7 @@ where
                 let (validator_args, voting_powers) = ctx
                     .wl_storage
                     .ethbridge_queries()
-                    .get_validator_set_args(None);
+                    .get_bridge_validator_set(None);
                 let relay_proof = ethereum_structs::RelayProof {
                     transfers,
                     pool_root: signed_root.data.0.0,
@@ -558,14 +564,14 @@ where
     Ok(proof.map(|set| (epoch, set)).encode())
 }
 
-/// Read the consensus set of validators at the given [`Epoch`].
+/// Request the set of bridge validators at the given epoch.
 ///
 /// This method may fail if no set of validators exists yet,
 /// at that [`Epoch`].
-fn read_consensus_valset<D, H>(
+fn read_bridge_valset<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Epoch,
-) -> storage_api::Result<EncodeCell<ValidatorSetArgs>>
+) -> storage_api::Result<ValidatorSetArgs>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -574,7 +580,37 @@ where
     if epoch > current_epoch.next() {
         Err(storage_api::Error::Custom(CustomError(
             format!(
-                "Requesting consensus validator set at {epoch:?}, but the \
+                "Requesting Bridge validator set at {epoch:?}, but the last \
+                 installed epoch is still {current_epoch:?}"
+            )
+            .into(),
+        )))
+    } else {
+        Ok(ctx
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_validator_set(Some(epoch))
+            .0)
+    }
+}
+
+/// Request the set of governance validators at the given epoch.
+///
+/// This method may fail if no set of validators exists yet,
+/// at that [`Epoch`].
+fn read_governance_valset<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    epoch: Epoch,
+) -> storage_api::Result<ValidatorSetArgs>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    if epoch > current_epoch.next() {
+        Err(storage_api::Error::Custom(CustomError(
+            format!(
+                "Requesting Governance validator set at {epoch:?}, but the \
                  last installed epoch is still {current_epoch:?}"
             )
             .into(),
@@ -583,9 +619,8 @@ where
         Ok(ctx
             .wl_storage
             .ethbridge_queries()
-            .get_validator_set_args(Some(epoch))
-            .0
-            .encode())
+            .get_governance_validator_set(Some(epoch))
+            .0)
     }
 }
 
@@ -627,7 +662,7 @@ where
     let (_, voting_powers) = ctx
         .wl_storage
         .ethbridge_queries()
-        .get_validator_set_args(Some(epoch));
+        .get_bridge_validator_set(Some(epoch));
     Ok(voting_powers)
 }
 
@@ -667,7 +702,7 @@ mod test_ethbridge_router {
     };
     use crate::types::ethereum_events::EthAddress;
 
-    /// Test that reading the consensus validator set works.
+    /// Test that reading the bridge validator set works.
     #[tokio::test]
     async fn test_read_consensus_valset() {
         let mut client = TestClient::new(RPC);
@@ -688,7 +723,7 @@ mod test_ethbridge_router {
         let validator_set = RPC
             .shell()
             .eth_bridge()
-            .read_consensus_valset(&client, &epoch)
+            .read_bridge_valset(&client, &epoch)
             .await
             .unwrap();
         let expected = {
@@ -722,7 +757,6 @@ mod test_ethbridge_router {
                 validators,
                 voting_powers,
             }
-            .encode()
         };
 
         assert_eq!(validator_set, expected);
@@ -749,7 +783,7 @@ mod test_ethbridge_router {
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_consensus_valset(&client, &Epoch(999_999))
+            .read_bridge_valset(&client, &Epoch(999_999))
             .await;
         let Err(err) = result else {
             panic!("Test failed");
@@ -1060,7 +1094,7 @@ mod test_ethbridge_router {
         let (validator_args, voting_powers) = client
             .wl_storage
             .ethbridge_queries()
-            .get_validator_set_args(None);
+            .get_bridge_validator_set(None);
         let relay_proof = ethereum_structs::RelayProof {
             transfers: vec![(&transfer).into()],
             pool_root: signed_root.data.0.0,

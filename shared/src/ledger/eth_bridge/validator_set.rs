@@ -17,13 +17,15 @@ use namada_core::types::storage::Epoch;
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
-use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
+use crate::eth_bridge::structs::Signature;
 use crate::ledger::args;
 use crate::ledger::queries::{Client, RPC};
 use crate::types::control_flow::time::{self, Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
+use crate::types::ethereum_events::EthAddress;
+use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 
 /// Relayer related errors.
 #[derive(Debug, Default)]
@@ -292,20 +294,44 @@ pub async fn query_validator_set_args<C>(
 ) where
     C: Client + Sync,
 {
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Validator {
+        addr: EthAddress,
+        voting_power: u128,
+    }
+
+    #[derive(Serialize)]
+    struct ValidatorSet {
+        set: Vec<Validator>,
+    }
+
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
         RPC.shell().epoch(client).await.unwrap()
     };
 
-    let encoded_validator_set_args = RPC
+    let ValidatorSetArgs {
+        validators,
+        voting_powers,
+        ..
+    } = RPC
         .shell()
         .eth_bridge()
-        .read_consensus_valset(client, &epoch)
+        .read_bridge_valset(client, &epoch)
         .await
         .unwrap();
+    let validator_set = ValidatorSet {
+        set: validators
+            .into_iter()
+            .zip(voting_powers.into_iter().map(u128::from))
+            .map(|(addr, voting_power)| Validator { addr, voting_power })
+            .collect(),
+    };
 
-    println!("0x{}", HEXLOWER.encode(encoded_validator_set_args.as_ref()));
+    println!("{}", serde_json::to_string_pretty(&validator_set).unwrap());
 }
 
 /// Relay a validator set update, signed off for a given epoch.
@@ -588,16 +614,16 @@ where
 
     let bridge_current_epoch = epoch_to_relay - 1;
     let shell = RPC.shell().eth_bridge();
-    let encoded_validator_set_args_fut =
-        shell.read_consensus_valset(nam_client, &bridge_current_epoch);
+    let validator_set_args_fut =
+        shell.read_bridge_valset(nam_client, &bridge_current_epoch);
 
     let shell = RPC.shell().eth_bridge();
     let bridge_address_fut = shell.read_bridge_contract(nam_client);
 
-    let (encoded_proof, encoded_validator_set_args, bridge_contract) =
+    let (encoded_proof, validator_set_args, bridge_contract) =
         futures::try_join!(
             encoded_proof_fut,
-            encoded_validator_set_args_fut,
+            validator_set_args_fut,
             bridge_address_fut
         )
         .map_err(|err| R::try_recover(err.to_string()))?;
@@ -607,8 +633,6 @@ where
         [u8; 32],
         Vec<Signature>,
     ) = abi_decode_struct(encoded_proof);
-    let consensus_set: ValidatorSetArgs =
-        abi_decode_struct(encoded_validator_set_args);
 
     let bridge = Bridge::new(bridge_contract.address, eth_client);
 
@@ -618,7 +642,7 @@ where
     }
 
     let mut relay_op = bridge.update_validator_set(
-        consensus_set,
+        validator_set_args.into(),
         bridge_hash,
         gov_hash,
         signatures,
