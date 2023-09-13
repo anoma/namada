@@ -221,7 +221,11 @@ pub fn sign_tx<U: WalletUtils>(
                 }
             })
             .collect::<Vec<common::SecretKey>>();
-        tx.sign_raw(signing_tx_keypairs, account_public_keys_map, signing_data.owner);
+        tx.sign_raw(
+            signing_tx_keypairs,
+            account_public_keys_map,
+            signing_data.owner,
+        );
     }
 
     let fee_payer_keypair =

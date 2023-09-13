@@ -484,8 +484,8 @@ mod tests {
                         1,
                         None,
                         Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into()))
-                        )
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ))
                     )
                     .is_ok()
             );
@@ -505,8 +505,8 @@ mod tests {
                         1,
                         None,
                         Some(&mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into()))
-                        )
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ))
                     )
                     .is_err()
             );

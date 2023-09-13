@@ -203,8 +203,7 @@ where
     C::Error: std::fmt::Display,
 {
     let signing_data =
-        aux_signing_data(client, &mut ctx.wallet, &args.tx, None, None)
-            .await?;
+        aux_signing_data(client, &mut ctx.wallet, &args.tx, None, None).await?;
 
     let (mut tx, _epoch) = tx::build_init_account(
         client,
@@ -429,8 +428,7 @@ pub async fn submit_init_validator<
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
     let signing_data =
-        aux_signing_data(client, &mut ctx.wallet, &tx_args, None, None)
-            .await?;
+        aux_signing_data(client, &mut ctx.wallet, &tx_args, None, None).await?;
 
     tx::prepare_tx(
         client,
@@ -1096,8 +1094,11 @@ where
 
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
-        let signatures =
-            tx.compute_section_signature(secret_keys, &account_public_keys_map, Some(owner));
+        let signatures = tx.compute_section_signature(
+            secret_keys,
+            &account_public_keys_map,
+            Some(owner),
+        );
 
         for signature in &signatures {
             let filename = format!(

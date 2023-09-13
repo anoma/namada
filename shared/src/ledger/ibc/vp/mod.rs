@@ -385,7 +385,7 @@ mod tests {
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
     use crate::proof_of_stake::parameters::PosParams;
-    use crate::proto::{Code, Data, Signature, Section, Tx};
+    use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
     use crate::types::key::testing::keypair_1;

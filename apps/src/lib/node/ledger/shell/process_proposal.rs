@@ -1002,7 +1002,7 @@ mod test_process_proposal {
     use assert_matches::assert_matches;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
-        Code, Data, Signature, Section, SignableEthMessage, Signed,
+        Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::hash::Hash;
@@ -2773,7 +2773,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2816,7 +2818,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2859,7 +2863,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2902,7 +2908,9 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 

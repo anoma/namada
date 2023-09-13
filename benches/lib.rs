@@ -73,7 +73,7 @@ use namada::ledger::queries::{
 };
 use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
-use namada::proto::{Code, Data, Signature, Section, Tx};
+use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;

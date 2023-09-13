@@ -405,7 +405,7 @@ impl SignatureIndex {
             index: None,
         }
     }
-    
+
     pub fn to_vec(&self) -> Vec<Self> {
         vec![self.clone()]
     }
@@ -499,14 +499,24 @@ impl Signature {
         };
 
         // Commit to the given targets
-        let partial = Self { targets, signer, signatures: BTreeMap::new() };
+        let partial = Self {
+            targets,
+            signer,
+            signatures: BTreeMap::new(),
+        };
         let target = partial.get_raw_hash();
         // Turn the map of secret keys into a map of signatures over the
         // commitment made above
-        let signatures = secret_keys.iter().map(|(index, secret_key)| {
-            (*index, common::SigScheme::sign(secret_key, target))
-        }).collect();
-        Self { signatures, ..partial }
+        let signatures = secret_keys
+            .iter()
+            .map(|(index, secret_key)| {
+                (*index, common::SigScheme::sign(secret_key, target))
+            })
+            .collect();
+        Self {
+            signatures,
+            ..partial
+        }
     }
 
     pub fn total_signatures(&self) -> u8 {
@@ -552,7 +562,9 @@ impl Signature {
             // account addresses match
             Signer::Address(addr) if Some(addr) == signer.as_ref() => {
                 for (idx, sig) in &self.signatures {
-                    if let Some(pk) = public_keys_index_map.get_public_key_from_index(*idx) {
+                    if let Some(pk) =
+                        public_keys_index_map.get_public_key_from_index(*idx)
+                    {
                         common::SigScheme::verify_signature(
                             &pk,
                             &self.get_raw_hash(),
@@ -562,15 +574,17 @@ impl Signature {
                         verifications += 1;
                     }
                 }
-            },
+            }
             // If the account addresses do not match, then there is no efficient
             // way to map signatures to the given public keys
-            Signer::Address(_) => {},
+            Signer::Address(_) => {}
             // Verify the signatures against the subset of this section's public
             // keys that are also in the given map
             Signer::PubKeys(pks) => {
                 for (idx, pk) in pks.iter().enumerate() {
-                    if let Some(map_idx) = public_keys_index_map.get_index_from_public_key(pk) {
+                    if let Some(map_idx) =
+                        public_keys_index_map.get_index_from_public_key(pk)
+                    {
                         common::SigScheme::verify_signature(
                             pk,
                             &self.get_raw_hash(),
@@ -580,9 +594,50 @@ impl Signature {
                         verifications += 1;
                     }
                 }
-            },
+            }
         }
         Ok(verifications)
+    }
+}
+
+/// A section representing a multisig over another section
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct CompressedSignature {
+    /// The hash of the section being signed
+    pub targets: Vec<u8>,
+    /// The public keys against which the signatures should be verified
+    pub signer: Signer,
+    /// The signature over the above hash
+    pub signatures: BTreeMap<u8, common::Signature>,
+}
+
+impl CompressedSignature {
+    /// Decompress this signature object with respect to the given transaction
+    /// by looking up the necessary section hashes. Used by constrained hardware
+    /// wallets.
+    pub fn expand(self, tx: &Tx) -> Signature {
+        let mut targets = Vec::new();
+        for idx in self.targets {
+            if idx == 0 {
+                // The "zeroth" section is the header
+                targets.push(tx.header_hash());
+            } else {
+                targets.push(tx.sections[idx as usize - 1].get_hash());
+            }
+        }
+        Signature {
+            targets,
+            signer: self.signer,
+            signatures: self.signatures,
+        }
     }
 }
 
@@ -1342,7 +1397,11 @@ impl Tx {
                 // signs over are present.
                 if hashes.iter().all(|x| {
                     signatures.targets.contains(x) || section.get_hash() == *x
-                }) && signatures.targets.iter().all(|x| self.get_section(x).is_some()) {
+                }) && signatures
+                    .targets
+                    .iter()
+                    .all(|x| self.get_section(x).is_some())
+                {
                     if signatures.total_signatures() > max_signatures {
                         return Err(Error::InvalidSectionSignature(
                             "too many signatures.".to_string(),
@@ -1352,12 +1411,21 @@ impl Tx {
                     // Finally verify that the signature itself is valid
                     let prev_verifieds = verified_pks.len();
                     let amt_verifieds = signatures
-                        .verify_signature(&mut verified_pks, &public_keys_index_map, signer)
-                        .map_err(|_| Error::InvalidSectionSignature("found invalid signature.".to_string()));
+                        .verify_signature(
+                            &mut verified_pks,
+                            &public_keys_index_map,
+                            signer,
+                        )
+                        .map_err(|_| {
+                            Error::InvalidSectionSignature(
+                                "found invalid signature.".to_string(),
+                            )
+                        });
                     // Compute the cost of the signature verifications
                     if let Some(x) = gas_meter.as_mut() {
-                        let amt_verified = usize::from(amt_verifieds.is_err()) +
-                            verified_pks.len() - prev_verifieds;
+                        let amt_verified = usize::from(amt_verifieds.is_err())
+                            + verified_pks.len()
+                            - prev_verifieds;
                         x.consume(VERIFY_TX_SIG_GAS_COST * amt_verified as u64)
                             .map_err(|_| Error::OutOfGas)?;
                     }
@@ -1372,7 +1440,9 @@ impl Tx {
                 }
             }
         }
-        Err(Error::InvalidSectionSignature("signature threshold not met.".to_string()))
+        Err(Error::InvalidSectionSignature(
+            "signature threshold not met.".to_string(),
+        ))
     }
 
     /// Verify that the sections with the given hashes have been signed together
@@ -1390,7 +1460,9 @@ impl Tx {
             1,
             None,
             None,
-        ).map(|x| *x.first().unwrap()).map_err(|_| Error::InvalidWrapperSignature)
+        )
+        .map(|x| *x.first().unwrap())
+        .map_err(|_| Error::InvalidWrapperSignature)
     }
 
     /// Validate any and all ciphertexts stored in this transaction
@@ -1433,7 +1505,7 @@ impl Tx {
                         signature,
                     });
                 }
-            },
+            }
             Signer::PubKeys(pub_keys) => {
                 for (idx, signature) in section.signatures {
                     signatures.push(SignatureIndex {
@@ -1442,7 +1514,7 @@ impl Tx {
                         signature,
                     });
                 }
-            },
+            }
         }
         signatures
     }
@@ -1732,19 +1804,23 @@ impl Tx {
         for signature in signatures {
             if let Some((addr, idx)) = &signature.index {
                 // Add the signature under the given multisig address
-                let section = sections.entry(addr.clone()).or_insert_with(|| Signature {
-                    targets: self.inner_section_targets(),
-                    signatures: BTreeMap::new(),
-                    signer: Signer::Address(addr.clone()),
-                });
+                let section =
+                    sections.entry(addr.clone()).or_insert_with(|| Signature {
+                        targets: self.inner_section_targets(),
+                        signatures: BTreeMap::new(),
+                        signer: Signer::Address(addr.clone()),
+                    });
                 section.signatures.insert(*idx, signature.signature);
             } else if let Signer::PubKeys(pks) = &mut pk_section.signer {
                 // Add the signature under its corresponding public key
-                pk_section.signatures.insert(pks.len() as u8, signature.signature);
+                pk_section
+                    .signatures
+                    .insert(pks.len() as u8, signature.signature);
                 pks.push(signature.pubkey);
             }
         }
-        for section in std::iter::once(pk_section).chain(sections.into_values()) {
+        for section in std::iter::once(pk_section).chain(sections.into_values())
+        {
             self.add_section(Section::Signature(section));
         }
         self

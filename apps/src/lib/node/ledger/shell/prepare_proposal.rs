@@ -522,7 +522,7 @@ mod test_prepare_proposal {
     };
     #[cfg(feature = "abcipp")]
     use namada::proto::SignableEthMessage;
-    use namada::proto::{Code, Data, Header, Signature, Section, Signed};
+    use namada::proto::{Code, Data, Header, Section, Signature, Signed};
     use namada::types::address::{self, Address};
     use namada::types::ethereum_events::EthereumEvent;
     #[cfg(feature = "abcipp")]
@@ -1561,7 +1561,9 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -1601,7 +1603,9 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -1640,7 +1644,9 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -1679,7 +1685,9 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 

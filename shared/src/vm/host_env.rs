@@ -1837,7 +1837,7 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
     let signer = Address::try_from_slice(&signer)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-    
+
     let (max_signatures, gas) = env
         .memory
         .read_bytes(max_signatures_ptr, max_signatures_len as _)

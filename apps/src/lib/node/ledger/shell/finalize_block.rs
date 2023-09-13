@@ -1099,7 +1099,7 @@ mod test_finalize_block {
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
-    use namada::proto::{Code, Data, Signature, Section};
+    use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
     use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
@@ -1157,7 +1157,7 @@ mod test_finalize_block {
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
-            None
+            None,
         )));
         let tx = wrapper_tx.to_bytes();
         (
@@ -2649,7 +2649,9 @@ mod test_finalize_block {
         ));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
         let fee_amount =

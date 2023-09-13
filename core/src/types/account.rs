@@ -6,8 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use super::address::Address;
-use super::key::common;
-use super::key::RefTo;
+use super::key::{common, RefTo};
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -96,9 +95,12 @@ impl AccountPublicKeysMap {
         &self,
         secret_keys: Vec<common::SecretKey>,
     ) -> BTreeMap<u8, common::SecretKey> {
-        secret_keys.into_iter().filter_map(|secret_key: common::SecretKey| {
-            self.get_index_from_public_key(&secret_key.ref_to())
-                .map(|index| (index, secret_key))
-        }).collect()
+        secret_keys
+            .into_iter()
+            .filter_map(|secret_key: common::SecretKey| {
+                self.get_index_from_public_key(&secret_key.ref_to())
+                    .map(|index| (index, secret_key))
+            })
+            .collect()
     }
 }

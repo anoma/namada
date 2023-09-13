@@ -168,7 +168,7 @@ impl TxType {
 #[cfg(test)]
 mod test_process_tx {
     use super::*;
-    use crate::proto::{Code, Data, Signature, Section, Tx, TxError};
+    use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
     use crate::types::key::*;
     use crate::types::storage::Epoch;
@@ -346,7 +346,7 @@ fn test_process_tx_decrypted_unsigned() {
 /// signature
 #[test]
 fn test_process_tx_decrypted_signed() {
-    use crate::proto::{Code, Data, Signature, Section, Tx};
+    use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::types::key::*;
 
     fn gen_keypair() -> common::SecretKey {
@@ -366,9 +366,14 @@ fn test_process_tx_decrypted_signed() {
     // Invalid signed data
     let ed_sig =
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-    let mut sig_sec =
-        Signature::new(vec![decrypted.header_hash()], [(0, gen_keypair())].into_iter().collect(), None);
-    sig_sec.signatures.insert(0, common::Signature::try_from_sig(&ed_sig).unwrap());
+    let mut sig_sec = Signature::new(
+        vec![decrypted.header_hash()],
+        [(0, gen_keypair())].into_iter().collect(),
+        None,
+    );
+    sig_sec
+        .signatures
+        .insert(0, common::Signature::try_from_sig(&ed_sig).unwrap());
     decrypted.add_section(Section::Signature(sig_sec));
     // create the tx with signed decrypted data
     let code_sec = decrypted

@@ -1,11 +1,12 @@
+use std::collections::HashSet;
+
 use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
-use namada::proto::{Data, Signature, Section};
+use namada::proto::{Data, Section, Signature};
 use namada_apps::wallet::defaults;
-use std::collections::HashSet;
 
 /// Benchmarks the validation of a single signature on a single `Section` of a
 /// transaction

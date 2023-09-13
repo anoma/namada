@@ -2159,7 +2159,7 @@ mod test_utils {
 #[cfg(all(test, not(feature = "abcipp")))]
 mod abciplus_mempool_tests {
     use namada::proto::{
-        Data, Signature, Section, SignableEthMessage, Signed, Tx,
+        Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
@@ -2313,7 +2313,7 @@ mod abciplus_mempool_tests {
 #[cfg(test)]
 mod test_mempool_validate {
     use namada::proof_of_stake::Epoch;
-    use namada::proto::{Code, Data, Signature, Section, Tx};
+    use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::transaction::{Fee, WrapperTx};
 
     use super::*;
@@ -2684,7 +2684,9 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2719,7 +2721,9 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2753,7 +2757,9 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2787,7 +2793,9 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 

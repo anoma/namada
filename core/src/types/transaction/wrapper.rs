@@ -414,7 +414,7 @@ pub mod wrapper_tx {
     #[cfg(test)]
     mod test_wrapper_tx {
         use super::*;
-        use crate::proto::{Code, Data, Signature, Section, Tx, TxError};
+        use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
         use crate::types::address::nam;
         use crate::types::transaction::{Hash, TxType};
 
