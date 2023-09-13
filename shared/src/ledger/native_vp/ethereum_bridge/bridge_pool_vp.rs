@@ -412,17 +412,59 @@ struct EscrowDelta<'a, KIND> {
     _kind: PhantomData<*const KIND>,
 }
 
-impl<KIND> EscrowDelta<'_, KIND> {
-    fn validate_changed_keys(&self, changed_keys: &BTreeSet<Key>) -> bool {
+impl EscrowDelta<'_, TokenCheck> {
+    fn validate_changed_keys(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+        pending: &PendingTransfer,
+    ) -> bool {
         let EscrowDelta {
             token,
             payer_account,
             escrow_account,
             ..
         } = self;
+
         let owner_key = balance_key(token, payer_account);
         let escrow_key = balance_key(token, escrow_account);
-        changed_keys.contains(&owner_key) && changed_keys.contains(&escrow_key)
+
+        let has_owner_key = changed_keys.contains(&owner_key);
+        let has_escrow_key = changed_keys.contains(&escrow_key);
+
+        let amount_is_zero = pending.transfer.amount.is_zero();
+
+        hints::likely(!amount_is_zero && has_owner_key && has_escrow_key)
+            || hints::unlikely(
+                amount_is_zero && !has_owner_key && !has_escrow_key,
+            )
+    }
+}
+
+impl EscrowDelta<'_, GasCheck> {
+    fn validate_changed_keys(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+        pending: &PendingTransfer,
+    ) -> bool {
+        let EscrowDelta {
+            token,
+            payer_account,
+            escrow_account,
+            ..
+        } = self;
+
+        let owner_key = balance_key(token, payer_account);
+        let escrow_key = balance_key(token, escrow_account);
+
+        let has_owner_key = changed_keys.contains(&owner_key);
+        let has_escrow_key = changed_keys.contains(&escrow_key);
+
+        let amount_is_zero = pending.gas_fee.amount.is_zero();
+
+        hints::likely(!amount_is_zero && has_owner_key && has_escrow_key)
+            || hints::unlikely(
+                amount_is_zero && !has_owner_key && !has_escrow_key,
+            )
     }
 }
 
@@ -437,9 +479,15 @@ struct EscrowCheck<'a> {
 
 impl EscrowCheck<'_> {
     #[inline]
-    fn validate_changed_keys(&self, changed_keys: &BTreeSet<Key>) -> bool {
-        self.gas_check.validate_changed_keys(changed_keys)
-            && self.token_check.validate_changed_keys(changed_keys)
+    fn validate_changed_keys(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+        pending: &PendingTransfer,
+    ) -> bool {
+        self.gas_check.validate_changed_keys(changed_keys, pending)
+            && self
+                .token_check
+                .validate_changed_keys(changed_keys, pending)
     }
 }
 
@@ -541,7 +589,7 @@ where
         let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
         let escrow_checks =
             self.determine_escrow_checks(&wnam_address, &transfer)?;
-        if !escrow_checks.validate_changed_keys(keys_changed) {
+        if !escrow_checks.validate_changed_keys(keys_changed, &transfer) {
             tracing::debug!(
                 ?transfer,
                 "Missing storage modifications in the Bridge pool"
@@ -1848,5 +1896,147 @@ mod test_bridge_pool_vp {
             },
             Expect::True,
         );
+    }
+
+    /// Test that the Bridge pool native VP validates transfers that
+    /// do not contain gas fees and no associated changed keys.
+    #[test]
+    fn test_no_gas_fees_with_no_changed_keys() {
+        let nam_addr = nam();
+        let pending = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                amount: Amount::from(1u64),
+            },
+            gas_fee: GasFee {
+                token: nam(),
+                // NOTE: testing 0 amount
+                amount: Amount::zero(),
+                payer: bertha_address(),
+            },
+        };
+        let delta = EscrowDelta {
+            token: Cow::Borrowed(&nam_addr),
+            payer_account: &bertha_address(),
+            escrow_account: &BRIDGE_ADDRESS,
+            expected_debit: Amount::zero(),
+            expected_credit: Amount::zero(),
+            // NOTE: testing gas fees
+            _kind: PhantomData::<*const GasCheck>,
+        };
+        // NOTE: testing no changed keys
+        let empty_keys = BTreeSet::new();
+
+        assert!(delta.validate_changed_keys(&empty_keys, &pending));
+    }
+
+    /// Test that the Bridge pool native VP rejects transfers that
+    /// do not contain gas fees and has associated changed keys.
+    #[test]
+    fn test_no_gas_fees_with_changed_keys() {
+        let nam_addr = nam();
+        let pending = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                amount: Amount::from(1u64),
+            },
+            gas_fee: GasFee {
+                token: nam(),
+                // NOTE: testing 0 amount
+                amount: Amount::zero(),
+                payer: bertha_address(),
+            },
+        };
+        let delta = EscrowDelta {
+            token: Cow::Borrowed(&nam_addr),
+            payer_account: &bertha_address(),
+            escrow_account: &BRIDGE_ADDRESS,
+            expected_debit: Amount::zero(),
+            expected_credit: Amount::zero(),
+            // NOTE: testing gas fees
+            _kind: PhantomData::<*const GasCheck>,
+        };
+        let owner_key = balance_key(&nam_addr, &bertha_address());
+        // NOTE: testing changed keys
+        let some_changed_keys = BTreeSet::from([owner_key]);
+
+        assert!(!delta.validate_changed_keys(&some_changed_keys, &pending));
+    }
+
+    /// Test that the Bridge pool native VP validates transfers
+    /// moving no value and with no associated changed keys.
+    #[test]
+    fn test_no_amount_with_no_changed_keys() {
+        let nam_addr = nam();
+        let pending = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                // NOTE: testing 0 amount
+                amount: Amount::zero(),
+            },
+            gas_fee: GasFee {
+                token: nam(),
+                amount: Amount::from(1u64),
+                payer: bertha_address(),
+            },
+        };
+        let delta = EscrowDelta {
+            token: Cow::Borrowed(&nam_addr),
+            payer_account: &bertha_address(),
+            escrow_account: &BRIDGE_ADDRESS,
+            expected_debit: Amount::zero(),
+            expected_credit: Amount::zero(),
+            // NOTE: testing token transfers
+            _kind: PhantomData::<*const TokenCheck>,
+        };
+        // NOTE: testing no changed keys
+        let empty_keys = BTreeSet::new();
+
+        assert!(delta.validate_changed_keys(&empty_keys, &pending));
+    }
+
+    /// Test that the Bridge pool native VP rejects transfers
+    /// moving no value and with associated changed keys.
+    #[test]
+    fn test_no_amount_with_changed_keys() {
+        let nam_addr = nam();
+        let pending = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: wnam(),
+                sender: bertha_address(),
+                recipient: EthAddress([1; 20]),
+                // NOTE: testing 0 amount
+                amount: Amount::zero(),
+            },
+            gas_fee: GasFee {
+                token: nam(),
+                amount: Amount::from(1u64),
+                payer: bertha_address(),
+            },
+        };
+        let delta = EscrowDelta {
+            token: Cow::Borrowed(&nam_addr),
+            payer_account: &bertha_address(),
+            escrow_account: &BRIDGE_ADDRESS,
+            expected_debit: Amount::zero(),
+            expected_credit: Amount::zero(),
+            // NOTE: testing token transfers
+            _kind: PhantomData::<*const TokenCheck>,
+        };
+        let owner_key = balance_key(&nam_addr, &bertha_address());
+        // NOTE: testing changed keys
+        let some_changed_keys = BTreeSet::from([owner_key]);
+
+        assert!(!delta.validate_changed_keys(&some_changed_keys, &pending));
     }
 }
