@@ -40,7 +40,7 @@ id = 'local.21dbb046494e45859ec2af32'
 type = 'namada'
 rpc_addr = 'http://127.0.0.1:26657'
 grpc_addr = 'http://127.0.0.1:9090'
-event_source = { mode = 'push', url = 'ws://127.0.0.1:27657/websocket', batch_delay = '500ms' }
+event_source = { mode = 'push', url = 'ws://127.0.0.1:26657/websocket', batch_delay = '500ms' }
 account_prefix = ''
 key_name = 'relayer'
 store_prefix = 'ibc'
