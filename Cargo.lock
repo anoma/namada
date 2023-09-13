@@ -90,6 +90,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anes"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -361,6 +367,17 @@ dependencies = [
  "futures",
  "pharos",
  "rustc_version 0.4.0",
+]
+
+[[package]]
+name = "atty"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
+dependencies = [
+ "hermit-abi 0.1.19",
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -950,6 +967,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cast"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1033,6 +1056,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cca491388666e04d7248af3f60f0c40cfb0991c72205595d7c396e3510207d1a"
 
 [[package]]
+name = "ciborium"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde 1.0.163",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "cipher"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1074,6 +1124,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
+version = "3.2.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ea181bf566f71cb9a5d17a59e1871af638180a18fb0035c92ae62b705207123"
+dependencies = [
+ "bitflags 1.2.1",
+ "clap_lex 0.2.4",
+ "indexmap 1.9.3",
+ "textwrap",
+]
+
+[[package]]
+name = "clap"
 version = "4.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2686c4115cb0810d9a984776e197823d08ec94f176549a89a9efded477c456dc"
@@ -1090,8 +1152,17 @@ dependencies = [
  "anstream",
  "anstyle",
  "bitflags 1.2.1",
- "clap_lex",
+ "clap_lex 0.5.0",
  "strsim",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
+dependencies = [
+ "os_str_bytes",
 ]
 
 [[package]]
@@ -1356,6 +1427,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
 dependencies = [
  "cfg-if 1.0.0",
+]
+
+[[package]]
+name = "criterion"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7c76e09c1aae2bc52b3d2f29e13c6572553b30c4aa1b8a49fd70de6412654cb"
+dependencies = [
+ "anes",
+ "atty",
+ "cast",
+ "ciborium",
+ "clap 3.2.25",
+ "criterion-plot",
+ "itertools",
+ "lazy_static",
+ "num-traits 0.2.15",
+ "oorandom",
+ "plotters",
+ "rayon",
+ "regex",
+ "serde 1.0.163",
+ "serde_derive",
+ "serde_json",
+ "tinytemplate",
+ "walkdir",
+]
+
+[[package]]
+name = "criterion-plot"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
+dependencies = [
+ "cast",
+ "itertools",
 ]
 
 [[package]]
@@ -1999,8 +2106,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -2010,8 +2117,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -2021,19 +2128,18 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-events"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-governance-events",
  "ethers",
- "smallvec",
 ]
 
 [[package]]
 name = "ethbridge-governance-contract"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-governance-events",
  "ethbridge-structs",
@@ -2043,8 +2149,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-events"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -2054,8 +2160,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethers",
@@ -2912,6 +3018,15 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "hermit-abi"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee512640fe35acbfb4bb779db6f0d80704c2cacfa2e39b601ef3e3f47d1ae4c7"
@@ -3697,7 +3812,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "borsh 0.9.4",
  "chacha20 0.9.1",
@@ -3710,7 +3825,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3730,6 +3845,7 @@ dependencies = [
  "masp_note_encryption",
  "memuse",
  "nonempty",
+ "num-traits 0.2.15",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
@@ -3740,7 +3856,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3756,7 +3872,6 @@ dependencies = [
  "rand_core 0.6.4",
  "redjubjub",
  "tracing 0.1.37",
- "wagyu-zcash-parameters",
 ]
 
 [[package]]
@@ -3959,7 +4074,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4027,7 +4142,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4042,7 +4157,7 @@ dependencies = [
  "byte-unit",
  "byteorder",
  "bytes",
- "clap",
+ "clap 4.3.5",
  "color-eyre",
  "config",
  "data-encoding",
@@ -4115,8 +4230,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_benchmarks"
+version = "0.22.0"
+dependencies = [
+ "async-trait",
+ "borsh 0.9.4",
+ "criterion",
+ "ferveo-common",
+ "masp_primitives",
+ "masp_proofs",
+ "namada",
+ "namada_apps",
+ "namada_test_utils",
+ "prost",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "sha2 0.9.9",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "namada_core"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -4148,6 +4284,7 @@ dependencies = [
  "num-traits 0.2.15",
  "num256",
  "pretty_assertions",
+ "primitive-types",
  "proptest",
  "prost",
  "prost-types",
@@ -4173,7 +4310,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "itertools",
@@ -4184,7 +4321,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "assert_matches",
  "borsh 0.9.4",
@@ -4208,7 +4345,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4217,7 +4354,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -4235,7 +4372,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -4244,13 +4381,13 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
  "borsh 0.9.4",
  "chrono",
- "clap",
+ "clap 4.3.5",
  "color-eyre",
  "concat-idents",
  "data-encoding",
@@ -4291,7 +4428,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -4305,7 +4442,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -4314,7 +4451,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -4620,6 +4757,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 
 [[package]]
+name = "oorandom"
+version = "11.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
+
+[[package]]
 name = "opaque-debug"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4711,6 +4854,12 @@ dependencies = [
  "subtle 2.4.1",
  "zeroize",
 ]
+
+[[package]]
+name = "os_str_bytes"
+version = "6.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d5d9eb14b174ee9aa2ef96dc2b94637a2d4b6e7cb873c7e171f0c20c6cf3eac"
 
 [[package]]
 name = "output_vt100"
@@ -4985,6 +5134,34 @@ name = "pkg-config"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
+
+[[package]]
+name = "plotters"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2c224ba00d7cadd4d5c660deaf2098e5e80e07846537c51f9cfa4be50c1fd45"
+dependencies = [
+ "num-traits 0.2.15",
+ "plotters-backend",
+ "plotters-svg",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "plotters-backend"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e76628b4d3a7581389a35d5b6e2139607ad7c75b17aed325f210aa91f4a9609"
+
+[[package]]
+name = "plotters-svg"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38f6d39893cca0701371e3c27294f09797214b86f1fb951b89ade8ec04e2abab"
+dependencies = [
+ "plotters-backend",
+]
 
 [[package]]
 name = "poly1305"
@@ -6606,6 +6783,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "textwrap"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
+
+[[package]]
 name = "thiserror"
 version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6722,6 +6905,16 @@ dependencies = [
  "chunked_transfer",
  "httpdate",
  "log",
+]
+
+[[package]]
+name = "tinytemplate"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
+dependencies = [
+ "serde 1.0.163",
+ "serde_json",
 ]
 
 [[package]]
@@ -7358,56 +7551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "wagyu-zcash-parameters"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c904628658374e651288f000934c33ef738b2d8b3e65d4100b70b395dbe2bb"
-dependencies = [
- "wagyu-zcash-parameters-1",
- "wagyu-zcash-parameters-2",
- "wagyu-zcash-parameters-3",
- "wagyu-zcash-parameters-4",
- "wagyu-zcash-parameters-5",
- "wagyu-zcash-parameters-6",
-]
-
-[[package]]
-name = "wagyu-zcash-parameters-1"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90bf2e21bb027d3f8428c60d6a720b54a08bf6ce4e6f834ef8e0d38bb5695da8"
-
-[[package]]
-name = "wagyu-zcash-parameters-2"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a616ab2e51e74cc48995d476e94de810fb16fc73815f390bf2941b046cc9ba2c"
-
-[[package]]
-name = "wagyu-zcash-parameters-3"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14da1e2e958ff93c0830ee68e91884069253bf3462a67831b02b367be75d6147"
-
-[[package]]
-name = "wagyu-zcash-parameters-4"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f058aeef03a2070e8666ffb5d1057d8bb10313b204a254a6e6103eb958e9a6d6"
-
-[[package]]
-name = "wagyu-zcash-parameters-5"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffe916b30e608c032ae1b734f02574a3e12ec19ab5cc5562208d679efe4969d"
-
-[[package]]
-name = "wagyu-zcash-parameters-6"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7b6d5a78adc3e8f198e9cd730f219a695431467f7ec29dcfc63ade885feebe1"
-
-[[package]]
 name = "wait-timeout"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7566,8 +7709,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8d8361c9d006ea3d7797de7bd6b1492ffd0f91a22430cfda6c1658ad57bedf"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap 1.9.3",
@@ -7593,8 +7735,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aaf9428c29c1d8ad2ac0e45889ba8a568a835e33fd058964e5e500f2f7ce325"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enumset",
  "loupe",
@@ -7606,8 +7747,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0def391ee1631deac5ac1e6ce919c07a5ccb936ad0fd44708cdc2365c49561a4"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "blake3",
  "hex",
@@ -7618,8 +7758,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67a6cd866aed456656db2cfea96c18baabbd33f676578482b85c51e1ee19d2c"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enumset",
  "loupe",
@@ -7636,8 +7775,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48be2f9f6495f08649e4f8b946a2cbbe119faf5a654aa1457f9504a99d23dae0"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -7656,8 +7794,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ca2a35204d8befa85062bc7aac259a8db8070b801b8a783770ba58231d729e"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -7675,8 +7812,7 @@ dependencies = [
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00e50405cc2a2f74ff574584710a5f2c1d5c93744acce2ca0866084739284b51"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -7687,8 +7823,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f98f010978c244db431b392aeab0661df7ea0822343334f8f2a920763548e45"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "enumset",
@@ -7710,8 +7845,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0358af9c154724587731175553805648d9acb8f6657880d165e378672b7e53"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -7736,8 +7870,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "440dc3d93c9ca47865a4f4edd037ea81bf983b5796b59b3d712d844b32dbef15"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -7756,8 +7889,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f1db3f54152657eb6e86c44b66525ff7801dad8328fe677da48dd06af9ad41"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -7772,8 +7904,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d831335ff3a44ecf451303f6f891175c642488036b92ceceb24ac8623a8fa8b"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -7784,8 +7915,7 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39df01ea05dc0a9bab67e054c7cb01521e53b35a7bb90bd02eca564ed0b2667f"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "enum-iterator",
@@ -7800,8 +7930,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d965fa61f4dc4cdb35a54daaf7ecec3563fbb94154a6c35433f879466247dd"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "cc",

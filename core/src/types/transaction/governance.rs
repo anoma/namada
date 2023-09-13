@@ -8,7 +8,7 @@ use crate::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use crate::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType,
+    AddRemove, PGFAction, PGFTarget, ProposalType,
 };
 use crate::ledger::governance::storage::vote::StorageProposalVote;
 use crate::types::address::Address;
@@ -100,12 +100,8 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfStewardProposal) -> Result<Self, Self::Error> {
-        let extra_data = value
-            .data
-            .iter()
-            .cloned()
-            .map(|steward| AddRemove::<Address>::try_from(steward).unwrap())
-            .collect::<HashSet<AddRemove<Address>>>();
+        let extra_data =
+            HashSet::<AddRemove<Address>>::try_from(value.data).unwrap();
 
         Ok(InitProposalData {
             id: value.proposal.id,
@@ -128,7 +124,17 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .continous
             .iter()
             .cloned()
-            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .map(|funding| {
+                let target = PGFTarget {
+                    target: funding.address,
+                    amount: funding.amount,
+                };
+                if funding.amount.is_zero() {
+                    PGFAction::Continuous(AddRemove::Remove(target))
+                } else {
+                    PGFAction::Continuous(AddRemove::Add(target))
+                }
+            })
             .collect::<Vec<PGFAction>>();
 
         let retro_fundings = value
@@ -136,7 +142,13 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .retro
             .iter()
             .cloned()
-            .map(|funding| PGFAction::try_from(funding).unwrap())
+            .map(|funding| {
+                let target = PGFTarget {
+                    target: funding.address,
+                    amount: funding.amount,
+                };
+                PGFAction::Retro(target)
+            })
             .collect::<Vec<PGFAction>>();
 
         let extra_data = [continous_fundings, retro_fundings].concat();

@@ -1,5 +1,6 @@
 //! Structures encapsulating SDK arguments
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
@@ -7,6 +8,7 @@ use namada_core::types::chain::ChainId;
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::time::DateTimeUtc;
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
@@ -57,15 +59,29 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type TransferTarget: Clone + std::fmt::Debug;
     /// Represents some data that is used in a transaction
     type Data: Clone + std::fmt::Debug;
+    /// Bridge pool recommendations conversion rates table.
+    type BpConversionTable: Clone + std::fmt::Debug;
 }
 
 /// The concrete types being used in Namada SDK
 #[derive(Clone, Debug)]
 pub struct SdkTypes;
 
+/// An entry in the Bridge pool recommendations conversion
+/// rates table.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BpConversionTableEntry {
+    /// An alias for the token, or the string representation
+    /// of its address if none is available.
+    pub alias: String,
+    /// Conversion rate from the given token to gwei.
+    pub conversion_rate: f64,
+}
+
 impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::types::masp::BalanceOwner;
+    type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::types::key::common::SecretKey;
@@ -150,7 +166,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Transferred token addres    s
     pub token: C::Address,
     /// Transferred token amount
-    pub amount: token::Amount,
+    pub amount: InputAmount,
     /// Port ID
     pub port_id: PortId,
     /// Channel ID
@@ -437,6 +453,30 @@ pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
 }
 
 #[derive(Clone, Debug)]
+/// Commission rate change args
+pub struct UpdateStewardCommission<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Steward address
+    pub steward: C::Address,
+    /// Value to which the tx changes the commission rate
+    pub commission: C::Data,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+/// Commission rate change args
+pub struct ResignSteward<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address
+    pub steward: C::Address,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
 /// Re-activate a jailed validator args
 pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
@@ -510,6 +550,8 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
+    /// Simulate applying both the wrapper and inner transactions
+    pub dry_run_wrapper: bool,
     /// Dump the transaction bytes to file
     pub dump_tx: bool,
     /// The output directory path to where serialize the data
@@ -526,16 +568,21 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the above alias, if it is provided, in the
     /// wallet.
     pub wallet_alias_force: bool,
+    /// The amount being payed (for gas unit) to include the transaction
+    pub fee_amount: Option<InputAmount>,
     /// The fee payer signing key
-    pub gas_payer: Option<C::Keypair>,
-    /// The amount being payed to include the transaction
-    pub gas_amount: InputAmount,
+    pub wrapper_fee_payer: Option<C::Keypair>,
     /// The token in which the fee is being paid
-    pub gas_token: C::Address,
+    pub fee_token: C::Address,
+    /// The optional spending key for fee unshielding
+    pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: Option<DateTimeUtc>,
+    /// Generate an ephimeral signing key to be used only once to sign a
+    /// wrapper tx
+    pub disposable_signing_key: bool,
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
@@ -694,13 +741,18 @@ pub struct RecommendBatch<C: NamadaTypes = SdkTypes> {
     /// An optional parameter indicating how much net
     /// gas the relayer is willing to pay.
     pub gas: Option<u64>,
-    /// Estimate of amount of NAM a single ETH is worth.
-    pub nam_per_eth: f64,
+    /// Bridge pool recommendations conversion rates table.
+    pub conversion_table: C::BpConversionTable,
 }
 
 /// A transfer to be added to the Ethereum bridge pool.
 #[derive(Clone, Debug)]
 pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
+    /// Whether the transfer is for a NUT.
+    ///
+    /// By default, we add wrapped ERC20s onto the
+    /// Bridge pool.
+    pub nut: bool,
     /// The args for building a tx to the bridge pool
     pub tx: Tx<C>,
     /// The type of token
@@ -711,10 +763,14 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     pub sender: C::Address,
     /// The amount to be transferred
     pub amount: InputAmount,
-    /// The amount of fees (in NAM)
-    pub fee_amount: token::Amount,
+    /// The amount of gas fees
+    pub fee_amount: InputAmount,
     /// The account of fee payer.
-    pub fee_payer: C::Address,
+    ///
+    /// If unset, it is the same as the sender.
+    pub fee_payer: Option<C::Address>,
+    /// The token in which the gas is being paid
+    pub fee_token: C::Address,
     /// Path to the tx WASM code file
     pub code_path: PathBuf,
 }

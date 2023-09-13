@@ -29,7 +29,7 @@ use crate::types::time::DateTimeUtc;
 pub const IBC_KEY_LIMIT: usize = 120;
 
 #[allow(missing_docs)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error("Error parsing address: {0}")]
     ParseAddress(address::DecodeError),
@@ -65,6 +65,10 @@ pub const RESERVED_VP_KEY: &str = "?";
 pub const WASM_KEY_PREFIX: &str = "wasm";
 /// The reserved storage key prefix for wasm codes
 pub const WASM_CODE_PREFIX: &str = "code";
+/// The reserved storage key prefix for wasm codes' name
+pub const WASM_CODE_NAME_PREFIX: &str = "name";
+/// The reserved storage key prefix for wasm codes' length
+pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
@@ -503,14 +507,17 @@ impl Key {
 
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
-        let mut addresses = Vec::new();
-        for s in &self.segments {
-            match s {
-                DbKeySeg::AddressSeg(addr) => addresses.push(addr.clone()),
-                _ => continue,
-            }
-        }
-        addresses
+        self.iter_addresses().cloned().collect()
+    }
+
+    /// Iterates over all addresses in the key segments
+    pub fn iter_addresses<'k, 'this: 'k>(
+        &'this self,
+    ) -> impl Iterator<Item = &'_ Address> + 'k {
+        self.segments.iter().filter_map(|s| match s {
+            DbKeySeg::AddressSeg(addr) => Some(addr),
+            _ => None,
+        })
     }
 
     /// Return the segment at the index parameter
@@ -550,6 +557,24 @@ impl Key {
         let mut segments =
             Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
         segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key of wasm code's hash of the given name
+    pub fn wasm_code_name(code_name: String) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_NAME_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_name));
+        Key { segments }
+    }
+
+    /// Returns a key of the wasm code's length of the given hash
+    pub fn wasm_code_len(code_hash: &Hash) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_LEN_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
         Key { segments }
     }
@@ -1254,7 +1279,6 @@ pub struct PrefixValue {
 pub struct EthEventsQueue {
     /// Queue of transfer to Namada events.
     pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
-    // TODO: add queue of update whitelist events
 }
 
 /// A queue of confirmed Ethereum events of type `E`.

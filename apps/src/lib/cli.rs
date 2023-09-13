@@ -15,6 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
+use namada::types::io::DefaultIo;
 use utils::*;
 pub use utils::{dispatch_prompt, safe_exit, Cmd, TESTIN};
 
@@ -218,7 +219,7 @@ pub mod cmds {
                 .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
-                // Proposal transactions
+                // Governance transactions
                 .subcommand(TxInitProposal::def().display_order(1))
                 .subcommand(TxVoteProposal::def().display_order(1))
                 // PoS transactions
@@ -228,31 +229,34 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
-                // Ethereum bridge
+                // Ethereum bridge transactions
                 .subcommand(AddToEthBridgePool::def().display_order(3))
+                // PGF transactions
+                .subcommand(TxUpdateStewardCommission::def().display_order(4))
+                .subcommand(TxResignSteward::def().display_order(4))
                 // Queries
-                .subcommand(QueryEpoch::def().display_order(4))
-                .subcommand(QueryAccount::def().display_order(4))
-                .subcommand(QueryTransfers::def().display_order(4))
-                .subcommand(QueryConversions::def().display_order(4))
-                .subcommand(QueryBlock::def().display_order(4))
-                .subcommand(QueryBalance::def().display_order(4))
-                .subcommand(QueryBonds::def().display_order(4))
-                .subcommand(QueryBondedStake::def().display_order(4))
-                .subcommand(QuerySlashes::def().display_order(4))
-                .subcommand(QueryDelegations::def().display_order(4))
-                .subcommand(QueryFindValidator::def().display_order(4))
-                .subcommand(QueryResult::def().display_order(4))
-                .subcommand(QueryRawBytes::def().display_order(4))
-                .subcommand(QueryProposal::def().display_order(4))
-                .subcommand(QueryProposalResult::def().display_order(4))
-                .subcommand(QueryProtocolParameters::def().display_order(4))
-                .subcommand(QueryPgf::def().display_order(4))
-                .subcommand(QueryValidatorState::def().display_order(4))
+                .subcommand(QueryEpoch::def().display_order(5))
+                .subcommand(QueryAccount::def().display_order(5))
+                .subcommand(QueryTransfers::def().display_order(5))
+                .subcommand(QueryConversions::def().display_order(5))
+                .subcommand(QueryBlock::def().display_order(5))
+                .subcommand(QueryBalance::def().display_order(5))
+                .subcommand(QueryBonds::def().display_order(5))
+                .subcommand(QueryBondedStake::def().display_order(5))
+                .subcommand(QuerySlashes::def().display_order(5))
+                .subcommand(QueryDelegations::def().display_order(5))
+                .subcommand(QueryFindValidator::def().display_order(5))
+                .subcommand(QueryResult::def().display_order(5))
+                .subcommand(QueryRawBytes::def().display_order(5))
+                .subcommand(QueryProposal::def().display_order(5))
+                .subcommand(QueryProposalResult::def().display_order(5))
+                .subcommand(QueryProtocolParameters::def().display_order(5))
+                .subcommand(QueryPgf::def().display_order(5))
+                .subcommand(QueryValidatorState::def().display_order(5))
                 // Actions
-                .subcommand(SignTx::def().display_order(5))
+                .subcommand(SignTx::def().display_order(6))
                 // Utils
-                .subcommand(Utils::def().display_order(6))
+                .subcommand(Utils::def().display_order(7))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -272,6 +276,10 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxInitProposal);
             let tx_vote_proposal =
                 Self::parse_with_ctx(matches, TxVoteProposal);
+            let tx_update_steward_commission =
+                Self::parse_with_ctx(matches, TxUpdateStewardCommission);
+            let tx_resign_steward =
+                Self::parse_with_ctx(matches, TxResignSteward);
             let tx_commission_rate_change =
                 Self::parse_with_ctx(matches, TxCommissionRateChange);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -321,6 +329,8 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(add_to_eth_bridge_pool)
+                .or(tx_update_steward_commission)
+                .or(tx_resign_steward)
                 .or(query_epoch)
                 .or(query_transfers)
                 .or(query_conversions)
@@ -393,6 +403,8 @@ pub mod cmds {
         Unbond(Unbond),
         Withdraw(Withdraw),
         AddToEthBridgePool(AddToEthBridgePool),
+        TxUpdateStewardCommission(TxUpdateStewardCommission),
+        TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
         QueryAccount(QueryAccount),
         QueryTransfers(QueryTransfers),
@@ -1737,6 +1749,54 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxUpdateStewardCommission(
+        pub args::UpdateStewardCommission<args::CliTypes>,
+    );
+
+    impl SubCmd for TxUpdateStewardCommission {
+        const CMD: &'static str = "update-steward-rewards";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUpdateStewardCommission(args::UpdateStewardCommission::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Update how steward commissions are split.")
+                .add_args::<args::UpdateStewardCommission<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxResignSteward(pub args::ResignSteward<args::CliTypes>);
+
+    impl SubCmd for TxResignSteward {
+        const CMD: &'static str = "resign-steward";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxResignSteward(args::ResignSteward::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Craft a transaction to resign as a steward.")
+                .add_args::<args::ResignSteward<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxCommissionRateChange(
         pub args::CommissionRateChange<args::CliTypes>,
     );
@@ -1972,52 +2032,87 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum EthBridgePool {
+        /// The [`super::Context`] provides access to the wallet and the
+        /// config. It will generate a new wallet and config, if they
+        /// don't exist.
+        WithContext(EthBridgePoolWithCtx),
+        /// Utils don't have [`super::Context`], only the global arguments.
+        WithoutContext(EthBridgePoolWithoutCtx),
+    }
+
+    /// Ethereum Bridge pool commands requiring [`super::Context`].
+    #[derive(Clone, Debug)]
+    pub enum EthBridgePoolWithCtx {
         /// Get a recommendation on a batch of transfers
         /// to relay.
-        RecommendBatch(args::RecommendBatch<args::CliTypes>),
+        RecommendBatch(RecommendBatch),
+    }
+
+    /// Ethereum Bridge pool commands not requiring [`super::Context`].
+    #[derive(Clone, Debug)]
+    pub enum EthBridgePoolWithoutCtx {
         /// Construct a proof that a set of transfers is in the pool.
         /// This can be used to relay transfers across the
         /// bridge to Ethereum.
-        ConstructProof(args::BridgePoolProof<args::CliTypes>),
-        /// Construct and relay a bridge pool proof to
+        ConstructProof(ConstructProof),
+        /// Construct and relay a Bridge pool proof to
         /// Ethereum directly.
-        RelayProof(args::RelayBridgePoolProof<args::CliTypes>),
+        RelayProof(RelayProof),
         /// Query the contents of the pool.
-        QueryPool(args::Query<args::CliTypes>),
+        QueryPool(QueryEthBridgePool),
         /// Query to provable contents of the pool.
-        QuerySigned(args::Query<args::CliTypes>),
+        QuerySigned(QuerySignedBridgePool),
         /// Check the confirmation status of `TransferToEthereum`
         /// events.
-        QueryRelays(args::Query<args::CliTypes>),
+        QueryRelays(QueryRelayProgress),
     }
 
     impl Cmd for EthBridgePool {
         fn add_sub(app: App) -> App {
-            app.subcommand(ConstructProof::def().display_order(1))
+            app.subcommand(RecommendBatch::def().display_order(1))
+                .subcommand(ConstructProof::def().display_order(1))
+                .subcommand(RelayProof::def().display_order(1))
                 .subcommand(QueryEthBridgePool::def().display_order(1))
                 .subcommand(QuerySignedBridgePool::def().display_order(1))
                 .subcommand(QueryRelayProgress::def().display_order(1))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let recommend = RecommendBatch::parse(matches)
-                .map(|query| Self::RecommendBatch(query.0));
-            let construct_proof = ConstructProof::parse(matches)
-                .map(|proof| Self::ConstructProof(proof.0));
-            let relay_proof = RelayProof::parse(matches)
-                .map(|proof| Self::RelayProof(proof.0));
-            let query_pool = QueryEthBridgePool::parse(matches)
-                .map(|q| Self::QueryPool(q.0));
-            let query_signed = QuerySignedBridgePool::parse(matches)
-                .map(|q| Self::QuerySigned(q.0));
-            let query_relays = QueryRelayProgress::parse(matches)
-                .map(|q| Self::QueryRelays(q.0));
+            use EthBridgePoolWithCtx::*;
+            use EthBridgePoolWithoutCtx::*;
+
+            let recommend = Self::parse_with_ctx(matches, RecommendBatch);
+            let construct_proof =
+                Self::parse_without_ctx(matches, ConstructProof);
+            let relay_proof = Self::parse_without_ctx(matches, RelayProof);
+            let query_pool = Self::parse_without_ctx(matches, QueryPool);
+            let query_signed = Self::parse_without_ctx(matches, QuerySigned);
+            let query_relays = Self::parse_without_ctx(matches, QueryRelays);
+
             construct_proof
                 .or(recommend)
                 .or(relay_proof)
                 .or(query_pool)
                 .or(query_signed)
                 .or(query_relays)
+        }
+    }
+
+    impl EthBridgePool {
+        /// A helper method to parse sub cmds with context
+        fn parse_with_ctx<T: SubCmd>(
+            matches: &ArgMatches,
+            sub_to_self: impl Fn(T) -> EthBridgePoolWithCtx,
+        ) -> Option<Self> {
+            T::parse(matches).map(|sub| Self::WithContext(sub_to_self(sub)))
+        }
+
+        /// A helper method to parse sub cmds without context
+        fn parse_without_ctx<T: SubCmd>(
+            matches: &ArgMatches,
+            sub_to_self: impl Fn(T) -> EthBridgePoolWithoutCtx,
+        ) -> Option<Self> {
+            T::parse(matches).map(|sub| Self::WithoutContext(sub_to_self(sub)))
         }
     }
 
@@ -2059,7 +2154,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Add a new transfer to the Ethereum bridge pool.")
+                .about("Add a new transfer to the Ethereum Bridge pool.")
                 .arg_required_else_help(true)
                 .add_args::<args::EthereumBridgePool<args::CliTypes>>()
         }
@@ -2135,7 +2230,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryEthBridgePool(args::Query<args::CliTypes>);
+    pub struct QueryEthBridgePool(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryEthBridgePool {
         const CMD: &'static str = "query";
@@ -2148,13 +2243,13 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Get the contents of the Ethereum bridge pool.")
+                .about("Get the contents of the Ethereum Bridge pool.")
                 .add_args::<args::Query<args::CliTypes>>()
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct QuerySignedBridgePool(args::Query<args::CliTypes>);
+    pub struct QuerySignedBridgePool(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QuerySignedBridgePool {
         const CMD: &'static str = "query-signed";
@@ -2168,7 +2263,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Get the contents of the Ethereum bridge pool with a \
+                    "Get the contents of the Ethereum Bridge pool with a \
                      signed Merkle root.",
                 )
                 .add_args::<args::Query<args::CliTypes>>()
@@ -2176,7 +2271,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRelayProgress(args::Query<args::CliTypes>);
+    pub struct QueryRelayProgress(pub args::Query<args::CliTypes>);
 
     impl SubCmd for QueryRelayProgress {
         const CMD: &'static str = "query-relayed";
@@ -2200,14 +2295,14 @@ pub mod cmds {
         /// Query an Ethereum ABI encoding of the consensus validator
         /// set in Namada, at the given epoch, or the latest
         /// one, if none is provided.
-        ConsensusValidatorSet(args::ConsensusValidatorSet<args::CliTypes>),
+        ConsensusValidatorSet(ConsensusValidatorSet),
         /// Query an Ethereum ABI encoding of a proof of the consensus
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
-        ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>),
+        ValidatorSetProof(ValidatorSetProof),
         /// Relay a validator set update to Namada's Ethereum bridge
         /// smart contracts.
-        ValidatorSetUpdateRelay(args::ValidatorSetUpdateRelay<args::CliTypes>),
+        ValidatorSetUpdateRelay(ValidatorSetUpdateRelay),
     }
 
     impl SubCmd for ValidatorSet {
@@ -2217,11 +2312,11 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let consensus_validator_set =
                     ConsensusValidatorSet::parse(matches)
-                        .map(|args| Self::ConsensusValidatorSet(args.0));
+                        .map(Self::ConsensusValidatorSet);
                 let validator_set_proof = ValidatorSetProof::parse(matches)
-                    .map(|args| Self::ValidatorSetProof(args.0));
+                    .map(Self::ValidatorSetProof);
                 let relay = ValidatorSetUpdateRelay::parse(matches)
-                    .map(|args| Self::ValidatorSetUpdateRelay(args.0));
+                    .map(Self::ValidatorSetUpdateRelay);
                 consensus_validator_set.or(validator_set_proof).or(relay)
             })
         }
@@ -2242,7 +2337,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub struct ConsensusValidatorSet(
-        args::ConsensusValidatorSet<args::CliTypes>,
+        pub args::ConsensusValidatorSet<args::CliTypes>,
     );
 
     impl SubCmd for ConsensusValidatorSet {
@@ -2266,7 +2361,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct ValidatorSetProof(args::ValidatorSetProof<args::CliTypes>);
+    pub struct ValidatorSetProof(pub args::ValidatorSetProof<args::CliTypes>);
 
     impl SubCmd for ValidatorSetProof {
         const CMD: &'static str = "proof";
@@ -2290,7 +2385,7 @@ pub mod cmds {
 
     #[derive(Clone, Debug)]
     pub struct ValidatorSetUpdateRelay(
-        args::ValidatorSetUpdateRelay<args::CliTypes>,
+        pub args::ValidatorSetUpdateRelay<args::CliTypes>,
     );
 
     impl SubCmd for ValidatorSetUpdateRelay {
@@ -2359,6 +2454,7 @@ pub mod cmds {
 }
 
 pub mod args {
+    use std::collections::HashMap;
     use std::convert::TryFrom;
     use std::env;
     use std::net::SocketAddr;
@@ -2378,6 +2474,7 @@ pub mod args {
     use namada::types::time::DateTimeUtc;
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada::types::transaction::GasLimit;
 
     use super::context::*;
     use super::utils::*;
@@ -2400,8 +2497,11 @@ pub mod args {
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
     pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
+    pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+        "tx_update_steward_commission.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
     pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+    pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 
     pub const VP_USER_WASM: &str = "vp_user.wasm";
 
@@ -2421,7 +2521,23 @@ pub mod args {
         }),
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
-    // pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
+        arg_default(
+            "pool-gas-amount",
+            DefaultFn(|| token::DenominatedAmount {
+                amount: token::Amount::default(),
+                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+            }),
+        );
+    pub const BRIDGE_POOL_GAS_PAYER: ArgOpt<WalletAddress> =
+        arg_opt("pool-gas-payer");
+    pub const BRIDGE_POOL_GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+        arg_default_from_ctx(
+            "pool-gas-token",
+            DefaultFn(|| "NAM".parse().unwrap()),
+        );
+    pub const BRIDGE_POOL_TARGET: Arg<EthAddress> = arg("target");
     pub const BROADCAST_ONLY: ArgFlag = flag("broadcast-only");
     pub const CHAIN_ID: Arg<ChainId> = arg("chain-id");
     pub const CHAIN_ID_OPT: ArgOpt<ChainId> = CHAIN_ID.opt();
@@ -2434,6 +2550,7 @@ pub mod args {
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
     );
+    pub const CONVERSION_TABLE: Arg<PathBuf> = arg("conversion-table");
     pub const DAEMON_MODE: ArgFlag = flag("daemon");
     pub const DAEMON_MODE_RETRY_DUR: ArgOpt<Duration> = arg_opt("retry-sleep");
     pub const DAEMON_MODE_SUCCESS_DUR: ArgOpt<Duration> =
@@ -2441,9 +2558,11 @@ pub mod args {
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DECRYPT: ArgFlag = flag("decrypt");
+    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
+    pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const ERC20: Arg<EthAddress> = arg("erc20");
@@ -2451,30 +2570,22 @@ pub mod args {
     pub const ETH_GAS: ArgOpt<u64> = arg_opt("eth-gas");
     pub const ETH_GAS_PRICE: ArgOpt<u64> = arg_opt("eth-gas-price");
     pub const ETH_ADDRESS: Arg<EthAddress> = arg("ethereum-address");
-    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = arg_opt("ethereum-address");
+    pub const ETH_ADDRESS_OPT: ArgOpt<EthAddress> = ETH_ADDRESS.opt();
     pub const ETH_RPC_ENDPOINT: ArgDefault<String> = arg_default(
         "eth-rpc-endpoint",
         DefaultFn(|| "http://localhost:8545".into()),
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
+        arg_opt("gas-spending-key");
+    pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
+        arg_opt("gas-price");
+    pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
-    pub const GAS_PAYER: ArgOpt<WalletKeypair> = arg("gas-payer").opt();
-    pub const GAS_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "gas-amount",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const GAS_LIMIT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "gas-limit",
-        DefaultFn(|| token::DenominatedAmount {
-            amount: token::Amount::default(),
-            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-        }),
-    );
-    pub const GAS_TOKEN: ArgDefaultFromCtx<WalletAddress> =
+    pub const GAS_LIMIT: ArgDefault<GasLimit> =
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
+    pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
@@ -2510,10 +2621,10 @@ pub mod args {
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
-    pub const NAM_PER_ETH: Arg<f64> = arg("nam-per-eth");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const NUT: ArgFlag = flag("nut");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT_FOLDER_PATH: ArgOpt<PathBuf> =
         arg_opt("output-folder-path");
@@ -2551,6 +2662,7 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const STEWARD: Arg<WalletAddress> = arg("steward");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
@@ -2700,41 +2812,41 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct LedgerDumpDb {
         // TODO: allow to specify height
-        // pub block_height: Option<BlockHeight>,
+        pub block_height: Option<BlockHeight>,
         pub out_file_path: PathBuf,
         pub historic: bool,
     }
 
     impl Args for LedgerDumpDb {
         fn parse(matches: &ArgMatches) -> Self {
-            // let block_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let block_height = BLOCK_HEIGHT_OPT.parse(matches);
             let out_file_path = OUT_FILE_PATH_OPT
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from("db_dump".to_string()));
             let historic = HISTORIC.parse(matches);
 
             Self {
-                // block_height,
+                block_height,
                 out_file_path,
                 historic,
             }
         }
 
         fn def(app: App) -> App {
-            app
-                // .arg(BLOCK_HEIGHT_OPT.def().help(
-                //     "The block height to dump. Defaults to latest committed
-                // block.", ))
-                .arg(OUT_FILE_PATH_OPT.def().help(
-                    "Path for the output file (omitting file extension). \
-                     Defaults to \"db_dump.{block_height}.toml\" in the \
-                     current working directory.",
-                ))
-                .arg(
-                    HISTORIC.def().help(
-                        "If provided, dump also the diff of the last height",
-                    ),
-                )
+            app.arg(BLOCK_HEIGHT_OPT.def().help(
+                "The block height to dump. Defaults to latest committed
+                block.",
+            ))
+            .arg(OUT_FILE_PATH_OPT.def().help(
+                "Path for the output file (omitting file extension). Defaults \
+                 to \"db_dump.{block_height}.toml\" in the current working \
+                 directory.",
+            ))
+            .arg(
+                HISTORIC
+                    .def()
+                    .help("If provided, dump also the diff of the last height"),
+            )
         }
     }
 
@@ -2788,13 +2900,15 @@ pub mod args {
     impl CliToSdk<EthereumBridgePool<SdkTypes>> for EthereumBridgePool<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> EthereumBridgePool<SdkTypes> {
             EthereumBridgePool::<SdkTypes> {
+                nut: self.nut,
                 tx: self.tx.to_sdk(ctx),
                 asset: self.asset,
                 recipient: self.recipient,
                 sender: ctx.get(&self.sender),
                 amount: self.amount,
                 fee_amount: self.fee_amount,
-                fee_payer: ctx.get(&self.fee_payer),
+                fee_payer: self.fee_payer.map(|fee_payer| ctx.get(&fee_payer)),
+                fee_token: ctx.get(&self.fee_token),
                 code_path: self.code_path,
             }
         }
@@ -2804,12 +2918,15 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let asset = ERC20.parse(matches);
-            let recipient = ETH_ADDRESS.parse(matches);
-            let sender = ADDRESS.parse(matches);
+            let recipient = BRIDGE_POOL_TARGET.parse(matches);
+            let sender = SOURCE.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let fee_amount = FEE_AMOUNT.parse(matches).amount;
-            let fee_payer = FEE_PAYER.parse(matches);
+            let fee_amount =
+                InputAmount::Unvalidated(BRIDGE_POOL_GAS_AMOUNT.parse(matches));
+            let fee_payer = BRIDGE_POOL_GAS_PAYER.parse(matches);
+            let fee_token = BRIDGE_POOL_GAS_TOKEN.parse(matches);
             let code_path = PathBuf::from(TX_BRIDGE_POOL_WASM);
+            let nut = NUT.parse(matches);
             Self {
                 tx,
                 asset,
@@ -2818,7 +2935,9 @@ pub mod args {
                 amount,
                 fee_amount,
                 fee_payer,
+                fee_token,
                 code_path,
+                nut,
             }
         }
 
@@ -2830,39 +2949,70 @@ pub mod args {
                         .help("The Ethereum address of the ERC20 token."),
                 )
                 .arg(
-                    ETH_ADDRESS
+                    BRIDGE_POOL_TARGET
                         .def()
                         .help("The Ethereum address receiving the tokens."),
                 )
                 .arg(
-                    ADDRESS
-                        .def()
-                        .help("The Namada address sending the tokens."),
+                    SOURCE.def().help("The Namada address sending the tokens."),
                 )
                 .arg(
                     AMOUNT.def().help(
                         "The amount of tokens being sent across the bridge.",
                     ),
                 )
-                .arg(FEE_AMOUNT.def().help(
-                    "The amount of NAM you wish to pay to have this transfer \
+                .arg(BRIDGE_POOL_GAS_AMOUNT.def().help(
+                    "The amount of gas you wish to pay to have this transfer \
                      relayed to Ethereum.",
                 ))
-                .arg(
-                    FEE_PAYER.def().help(
-                        "The Namada address of the account paying the fee.",
-                    ),
-                )
+                .arg(BRIDGE_POOL_GAS_PAYER.def().help(
+                    "The Namada address of the account paying the gas. By \
+                     default, it is the same as the source.",
+                ))
+                .arg(BRIDGE_POOL_GAS_TOKEN.def().help(
+                    "The token for paying the Bridge pool gas fees. Defaults \
+                     to NAM.",
+                ))
+                .arg(NUT.def().help(
+                    "Add Non Usable Tokens (NUTs) to the Bridge pool. These \
+                     are usually obtained from invalid transfers to Namada.",
+                ))
         }
     }
 
-    impl CliToSdkCtxless<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
-        fn to_sdk_ctxless(self) -> RecommendBatch<SdkTypes> {
+    impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
             RecommendBatch::<SdkTypes> {
                 query: self.query.to_sdk_ctxless(),
                 max_gas: self.max_gas,
                 gas: self.gas,
-                nam_per_eth: self.nam_per_eth,
+                conversion_table: {
+                    let file = std::io::BufReader::new(
+                        std::fs::File::open(self.conversion_table).expect(
+                            "Failed to open the provided file to the \
+                             conversion table",
+                        ),
+                    );
+                    let table: HashMap<String, f64> =
+                        serde_json::from_reader(file)
+                            .expect("Failed to parse conversion table");
+                    table
+                        .into_iter()
+                        .map(|(token, conversion_rate)| {
+                            let token_from_ctx =
+                                FromContext::<Address>::new(token);
+                            let address = ctx.get(&token_from_ctx);
+                            let alias = token_from_ctx.into_raw();
+                            (
+                                address,
+                                BpConversionTableEntry {
+                                    alias,
+                                    conversion_rate,
+                                },
+                            )
+                        })
+                        .collect()
+                },
             }
         }
     }
@@ -2872,12 +3022,12 @@ pub mod args {
             let query = Query::parse(matches);
             let max_gas = MAX_ETH_GAS.parse(matches);
             let gas = ETH_GAS.parse(matches);
-            let nam_to_eth = NAM_PER_ETH.parse(matches);
+            let conversion_table = CONVERSION_TABLE.parse(matches);
             Self {
                 query,
                 max_gas,
                 gas,
-                nam_per_eth: nam_to_eth,
+                conversion_table,
             }
         }
 
@@ -2894,9 +3044,9 @@ pub mod args {
                      costs as close to the given value as possible without \
                      exceeding it.",
                 ))
-                .arg(NAM_PER_ETH.def().help(
-                    "The amount of NAM that one ETH is worth, represented as \
-                     a decimal number.",
+                .arg(CONVERSION_TABLE.def().help(
+                    "Path to a JSON object containing a mapping between token \
+                     aliases (or addresses) and their conversion rates in gwei",
                 ))
         }
     }
@@ -2919,7 +3069,7 @@ pub mod args {
             Self {
                 query,
                 transfers: hashes
-                    .split(' ')
+                    .split_whitespace()
                     .map(|hash| {
                         KeccakHash::try_from(hash).unwrap_or_else(|_| {
                             tracing::info!(
@@ -2937,7 +3087,8 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(HASH_LIST.def().help(
-                    "List of Keccak hashes of transfers in the bridge pool.",
+                    "Whitespace separated Keccak hash list of transfers in \
+                     the Bridge pool.",
                 ))
                 .arg(
                     RELAYER
@@ -3010,7 +3161,8 @@ pub mod args {
                      ensure Ethereum transfers aren't canceled midway through.",
                 ))
                 .arg(HASH_LIST.def().help(
-                    "List of Keccak hashes of transfers in the bridge pool.",
+                    "Whitespace separated Keccak hash list of transfers in \
+                     the Bridge pool.",
                 ))
                 .arg(
                     RELAYER
@@ -3337,7 +3489,7 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
-            let amount = AMOUNT.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
@@ -3349,7 +3501,7 @@ pub mod args {
                 source,
                 receiver,
                 token,
-                amount: amount.amount,
+                amount,
                 port_id,
                 channel_id,
                 timeout_height,
@@ -3717,6 +3869,75 @@ pub mod args {
         }
     }
 
+    impl CliToSdk<UpdateStewardCommission<SdkTypes>>
+        for UpdateStewardCommission<CliTypes>
+    {
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> UpdateStewardCommission<SdkTypes> {
+            UpdateStewardCommission::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                steward: ctx.get(&self.steward),
+                commission: std::fs::read(self.commission).expect(""),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for UpdateStewardCommission<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let steward = STEWARD.parse(matches);
+            let commission = DATA_PATH.parse(matches);
+            let tx_code_path = PathBuf::from(TX_UPDATE_STEWARD_COMMISSION);
+            Self {
+                tx,
+                steward,
+                commission,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(STEWARD.def().help("Steward address."))
+                .arg(DATA_PATH.def().help(
+                    "The path to the file that describes the commission \
+                     split. The file must contain a map from namada address \
+                     to a percentage. Percentages must sum to 1 or less.",
+                ))
+        }
+    }
+
+    impl CliToSdk<ResignSteward<SdkTypes>> for ResignSteward<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ResignSteward<SdkTypes> {
+            ResignSteward::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                steward: ctx.get(&self.steward),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for ResignSteward<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let steward = STEWARD.parse(matches);
+            let tx_code_path = PathBuf::from(TX_RESIGN_STEWARD);
+            Self {
+                tx,
+                steward,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(STEWARD.def().help("Steward address."))
+        }
+    }
+
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
             InitProposal::<SdkTypes> {
@@ -3814,7 +4035,6 @@ pub mod args {
                 voter: ctx.get(&self.voter),
                 is_offline: self.is_offline,
                 proposal_data: self.proposal_data.map(|path| {
-                    println!("Not able to read {}.", path.to_string_lossy());
                     std::fs::read(path)
                         .expect("Should be able to read the file.")
                 }),
@@ -4023,14 +4243,6 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
-            QueryPgf::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
-            }
-        }
-    }
-
     impl Args for QueryPgf<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -4040,6 +4252,14 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
+        }
+    }
+
+    impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
+            QueryPgf::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+            }
         }
     }
 
@@ -4569,6 +4789,7 @@ pub mod args {
     impl NamadaTypes for CliTypes {
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
+        type BpConversionTable = PathBuf;
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
@@ -4584,6 +4805,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
+                dry_run_wrapper: self.dry_run_wrapper,
                 dump_tx: self.dump_tx,
                 output_folder: self.output_folder,
                 force: self.force,
@@ -4591,9 +4813,11 @@ pub mod args {
                 ledger_address: (),
                 initialized_account_alias: self.initialized_account_alias,
                 wallet_alias_force: self.wallet_alias_force,
-                gas_payer: ctx.get_opt_cached(&self.gas_payer),
-                gas_amount: self.gas_amount,
-                gas_token: ctx.get(&self.gas_token),
+                fee_amount: self.fee_amount,
+                fee_token: ctx.get(&self.fee_token),
+                fee_unshield: self
+                    .fee_unshield
+                    .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),
                 gas_limit: self.gas_limit,
                 signing_keys: self
                     .signing_keys
@@ -4608,12 +4832,16 @@ pub mod args {
                 verification_key: self
                     .verification_key
                     .map(|public_key| ctx.get_cached(&public_key)),
+                disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
                 chain_id: self
                     .chain_id
                     .or_else(|| Some(ctx.config.ledger.chain_id.clone())),
+                wrapper_fee_payer: self
+                    .wrapper_fee_payer
+                    .map(|x| ctx.get_cached(&x)),
             }
         }
     }
@@ -4623,7 +4851,17 @@ pub mod args {
             app.arg(
                 DRY_RUN_TX
                     .def()
-                    .help("Simulate the transaction application."),
+                    .help("Simulate the transaction application.")
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
+            )
+            .arg(
+                DRY_RUN_WRAPPER_TX
+                    .def()
+                    .help(
+                        "Simulate the complete transaction application. This \
+                         estimates the gas cost of the transaction.",
+                    )
+                    .conflicts_with(DRY_RUN_TX.name),
             )
             .arg(DUMP_TX.def().help("Dump transaction bytes to a file."))
             .arg(FORCE.def().help(
@@ -4646,28 +4884,38 @@ pub mod args {
                  initialized, the alias will be the prefix of each new \
                  address joined with a number.",
             ))
+            .arg(FEE_AMOUNT_OPT.def().help(
+                "The amount being paid, per gas unit, for the inclusion of \
+                 this transaction",
+            ))
+            .arg(FEE_TOKEN.def().help("The token for paying the gas"))
+            .arg(FEE_UNSHIELD_SPENDING_KEY.def().help(
+                "The spending key to be used for fee unshielding. If none is \
+                 provided, fee will be payed from the unshielded balance only.",
+            ))
+            .arg(GAS_LIMIT.def().help(
+                "The multiplier of the gas limit resolution defining the \
+                 maximum amount of gas needed to run transaction.",
+            ))
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(GAS_PAYER.def().help(
-                "The implicit address of the gas payer. It defaults to the \
-                 address associated to the first key passed to --signing-keys.",
-            ))
-            .arg(GAS_AMOUNT.def().help(
-                "The amount being paid for the inclusion of this transaction",
-            ))
-            .arg(GAS_TOKEN.def().help("The token for paying the gas"))
-            .arg(
-                GAS_LIMIT.def().help(
-                    "The maximum amount of gas needed to run transaction",
-                ),
-            )
             .arg(EXPIRATION_OPT.def().help(
                 "The expiration datetime of the transaction, after which the \
                  tx won't be accepted anymore. All of these examples are \
                  equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
                  12:12:12Z\n2012-  12-12T12:  12:12Z",
             ))
+            .arg(
+                DISPOSABLE_SIGNING_KEY
+                    .def()
+                    .help(
+                        "Generates an ephemeral, disposable keypair to sign \
+                         the wrapper transaction. This keypair will be \
+                         immediately discarded after use.",
+                    )
+                    .requires(FEE_UNSHIELD_SPENDING_KEY.name),
+            )
             .arg(
                 SIGNING_KEYS
                     .def()
@@ -4693,7 +4941,7 @@ pub mod args {
                         SIGNING_KEYS.name,
                         VERIFICATION_KEY.name,
                     ])
-                    .requires(GAS_PAYER.name),
+                    .requires(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(
                 "The output folder path where the artifact will be stored.",
@@ -4709,48 +4957,65 @@ pub mod args {
                     .conflicts_with_all([SIGNING_KEYS.name, SIGNATURES.name]),
             )
             .arg(CHAIN_ID_OPT.def().help("The chain ID."))
+            .arg(
+                FEE_PAYER_OPT
+                    .def()
+                    .help(
+                        "The implicit address of the gas payer. It defaults \
+                         to the address associated to the first key passed to \
+                         --signing-keys.",
+                    )
+                    .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
+            )
         }
 
         fn parse(matches: &ArgMatches) -> Self {
             let dry_run = DRY_RUN_TX.parse(matches);
+            let dry_run_wrapper = DRY_RUN_WRAPPER_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = LEDGER_ADDRESS_DEFAULT.parse(matches);
             let initialized_account_alias = ALIAS_OPT.parse(matches);
+            let fee_amount =
+                FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
+            let fee_token = FEE_TOKEN.parse(matches);
+            let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
+            let _wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
+            let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
-            let gas_payer = GAS_PAYER.parse(matches);
-            let gas_amount =
-                InputAmount::Unvalidated(GAS_AMOUNT.parse(matches));
-            let gas_token = GAS_TOKEN.parse(matches);
-            let gas_limit = GAS_LIMIT.parse(matches).amount.into();
             let expiration = EXPIRATION_OPT.parse(matches);
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
             let verification_key = VERIFICATION_KEY.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
+            let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             Self {
                 dry_run,
+                dry_run_wrapper,
                 dump_tx,
                 force,
                 broadcast_only,
                 ledger_address,
                 initialized_account_alias,
                 wallet_alias_force,
-                gas_payer,
-                gas_amount,
-                gas_token,
+                fee_amount,
+                fee_token,
+                fee_unshield,
                 gas_limit,
                 expiration,
+                disposable_signing_key,
                 signing_keys,
                 signatures,
                 verification_key,
                 tx_reveal_code_path,
                 password,
                 chain_id,
+                wrapper_fee_payer,
                 output_folder,
             }
         }
@@ -5419,9 +5684,39 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
-pub fn namada_relayer_cli() -> Result<(cmds::NamadaRelayer, Context)> {
+pub enum NamadaRelayer {
+    EthBridgePoolWithCtx(Box<(cmds::EthBridgePoolWithCtx, Context)>),
+    EthBridgePoolWithoutCtx(cmds::EthBridgePoolWithoutCtx),
+    ValidatorSet(cmds::ValidatorSet),
+}
+
+pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     let app = namada_relayer_app();
-    cmds::NamadaRelayer::parse_or_print_help(app)
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => match cmd {
+            cmds::NamadaRelayer::EthBridgePool(
+                cmds::EthBridgePool::WithContext(sub_cmd),
+            ) => {
+                let global_args = args::Global::parse(&matches);
+                let context = Context::new::<DefaultIo>(global_args)?;
+                Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
+                    sub_cmd, context,
+                ))))
+            }
+            cmds::NamadaRelayer::EthBridgePool(
+                cmds::EthBridgePool::WithoutContext(sub_cmd),
+            ) => Ok(NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd)),
+            cmds::NamadaRelayer::ValidatorSet(sub_cmd) => {
+                Ok(NamadaRelayer::ValidatorSet(sub_cmd))
+            }
+        },
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
 }
 
 fn namada_app() -> App {

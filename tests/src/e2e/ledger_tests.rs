@@ -20,17 +20,21 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::Address;
+use namada::types::io::DefaultIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
+use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
-    GenesisConfig, ParametersConfig, PosParamsConfig,
+    GenesisConfig, ParametersConfig, PgfParametersConfig, PosParamsConfig,
 };
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::ledger::governance::cli::onchain::{PgfAction, PgfSteward};
+use namada_core::ledger::governance::cli::onchain::{
+    PgfFunding, PgfFundingTarget, StewardsUpdate,
+};
 use namada_test_utils::TestWasms;
-use namada_vp_prelude::testnet_pow;
+use namada_vp_prelude::{testnet_pow, BTreeSet};
 use serde_json::json;
 use setup::constants::*;
 use setup::Test;
@@ -166,12 +170,8 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
+        "--gas-price",
+        "0.00090",
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -475,12 +475,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -497,12 +491,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             DAEWON,
             "--node",
@@ -519,12 +507,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             NAM,
             "--amount",
             "10.1",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--node",
             &validator_one_rpc,
         ],
@@ -536,12 +518,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA,
             "--code-path",
             VP_USER_WASM,
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -556,16 +532,10 @@ fn ledger_txs_and_queries() -> Result<()> {
             &tx_data_path,
             "--owner",
             BERTHA,
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             BERTHA_KEY,
             "--node",
-            &validator_one_rpc
+            &validator_one_rpc,
         ],
         // 5. Submit a tx to initialize a new account
         vec![
@@ -579,12 +549,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             VP_USER_WASM,
             "--alias",
             "Test-Account",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -601,12 +565,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             VP_USER_WASM,
             "--alias",
             "Test-Account-2",
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
-            "--gas-token",
-            NAM,
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -630,6 +588,24 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
+        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
+        //    solution)
+            vec![
+                "transfer",
+                "--source",
+                "faucet",
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "10.1",
+                // Faucet withdrawal requires an explicit signer
+            "--signing-keys",
+            ALBERT_KEY,
+                "--node",
+                &validator_one_rpc,
+            ],
     ];
 
     for tx_args in &txs_args {
@@ -753,6 +729,265 @@ fn ledger_txs_and_queries() -> Result<()> {
     Ok(())
 }
 
+/// We test shielding, shielded to shielded and unshielding transfers:
+/// 1. Run the ledger node
+/// 2. Send 20 BTC from Albert to PA(A)
+/// 3. Send 7 BTC from SK(A) to PA(B)
+/// 4. Assert BTC balance at VK(A) is 13
+/// 5. Send 5 BTC from SK(B) to Bertha
+/// 6. Assert BTC balance at VK(B) is 2
+#[test]
+fn masp_txs_and_queries() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(3600),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    let txs_args = vec![
+        // 2. Send 20 BTC from Albert to PA(A)
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "20",
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 3. Send 7 BTC from SK(A) to PA(B)
+        (
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "7",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 4. Assert BTC balance at VK(A) is 13
+        (
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "btc: 13",
+        ),
+        // 5. Send 5 BTC from SK(B) to Bertha
+        (
+            vec![
+                "transfer",
+                "--source",
+                B_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                BTC,
+                "--amount",
+                "5",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        // 6. Assert BTC balance at VK(B) is 2
+        (
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            "btc: 2",
+        ),
+    ];
+
+    for (tx_args, tx_result) in &txs_args {
+        for &dry_run in &[true, false] {
+            let tx_args = if dry_run && tx_args[0] == "transfer" {
+                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+            } else {
+                tx_args.clone()
+            };
+            let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+            if *tx_result == "Transaction is valid" && !dry_run {
+                client.exp_string("Transaction accepted")?;
+                client.exp_string("Transaction applied")?;
+            }
+            client.exp_string(tx_result)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Test the optional disposable keypair for wrapper signing
+///
+/// 1. Test that a tx requesting a disposable signer with a correct unshielding
+/// operation is succesful
+/// 2. Test that a tx requesting a disposable signer
+/// providing an insufficient unshielding goes through the PoW
+#[test]
+fn wrapper_disposable_signer() -> Result<()> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                epochs_per_year: epochs_per_year_from_min_duration(3600),
+                min_num_of_blocks: 1,
+                ..genesis.parameters
+            };
+            GenesisConfig {
+                parameters,
+                ..genesis
+            }
+        },
+        None,
+    )?;
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    let txs_args = vec![
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "50",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-gas-payer",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            "Transaction is valid",
+        ),
+        (
+            vec![
+                "transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-price",
+                "90000000",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
+                "--disposable-gas-payer",
+                "--ledger-address",
+                &validator_one_rpc,
+            ],
+            // Not enough funds for fee payment, will use PoW
+            "Looking for a solution with difficulty",
+        ),
+    ];
+
+    for (tx_args, tx_result) in &txs_args {
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+        if *tx_result == "Transaction is valid" {
+            client.exp_string("Transaction accepted")?;
+            client.exp_string("Transaction applied")?;
+        }
+        client.exp_string(tx_result)?;
+    }
+
+    Ok(())
+}
+
 /// In this test we:
 /// 1. Run the ledger node
 /// 2. Submit an invalid transaction (disallowed by state machine)
@@ -790,12 +1025,6 @@ fn invalid_transactions() -> Result<()> {
         NAM,
         "--amount",
         "1",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         ALBERT_KEY,
         "--node",
@@ -807,7 +1036,7 @@ fn invalid_transactions() -> Result<()> {
     client.exp_string("Transaction accepted")?;
     client.exp_string("Transaction applied")?;
     client.exp_string("Transaction is invalid")?;
-    client.exp_string(r#""code": "4"#)?;
+    client.exp_string(r#""code": "5"#)?;
 
     client.assert_success();
     let mut ledger = bg_ledger.foreground();
@@ -850,12 +1079,6 @@ fn invalid_transactions() -> Result<()> {
         BERTHA,
         "--amount",
         "1000000.1",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         // Force to ignore client check that fails on the balance check of the
         // source address
         "--force",
@@ -869,7 +1092,7 @@ fn invalid_transactions() -> Result<()> {
 
     client.exp_string("Error trying to apply a transaction")?;
 
-    client.exp_string(r#""code": "3"#)?;
+    client.exp_string(r#""code": "4"#)?;
 
     client.assert_success();
     Ok(())
@@ -933,12 +1156,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "10000.0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         "validator-0-account-key",
         "--node",
@@ -959,12 +1176,6 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "5000.0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -982,12 +1193,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--amount",
         "5100.0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         "validator-0-account-key",
         "--node",
@@ -1008,12 +1213,6 @@ fn pos_bonds() -> Result<()> {
         BERTHA,
         "--amount",
         "3200.",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1054,12 +1253,6 @@ fn pos_bonds() -> Result<()> {
         "withdraw",
         "--validator",
         "validator-0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         "validator-0-account-key",
         "--node",
@@ -1078,12 +1271,6 @@ fn pos_bonds() -> Result<()> {
         "validator-0",
         "--source",
         BERTHA,
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1158,8 +1345,6 @@ fn pos_rewards() -> Result<()> {
         "10000.0",
         "--gas-amount",
         "0",
-        "--gas-limit",
-        "0",
         "--gas-token",
         NAM,
         "--signing-keys",
@@ -1196,8 +1381,6 @@ fn pos_rewards() -> Result<()> {
         "30000.0",
         "--gas-amount",
         "0",
-        "--gas-limit",
-        "0",
         "--gas-token",
         NAM,
         "--signing-keys",
@@ -1219,8 +1402,6 @@ fn pos_rewards() -> Result<()> {
         "--amount",
         "25000.0",
         "--gas-amount",
-        "0",
-        "--gas-limit",
         "0",
         "--gas-token",
         NAM,
@@ -1304,16 +1485,25 @@ fn test_bond_queries() -> Result<()> {
         "bond",
         "--validator",
         validator_alias,
+        "--amount",
+        "100",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 3. Submit a delegation to the genesis validator
+    let tx_args = vec![
+        "bond",
+        "--validator",
+        "validator-0",
         "--source",
         BERTHA,
         "--amount",
         "200",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--ledger-address",
@@ -1346,12 +1536,6 @@ fn test_bond_queries() -> Result<()> {
         BERTHA,
         "--amount",
         "300",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--ledger-address",
@@ -1371,12 +1555,6 @@ fn test_bond_queries() -> Result<()> {
         BERTHA,
         "--amount",
         "412",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--ledger-address",
@@ -1479,12 +1657,6 @@ fn pos_init_validator() -> Result<()> {
         new_validator,
         "--account-keys",
         "bertha-key",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--commission-rate",
         "0.05",
         "--max-commission-rate-change",
@@ -1510,13 +1682,7 @@ fn pos_init_validator() -> Result<()> {
         "--token",
         NAM,
         "--amount",
-        "0.5",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
+        "10000.5",
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1536,12 +1702,6 @@ fn pos_init_validator() -> Result<()> {
         BERTHA,
         "--amount",
         delegation_str,
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1563,12 +1723,6 @@ fn pos_init_validator() -> Result<()> {
         NAM,
         "--amount",
         validator_stake_str,
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1585,12 +1739,6 @@ fn pos_init_validator() -> Result<()> {
         new_validator,
         "--amount",
         validator_stake_str,
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &non_validator_rpc,
     ];
@@ -1695,12 +1843,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         NAM,
         "--amount",
         "1.01",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--signing-keys",
         BERTHA_KEY,
         "--node",
@@ -1753,8 +1895,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
-    let working_dir = setup::working_dir();
-
     let test = setup::network(
         |genesis| {
             let parameters = ParametersConfig {
@@ -1762,16 +1902,6 @@ fn proposal_submission() -> Result<()> {
                 max_proposal_bytes: Default::default(),
                 min_num_of_blocks: 4,
                 max_expected_time_per_block: 1,
-                vp_whitelist: Some(get_all_wasms_hashes(
-                    &working_dir,
-                    Some("vp_"),
-                )),
-                // Enable tx whitelist to test the execution of a
-                // non-whitelisted tx by governance
-                tx_whitelist: Some(get_all_wasms_hashes(
-                    &working_dir,
-                    Some("tx_"),
-                )),
                 ..genesis.parameters
             };
 
@@ -1805,12 +1935,6 @@ fn proposal_submission() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_0_rpc,
     ];
@@ -1832,6 +1956,8 @@ fn proposal_submission() -> Result<()> {
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
         "--node",
         &validator_one_rpc,
     ];
@@ -2092,9 +2218,14 @@ fn pgf_governance_proposal() -> Result<()> {
                 max_expected_time_per_block: 1,
                 ..genesis.parameters
             };
+            let pgf_params = PgfParametersConfig {
+                stewards: BTreeSet::from_iter(Address::from_str("atest1v4ehgw36xguyzsejx5m5xvehxqmnyvejgdzygv6rgcurgdzxxsunzs3nxuc5vwfkg3pnxdf4u4p9h9")),
+                ..genesis.pgf_params
+            };
 
             GenesisConfig {
                 parameters,
+                pgf_params,
                 ..genesis
             }
         },
@@ -2131,12 +2262,6 @@ fn pgf_governance_proposal() -> Result<()> {
         BERTHA,
         "--amount",
         "900",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -2147,13 +2272,13 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 1 - Submit proposal
     let albert = find_address(&test, ALBERT)?;
-    let pgf_stewards = PgfSteward {
-        action: PgfAction::Add,
-        address: albert.clone(),
+    let pgf_stewards = StewardsUpdate {
+        add: Some(albert.clone()),
+        remove: vec![],
     };
 
     let valid_proposal_json_path =
-        prepare_proposal_data(&test, albert, vec![pgf_stewards], 12);
+        prepare_proposal_data(&test, albert, pgf_stewards, 12);
     let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
     let submit_proposal_args = vec![
@@ -2284,7 +2409,7 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 12. Wait proposals grace and check proposal author funds
     while epoch.0 < 31 {
-        sleep(1);
+        sleep(2);
         epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     }
 
@@ -2323,7 +2448,72 @@ fn pgf_governance_proposal() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_pgf, Some(30))?;
     client.exp_string("Pgf stewards:")?;
     client.exp_string(&format!("- {}", albert_address))?;
+    client.exp_string("Reward distribution:")?;
+    client.exp_string(&format!("- 1 to {}", albert_address))?;
     client.exp_string("Pgf fundings: no fundings are currently set.")?;
+    client.assert_success();
+
+    // 15 - Submit proposal funding
+    let albert = find_address(&test, ALBERT)?;
+    let bertha = find_address(&test, BERTHA)?;
+    let christel = find_address(&test, CHRISTEL)?;
+
+    let pgf_funding = PgfFunding {
+        continous: vec![PgfFundingTarget {
+            amount: token::Amount::from_u64(10),
+            address: bertha.clone(),
+        }],
+        retro: vec![PgfFundingTarget {
+            amount: token::Amount::from_u64(5),
+            address: christel,
+        }],
+    };
+
+    let valid_proposal_json_path =
+        prepare_proposal_data(&test, albert, pgf_funding, 36);
+    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 2 - Query the funding proposal
+    let proposal_query_args = vec![
+        "query-proposal",
+        "--proposal-id",
+        "1",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+
+    client = run!(test, Bin::Client, proposal_query_args, Some(40))?;
+    client.exp_string("Proposal Id: 1")?;
+    client.assert_success();
+
+    // 13. Wait proposals grace and check proposal author funds
+    while epoch.0 < 55 {
+        sleep(2);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    // 14. Query pgf fundings
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, query_pgf, Some(30))?;
+    client.exp_string("Pgf fundings")?;
+    client.exp_string(&format!(
+        "{} for {}",
+        bertha,
+        token::Amount::from_u64(10).to_string_native()
+    ))?;
     client.assert_success();
 
     Ok(())
@@ -2389,12 +2579,6 @@ fn proposal_offline() -> Result<()> {
         ALBERT,
         "--amount",
         "900",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_one_rpc,
     ];
@@ -2863,12 +3047,6 @@ fn test_genesis_validators() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_one_rpc,
     ];
@@ -2916,7 +3094,7 @@ fn test_genesis_validators() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("nam: 1000000000010.1")?;
+        client.exp_string(r"nam: 1000000000010.1")?;
         client.assert_success();
     }
 
@@ -3103,12 +3281,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         NAM,
         "--amount",
         "10.1",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_one_rpc,
     ];
@@ -3192,12 +3364,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         "unjail-validator",
         "--validator",
         "validator-0",
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
-        "--gas-token",
-        NAM,
         "--node",
         &validator_one_rpc,
     ];
@@ -3323,6 +3489,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 valid_proposal_json_path.to_str().unwrap(),
                 "--signing-keys",
                 source,
+                "--gas-limit",
+                "2000000",
                 "--node",
                 &validator_0_rpc,
             ]
@@ -3451,8 +3619,8 @@ fn prepare_proposal_data(
             },
             "author": source,
             "voting_start_epoch": start_epoch,
-            "voting_end_epoch": 24_u64,
-            "grace_epoch": 30_u64,
+            "voting_end_epoch": start_epoch + 12_u64,
+            "grace_epoch": start_epoch + 12u64 + 6_u64,
         },
         "data": data
     });

@@ -66,7 +66,7 @@ data-encoding.workspace = true
 derivative.workspace = true
 ed25519-consensus.workspace = true
 ethabi.workspace = true
-ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0" }
+ethbridge-structs.workspace = true
 eyre.workspace = true
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
@@ -84,6 +84,7 @@ num256.workspace = true
 num-integer = "0.1.45"
 num-rational.workspace = true
 num-traits.workspace = true
+primitive-types.workspace = true
 proptest = {version = "1.2.0", optional = true}
 prost.workspace = true
 prost-types.workspace = true

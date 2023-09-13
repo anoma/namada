@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
+use crate::types::ethereum_structs::Erc20Transfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
@@ -50,11 +51,14 @@ impl Ord for Uint {
 }
 
 impl Uint {
-    /// Convert to a little endian byte representation of
-    /// a uint256.
+    /// Convert to an Ethereum-compatible byte representation.
+    ///
+    /// The Ethereum virtual machine employs big-endian integers
+    /// (Wood, 2014), therefore the returned byte array has the
+    /// same endianness.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
-        ethUint(self.0).to_little_endian(&mut bytes);
+        ethUint(self.0).to_big_endian(&mut bytes);
         bytes
     }
 
@@ -334,16 +338,6 @@ pub enum EthereumEvent {
         #[allow(dead_code)]
         address: EthAddress,
     },
-    /// Event indication a new Ethereum based token has been whitelisted for
-    /// transfer across the bridge
-    UpdateBridgeWhitelist {
-        /// Monotonically increasing nonce
-        #[allow(dead_code)]
-        nonce: Uint,
-        /// Tokens to be allowed to be transferred across the bridge
-        #[allow(dead_code)]
-        whitelist: Vec<TokenWhitelist>,
-    },
 }
 
 impl EthereumEvent {
@@ -398,36 +392,34 @@ pub struct TransferToEthereum {
     pub asset: EthAddress,
     /// The address receiving assets on Ethereum
     pub receiver: EthAddress,
-    /// The amount of fees (in NAM)
-    pub gas_amount: Amount,
-    /// The address sending assets to Ethereum.
-    pub sender: Address,
-    /// The account of fee payer.
-    pub gas_payer: Address,
+    /// Checksum of all Namada specific fields, including,
+    /// but not limited to, whether it is a NUT transfer,
+    /// the address of the sender, etc
+    ///
+    /// It serves to uniquely identify an event stored under
+    /// the Bridge pool, in Namada
+    pub checksum: Hash,
 }
 
-/// struct for whitelisting a token from Ethereum.
-/// Includes the address of issuing contract and
-/// a cap on the max amount of this token allowed to be
-/// held by the bridge.
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-#[allow(dead_code)]
-pub struct TokenWhitelist {
-    /// Address of Ethereum smart contract issuing token
-    pub token: EthAddress,
-    /// Maximum amount of token allowed on the bridge
-    pub cap: Amount,
+impl From<Erc20Transfer> for TransferToEthereum {
+    #[inline]
+    fn from(transfer: Erc20Transfer) -> Self {
+        Self {
+            amount: {
+                let uint = {
+                    use crate::types::uint::Uint as NamadaUint;
+                    let mut num_buf = [0; 32];
+                    transfer.amount.to_little_endian(&mut num_buf);
+                    NamadaUint::from_little_endian(&num_buf)
+                };
+                // this is infallible for a denom of 0
+                Amount::from_uint(uint, 0).unwrap()
+            },
+            asset: EthAddress(transfer.from.0),
+            receiver: EthAddress(transfer.to.0),
+            checksum: Hash(transfer.namada_data_digest),
+        }
+    }
 }
 
 #[cfg(test)]

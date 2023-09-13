@@ -8,6 +8,7 @@ use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
 use num_integer::Integer;
+use num_traits::CheckedMul;
 use uint::construct_uint;
 
 use crate::types::token;
@@ -208,7 +209,6 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 #[derive(
     Copy,
     Clone,
-    Debug,
     Default,
     PartialEq,
     Eq,
@@ -218,6 +218,13 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
     BorshSchema,
 )]
 pub struct I256(pub Uint);
+
+impl fmt::Debug for I256 {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        <Self as fmt::Display>::fmt(self, f)
+    }
+}
 
 impl fmt::Display for I256 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -295,6 +302,8 @@ impl I256 {
     pub fn checked_sub(&self, other: &Self) -> Option<Self> {
         self.checked_add(&other.neg())
     }
+
+    ///
 
     /// Changed the inner Uint into a canonical representation.
     fn canonical(self) -> Self {
@@ -438,6 +447,19 @@ impl Mul<Uint> for I256 {
         let is_neg = self.is_negative();
         let prod = self.abs() * rhs;
         if is_neg { -Self(prod) } else { Self(prod) }
+    }
+}
+
+impl CheckedMul for I256 {
+    fn checked_mul(&self, v: &Self) -> Option<Self> {
+        let is_negative = self.is_negative() != v.is_negative();
+        let unsigned_res =
+            I256::try_from(self.abs().checked_mul(v.abs())?).ok()?;
+        Some(if is_negative {
+            -unsigned_res
+        } else {
+            unsigned_res
+        })
     }
 }
 

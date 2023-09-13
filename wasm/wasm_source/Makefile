@@ -19,6 +19,8 @@ wasms += tx_unjail_validator
 wasms += tx_update_account
 wasms += tx_vote_proposal
 wasms += tx_withdraw
+wasms += tx_update_steward_commission
+wasms += tx_resign_steward
 wasms += vp_implicit
 wasms += vp_masp
 wasms += vp_testnet_faucet
@@ -82,7 +84,7 @@ $(patsubst %,watch_%,$(wasms)): watch_%:
 $(patsubst %,clippy_%,$(wasms)): clippy_%:
 	$(cargo) +$(nightly) clippy --all-targets --features $* -- -D warnings
 
-clean-wasm = rm ../$(wasm).wasm
+clean-wasm = rm ../$(wasm).*.wasm
 clean:
 	$(foreach wasm,$(wasms),$(clean-wasm) && ) true
 

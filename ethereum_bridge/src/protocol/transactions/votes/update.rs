@@ -61,8 +61,9 @@ impl NewVotes {
         let mut inner = self.inner;
         let mut removed = HashSet::default();
         for voter in voters {
-            inner.remove(voter);
-            removed.insert(voter);
+            if inner.remove(voter).is_some() {
+                removed.insert(voter);
+            }
         }
         (Self { inner }, removed)
     }
@@ -310,6 +311,25 @@ mod tests {
 
         assert!(vote_info.voters().is_empty());
         assert_eq!(removed, HashSet::from([&validator]));
+        Ok(())
+    }
+
+    #[test]
+    fn test_vote_info_remove_non_dupe() -> Result<()> {
+        let validator = address::testing::established_address_1();
+        let new_validator = address::testing::established_address_2();
+        let vote_height = BlockHeight(100);
+        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let vote = (validator.clone(), vote_height);
+        let votes = Votes::from([vote.clone()]);
+        let voting_powers = HashMap::from([(vote, voting_power)]);
+        let vote_info = NewVotes::new(votes, &voting_powers)?;
+
+        let (vote_info, removed) =
+            vote_info.without_voters(vec![&new_validator]);
+
+        assert!(removed.is_empty());
+        assert_eq!(vote_info.voters(), BTreeSet::from([validator]));
         Ok(())
     }
 

@@ -6,9 +6,10 @@ use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::io::Io;
 
+use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
-use crate::cli::args::CliToSdkCtxless;
-use crate::cli::cmds;
+use crate::cli::args::{CliToSdk, CliToSdkCtxless};
+use crate::cli::cmds::*;
 
 fn error() -> Report {
     eyre!("Fatal error")
@@ -17,29 +18,38 @@ fn error() -> Report {
 impl<IO: Io> CliApi<IO> {
     pub async fn handle_relayer_command<C>(
         client: Option<C>,
-        cmd: cmds::NamadaRelayer,
+        cmd: cli::NamadaRelayer,
     ) -> Result<()>
     where
         C: CliClient,
     {
         match cmd {
-            cmds::NamadaRelayer::EthBridgePool(sub) => match sub {
-                cmds::EthBridgePool::RecommendBatch(mut args) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(
-                            &mut args.query.ledger_address,
-                        )
-                    });
-                    client
-                        .wait_until_node_is_synced::<IO>()
-                        .await
-                        .proceed_or_else(error)?;
-                    let args = args.to_sdk_ctxless();
-                    bridge_pool::recommend_batch::<_, IO>(&client, args)
-                        .await
-                        .proceed_or_else(error)?;
+            cli::NamadaRelayer::EthBridgePoolWithCtx(boxed) => {
+                let (sub, mut ctx) = *boxed;
+                match sub {
+                    EthBridgePoolWithCtx::RecommendBatch(RecommendBatch(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        bridge_pool::recommend_batch::<_, IO>(&client, args)
+                            .await
+                            .proceed_or_else(error)?;
+                    }
                 }
-                cmds::EthBridgePool::ConstructProof(mut args) => {
+            }
+            cli::NamadaRelayer::EthBridgePoolWithoutCtx(sub) => match sub {
+                EthBridgePoolWithoutCtx::ConstructProof(ConstructProof(
+                    mut args,
+                )) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(
                             &mut args.query.ledger_address,
@@ -54,7 +64,7 @@ impl<IO: Io> CliApi<IO> {
                         .await
                         .proceed_or_else(error)?;
                 }
-                cmds::EthBridgePool::RelayProof(mut args) => {
+                EthBridgePoolWithoutCtx::RelayProof(RelayProof(mut args)) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(
                             &mut args.query.ledger_address,
@@ -75,7 +85,9 @@ impl<IO: Io> CliApi<IO> {
                     .await
                     .proceed_or_else(error)?;
                 }
-                cmds::EthBridgePool::QueryPool(mut query) => {
+                EthBridgePoolWithoutCtx::QueryPool(QueryEthBridgePool(
+                    mut query,
+                )) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(&mut query.ledger_address)
                     });
@@ -85,7 +97,9 @@ impl<IO: Io> CliApi<IO> {
                         .proceed_or_else(error)?;
                     bridge_pool::query_bridge_pool::<_, IO>(&client).await;
                 }
-                cmds::EthBridgePool::QuerySigned(mut query) => {
+                EthBridgePoolWithoutCtx::QuerySigned(
+                    QuerySignedBridgePool(mut query),
+                ) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(&mut query.ledger_address)
                     });
@@ -97,7 +111,9 @@ impl<IO: Io> CliApi<IO> {
                         .await
                         .proceed_or_else(error)?;
                 }
-                cmds::EthBridgePool::QueryRelays(mut query) => {
+                EthBridgePoolWithoutCtx::QueryRelays(QueryRelayProgress(
+                    mut query,
+                )) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(&mut query.ledger_address)
                     });
@@ -108,8 +124,10 @@ impl<IO: Io> CliApi<IO> {
                     bridge_pool::query_relay_progress::<_, IO>(&client).await;
                 }
             },
-            cmds::NamadaRelayer::ValidatorSet(sub) => match sub {
-                cmds::ValidatorSet::ConsensusValidatorSet(mut args) => {
+            cli::NamadaRelayer::ValidatorSet(sub) => match sub {
+                ValidatorSet::ConsensusValidatorSet(ConsensusValidatorSet(
+                    mut args,
+                )) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(
                             &mut args.query.ledger_address,
@@ -125,7 +143,9 @@ impl<IO: Io> CliApi<IO> {
                     )
                     .await;
                 }
-                cmds::ValidatorSet::ValidatorSetProof(mut args) => {
+                ValidatorSet::ValidatorSetProof(ValidatorSetProof(
+                    mut args,
+                )) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(
                             &mut args.query.ledger_address,
@@ -141,7 +161,9 @@ impl<IO: Io> CliApi<IO> {
                     )
                     .await;
                 }
-                cmds::ValidatorSet::ValidatorSetUpdateRelay(mut args) => {
+                ValidatorSet::ValidatorSetUpdateRelay(
+                    ValidatorSetUpdateRelay(mut args),
+                ) => {
                     let client = client.unwrap_or_else(|| {
                         C::from_tendermint_address(
                             &mut args.query.ledger_address,

@@ -1,6 +1,65 @@
 pub mod events_endpoint;
 
 #[cfg(test)]
+pub mod event_log {
+    // praise be unto thee whom'st've read and understand this code
+    // p.s.: https://medium.com/mycrypto/understanding-event-logs-on-the-ethereum-blockchain-f4ae7ba50378
+
+    use ethbridge_bridge_events::{
+        TransferToErcFilter, TransferToNamadaFilter,
+    };
+    use ethbridge_governance_events::ValidatorSetUpdateFilter;
+    use namada::eth_bridge::ethers::abi::AbiEncode;
+    use namada::eth_bridge::ethers::contract::EthEvent;
+
+    /// Get an [`ethabi::RawLog`] from a given Ethereum event.
+    pub trait GetLog {
+        /// Return an [`ethabi::RawLog`].
+        fn get_log(self) -> ethabi::RawLog;
+    }
+
+    impl GetLog for TransferToNamadaFilter {
+        fn get_log(self) -> ethabi::RawLog {
+            ethabi::RawLog {
+                topics: vec![Self::signature()],
+                data: self.encode(),
+            }
+        }
+    }
+
+    impl GetLog for TransferToErcFilter {
+        fn get_log(self) -> ethabi::RawLog {
+            ethabi::RawLog {
+                topics: vec![Self::signature(), {
+                    let mut buf = [0; 32];
+                    self.nonce.to_big_endian(&mut buf);
+                    ethabi::ethereum_types::H256(buf)
+                }],
+                data: (self.transfers, self.valid_map, self.relayer_address)
+                    .encode(),
+            }
+        }
+    }
+
+    impl GetLog for ValidatorSetUpdateFilter {
+        fn get_log(self) -> ethabi::RawLog {
+            ethabi::RawLog {
+                topics: vec![Self::signature(), {
+                    let mut buf = [0; 32];
+                    self.validator_set_nonce.to_big_endian(&mut buf);
+                    ethabi::ethereum_types::H256(buf)
+                }],
+                data: (
+                    self.bridge_validator_set_hash,
+                    self.governance_validator_set_hash,
+                )
+                    .encode(),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 pub mod mock_web3_client {
     use std::borrow::Cow;
     use std::fmt::Debug;
@@ -32,7 +91,7 @@ pub mod mock_web3_client {
         NewHeight(Uint256),
         NewEvent {
             event_type: MockEventType,
-            data: Vec<u8>,
+            log: ethabi::RawLog,
             height: u32,
             seen: Sender<()>,
         },
@@ -60,10 +119,10 @@ pub mod mock_web3_client {
                 }
                 TestCmd::NewEvent {
                     event_type: ty,
-                    data,
+                    log,
                     height,
                     seen,
-                } => oracle.events.push((ty, data, height, seen)),
+                } => oracle.events.push((ty, log, height, seen)),
             }
         }
     }
@@ -82,7 +141,7 @@ pub mod mock_web3_client {
     pub struct Web3ClientInner {
         active: bool,
         latest_block_height: Uint256,
-        events: Vec<(MockEventType, Vec<u8>, u32, Sender<()>)>,
+        events: Vec<(MockEventType, ethabi::RawLog, u32, Sender<()>)>,
         blocks_processed: UnboundedSender<Uint256>,
         last_block_processed: Option<Uint256>,
     }
@@ -116,16 +175,13 @@ pub mod mock_web3_client {
                 let mut logs = vec![];
                 let mut events = vec![];
                 std::mem::swap(&mut client.events, &mut events);
-                for (event_ty, data, height, seen) in events.into_iter() {
+                for (event_ty, log, height, seen) in events.into_iter() {
                     if event_ty == ty && block_to_check >= Uint256::from(height)
                     {
                         seen.send(()).unwrap();
-                        logs.push(ethabi::RawLog {
-                            data,
-                            topics: vec![],
-                        });
+                        logs.push(log);
                     } else {
-                        client.events.push((event_ty, data, height, seen));
+                        client.events.push((event_ty, log, height, seen));
                     }
                 }
                 if client.last_block_processed.as_ref() < Some(&block_to_check)

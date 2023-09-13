@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "apps",
+  "benches",
   "core",
   "ethereum_bridge",
   "proof_of_stake",
@@ -32,7 +33,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.21.1"
+version = "0.22.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -66,6 +67,12 @@ directories = "4.0.1"
 ed25519-consensus = "1.2.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
+ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
+ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
+ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
+ethbridge-governance-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
+ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0"}
+ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.23.0" }
 ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.5"
@@ -85,8 +92,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 libsecp256k1 = {git = "https://github.com/heliaxdev/libsecp256k1", rev = "bbb3bd44a49db361f21d9db80f9a087c194c0ae9", default-features = false, features = ["std", "static-context"]}
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "50acc5028fbcd52a05970fe7991c7850ab04358e" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "50acc5028fbcd52a05970fe7991c7850ab04358e", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
@@ -96,6 +103,7 @@ once_cell = "1.8.0"
 orion = "0.16.0"
 paste = "1.0.9"
 pretty_assertions = "0.7.2"
+primitive-types = "0.12.1"
 proptest = "1.2.0"
 proptest-state-machine = "0.1.0"
 prost = "0.11.6"

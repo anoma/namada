@@ -309,6 +309,12 @@ impl DenominatedAmount {
         }
     }
 
+    /// Check if the inner [`Amount`] is zero.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.amount.is_zero()
+    }
+
     /// A precise string representation. The number of
     /// decimal places in this string gives the denomination.
     /// This not true of the string produced by the `Display`
@@ -599,6 +605,20 @@ impl Mul<(u64, u64)> for Amount {
     }
 }
 
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b).
+impl Mul<(u32, u32)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (u32, u32)) -> Self::Output {
+        let amt = Amount {
+            raw: (self.raw / rhs.1) * rhs.0,
+        };
+        self.raw %= rhs.1;
+        (amt, self)
+    }
+}
+
 impl Div<u64> for Amount {
     type Output = Self;
 
@@ -768,17 +788,9 @@ impl MaspDenom {
     }
 }
 
-impl TryFrom<IbcAmount> for Amount {
-    type Error = AmountParseError;
-
-    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
-        // TODO: https://github.com/anoma/namada/issues/1089
-        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
-        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
-        //    return Err(AmountParseError::InvalidRange);
-        //}
-        DenominatedAmount::from_str(&amount.to_string())
-            .map(|a| a.amount * NATIVE_SCALE)
+impl From<DenominatedAmount> for IbcAmount {
+    fn from(amount: DenominatedAmount) -> Self {
+        primitive_types::U256(amount.canonical().amount.raw.0).into()
     }
 }
 

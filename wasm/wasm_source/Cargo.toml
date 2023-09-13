@@ -4,7 +4,7 @@ edition = "2021"
 license = "GPL-3.0"
 name = "namada_wasm"
 resolver = "2"
-version = "0.21.1"
+version = "0.22.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -27,6 +27,8 @@ tx_unjail_validator = ["namada_tx_prelude"]
 tx_update_account = ["namada_tx_prelude"]
 tx_vote_proposal = ["namada_tx_prelude"]
 tx_withdraw = ["namada_tx_prelude"]
+tx_update_steward_commission = ["namada_tx_prelude"]
+tx_resign_steward = ["namada_tx_prelude"]
 vp_implicit = ["namada_vp_prelude", "once_cell"]
 vp_masp = ["namada_vp_prelude", "masp_primitives"]
 vp_testnet_faucet = ["namada_vp_prelude", "once_cell"]
@@ -42,7 +44,7 @@ once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "252a6059565b125c1444e9e7d0b7c8da0fba8f8f", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "50acc5028fbcd52a05970fe7991c7850ab04358e", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]

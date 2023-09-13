@@ -15,10 +15,8 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use prost::Message;
 use thiserror::Error;
 
-use crate::ibc::applications::transfer::denom::TracePrefix;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use crate::ibc::applications::transfer::packet::PacketData;
 use crate::ibc::applications::transfer::{
     send_transfer_execute, send_transfer_validate,
 };
@@ -136,27 +134,48 @@ where
     /// Store the denom when transfer with MsgRecvPacket
     fn store_denom(&mut self, envelope: MsgEnvelope) -> Result<(), Error> {
         match envelope {
-            MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                let data = match serde_json::from_slice::<PacketData>(
-                    &msg.packet.data,
-                ) {
-                    Ok(data) => data,
-                    // not token transfer data
-                    Err(_) => return Ok(()),
-                };
-                let prefix = TracePrefix::new(
-                    msg.packet.port_id_on_b.clone(),
-                    msg.packet.chan_id_on_b,
-                );
-                let mut coin = data.token;
-                coin.denom.add_trace_prefix(prefix);
-                let trace_hash = storage::calc_hash(coin.denom.to_string());
-                self.ctx
-                    .borrow_mut()
-                    .store_denom(trace_hash, coin.denom)
-                    .map_err(|e| {
-                        Error::Denom(format!("Write the denom failed: {}", e))
+            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+                let result = self
+                    .ctx
+                    .borrow()
+                    .get_ibc_event("denomination_trace")
+                    .map_err(|_| {
+                        Error::Denom("Reading the IBC event failed".to_string())
+                    })?;
+                if let Some((trace_hash, ibc_denom)) =
+                    result.as_ref().and_then(|event| {
+                        event
+                            .attributes
+                            .get("trace_hash")
+                            .zip(event.attributes.get("denom"))
                     })
+                {
+                    // If the denomination trace event has the trace hash and
+                    // the IBC denom, a token has been minted. The raw IBC denom
+                    // including the port ID, the channel ID and the base token
+                    // is stored to be restored from the trace hash. The amount
+                    // denomination is also set for the minting.
+                    self.ctx
+                        .borrow_mut()
+                        .store_ibc_denom(trace_hash, ibc_denom)
+                        .map_err(|e| {
+                            Error::Denom(format!(
+                                "Writing the IBC denom failed: {}",
+                                e
+                            ))
+                        })?;
+                    let token = storage::ibc_token(ibc_denom);
+                    self.ctx.borrow_mut().store_token_denom(&token).map_err(
+                        |e| {
+                            Error::Denom(format!(
+                                "Writing the token denom failed: {}",
+                                e
+                            ))
+                        },
+                    )
+                } else {
+                    Ok(())
+                }
             }
             // other messages
             _ => Ok(()),

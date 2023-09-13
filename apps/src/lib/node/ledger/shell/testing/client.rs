@@ -9,7 +9,7 @@ use tendermint_config::net::Address as TendermintAddress;
 use super::node::MockNode;
 use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::Global;
-use crate::cli::{args, cmds, Cmd, Context, NamadaClient};
+use crate::cli::{args, cmds, Cmd, Context, NamadaClient, NamadaRelayer};
 use crate::node::ledger::shell::testing::utils::Bin;
 
 pub fn run(
@@ -67,8 +67,21 @@ pub fn run(
             let app = App::new("test");
             let app = cmds::NamadaRelayer::add_sub(args::Global::def(app));
             let matches = app.get_matches_from(args.clone());
-            let cmd = cmds::NamadaRelayer::parse(&matches)
-                .expect("Could not parse wallet command");
+            let cmd = match cmds::NamadaRelayer::parse(&matches)
+                .expect("Could not parse relayer command")
+            {
+                cmds::NamadaRelayer::EthBridgePool(
+                    cmds::EthBridgePool::WithContext(sub_cmd),
+                ) => NamadaRelayer::EthBridgePoolWithCtx(Box::new((
+                    sub_cmd, ctx,
+                ))),
+                cmds::NamadaRelayer::EthBridgePool(
+                    cmds::EthBridgePool::WithoutContext(sub_cmd),
+                ) => NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd),
+                cmds::NamadaRelayer::ValidatorSet(sub_cmd) => {
+                    NamadaRelayer::ValidatorSet(sub_cmd)
+                }
+            };
             rt.block_on(CliApi::<DefaultIo>::handle_relayer_command(
                 Some(node),
                 cmd,

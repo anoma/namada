@@ -3,13 +3,14 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
-use namada::core::ledger::pgf::storage::keys as pgf_storage;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
+use namada::ledger::events::EventType;
+use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
+use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
 use namada::ledger::{inflation, protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
@@ -64,9 +65,6 @@ where
         &mut self,
         req: shim::request::FinalizeBlock,
     ) -> Result<shim::response::FinalizeBlock> {
-        // Reset the gas meter before we start
-        self.gas_meter.reset();
-
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
@@ -132,8 +130,18 @@ where
             self.process_slashes();
         }
 
-        let wrapper_fees = self.get_wrapper_tx_fees();
         let mut stats = InternalStats::default();
+
+        let native_block_proposer_address = {
+            let tm_raw_hash_string =
+                tm_raw_hash_to_string(req.proposer_address);
+            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+                .unwrap()
+                .expect(
+                    "Unable to find native validator address of block \
+                     proposer from tendermint raw hash",
+                )
+        };
 
         // Tracks the accepted transactions
         self.wl_storage.storage.block.results = BlockResults::default();
@@ -148,7 +156,6 @@ where
                 );
                 continue;
             };
-            let tx_length = processed_tx.tx.len();
             // If [`process_proposal`] rejected a Tx due to invalid signature,
             // emit an event here and move on to next tx.
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
@@ -176,16 +183,14 @@ where
                 continue;
             }
 
-            let tx = if tx.validate_tx().is_ok() {
-                tx
-            } else {
+            if tx.validate_tx().is_err() {
                 tracing::error!(
                     "Internal logic error: FinalizeBlock received tx that \
                      could not be deserialized to a valid TxType"
                 );
                 continue;
             };
-            let tx_type = tx.header();
+            let tx_header = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             if ErrorCodes::from_u32(processed_tx.result.code).unwrap()
@@ -200,7 +205,7 @@ where
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed and remove the hash
                 // from storage
-                if let TxType::Decrypted(_) = &tx_type.tx_type {
+                if let TxType::Decrypted(_) = &tx_header.tx_type {
                     let tx_hash = self
                         .wl_storage
                         .storage
@@ -212,106 +217,103 @@ where
                         .update_header(TxType::Raw)
                         .header_hash();
                     let tx_hash_key =
-                        replay_protection::get_tx_hash_key(&tx_hash);
+                        replay_protection::get_replay_protection_key(&tx_hash);
                     self.wl_storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
                 }
+
+                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+                if let TxType::Wrapper(wrapper) = &tx_header.tx_type {
+                    // Charge fee if wrapper transaction went out of gas or
+                    // failed because of fees
+                    let error_code =
+                        ErrorCodes::from_u32(processed_tx.result.code).unwrap();
+                    if (error_code == ErrorCodes::TxGasLimit)
+                        | (error_code == ErrorCodes::FeeError)
+                    {
+                        let masp_transaction = wrapper
+                            .unshield_section_hash
+                            .map(|ref hash| {
+                                tx.get_section(hash)
+                                    .map(|section| {
+                                        if let Section::MaspTx(transaction) =
+                                            section
+                                        {
+                                            Some(transaction.to_owned())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .flatten()
+                            })
+                            .flatten();
+                        #[cfg(not(feature = "mainnet"))]
+                        let has_valid_pow =
+                            self.invalidate_pow_solution_if_valid(wrapper);
+                        if let Err(msg) = protocol::charge_fee(
+                            wrapper,
+                            masp_transaction,
+                            ShellParams::new(
+                                TxGasMeter::new_from_sub_limit(u64::MAX),
+                                &mut self.wl_storage,
+                                &mut self.vp_wasm_cache,
+                                &mut self.tx_wasm_cache,
+                            ),
+                            #[cfg(not(feature = "mainnet"))]
+                            has_valid_pow,
+                            Some(&native_block_proposer_address),
+                            &mut BTreeSet::default(),
+                        ) {
+                            self.wl_storage.write_log.drop_tx();
+                            tracing::error!(
+                                "Rejected wrapper tx {} could not pay fee: {}",
+                                Hash::sha256(
+                                    tx::try_from(processed_tx.as_ref())
+                                        .unwrap()
+                                ),
+                                msg
+                            )
+                        }
+                    }
+                }
+
                 continue;
             }
 
-            let (mut tx_event, tx_unsigned_hash) = match &tx_type.tx_type {
+            let (
+                mut tx_event,
+                tx_unsigned_hash,
+                mut tx_gas_meter,
+                has_valid_pow,
+                wrapper,
+            ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let mut tx_event = Event::new_tx_event(&tx, height.0);
-
-                    // Writes both txs hash to storage
-                    let processed_tx =
-                        Tx::try_from(processed_tx.tx.as_ref()).unwrap();
-                    let wrapper_tx_hash_key =
-                        replay_protection::get_tx_hash_key(&hash::Hash(
-                            processed_tx.header_hash().0,
-                        ));
-                    self.wl_storage
-                        .write_bytes(&wrapper_tx_hash_key, vec![])
-                        .expect("Error while writing tx hash to storage");
-
-                    let inner_tx_hash_key = replay_protection::get_tx_hash_key(
-                        &tx.clone().update_header(TxType::Raw).header_hash(),
-                    );
-                    self.wl_storage
-                        .write_bytes(&inner_tx_hash_key, vec![])
-                        .expect("Error while writing tx hash to storage");
-
+                    let tx_event = Event::new_tx_event(&tx, height.0);
                     #[cfg(not(feature = "mainnet"))]
                     let has_valid_pow =
                         self.invalidate_pow_solution_if_valid(wrapper);
 
-                    // Charge fee
-                    let gas_payer =
-                        if wrapper.pk != address::masp_tx_key().ref_to() {
-                            wrapper.gas_payer()
-                        } else {
-                            address::masp()
-                        };
+                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
 
-                    let balance_key =
-                        token::balance_key(&wrapper.fee.token, &gas_payer);
-                    let balance: token::Amount = self
-                        .wl_storage
-                        .read(&balance_key)
-                        .expect("must be able to read")
-                        .unwrap_or_default();
-
-                    match balance.checked_sub(wrapper_fees) {
-                        Some(amount) => {
-                            self.wl_storage
-                                .write(&balance_key, amount)
-                                .unwrap();
-                        }
-                        None => {
-                            #[cfg(not(feature = "mainnet"))]
-                            let reject = !has_valid_pow;
-                            #[cfg(feature = "mainnet")]
-                            let reject = true;
-                            if reject {
-                                // Burn remaining funds
-                                self.wl_storage
-                                    .write(
-                                        &balance_key,
-                                        Amount::native_whole(0),
-                                    )
-                                    .unwrap();
-                                tx_event["info"] =
-                                    "Insufficient balance for fee".into();
-                                tx_event["code"] = ErrorCodes::InvalidTx.into();
-                                tx_event["gas_used"] = "0".to_string();
-
-                                response.events.push(tx_event);
-                                continue;
-                            }
-                        }
-                    }
-
-                    self.wl_storage.storage.tx_queue.push(TxInQueue {
-                        tx: processed_tx.clone(),
+                    (
+                        tx_event,
+                        None,
+                        gas_meter,
                         #[cfg(not(feature = "mainnet"))]
                         has_valid_pow,
-                    });
-                    (tx_event, None)
+                        Some(tx.clone()),
+                    )
                 }
                 TxType::Decrypted(inner) => {
                     // We remove the corresponding wrapper tx from the queue
-                    let wrapper_hash = self
+                    let mut tx_in_queue = self
                         .wl_storage
                         .storage
                         .tx_queue
                         .pop()
-                        .expect("Missing wrapper tx in queue")
-                        .tx
-                        .clone()
-                        .update_header(TxType::Raw)
-                        .header_hash();
+                        .expect("Missing wrapper tx in queue");
                     let mut event = Event::new_tx_event(&tx, height.0);
 
                     match inner {
@@ -328,7 +330,7 @@ where
                         DecryptedTx::Undecryptable => {
                             tracing::info!(
                                 "Tx with hash {} was un-decryptable",
-                                wrapper_hash
+                                tx_in_queue.tx.header_hash()
                             );
                             event["info"] = "Transaction is invalid.".into();
                             event["log"] =
@@ -337,7 +339,20 @@ where
                             continue;
                         }
                     }
-                    (event, Some(wrapper_hash))
+
+                    (
+                        event,
+                        Some(
+                            tx_in_queue
+                                .tx
+                                .update_header(TxType::Raw)
+                                .header_hash(),
+                        ),
+                        TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
+                        #[cfg(not(feature = "mainnet"))]
+                        false,
+                        None,
+                    )
                 }
                 TxType::Raw => {
                     tracing::error!(
@@ -350,9 +365,14 @@ where
                     ProtocolTxType::BridgePoolVext
                     | ProtocolTxType::BridgePool
                     | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => {
-                        (Event::new_tx_event(&tx, height.0), None)
-                    }
+                    | ProtocolTxType::ValidatorSetUpdate => (
+                        Event::new_tx_event(&tx, height.0),
+                        None,
+                        TxGasMeter::new_from_sub_limit(0.into()),
+                        #[cfg(not(feature = "mainnet"))]
+                        false,
+                        None,
+                    ),
                     ProtocolTxType::EthEventsVext => {
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
@@ -371,7 +391,14 @@ where
                                 self.mode.dequeue_eth_event(event);
                             }
                         }
-                        (Event::new_tx_event(&tx, height.0), None)
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            #[cfg(not(feature = "mainnet"))]
+                            false,
+                            None,
+                        )
                     }
                     ProtocolTxType::EthereumEvents => {
                         let digest =
@@ -393,7 +420,14 @@ where
                                 }
                             }
                         }
-                        (Event::new_tx_event(&tx, height.0), None)
+                        (
+                            Event::new_tx_event(&tx, height.0),
+                            None,
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            #[cfg(not(feature = "mainnet"))]
+                            false,
+                            None,
+                        )
                     }
                     ref protocol_tx_type => {
                         tracing::error!(
@@ -408,29 +442,46 @@ where
             };
 
             match protocol::dispatch_tx(
-                tx.clone(),
-                tx_length,
+                tx,
+                processed_tx.tx.as_ref(),
                 TxIndex(
                     tx_index
                         .try_into()
                         .expect("transaction index out of bounds"),
                 ),
-                &mut self.gas_meter,
+                &mut tx_gas_meter,
                 &mut self.wl_storage,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
+                Some(&native_block_proposer_address),
+                #[cfg(not(feature = "mainnet"))]
+                has_valid_pow,
             )
             .map_err(Error::TxApply)
             {
                 Ok(result) => {
                     if result.is_accepted() {
-                        tracing::trace!(
-                            "all VPs accepted transaction {} storage \
-                             modification {:#?}",
-                            tx_event["hash"],
-                            result
-                        );
-                        stats.increment_successful_txs();
+                        if let EventType::Accepted = tx_event.event_type {
+                            // Wrapper transaction
+                            tracing::trace!(
+                                "Wrapper transaction {} was accepted",
+                                tx_event["hash"]
+                            );
+                            self.wl_storage.storage.tx_queue.push(TxInQueue {
+                                tx: wrapper.expect("Missing expected wrapper"),
+                                gas: tx_gas_meter.get_available_gas(),
+                                #[cfg(not(feature = "mainnet"))]
+                                has_valid_pow,
+                            });
+                        } else {
+                            tracing::trace!(
+                                "all VPs accepted transaction {} storage \
+                                 modification {:#?}",
+                                tx_event["hash"],
+                                result
+                            );
+                            stats.increment_successful_txs();
+                        }
                         self.wl_storage.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ErrorCodes::Ok.into();
@@ -489,28 +540,28 @@ where
                     // out of gas, remove its hash from storage to allow
                     // rewrapping it
                     if let Some(hash) = tx_unsigned_hash {
-                        if let Error::TxApply(protocol::Error::GasError(namada::ledger::gas::Error::TransactionGasExceededError)) =
+                        if let Error::TxApply(protocol::Error::GasError(_)) =
                             msg
                         {
                             let tx_hash_key =
-                                replay_protection::get_tx_hash_key(&hash);
-                            self.wl_storage
-                                .delete(&tx_hash_key)
-                                .expect(
-                                    "Error while deleting tx hash key from storage",
+                                replay_protection::get_replay_protection_key(
+                                    &hash,
                                 );
-                            // Apply only to remove its hash,
-                            // since all other changes have already been dropped
-                            self.wl_storage.commit_tx();
+                            self.wl_storage.delete(&tx_hash_key).expect(
+                                "Error while deleting tx hash key from storage",
+                            );
                         }
                     }
 
-                    tx_event["gas_used"] = self
-                        .gas_meter
-                        .get_current_transaction_gas()
-                        .to_string();
+                    tx_event["gas_used"] =
+                        tx_gas_meter.get_tx_consumed_gas().to_string();
                     tx_event["info"] = msg.to_string();
-                    tx_event["code"] = ErrorCodes::WasmRuntimeError.into();
+                    if let EventType::Accepted = tx_event.event_type {
+                        // If wrapper, invalid tx error code
+                        tx_event["code"] = ErrorCodes::InvalidTx.into();
+                    } else {
+                        tx_event["code"] = ErrorCodes::WasmRuntimeError.into();
+                    }
                 }
             }
             response.events.push(tx_event);
@@ -535,28 +586,10 @@ where
             self.update_eth_oracle();
         }
 
-        if !req.proposer_address.is_empty() {
-            let tm_raw_hash_string =
-                tm_raw_hash_to_string(req.proposer_address);
-            let native_proposer_address = find_validator_by_raw_hash(
-                &self.wl_storage,
-                tm_raw_hash_string,
-            )
-            .unwrap()
-            .expect(
-                "Unable to find native validator address of block proposer \
-                 from tendermint raw hash",
-            );
-            write_last_block_proposer_address(
-                &mut self.wl_storage,
-                native_proposer_address,
-            )?;
-        }
-
-        let _ = self
-            .gas_meter
-            .finalize_transaction()
-            .map_err(|_| Error::GasOverflow)?;
+        write_last_block_proposer_address(
+            &mut self.wl_storage,
+            native_block_proposer_address,
+        )?;
 
         self.event_log_mut().log_events(response.events.clone());
         tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
@@ -576,8 +609,6 @@ where
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
         let height = self.wl_storage.storage.get_last_block_height() + 1;
-
-        self.gas_meter.reset();
 
         self.wl_storage
             .storage
@@ -819,14 +850,19 @@ where
         }
 
         // Pgf inflation
-        let pgf_inflation_rate_key = pgf_storage::get_pgf_inflation_rate_key();
-        let pgf_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_inflation_rate_key)
-            .unwrap_or_default();
+        let pgf_parameters = pgf::get_parameters(&self.wl_storage)?;
 
-        let pgf_pd_rate = pgf_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_pd_rate =
+            pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
         let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
-        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
+
+        let pgf_stewards_pd_rate =
+            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
+        let pgf_inflation_amount =
+            token::Amount::from(pgf_inflation + pgf_steward_inflation);
 
         credit_tokens(
             &mut self.wl_storage,
@@ -841,43 +877,71 @@ where
             pgf_inflation_amount.to_string_native()
         );
 
-        // Pgf steward inflation
-        let pgf_stewards_inflation_rate_key =
-            pgf_storage::get_steward_inflation_rate_key();
-        let pgf_stewards_inflation_rate = self
-            .read_storage_key::<Dec>(&pgf_stewards_inflation_rate_key)
-            .unwrap_or_default();
+        let mut pgf_fundings = pgf::get_payments(&self.wl_storage)?;
+        // we want to pay first the oldest fundings
+        pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
-        let pgf_stewards_pd_rate =
-            pgf_stewards_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_steward_inflation =
-            Dec::from(total_tokens) * pgf_stewards_pd_rate;
-
-        let pgf_stewards_key = pgf_storage::get_stewards_key();
-        let pgf_stewards: BTreeSet<Address> =
-            self.read_storage_key(&pgf_stewards_key).unwrap_or_default();
-
-        let pgf_steward_reward = match pgf_stewards.len() {
-            0 => Dec::zero(),
-            _ => pgf_steward_inflation
-                .trunc_div(&Dec::from(pgf_stewards.len()))
-                .unwrap_or_default(),
-        };
-        let pgf_steward_reward = token::Amount::from(pgf_steward_reward);
-
-        for steward in pgf_stewards {
-            credit_tokens(
+        for funding in pgf_fundings {
+            if credit_tokens(
                 &mut self.wl_storage,
                 &staking_token,
-                &steward,
-                pgf_steward_reward,
-            )?;
-            tracing::info!(
-                "Minting {} tokens for PGF Steward rewards distribution into \
-                 the steward address {}.",
-                pgf_steward_reward.to_string_native(),
-                steward,
-            );
+                &funding.detail.target,
+                funding.detail.amount,
+            )
+            .is_ok()
+            {
+                tracing::info!(
+                    "Minted {} tokens for {} project.",
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
+                );
+            } else {
+                tracing::warn!(
+                    "Failed Minting {} tokens for {} project.",
+                    funding.detail.amount.to_string_native(),
+                    &funding.detail.target,
+                );
+            }
+        }
+
+        // Pgf steward inflation
+        let stewards = pgf::get_stewards(&self.wl_storage)?;
+
+        let pgf_steward_reward = match stewards.len() {
+            0 => Dec::zero(),
+            _ => pgf_steward_inflation
+                .trunc_div(&Dec::from(stewards.len()))
+                .unwrap_or_default(),
+        };
+
+        for steward in stewards {
+            for (address, percentage) in steward.reward_distribution {
+                let pgf_steward_reward = pgf_steward_reward
+                    .checked_mul(&percentage)
+                    .unwrap_or_default();
+                let reward_amount = token::Amount::from(pgf_steward_reward);
+
+                if credit_tokens(
+                    &mut self.wl_storage,
+                    &staking_token,
+                    &address,
+                    reward_amount,
+                )
+                .is_ok()
+                {
+                    tracing::info!(
+                        "Minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                } else {
+                    tracing::warn!(
+                        "Failed minting {} tokens for steward {}.",
+                        reward_amount.to_string_native(),
+                        address,
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -1022,7 +1086,6 @@ mod test_finalize_block {
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::btree_set::BTreeSetShims;
-    use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::{
         is_validator_slashes_key, slashes_prefix,
     };
@@ -1038,9 +1101,7 @@ mod test_finalize_block {
     };
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
-    use namada::types::ethereum_events::{
-        EthAddress, TransferToEthereum, Uint as ethUint,
-    };
+    use namada::types::ethereum_events::{EthAddress, Uint as ethUint};
     use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::key::tm_consensus_key_raw_hash;
@@ -1051,7 +1112,7 @@ mod test_finalize_block {
         InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{Fee, WrapperTx, MIN_FEE_AMOUNT};
+    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
     use namada_test_utils::TestWasms;
@@ -1067,6 +1128,8 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
+    const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
+
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
     fn mk_wrapper_tx(
@@ -1076,13 +1139,14 @@ mod test_finalize_block {
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE_AMOUNT,
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1117,13 +1181,14 @@ mod test_finalize_block {
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: MIN_FEE_AMOUNT,
+                    amount_per_gas_unit: 1.into(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1131,7 +1196,11 @@ mod test_finalize_block {
         outer_tx.set_data(Data::new(
             "Decrypted transaction data".as_bytes().to_owned(),
         ));
-        shell.enqueue_tx(outer_tx.clone());
+        let gas_limit =
+            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
+                .unwrap();
+        shell.enqueue_tx(outer_tx.clone(), gas_limit);
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
             has_valid_pow: false,
@@ -1179,7 +1248,18 @@ mod test_finalize_block {
                     u32::try_from(i.rem_euclid(2)).unwrap();
                 processed_txs.push(processed_tx);
             } else {
-                shell.enqueue_tx(wrapper.clone());
+                let wrapper_info =
+                    if let TxType::Wrapper(w) = wrapper.header().tx_type {
+                        w
+                    } else {
+                        panic!("Unexpected tx type");
+                    };
+                shell.enqueue_tx(
+                    wrapper.clone(),
+                    Gas::from(wrapper_info.gas_limit)
+                        .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                        .unwrap(),
+                );
             }
 
             if i != 3 {
@@ -1216,7 +1296,7 @@ mod test_finalize_block {
     }
 
     /// Check that if a decrypted tx was rejected by [`process_proposal`],
-    /// check that the correct event is returned. Check that it is still
+    /// the correct event is returned. Check that it is still
     /// removed from the queue of txs to be included in the next block
     /// proposal
     #[test]
@@ -1226,13 +1306,14 @@ mod test_finalize_block {
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: Default::default(),
+                    amount_per_gas_unit: Default::default(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1240,7 +1321,11 @@ mod test_finalize_block {
         outer_tx.set_data(Data::new(
             String::from("transaction data").as_bytes().to_owned(),
         ));
-        shell.enqueue_tx(outer_tx.clone());
+        let gas_limit =
+            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
+                .unwrap();
+        shell.enqueue_tx(outer_tx.clone(), gas_limit);
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
             #[cfg(not(feature = "mainnet"))]
@@ -1278,17 +1363,18 @@ mod test_finalize_block {
 
         let keypair = crate::wallet::defaults::daewon_keypair();
         // not valid tx bytes
-        let wrapper = WrapperTx {
-            fee: Fee {
-                amount: Default::default(),
+        let wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 0.into(),
                 token: shell.wl_storage.storage.native_token.clone(),
             },
-            pk: keypair.ref_to(),
-            epoch: Epoch(0),
-            gas_limit: Default::default(),
+            keypair.ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
             #[cfg(not(feature = "mainnet"))]
-            pow_solution: None,
-        };
+            None,
+            None,
+        ))));
         let processed_tx = ProcessedTx {
             tx: Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
                 .to_bytes(),
@@ -1298,8 +1384,11 @@ mod test_finalize_block {
             },
         };
 
-        let tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
-        shell.enqueue_tx(tx);
+        let gas_limit =
+            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
+                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
+                .unwrap();
+        shell.enqueue_tx(wrapper, gas_limit);
 
         // check that correct error message is returned
         for event in shell
@@ -1658,6 +1747,7 @@ mod test_finalize_block {
     ///
     /// Sets the validity of the transfer on Ethereum's side.
     fn test_bp_nonce_is_incremented_aux(valid_transfer: bool) {
+        use crate::node::ledger::shell::address::nam;
         test_bp(|shell: &mut TestShell| {
             let asset = EthAddress([0xff; 20]);
             let receiver = EthAddress([0xaa; 20]);
@@ -1682,7 +1772,6 @@ mod test_finalize_block {
             }
             // add bertha's gas fees the pool
             {
-                use crate::node::ledger::shell::address::nam;
                 let amt: Amount = 999_999_u64.into();
                 let pool_balance_key = token::balance_key(
                     &nam(),
@@ -1695,16 +1784,25 @@ mod test_finalize_block {
             }
             // write transfer to storage
             let transfer = {
-                use namada::core::types::eth_bridge_pool::PendingTransfer;
-                let transfer = TransferToEthereum {
-                    amount: 10u64.into(),
-                    asset,
-                    receiver,
-                    gas_amount: 10u64.into(),
-                    sender: bertha.clone(),
-                    gas_payer: bertha.clone(),
+                use namada::core::types::eth_bridge_pool::{
+                    GasFee, PendingTransfer, TransferToEthereum,
+                    TransferToEthereumKind,
                 };
-                let pending = PendingTransfer::from(&transfer);
+                let pending = PendingTransfer {
+                    transfer: TransferToEthereum {
+                        kind: TransferToEthereumKind::Erc20,
+                        amount: 10u64.into(),
+                        asset,
+                        recipient: receiver,
+                        sender: bertha.clone(),
+                    },
+                    gas_fee: GasFee {
+                        token: nam(),
+                        amount: 10u64.into(),
+                        payer: bertha.clone(),
+                    },
+                };
+                let transfer = (&pending).into();
                 shell
                     .wl_storage
                     .write(&bridge_pool::get_pending_key(&pending), pending)
@@ -2215,32 +2313,71 @@ mod test_finalize_block {
         }
     }
 
-    fn next_block_for_inflation(
-        shell: &mut TestShell,
-        proposer_address: Vec<u8>,
-        votes: Vec<VoteInfo>,
-        byzantine_validators: Option<Vec<Misbehavior>>,
-    ) {
-        // Let the header time be always ahead of the next epoch min start time
-        let header = Header {
-            time: shell
+    /// Test that replay protection keys are not added to the merkle tree
+    #[test]
+    fn test_replay_keys_not_merkelized() {
+        let (mut shell, _, _, _) = setup();
+
+        let (wrapper_tx, processed_tx) =
+            mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
+        let wrapper_hash_key = replay_protection::get_replay_protection_key(
+            &wrapper_tx.header_hash(),
+        );
+        let mut decrypted_tx = wrapper_tx;
+
+        decrypted_tx.update_header(TxType::Raw);
+        let decrypted_hash_key = replay_protection::get_replay_protection_key(
+            &decrypted_tx.header_hash(),
+        );
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event
+            .attributes
+            .get("code")
+            .expect(
+                "Test
+        failed",
+            )
+            .as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        // Check transactions' hashes in storage
+        assert!(shell.shell.wl_storage.has_key(&wrapper_hash_key).unwrap());
+        assert!(shell.shell.wl_storage.has_key(&decrypted_hash_key).unwrap());
+        // Check that non of the hashes is present in the merkle tree
+        assert!(
+            !shell
+                .shell
                 .wl_storage
                 .storage
-                .next_epoch_min_start_time
-                .next_second(),
-            ..Default::default()
-        };
-        let mut req = FinalizeBlock {
-            header,
-            proposer_address,
-            votes,
-            ..Default::default()
-        };
-        if let Some(byz_vals) = byzantine_validators {
-            req.byzantine_validators = byz_vals;
-        }
-        shell.finalize_block(req).unwrap();
-        shell.commit();
+                .block
+                .tree
+                .has_key(&wrapper_hash_key)
+                .unwrap()
+        );
+        assert!(
+            !shell
+                .shell
+                .wl_storage
+                .storage
+                .block
+                .tree
+                .has_key(&decrypted_hash_key)
+                .unwrap()
+        );
     }
 
     /// Test that if a decrypted transaction fails because of out-of-gas, its
@@ -2257,13 +2394,14 @@ mod test_finalize_block {
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount: Amount::zero(),
+                    amount_per_gas_unit: Amount::zero(),
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                GAS_LIMIT_MULTIPLIER.into(),
                 #[cfg(not(feature = "mainnet"))]
+                None,
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -2279,7 +2417,7 @@ mod test_finalize_block {
         }));
 
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::get_tx_hash_key(
+        let inner_hash_key = replay_protection::get_replay_protection_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
@@ -2295,11 +2433,11 @@ mod test_finalize_block {
                 info: "".into(),
             },
         };
-        shell.enqueue_tx(wrapper_tx);
+        shell.enqueue_tx(wrapper_tx, Gas::default());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
 
-        let _event = &shell
+        let event = &shell
             .finalize_block(FinalizeBlock {
                 txs: vec![processed_tx],
                 ..Default::default()
@@ -2310,20 +2448,258 @@ mod test_finalize_block {
         let root_post = shell.shell.wl_storage.storage.block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        // FIXME: uncomment when proper gas metering is in place
-        // // Check inner tx hash has been removed from storage
-        // assert_eq!(event.event_type.to_string(), String::from("applied"));
-        // let code = event.attributes.get("code").expect("Test
-        // failed").as_str(); assert_eq!(code,
-        // String::from(ErrorCodes::WasmRuntimeError).as_str());
+        // Check inner tx hash has been removed from storage
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        // assert!(
-        //     !shell
-        //         .storage
-        //         .has_key(&inner_hash_key)
-        //         .expect("Test failed")
-        //         .0
-        // )
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
+    }
+
+    #[test]
+    /// Test that the hash of the wrapper transaction is committed to storage
+    /// even if the wrapper tx fails. The inner transaction hash must instead be
+    /// removed
+    fn test_commits_hash_if_wrapper_failure() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = gen_keypair();
+
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 0.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                0.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new(
+            "Encrypted transaction data".as_bytes().to_owned(),
+        ));
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            &keypair,
+        )));
+
+        let wrapper_hash_key = replay_protection::get_replay_protection_key(
+            &wrapper.header_hash(),
+        );
+        let inner_hash_key = replay_protection::get_replay_protection_key(
+            &wrapper.clone().update_header(TxType::Raw).header_hash(),
+        );
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check wrapper hash has been committed to storage even if it failed.
+        // Check that, instead, the inner hash has been removed
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+
+        assert!(
+            shell
+                .wl_storage
+                .has_key(&wrapper_hash_key)
+                .expect("Test failed")
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .has_key(&inner_hash_key)
+                .expect("Test failed")
+        )
+    }
+
+    // Test that if the fee payer doesn't have enough funds for fee payment the
+    // ledger drains their balance. Note that because of the checks in process
+    // proposal this scenario should never happen
+    #[test]
+    fn test_fee_payment_if_insufficient_balance() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = gen_keypair();
+
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 100.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper.set_data(Data::new(
+            "Encrypted transaction data".as_bytes().to_owned(),
+        ));
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            &keypair,
+        )));
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check balance of fee payer is 0
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        let balance_key = namada::core::types::token::balance_key(
+            &shell.wl_storage.storage.native_token,
+            &Address::from(&keypair.to_public()),
+        );
+        let balance: Amount = shell
+            .wl_storage
+            .read(&balance_key)
+            .unwrap()
+            .unwrap_or_default();
+
+        assert_eq!(balance, 0.into())
+    }
+
+    // Test that the fees collected from a block are withdrew from the wrapper
+    // signer and credited to the block proposer
+    #[test]
+    fn test_fee_payment_to_block_proposer() {
+        let (mut shell, _, _, _) = setup();
+
+        let validator = shell.mode.get_validator_address().unwrap().to_owned();
+        let pos_params =
+            namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+        let consensus_key =
+            namada_proof_of_stake::validator_consensus_key_handle(&validator)
+                .get(&shell.wl_storage, Epoch::default(), &pos_params)
+                .unwrap()
+                .unwrap();
+        let proposer_address = HEXUPPER
+            .decode(consensus_key.tm_raw_hash().as_bytes())
+            .unwrap();
+
+        let proposer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &validator,
+        )
+        .unwrap();
+
+        let mut wasm_path = top_level_directory();
+        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
+        let tx_code = std::fs::read(wasm_path)
+            .expect("Expected a file at given code path");
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: 1.into(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+                crate::wallet::defaults::albert_keypair().ref_to(),
+                Epoch(0),
+                5_000_000.into(),
+                #[cfg(not(feature = "mainnet"))]
+                None,
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new(tx_code));
+        wrapper.set_data(Data::new(
+            "Enxrypted transaction data".as_bytes().to_owned(),
+        ));
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            &crate::wallet::defaults::albert_keypair(),
+        )));
+        let fee_amount =
+            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+
+        let signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper.header().wrapper().unwrap().fee_payer(),
+        )
+        .unwrap();
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                proposer_address,
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check fee payment
+        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        let code = event.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ErrorCodes::Ok).as_str());
+
+        let new_proposer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &validator,
+        )
+        .unwrap();
+        assert_eq!(
+            new_proposer_balance,
+            proposer_balance.checked_add(fee_amount).unwrap()
+        );
+
+        let new_signer_balance = storage_api::token::read_balance(
+            &shell.wl_storage,
+            &shell.wl_storage.storage.native_token,
+            &wrapper.header().wrapper().unwrap().fee_payer(),
+        )
+        .unwrap();
+        assert_eq!(
+            new_signer_balance,
+            signer_balance.checked_sub(fee_amount).unwrap()
+        )
     }
 
     #[test]
@@ -3551,23 +3927,6 @@ mod test_finalize_block {
         shell.wl_storage.storage.block.epoch
     }
 
-    fn get_pkh_from_address<S>(
-        storage: &S,
-        params: &PosParams,
-        address: Address,
-        epoch: Epoch,
-    ) -> Vec<u8>
-    where
-        S: StorageRead,
-    {
-        let ck = validator_consensus_key_handle(&address)
-            .get(storage, epoch, params)
-            .unwrap()
-            .unwrap();
-        let hash_string = tm_consensus_key_raw_hash(&ck);
-        HEXUPPER.decode(hash_string.as_bytes()).unwrap()
-    }
-
     /// Test that updating the ethereum bridge params via governance works.
     #[tokio::test]
     async fn test_eth_bridge_param_updates() {
@@ -3587,7 +3946,9 @@ mod test_finalize_block {
             .wl_storage
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
-        let gas_meter = VpGasMeter::new(0);
+        let gas_meter = VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        );
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
         let ctx = namada::ledger::native_vp::Ctx::new(
@@ -3617,10 +3978,36 @@ mod test_finalize_block {
         }
         shell.finalize_block(req).expect("Test failed");
         shell.commit();
+
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = read_pos_params(&shell.wl_storage).unwrap();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+
         let _ = control_receiver.recv().await.expect("Test failed");
-        let mut req = FinalizeBlock::default();
-        req.header.time = namada::types::time::DateTimeUtc::now();
-        shell.finalize_block(req).expect("Test failed");
+        // Finalize block 2
+        let votes = vec![VoteInfo {
+            validator: Some(Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        next_block_for_inflation(&mut shell, pkh1.clone(), votes, None);
         let Command::UpdateConfig(cmd) =
             control_receiver.recv().await.expect("Test failed");
         assert_eq!(u64::from(cmd.min_confirmations), 42);

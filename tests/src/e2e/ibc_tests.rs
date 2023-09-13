@@ -160,6 +160,9 @@ fn run_ledger_ibc() -> Result<()> {
     )?;
     check_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
+    // Try invalid transfers and they will fail
+    try_invalid_transfers(&test_a, &test_b, &port_id_a, &channel_id_a)?;
+
     // Transfer 50000 received over IBC on Chain B
     transfer_received_token(&port_id_b, &channel_id_b, &test_b)?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -634,10 +637,11 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::native_whole(100000),
+        "100000",
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        None,
         None,
         false,
     )?;
@@ -688,6 +692,62 @@ fn transfer_token(
     Ok(())
 }
 
+fn try_invalid_transfers(
+    test_a: &Test,
+    test_b: &Test,
+    port_id_a: &PortId,
+    channel_id_a: &ChannelId,
+) -> Result<()> {
+    let receiver = find_address(test_b, BERTHA)?;
+
+    // invalid amount
+    transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        NAM,
+        "10.1",
+        ALBERT_KEY,
+        port_id_a,
+        channel_id_a,
+        None,
+        Some("The amount for the IBC transfer should be an integer"),
+        false,
+    )?;
+
+    // invalid port
+    transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        NAM,
+        "10",
+        ALBERT_KEY,
+        &"port".parse().unwrap(),
+        channel_id_a,
+        None,
+        Some("Error trying to apply a transaction"),
+        false,
+    )?;
+
+    // invalid channel
+    transfer(
+        test_a,
+        ALBERT,
+        &receiver,
+        NAM,
+        "10",
+        ALBERT_KEY,
+        port_id_a,
+        &"channel-42".parse().unwrap(),
+        None,
+        Some("Error trying to apply a transaction"),
+        false,
+    )?;
+
+    Ok(())
+}
+
 fn transfer_received_token(
     port_id: &PortId,
     channel_id: &ChannelId,
@@ -710,10 +770,6 @@ fn transfer_received_token(
         &ibc_token,
         "--amount",
         &amount,
-        "--gas-amount",
-        "0",
-        "--gas-limit",
-        "0",
         "--gas-token",
         NAM,
         "--node",
@@ -735,11 +791,11 @@ fn transfer_back(
     port_id_b: &PortId,
     channel_id_b: &ChannelId,
 ) -> Result<()> {
-    let nam = find_address(test_b, NAM)?.to_string();
+    let token = find_address(test_b, NAM)?.to_string();
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
-    let denom_raw = format!("{}/{}/{}", port_id_b, channel_id_b, nam);
+    let denom_raw = format!("{}/{}/{}", port_id_b, channel_id_b, token);
     let ibc_token = ibc_token(denom_raw).to_string();
     // Send a token from Chain B
     let height = transfer(
@@ -747,10 +803,11 @@ fn transfer_back(
         BERTHA,
         &receiver,
         ibc_token,
-        &Amount::native_whole(50000),
+        "50000",
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
+        None,
         None,
         false,
     )?;
@@ -809,11 +866,12 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        &Amount::native_whole(100000),
+        "100000",
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
         Some(Duration::new(5, 0)),
+        None,
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -917,10 +975,6 @@ fn submit_ibc_tx(
             owner,
             "--signing-keys",
             signer,
-            "--gas-amount",
-            "0",
-            "--gas-limit",
-            "0",
             "--gas-token",
             NAM,
             "--node",
@@ -941,17 +995,17 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: &Address,
     token: impl AsRef<str>,
-    amount: &Amount,
+    amount: impl AsRef<str>,
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout_sec: Option<Duration>,
+    expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
     let receiver = receiver.to_string();
-    let amount = amount.to_string_native();
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
     let mut tx_args = vec![
@@ -965,7 +1019,7 @@ fn transfer(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount,
+        amount.as_ref(),
         "--channel-id",
         &channel_id,
         "--port-id",
@@ -981,11 +1035,19 @@ fn transfer(
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied")?;
-    if wait_reveal_pk {
-        client.exp_string("Transaction applied")?;
+    match expected_err {
+        Some(err) => {
+            client.exp_string(err)?;
+            Ok(0)
+        }
+        None => {
+            client.exp_string("Transaction applied")?;
+            if wait_reveal_pk {
+                client.exp_string("Transaction applied")?;
+            }
+            check_tx_height(test, &mut client)
+        }
     }
-    check_tx_height(test, &mut client)
 }
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {

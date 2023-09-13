@@ -32,7 +32,11 @@ impl OfflineProposal {
     pub fn validate(
         self,
         current_epoch: Epoch,
+        force: bool,
     ) -> Result<Self, ProposalValidation> {
+        if force {
+            return Ok(self);
+        }
         is_valid_tally_epoch(self.tally_epoch, current_epoch)?;
 
         Ok(self)
@@ -153,7 +157,11 @@ impl OfflineSignedProposal {
         self,
         account_public_keys_map: &AccountPublicKeysMap,
         threshold: u8,
+        force: bool,
     ) -> Result<Self, ProposalValidation> {
+        if force {
+            return Ok(self);
+        }
         let valid_signature =
             self.check_signature(account_public_keys_map, threshold);
         if !valid_signature {

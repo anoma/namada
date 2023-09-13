@@ -14,7 +14,7 @@ env:
   CHAIN_BUCKET: anoma-iac-files-master
 
 jobs:
-  tasks:
+  with_py: # tasks that are using python scripts from anoma-ci-iac
     if: ${{ github.event.issue.pull_request }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.make.timeout }}
@@ -75,6 +75,44 @@ jobs:
           BINARIES_COMMIT_SHA: ${{ steps.comment-branch.outputs.head_sha }}
       - name: Comment not found
         if: steps.check.outputs.triggered != 'true'
-        run: echo "Comment $COMMENT not found"
+        run: echo "Comment \"$COMMENT\" not matched"
         env:
           COMMENT: ${{ matrix.make.comment }}
+
+  tasks: # tasks with commands with no external deps
+    if: ${{ github.event.issue.pull_request }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.make.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04]
+        make:
+          - name: Run PoS state-machine tests
+            comment: pls run pos tests
+            command: PROPTEST_CASES=300 make test-pos-sm # PoS state machine tests
+            timeout: 600 # 10 hours
+
+    steps:
+      - uses: khan/pull-request-comment-trigger@v1.1.0
+        id: check
+        with: 
+          trigger: ${{ matrix.make.comment }}
+          reaction: eyes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: xt0rted/pull-request-comment-branch@v1
+        if: steps.check.outputs.triggered == 'true'
+        id: comment-branch
+      - uses: actions/checkout@v3
+        if: steps.check.outputs.triggered == 'true'
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        if: steps.check.outputs.triggered == 'true'
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run task ${{ matrix.make.name }}
+        if: steps.check.outputs.triggered == 'true'
+        run: ${{ matrix.make.command }}

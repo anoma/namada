@@ -8,10 +8,11 @@ use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use thiserror::Error;
+use serde_json::Value;
 
 use crate::ledger::governance::utils::ProposalEvent;
 use crate::tendermint_proto::abci::EventAttribute;
+use crate::types::error::{EncodingError, Error, EventError};
 use crate::types::ibc::IbcEvent;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::TxType;
@@ -68,7 +69,7 @@ impl Display for EventType {
 }
 
 impl FromStr for EventType {
-    type Err = Error;
+    type Err = EventError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -82,7 +83,7 @@ impl FromStr for EventType {
             "write_acknowledgement" => {
                 Ok(EventType::Ibc("write_acknowledgement".to_string()))
             }
-            _ => Err(Error::InvalidEventType),
+            _ => Err(EventError::InvalidEventType),
         }
     }
 }
@@ -215,23 +216,6 @@ impl Attributes {
     }
 }
 
-/// Errors to do with emitting events.
-#[derive(Error, Debug)]
-pub enum Error {
-    /// Error when parsing an event type
-    #[error("Invalid event type")]
-    InvalidEventType,
-    /// Error when parsing attributes from an event JSON.
-    #[error("Json missing `attributes` field")]
-    MissingAttributes,
-    /// Missing key in attributes.
-    #[error("Attributes missing key: {0}")]
-    MissingKey(String),
-    /// Missing value in attributes.
-    #[error("Attributes missing value: {0}")]
-    MissingValue(String),
-}
-
 impl TryFrom<&serde_json::Value> for Attributes {
     type Error = Error;
 
@@ -239,35 +223,43 @@ impl TryFrom<&serde_json::Value> for Attributes {
         let mut attributes = HashMap::new();
         let attrs: Vec<serde_json::Value> = serde_json::from_value(
             json.get("attributes")
-                .ok_or(Error::MissingAttributes)?
+                .ok_or(EventError::MissingAttributes)?
                 .clone(),
         )
-        .unwrap();
+        .map_err(|err| EncodingError::Serde(err.to_string()))?;
 
         for attr in attrs {
-            attributes.insert(
-                serde_json::from_value(
-                    attr.get("key")
-                        .ok_or_else(|| {
-                            Error::MissingKey(
-                                serde_json::to_string(&attr).unwrap(),
-                            )
-                        })?
-                        .clone(),
-                )
-                .unwrap(),
-                serde_json::from_value(
-                    attr.get("value")
-                        .ok_or_else(|| {
-                            Error::MissingValue(
-                                serde_json::to_string(&attr).unwrap(),
-                            )
-                        })?
-                        .clone(),
-                )
-                .unwrap(),
-            );
+            let key = serde_json::from_value(
+                attr.get("key")
+                    .ok_or_else(|| {
+                        try_decoding_str(&attr, EventError::MissingKey)
+                    })?
+                    .clone(),
+            )
+            .map_err(|err| EncodingError::Serde(err.to_string()))?;
+            let value = serde_json::from_value(
+                attr.get("value")
+                    .ok_or_else(|| {
+                        try_decoding_str(&attr, EventError::MissingValue)
+                    })?
+                    .clone(),
+            )
+            .map_err(|err| EncodingError::Serde(err.to_string()))?;
+            attributes.insert(key, value);
         }
         Ok(Attributes(attributes))
+    }
+}
+
+fn try_decoding_str<F>(attr: &Value, err_type: F) -> Error
+where
+    F: FnOnce(String) -> EventError,
+{
+    match serde_json::to_string(attr) {
+        Ok(e) => Error::from(err_type(e)),
+        Err(err) => Error::from(EncodingError::Serde(format!(
+            "Failure to decode attribute {}",
+            err
+        ))),
     }
 }

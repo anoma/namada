@@ -7,7 +7,7 @@ pub mod merkle_tree;
 pub mod mockdb;
 pub mod traits;
 pub mod types;
-mod wl_storage;
+pub mod wl_storage;
 pub mod write_log;
 
 use core::fmt::Debug;
@@ -27,8 +27,11 @@ pub use wl_storage::{
 #[cfg(feature = "wasm-runtime")]
 pub use self::masp_conversions::update_allowed_conversions;
 pub use self::masp_conversions::{encode_asset_type, ConversionState};
+use super::replay_protection::is_replay_protection_key;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
-use crate::ledger::gas::MIN_STORAGE_GAS;
+use crate::ledger::gas::{
+    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+};
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
@@ -559,7 +562,19 @@ where
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
-        Ok((self.block.tree.has_key(key)?, key.len() as _))
+        if is_replay_protection_key(key) {
+            // Replay protection keys are not included in the merkle
+            // tree
+            Ok((
+                self.db.read_subspace_val(key)?.is_some(),
+                key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+            ))
+        } else {
+            Ok((
+                self.block.tree.has_key(key)?,
+                key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+            ))
+        }
     }
 
     /// Returns a value from the specified subspace and the gas cost
@@ -572,10 +587,11 @@ where
 
         match self.db.read_subspace_val(key)? {
             Some(v) => {
-                let gas = key.len() + v.len();
-                Ok((Some(v), gas as _))
+                let gas =
+                    (key.len() + v.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE;
+                Ok((Some(v), gas))
             }
-            None => Ok((None, key.len() as _)),
+            None => Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE)),
         }
     }
 
@@ -595,10 +611,13 @@ where
                 self.get_last_block_height(),
             )? {
                 Some(v) => {
-                    let gas = key.len() + v.len();
-                    Ok((Some(v), gas as _))
+                    let gas = (key.len() + v.len()) as u64
+                        * STORAGE_ACCESS_GAS_PER_BYTE;
+                    Ok((Some(v), gas))
                 }
-                None => Ok((None, key.len() as _)),
+                None => {
+                    Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE))
+                }
             }
         }
     }
@@ -612,7 +631,10 @@ where
         &self,
         prefix: &Key,
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db.iter_prefix(Some(prefix)), prefix.len() as _)
+        (
+            self.db.iter_prefix(Some(prefix)),
+            prefix.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Returns a prefix iterator and the gas cost
@@ -637,15 +659,16 @@ where
             let height =
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
-        } else {
+        } else if !is_replay_protection_key(key) {
+            // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
 
         let len = value.len();
-        let gas = key.len() + len;
+        let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
         let size_diff =
             self.db.write_subspace_val(self.block.height, key, value)?;
-        Ok((gas as _, size_diff))
+        Ok((gas, size_diff))
     }
 
     /// Delete the specified subspace and returns the gas cost and the size
@@ -655,12 +678,15 @@ where
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.has_key(key)?.0 {
-            self.block.tree.delete(key)?;
+            if !is_replay_protection_key(key) {
+                self.block.tree.delete(key)?;
+            }
             deleted_bytes_len =
                 self.db.delete_subspace_val(self.block.height, key)?;
         }
-        let gas = key.len() + deleted_bytes_len as usize;
-        Ok((gas as _, deleted_bytes_len))
+        let gas = (key.len() + deleted_bytes_len as usize) as u64
+            * STORAGE_WRITE_GAS_PER_BYTE;
+        Ok((gas, deleted_bytes_len))
     }
 
     /// Set the block header.
@@ -713,17 +739,23 @@ where
 
     /// Get the chain ID as a raw string
     pub fn get_chain_id(&self) -> (String, u64) {
-        (self.chain_id.to_string(), CHAIN_ID_LENGTH as _)
+        (
+            self.chain_id.to_string(),
+            CHAIN_ID_LENGTH as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Get the block height
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
-        (self.block.height, MIN_STORAGE_GAS)
+        (self.block.height, STORAGE_ACCESS_GAS_PER_BYTE)
     }
 
     /// Get the block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
-        (self.block.hash.clone(), BLOCK_HASH_LENGTH as _)
+        (
+            self.block.hash.clone(),
+            BLOCK_HASH_LENGTH as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Get the Merkle tree with stores and diffs in the DB
@@ -757,36 +789,44 @@ where
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.try_to_vec().expect(
-                                            "Serialization should never fail",
-                                        )
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_replay_protection_key(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.try_to_vec().expect(
+                                                "Serialization should never \
+                                                 fail",
+                                            )
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?
+                                };
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                tree.delete(&old_key)?;
+                                if !is_replay_protection_key(&old_key) {
+                                    tree.delete(&old_key)?;
+                                }
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                tree.update(
-                                    &new_key,
-                                    if is_pending_transfer_key(&new_key) {
-                                        target_height.try_to_vec().expect(
-                                            "Serialization should never fail",
-                                        )
-                                    } else {
-                                        new.1.clone()
-                                    },
-                                )?;
+                                if !is_replay_protection_key(&new_key) {
+                                    tree.update(
+                                        &new_key,
+                                        if is_pending_transfer_key(&new_key) {
+                                            target_height.try_to_vec().expect(
+                                                "Serialization should never \
+                                                 fail",
+                                            )
+                                        } else {
+                                            new.1.clone()
+                                        },
+                                    )?;
+                                }
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -795,23 +835,28 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-                        tree.delete(&key)?;
+                        if !is_replay_protection_key(&key) {
+                            tree.delete(&key)?;
+                        }
                         old_diff = old_diff_iter.next();
                     }
                     (None, Some(new)) => {
                         // the value was inserted
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
-                        tree.update(
-                            &key,
-                            if is_pending_transfer_key(&key) {
-                                target_height
-                                    .try_to_vec()
-                                    .expect("Serialization should never fail")
-                            } else {
-                                new.1.clone()
-                            },
-                        )?;
+
+                        if !is_replay_protection_key(&key) {
+                            tree.update(
+                                &key,
+                                if is_pending_transfer_key(&key) {
+                                    target_height.try_to_vec().expect(
+                                        "Serialization should never fail",
+                                    )
+                                } else {
+                                    new.1.clone()
+                                },
+                            )?
+                        };
                         new_diff = new_diff_iter.next();
                     }
                     (None, None) => break,
@@ -889,12 +934,12 @@ where
 
     /// Get the current (yet to be committed) block epoch
     pub fn get_current_epoch(&self) -> (Epoch, u64) {
-        (self.block.epoch, MIN_STORAGE_GAS)
+        (self.block.epoch, STORAGE_ACCESS_GAS_PER_BYTE)
     }
 
     /// Get the epoch of the last committed block
     pub fn get_last_epoch(&self) -> (Epoch, u64) {
-        (self.last_epoch, MIN_STORAGE_GAS)
+        (self.last_epoch, STORAGE_ACCESS_GAS_PER_BYTE)
     }
 
     /// Initialize the first epoch. The first epoch begins at genesis time.
@@ -920,16 +965,17 @@ where
     ) -> Result<(Option<Header>, u64)> {
         match height {
             Some(h) if h == self.get_block_height().0 => {
-                Ok((self.header.clone(), MIN_STORAGE_GAS))
+                Ok((self.header.clone(), STORAGE_ACCESS_GAS_PER_BYTE))
             }
             Some(h) => match self.db.read_block_header(h)? {
                 Some(header) => {
-                    let gas = header.encoded_len() as u64;
+                    let gas = header.encoded_len() as u64
+                        * STORAGE_ACCESS_GAS_PER_BYTE;
                     Ok((Some(header), gas))
                 }
-                None => Ok((None, MIN_STORAGE_GAS)),
+                None => Ok((None, STORAGE_ACCESS_GAS_PER_BYTE)),
             },
-            None => Ok((self.header.clone(), MIN_STORAGE_GAS)),
+            None => Ok((self.header.clone(), STORAGE_ACCESS_GAS_PER_BYTE)),
         }
     }
 
@@ -1004,7 +1050,8 @@ where
             let height =
                 self.block.height.try_to_vec().expect("Encoding failed");
             self.block.tree.update(key, height)?;
-        } else {
+        } else if !is_replay_protection_key(key) {
+            // Update the merkle tree for all but replay-protection entries
             self.block.tree.update(key, value)?;
         }
         self.db
@@ -1019,7 +1066,10 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<i64> {
-        self.block.tree.delete(key)?;
+        if !is_replay_protection_key(key) {
+            // Update the merkle tree for all but replay-protection entries
+            self.block.tree.delete(key)?;
+        }
         self.db
             .batch_delete_subspace_val(batch, self.block.height, key)
     }
@@ -1139,6 +1189,8 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use chrono::{TimeZone, Utc};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -1219,6 +1271,7 @@ mod tests {
             };
             let mut parameters = Parameters {
                 max_proposal_bytes: Default::default(),
+                max_block_gas: 20_000_000,
                 epoch_duration: epoch_duration.clone(),
                 max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_whitelist: vec![],
@@ -1232,8 +1285,9 @@ mod tests {
                 pos_inflation_amount: token::Amount::zero(),
                 #[cfg(not(feature = "mainnet"))]
                 faucet_account: None,
-                #[cfg(not(feature = "mainnet"))]
-                wrapper_tx_fees: None,
+                fee_unshielding_gas_limit: 20_000,
+                fee_unshielding_descriptions_limit: 15,
+                gas_cost: BTreeMap::default(),
             };
             parameters.init_storage(&mut wl_storage).unwrap();
 

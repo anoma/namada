@@ -65,7 +65,7 @@ where
     Ok(AccountPublicKeysMap::from_iter(public_keys))
 }
 
-/// Check if an account exists in storage
+/// Check if a user account exists in storage
 pub fn exists<S>(storage: &S, owner: &Address) -> Result<bool>
 where
     S: StorageRead,
@@ -75,7 +75,8 @@ where
             let vp_key = Key::validity_predicate(owner);
             storage.has_key(&vp_key)
         }
-        Address::Implicit(_) | Address::Internal(_) => Ok(true),
+        Address::Implicit(_) => Ok(true),
+        Address::Internal(_) => Ok(false),
     }
 }
 

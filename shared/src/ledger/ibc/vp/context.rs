@@ -11,7 +11,7 @@ use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{self, Amount};
+use namada_core::types::token::{self, Amount, DenominatedAmount};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -81,6 +81,11 @@ where
         }
     }
 
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        Ok(self.store.contains_key(key)
+            || self.ctx.has_key(key).map_err(Error::NativeVpError)?)
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
@@ -113,25 +118,37 @@ where
         Ok(())
     }
 
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        for event in &self.event {
+            if event.event_type == *event_type.as_ref() {
+                return Ok(Some(event.clone()));
+            }
+        }
+        Ok(None)
+    }
+
     fn transfer_token(
         &mut self,
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> =
             self.ctx.read(&src_key).map_err(Error::NativeVpError)?;
         let mut src_bal = src_bal.expect("The source has no balance");
-        src_bal.spend(&amount);
+        src_bal.spend(&amount.amount);
         let mut dest_bal: Amount = self
             .ctx
             .read(&dest_key)
             .map_err(Error::NativeVpError)?
             .unwrap_or_default();
-        dest_bal.receive(&amount);
+        dest_bal.receive(&amount.amount);
 
         self.write(
             &src_key,
@@ -147,7 +164,7 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount = self
@@ -155,7 +172,7 @@ where
             .read(&target_key)
             .map_err(Error::NativeVpError)?
             .unwrap_or_default();
-        target_bal.receive(&amount);
+        target_bal.receive(&amount.amount);
 
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount = self
@@ -163,7 +180,7 @@ where
             .read(&minted_key)
             .map_err(Error::NativeVpError)?
             .unwrap_or_default();
-        minted_bal.receive(&amount);
+        minted_bal.receive(&amount.amount);
 
         self.write(
             &target_key,
@@ -187,7 +204,7 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount = self
@@ -195,7 +212,7 @@ where
             .read(&target_key)
             .map_err(Error::NativeVpError)?
             .unwrap_or_default();
-        target_bal.spend(&amount);
+        target_bal.spend(&amount.amount);
 
         let minted_key = token::minted_balance_key(token);
         let mut minted_bal: Amount = self
@@ -203,7 +220,7 @@ where
             .read(&minted_key)
             .map_err(Error::NativeVpError)?
             .unwrap_or_default();
-        minted_bal.spend(&amount);
+        minted_bal.spend(&amount.amount);
 
         self.write(
             &target_key,
@@ -280,6 +297,10 @@ where
         self.ctx.read_bytes(key).map_err(Error::NativeVpError)
     }
 
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        self.ctx.has_key(key).map_err(Error::NativeVpError)
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
@@ -306,12 +327,19 @@ where
         unimplemented!("Validation doesn't emit an event")
     }
 
+    fn get_ibc_event(
+        &self,
+        _event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        unimplemented!("Validation doesn't get an event")
+    }
+
     fn transfer_token(
         &mut self,
         _src: &Address,
         _dest: &Address,
         _token: &Address,
-        _amount: Amount,
+        _amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't transfer")
     }
@@ -320,7 +348,7 @@ where
         &mut self,
         _target: &Address,
         _token: &Address,
-        _amount: Amount,
+        _amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't mint")
     }
@@ -329,7 +357,7 @@ where
         &mut self,
         _target: &Address,
         _token: &Address,
-        _amount: Amount,
+        _amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't burn")
     }

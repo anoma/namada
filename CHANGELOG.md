@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## v0.22.0
+
+Namada 0.22.0 is a minor release introducing a redefined PGF mechanism, a proper gas module, and major 
+improvements to the sdk and ethereum bridge.
+
+### BUG FIXES
+
+- Fix IBC amount handling ([\#1744](https://github.com/anoma/namada/issues/1744))
+- Fix wasm pointer misalignment issues on Apple silicon devices.
+  ([\#1778](https://github.com/anoma/namada/pull/1778))
+- Fix the decoding of events observed by the Ethereum oracle
+  ([\#1852](https://github.com/anoma/namada/pull/1852))
+- Trigger the NUT VP when NUTs are moved between accounts during wasm
+  transaction execution ([\#1854](https://github.com/anoma/namada/pull/1854))
+- Fix the Ethereum Bridge VP
+  ([\#1855](https://github.com/anoma/namada/pull/1855))
+- Miscellaneous Ethereum smart contract nonce fixes
+  ([\#1856](https://github.com/anoma/namada/pull/1856))
+- Log proper duped validator votes on Ethereum tallies
+  ([\#1860](https://github.com/anoma/namada/pull/1860))
+
+### FEATURES
+
+- Implement Ethereum token whitelist.
+  ([\#1290](https://github.com/anoma/namada/issues/1290))
+- Implemented the runtime gas and fee system.
+  ([\#1327](https://github.com/anoma/namada/pull/1327))
+- Control the flow of NAM over the Ethereum bridge
+  ([\#1781](https://github.com/anoma/namada/pull/1781))
+- Update ethbridge-rs to v0.22.0
+  ([\#1789](https://github.com/anoma/namada/pull/1789))
+- Allow Bridge pool transfer fees to be paid in arbitrary token types (except
+  NUTs) ([\#1795](https://github.com/anoma/namada/pull/1795))
+
+### IMPROVEMENTS
+
+- Adds the possibility to dump the state of the db at a custom height.
+  ([\#1468](https://github.com/anoma/namada/pull/1468))
+- Added various fee types to the output of the Bridge pool recommendations RPC
+  ([\#1811](https://github.com/anoma/namada/pull/1811))
+- Ensure that Namada (shared) crate can be built for WASM target.
+  ([\#1828](https://github.com/anoma/namada/pull/1828))
+- Upgraded the MASP crate commit used by Namada to the latest version.
+  ([\#1842](https://github.com/anoma/namada/pull/1842))
+- Add the Bridge pool as a default wallet address
+  ([\#1848](https://github.com/anoma/namada/pull/1848))
+- Call `Message::parse` directly
+  ([\#1849](https://github.com/anoma/namada/pull/1849))
+- Parse Eth addresses from the CLI
+  ([\#1850](https://github.com/anoma/namada/pull/1850))
+- Split Bridge pool transfer hashes on all whitespace toks
+  ([\#1851](https://github.com/anoma/namada/pull/1851))
+- Denominate non-whitelisted NUT amounts
+  ([\#1853](https://github.com/anoma/namada/pull/1853))
+- Removed replay protection storage keys from the merkle tree.
+  ([\#1863](https://github.com/anoma/namada/pull/1863))
+
 ## v0.21.1
 
 Namada 0.21.0 is a patch release addressing some minor changes to the PGF and IBC components.

@@ -7,16 +7,16 @@ pub mod eth_events {
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
     use ethbridge_governance_events::{
-        GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
-        UpgradedContractFilter, ValidatorSetUpdateFilter,
+        GovernanceEvents, NewContractFilter, UpgradedContractFilter,
+        ValidatorSetUpdateFilter,
     };
     use namada::core::types::ethereum_structs;
     use namada::eth_bridge::ethers::contract::EthEvent;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
-        TransferToNamada, Uint,
+        EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada, Uint,
     };
+    use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
     use num256::Uint256;
@@ -107,31 +107,6 @@ pub mod eth_events {
                     ));
                 }
                 RawEvents::Governance(
-                    GovernanceEvents::UpdateBridgeWhitelistFilter(
-                        UpdateBridgeWhitelistFilter {
-                            nonce,
-                            tokens,
-                            token_cap,
-                        },
-                    ),
-                ) => {
-                    let mut whitelist = vec![];
-
-                    for (token, cap) in
-                        tokens.into_iter().zip(token_cap.into_iter())
-                    {
-                        whitelist.push(TokenWhitelist {
-                            token: token.parse_eth_address()?,
-                            cap: cap.parse_amount()?,
-                        });
-                    }
-
-                    EthereumEvent::UpdateBridgeWhitelist {
-                        nonce: nonce.parse_uint256()?,
-                        whitelist,
-                    }
-                }
-                RawEvents::Governance(
                     GovernanceEvents::UpgradedContractFilter(
                         UpgradedContractFilter { name: _, addr: _ },
                     ),
@@ -178,24 +153,33 @@ pub mod eth_events {
         };
     }
 
-    /// Trait to add parsing methods to foreign types.
-    trait Parse: Sized {
-        parse_method! { parse_eth_address -> EthAddress }
-        parse_method! { parse_address -> Address }
-        parse_method! { parse_amount -> Amount }
-        parse_method! { parse_u32 -> u32 }
-        parse_method! { parse_uint256 -> Uint }
-        parse_method! { parse_bool -> bool }
-        parse_method! { parse_string -> String }
-        parse_method! { parse_keccak -> KeccakHash }
-        parse_method! { parse_amount_array -> Vec<Amount> }
-        parse_method! { parse_eth_address_array -> Vec<EthAddress> }
-        parse_method! { parse_address_array -> Vec<Address> }
-        parse_method! { parse_string_array -> Vec<String> }
-        parse_method! { parse_transfer_to_namada_array -> Vec<TransferToNamada> }
-        parse_method! { parse_transfer_to_namada -> TransferToNamada }
-        parse_method! { parse_transfer_to_eth_array -> Vec<TransferToEthereum> }
-        parse_method! { parse_transfer_to_eth -> TransferToEthereum }
+    macro_rules! trait_parse_def {
+        ($($name:ident -> $type:ty;)*) => {
+            /// Trait to add parsing methods to foreign types.
+            trait Parse: Sized {
+                $( parse_method!($name -> $type); )*
+            }
+        }
+    }
+
+    trait_parse_def! {
+        parse_address -> Address;
+        parse_address_array -> Vec<Address>;
+        parse_amount -> Amount;
+        parse_amount_array -> Vec<Amount>;
+        parse_bool -> bool;
+        parse_eth_address -> EthAddress;
+        parse_eth_address_array -> Vec<EthAddress>;
+        parse_hash -> Hash;
+        parse_keccak -> KeccakHash;
+        parse_string -> String;
+        parse_string_array -> Vec<String>;
+        parse_transfer_to_eth -> TransferToEthereum;
+        parse_transfer_to_eth_array -> Vec<TransferToEthereum>;
+        parse_transfer_to_namada -> TransferToNamada;
+        parse_transfer_to_namada_array -> Vec<TransferToNamada>;
+        parse_u32 -> u32;
+        parse_uint256 -> Uint;
     }
 
     impl Parse for ethabi::Address {
@@ -217,7 +201,13 @@ pub mod eth_events {
 
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
-            Ok(Amount::from(self.as_u64()))
+            let uint = {
+                use namada::core::types::uint::Uint as NamadaUint;
+                let mut num_buf = [0; 32];
+                self.to_little_endian(&mut num_buf);
+                NamadaUint::from_little_endian(&num_buf)
+            };
+            Amount::from_uint(uint, 0).map_err(|e| Error::Decode(e.to_string()))
         }
 
         fn parse_u32(self) -> Result<u32> {
@@ -238,6 +228,10 @@ pub mod eth_events {
     impl Parse for [u8; 32] {
         fn parse_keccak(self) -> Result<KeccakHash> {
             Ok(KeccakHash(self))
+        }
+
+        fn parse_hash(self) -> Result<Hash> {
+            Ok(Hash(self))
         }
     }
 
@@ -298,17 +292,13 @@ pub mod eth_events {
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
             let asset = self.from.parse_eth_address()?;
             let receiver = self.to.parse_eth_address()?;
-            let sender = self.sender.parse_address()?;
             let amount = self.amount.parse_amount()?;
-            let gas_payer = self.fee_from.parse_address()?;
-            let gas_amount = self.fee.parse_amount()?;
+            let checksum = self.namada_data_digest.parse_hash()?;
             Ok(TransferToEthereum {
                 asset,
                 amount,
-                sender,
                 receiver,
-                gas_amount,
-                gas_payer,
+                checksum,
             })
         }
     }
@@ -332,11 +322,11 @@ pub mod eth_events {
         use ethabi::ethereum_types::{H160, U256};
         use ethbridge_events::{
             TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
-            UPDATE_BRIDGE_WHITELIST_CODEC, VALIDATOR_SET_UPDATE_CODEC,
+            VALIDATOR_SET_UPDATE_CODEC,
         };
-        use namada::eth_bridge::ethers::abi::AbiEncode;
 
         use super::*;
+        use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the
@@ -360,7 +350,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations.clone(),
             )?;
 
@@ -407,7 +397,10 @@ pub mod eth_events {
             ];
 
             let raw: TransferToNamadaFilter = TRANSFER_TO_NAMADA_CODEC
-                .decode(&get_log(data))
+                .decode(&ethabi::RawLog {
+                    topics: vec![TransferToNamadaFilter::signature()],
+                    data,
+                })
                 .expect("Test failed")
                 .try_into()
                 .expect("Test failed");
@@ -443,7 +436,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations,
             )
             .unwrap();
@@ -526,10 +519,8 @@ pub mod eth_events {
                     ethereum_structs::Erc20Transfer {
                         from: H160([1; 20]),
                         to: H160([2; 20]),
-                        sender: address.clone(),
                         amount: 0u64.into(),
-                        fee_from: address.clone(),
-                        fee: 0u64.into(),
+                        namada_data_digest: [0; 32],
                     };
                     2
                 ],
@@ -542,16 +533,11 @@ pub mod eth_events {
                 bridge_validator_set_hash: [1; 32],
                 governance_validator_set_hash: [2; 32],
             };
-            let whitelist = UpdateBridgeWhitelistFilter {
-                nonce: 0u64.into(),
-                tokens: vec![H160([0; 20]); 2],
-                token_cap: vec![0u64.into(); 2],
-            };
             assert_eq!(
                 {
                     let decoded: TransferToNamadaFilter =
                         TRANSFER_TO_NAMADA_CODEC
-                            .decode(&get_log(nam_transfers.clone().encode()))
+                            .decode(&nam_transfers.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -562,7 +548,7 @@ pub mod eth_events {
             assert_eq!(
                 {
                     let decoded: TransferToErcFilter = TRANSFER_TO_ERC_CODEC
-                        .decode(&get_log(eth_transfers.clone().encode()))
+                        .decode(&eth_transfers.clone().get_log())
                         .expect("Test failed")
                         .try_into()
                         .expect("Test failed");
@@ -574,7 +560,7 @@ pub mod eth_events {
                 {
                     let decoded: ValidatorSetUpdateFilter =
                         VALIDATOR_SET_UPDATE_CODEC
-                            .decode(&get_log(update.clone().encode()))
+                            .decode(&update.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -582,27 +568,6 @@ pub mod eth_events {
                 },
                 update
             );
-            assert_eq!(
-                {
-                    let decoded: UpdateBridgeWhitelistFilter =
-                        UPDATE_BRIDGE_WHITELIST_CODEC
-                            .decode(&get_log(whitelist.clone().encode()))
-                            .expect("Test failed")
-                            .try_into()
-                            .expect("Test failed");
-                    decoded
-                },
-                whitelist
-            );
-        }
-
-        /// Return an Ethereum events log, from the given encoded event
-        /// data.
-        fn get_log(data: Vec<u8>) -> ethabi::RawLog {
-            ethabi::RawLog {
-                data,
-                topics: vec![],
-            }
         }
     }
 }

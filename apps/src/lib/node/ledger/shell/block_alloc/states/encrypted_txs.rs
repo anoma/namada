@@ -1,25 +1,30 @@
 use std::marker::PhantomData;
 
-use super::super::{AllocFailure, BlockSpaceAllocator, TxBin};
+use super::super::{AllocFailure, BlockAllocator, TxBin};
 use super::{
     BuildingDecryptedTxBatch, BuildingEncryptedTxBatch,
     EncryptedTxBatchAllocator, NextStateImpl, TryAlloc, WithEncryptedTxs,
     WithoutEncryptedTxs,
 };
+use crate::node::ledger::shell::block_alloc::BlockResources;
 
-impl TryAlloc
-    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
-{
+impl TryAlloc for BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>> {
+    type Resources<'tx> = BlockResources<'tx>;
+
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
-        self.encrypted_txs.try_dump(tx)
+    fn try_alloc(
+        &mut self,
+        resource_required: Self::Resources<'_>,
+    ) -> Result<(), AllocFailure> {
+        self.encrypted_txs.space.try_dump(resource_required.tx)?;
+        self.encrypted_txs.gas.try_dump(resource_required.gas)
     }
 }
 
 impl NextStateImpl
-    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
+    for BlockAllocator<BuildingEncryptedTxBatch<WithEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
+    type Next = BlockAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -28,18 +33,25 @@ impl NextStateImpl
 }
 
 impl TryAlloc
-    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
+    for BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
+    type Resources<'tx> = BlockResources<'tx>;
+
     #[inline]
-    fn try_alloc(&mut self, _tx: &[u8]) -> Result<(), AllocFailure> {
-        Err(AllocFailure::Rejected { bin_space_left: 0 })
+    fn try_alloc(
+        &mut self,
+        _resource_required: Self::Resources<'_>,
+    ) -> Result<(), AllocFailure> {
+        Err(AllocFailure::Rejected {
+            bin_resource_left: 0,
+        })
     }
 }
 
 impl NextStateImpl
-    for BlockSpaceAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
+    for BlockAllocator<BuildingEncryptedTxBatch<WithoutEncryptedTxs>>
 {
-    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
+    type Next = BlockAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {
@@ -49,9 +61,9 @@ impl NextStateImpl
 
 #[inline]
 fn next_state<Mode>(
-    mut alloc: BlockSpaceAllocator<BuildingEncryptedTxBatch<Mode>>,
-) -> BlockSpaceAllocator<BuildingDecryptedTxBatch> {
-    alloc.encrypted_txs.shrink_to_fit();
+    mut alloc: BlockAllocator<BuildingEncryptedTxBatch<Mode>>,
+) -> BlockAllocator<BuildingDecryptedTxBatch> {
+    alloc.encrypted_txs.space.shrink_to_fit();
 
     // decrypted txs can use as much space as they need - which
     // in practice will only be, at most, 1/3 of the block space
@@ -60,7 +72,7 @@ fn next_state<Mode>(
     alloc.decrypted_txs = TxBin::init(remaining_free_space);
 
     // cast state
-    let BlockSpaceAllocator {
+    let BlockAllocator {
         block,
         protocol_txs,
         encrypted_txs,
@@ -68,7 +80,7 @@ fn next_state<Mode>(
         ..
     } = alloc;
 
-    BlockSpaceAllocator {
+    BlockAllocator {
         _state: PhantomData,
         block,
         protocol_txs,
@@ -78,23 +90,28 @@ fn next_state<Mode>(
 }
 
 impl TryAlloc for EncryptedTxBatchAllocator {
+    type Resources<'tx> = BlockResources<'tx>;
+
     #[inline]
-    fn try_alloc(&mut self, tx: &[u8]) -> Result<(), AllocFailure> {
+    fn try_alloc(
+        &mut self,
+        resource_required: Self::Resources<'_>,
+    ) -> Result<(), AllocFailure> {
         match self {
             EncryptedTxBatchAllocator::WithEncryptedTxs(state) => {
-                state.try_alloc(tx)
+                state.try_alloc(resource_required)
             }
             EncryptedTxBatchAllocator::WithoutEncryptedTxs(state) => {
                 // NOTE: this operation will cause the allocator to
                 // run out of memory immediately
-                state.try_alloc(tx)
+                state.try_alloc(resource_required)
             }
         }
     }
 }
 
 impl NextStateImpl for EncryptedTxBatchAllocator {
-    type Next = BlockSpaceAllocator<BuildingDecryptedTxBatch>;
+    type Next = BlockAllocator<BuildingDecryptedTxBatch>;
 
     #[inline]
     fn next_state_impl(self) -> Self::Next {

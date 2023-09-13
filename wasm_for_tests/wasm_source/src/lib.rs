@@ -3,7 +3,7 @@
 pub mod main {
     use namada_tx_prelude::*;
 
-    #[transaction]
+    #[transaction(gas = 1000)]
     fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         Ok(())
     }
@@ -14,7 +14,7 @@ pub mod main {
 pub mod main {
     use namada_tx_prelude::*;
 
-    #[transaction]
+    #[transaction(gas = 1000)]
     fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         let len = usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
             .unwrap();
@@ -31,7 +31,7 @@ pub mod main {
 pub mod main {
     use namada_tx_prelude::*;
 
-    #[transaction]
+    #[transaction(gas = 1000)]
     fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         // governance
         let target_key = gov_storage::keys::get_min_proposal_grace_epoch_key();
@@ -49,7 +49,7 @@ pub mod main {
 pub mod main {
     use namada_tx_prelude::*;
 
-    #[transaction]
+    #[transaction(gas = 1000)]
     fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         // Allocates a memory of size given from the `tx_data (usize)`
         let key =
@@ -67,7 +67,8 @@ pub mod main {
     use borsh::BorshDeserialize;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_tx_prelude::{
-        log_string, transaction, Ctx, StorageRead, StorageWrite, Tx, TxResult,
+        log_string, transaction, Ctx, StorageRead, StorageWrite, Tx, TxEnv,
+        TxResult,
     };
 
     const TX_NAME: &str = "tx_write";
@@ -86,7 +87,7 @@ pub mod main {
         panic!()
     }
 
-    #[transaction]
+    #[transaction(gas = 1000)]
     fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         let signed = tx_data;
         let data = match signed.data() {
@@ -132,7 +133,7 @@ pub mod main {
 pub mod main {
     use namada_vp_prelude::*;
 
-    #[validity_predicate]
+    #[validity_predicate(gas = 1000)]
     fn validate_tx(
         _ctx: &Ctx,
         _tx_data: Tx,
@@ -149,7 +150,7 @@ pub mod main {
 pub mod main {
     use namada_vp_prelude::*;
 
-    #[validity_predicate]
+    #[validity_predicate(gas = 1000)]
     fn validate_tx(
         _ctx: &Ctx,
         _tx_data: Tx,
@@ -167,7 +168,7 @@ pub mod main {
 pub mod main {
     use namada_vp_prelude::*;
 
-    #[validity_predicate]
+    #[validity_predicate(gas = 1000)]
     fn validate_tx(
         ctx: &Ctx,
         tx_data: Tx,
@@ -192,7 +193,7 @@ pub mod main {
 pub mod main {
     use namada_vp_prelude::*;
 
-    #[validity_predicate]
+    #[validity_predicate(gas = 1000)]
     fn validate_tx(
         _ctx: &Ctx,
         tx_data: Tx,
@@ -216,7 +217,7 @@ pub mod main {
 pub mod main {
     use namada_vp_prelude::*;
 
-    #[validity_predicate]
+    #[validity_predicate(gas = 1000)]
     fn validate_tx(
         ctx: &Ctx,
         tx_data: Tx,

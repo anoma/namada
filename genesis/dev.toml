@@ -184,6 +184,12 @@ min_num_of_blocks = 4
 max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx batch proposal.
 max_proposal_bytes = 22020096
+# Max amount of gas per block
+max_block_gas = 20000000
+# Fee unshielding gas limit
+fee_unshielding_gas_limit = 20000
+# Fee unshielding descriptions limit
+fee_unshielding_descriptions_limit = 15
 # vp whitelist
 vp_whitelist = []
 # tx whitelist
@@ -198,6 +204,9 @@ pos_gain_p = "0.1"
 pos_gain_d = "0.1"
 # The maximum number of signatures allowed per transaction
 max_signatures_per_transaction = 15
+
+[parameters.gas_cost]
+"atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5" = "0.000001"
 
 # Proof of stake parameters.
 [pos_params]

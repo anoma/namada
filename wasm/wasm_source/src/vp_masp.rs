@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::components::I128Sum;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
@@ -64,15 +64,16 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> (AssetType, Amount) {
+) -> (AssetType, I128Sum) {
     let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
-        .expect("invalid value or asset type for amount");
+    let amount =
+        I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
+            .expect("invalid value or asset type for amount");
     (asset_type, amount)
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 8030000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -104,7 +105,7 @@ fn validate_tx(
         })
         .transpose()?;
     if let Some(shielded_tx) = shielded {
-        let mut transparent_tx_pool = Amount::zero();
+        let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
@@ -190,7 +191,7 @@ fn validate_tx(
                     continue;
                 }
                 if !valid_transfer_amount(
-                    out.value as u64,
+                    out.value,
                     denom.denominate(&transfer.amount.amount),
                 ) {
                     return reject();
@@ -246,7 +247,7 @@ fn validate_tx(
             }
         }
 
-        match transparent_tx_pool.partial_cmp(&Amount::zero()) {
+        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
                 debug_log!(
                     "Transparent transaction value pool must be nonnegative. \
@@ -255,6 +256,12 @@ fn validate_tx(
                 );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
+                return reject();
+            }
+            Some(Ordering::Greater) => {
+                debug_log!(
+                    "Transaction fees cannot be paid inside MASP transaction."
+                );
                 return reject();
             }
             _ => {}

@@ -1,16 +1,19 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
-use namada_core::ledger::eth_bridge::storage::active_key;
-use namada_core::ledger::eth_bridge::storage::bridge_pool::{
-    get_nonce_key, get_signed_root_key,
+use namada_core::ledger::eth_bridge::storage::{
+    active_key, bridge_pool, whitelist,
 };
 use namada_core::ledger::storage;
 use namada_core::ledger::storage::{StoreType, WlStorage};
 use namada_core::ledger::storage_api::StorageRead;
 use namada_core::types::address::Address;
-use namada_core::types::ethereum_events::{EthAddress, GetEventNonce, Uint};
+use namada_core::types::eth_abi::Encode;
+use namada_core::types::eth_bridge_pool::PendingTransfer;
+use namada_core::types::ethereum_events::{
+    EthAddress, GetEventNonce, TransferToEthereum, Uint,
+};
 use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{BlockHeight, Epoch};
+use namada_core::types::storage::{BlockHeight, Epoch, Key as StorageKey};
 use namada_core::types::token;
 use namada_core::types::vote_extensions::validator_set_update::{
     EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
@@ -175,7 +178,7 @@ where
             &self
                 .wl_storage
                 .storage
-                .read(&get_nonce_key())
+                .read(&bridge_pool::get_nonce_key())
                 .expect("Reading Bridge pool nonce shouldn't fail.")
                 .0
                 .expect("Reading Bridge pool nonce shouldn't fail."),
@@ -191,7 +194,7 @@ where
                 .storage
                 .db
                 .read_subspace_val_with_height(
-                    &get_nonce_key(),
+                    &bridge_pool::get_nonce_key(),
                     height,
                     self.wl_storage.storage.get_last_block_height(),
                 )
@@ -217,7 +220,7 @@ where
     /// root and nonce.
     ///
     /// Also returns the block height at which the
-    /// a quorum of signatures was collected.
+    /// Bridge pool root was originally signed.
     ///
     /// No value exists when the bridge if first
     /// started.
@@ -225,7 +228,7 @@ where
         self,
     ) -> Option<(BridgePoolRootProof, BlockHeight)> {
         self.wl_storage
-            .read_bytes(&get_signed_root_key())
+            .read_bytes(&bridge_pool::get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.")
             .map(|bytes| {
                 BorshDeserialize::try_from_slice(&bytes).expect(
@@ -391,6 +394,139 @@ where
             },
             voting_powers_map,
         )
+    }
+
+    /// Check if the token at the given [`EthAddress`] is whitelisted.
+    pub fn is_token_whitelisted(self, &token: &EthAddress) -> bool {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::Whitelisted,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
+            .unwrap_or(false)
+    }
+
+    /// Fetch the token cap of the asset associated with the given
+    /// [`EthAddress`].
+    ///
+    /// If the asset has never been whitelisted, return [`None`].
+    pub fn get_token_cap(self, &token: &EthAddress) -> Option<token::Amount> {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
+    }
+
+    /// Fetch the token supply of the asset associated with the given
+    /// [`EthAddress`].
+    ///
+    /// If the asset has never been minted, return [`None`].
+    pub fn get_token_supply(
+        self,
+        &token: &EthAddress,
+    ) -> Option<token::Amount> {
+        let key = whitelist::Key {
+            asset: token,
+            suffix: whitelist::KeyType::WrappedSupply,
+        }
+        .into();
+
+        self.wl_storage
+            .read(&key)
+            .expect("Reading from storage should not fail")
+    }
+
+    /// Return the number of ERC20 and NUT assets to be minted,
+    /// after receiving a "transfer to Namada" Ethereum event.
+    ///
+    /// NUTs are minted when:
+    ///
+    /// 1. `token` is not whitelisted.
+    /// 2. `token` has exceeded the configured token caps,
+    ///    after minting `amount_to_mint`.
+    pub fn get_eth_assets_to_mint(
+        self,
+        token: &EthAddress,
+        amount_to_mint: token::Amount,
+    ) -> EthAssetMint {
+        if !self.is_token_whitelisted(token) {
+            return EthAssetMint {
+                nut_amount: amount_to_mint,
+                erc20_amount: token::Amount::zero(),
+            };
+        }
+
+        let supply = self.get_token_supply(token).unwrap_or_default();
+        let cap = self.get_token_cap(token).unwrap_or_default();
+
+        if hints::unlikely(cap < supply) {
+            panic!(
+                "Namada's state is faulty! The Ethereum ERC20 asset {token} \
+                 has a higher minted supply than the configured token cap: \
+                 cap:{cap:?} < supply:{supply:?}"
+            );
+        }
+
+        if amount_to_mint + supply > cap {
+            let erc20_amount = cap - supply;
+            let nut_amount = amount_to_mint - erc20_amount;
+
+            return EthAssetMint {
+                nut_amount,
+                erc20_amount,
+            };
+        }
+
+        EthAssetMint {
+            erc20_amount: amount_to_mint,
+            nut_amount: token::Amount::zero(),
+        }
+    }
+
+    /// Given a [`TransferToEthereum`] event, look-up the corresponding
+    /// [`PendingTransfer`].
+    pub fn lookup_transfer_to_eth(
+        self,
+        transfer: &TransferToEthereum,
+    ) -> Option<(PendingTransfer, StorageKey)> {
+        let pending_key = bridge_pool::get_key_from_hash(&transfer.keccak256());
+        self.wl_storage
+            .read(&pending_key)
+            .expect("Reading from storage should not fail")
+            .zip(Some(pending_key))
+    }
+}
+
+/// Number of tokens to mint after receiving a "transfer
+/// to Namada" Ethereum event.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct EthAssetMint {
+    /// Amount of NUTs to mint.
+    pub nut_amount: token::Amount,
+    /// Amount of wrapped ERC20s to mint.
+    pub erc20_amount: token::Amount,
+}
+
+impl EthAssetMint {
+    /// Check if NUTs should be minted.
+    #[inline]
+    pub fn should_mint_nuts(&self) -> bool {
+        !self.nut_amount.is_zero()
+    }
+
+    /// Check if ERC20s should be minted.
+    #[inline]
+    pub fn should_mint_erc20s(&self) -> bool {
+        !self.erc20_amount.is_zero()
     }
 }
 

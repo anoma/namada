@@ -1,8 +1,8 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use namada::core::ledger::governance::storage::keys as gov_storage;
 use namada::core::ledger::governance::storage::proposal::{
-    AddRemove, PGFAction, PGFTarget, ProposalType,
+    AddRemove, PGFAction, ProposalType, StoragePgfFunding,
 };
 use namada::core::ledger::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
@@ -10,6 +10,7 @@ use namada::core::ledger::governance::utils::{
 };
 use namada::core::ledger::governance::ADDRESS as gov_address;
 use namada::core::ledger::pgf::storage::keys as pgf_storage;
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::core::ledger::pgf::ADDRESS;
 use namada::core::ledger::storage_api::governance as gov_api;
 use namada::ledger::governance::utils::ProposalEvent;
@@ -17,7 +18,7 @@ use namada::ledger::pos::BondId;
 use namada::ledger::protocol;
 use namada::ledger::storage::types::encode;
 use namada::ledger::storage::{DBIter, StorageHasher, DB};
-use namada::ledger::storage_api::{token, StorageWrite};
+use namada::ledger::storage_api::{pgf, token, StorageWrite};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::{bond_amount, read_total_stake};
 use namada::proto::{Code, Data};
@@ -47,6 +48,7 @@ where
         let proposal_funds_key = gov_storage::get_funds_key(id);
         let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
         let proposal_type_key = gov_storage::get_proposal_type_key(id);
+        let proposal_author_key = gov_storage::get_author_key(id);
 
         let funds: token::Amount =
             force_read(&shell.wl_storage, &proposal_funds_key)?;
@@ -54,12 +56,16 @@ where
             force_read(&shell.wl_storage, &proposal_end_epoch_key)?;
         let proposal_type: ProposalType =
             force_read(&shell.wl_storage, &proposal_type_key)?;
+        let proposal_author: Address =
+            force_read(&shell.wl_storage, &proposal_author_key)?;
+
+        let is_steward = pgf::is_steward(&shell.wl_storage, &proposal_author)?;
 
         let params = read_pos_params(&shell.wl_storage)?;
         let total_voting_power =
             read_total_stake(&shell.wl_storage, &params, proposal_end_epoch)?;
 
-        let tally_type = TallyType::from(proposal_type.clone());
+        let tally_type = TallyType::from(proposal_type.clone(), is_steward);
         let votes = compute_proposal_votes(
             &shell.wl_storage,
             &params,
@@ -117,9 +123,10 @@ where
                             &mut shell.wl_storage,
                             native_token,
                             payments,
+                            id,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgs payments) {} has been \
+                            "Governance proposal (pgf funding) {} has been \
                              executed and passed.",
                             id
                         );
@@ -138,20 +145,10 @@ where
                 if let ProposalType::PGFPayment(_) = proposal_type {
                     let two_third_nay = proposal_result.two_third_nay();
                     if two_third_nay {
-                        let pgf_stewards_key = pgf_storage::get_stewards_key();
-                        let proposal_author = gov_storage::get_author_key(id);
-
-                        let mut pgf_stewards = shell
-                            .wl_storage
-                            .read::<BTreeSet<Address>>(&pgf_stewards_key)?
-                            .unwrap_or_default();
-                        let proposal_author: Address =
-                            force_read(&shell.wl_storage, &proposal_author)?;
-
-                        pgf_stewards.remove(&proposal_author);
-                        shell
-                            .wl_storage
-                            .write(&pgf_stewards_key, pgf_stewards)?;
+                        pgf::remove_steward(
+                            &mut shell.wl_storage,
+                            &proposal_author,
+                        )?;
 
                         tracing::info!(
                             "Governance proposal {} was rejected with 2/3 of \
@@ -276,19 +273,19 @@ where
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code));
 
-        //  0 parameter is used to compute the fee
-        // based on the code size. We dont
-        // need it here.
         let tx_result = protocol::dispatch_tx(
             tx,
-            0, /*  this is used to compute the fee
-                * based on the code size. We dont
-                * need it here. */
+            &[], /*  this is used to compute the fee
+                  * based on the code size. We dont
+                  * need it here. */
             TxIndex::default(),
-            &mut BlockGasMeter::default(),
+            &mut TxGasMeter::new_from_sub_limit(u64::MAX.into()), /* No gas limit for governance proposal */
             &mut shell.wl_storage,
             &mut shell.vp_wasm_cache,
             &mut shell.tx_wasm_cache,
+            None,
+            #[cfg(not(feature = "mainnet"))]
+            false,
         );
         shell
             .wl_storage
@@ -325,41 +322,60 @@ fn execute_pgf_steward_proposal<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let stewards_key = pgf_storage::get_stewards_key();
-    let mut storage_stewards: BTreeSet<Address> =
-        storage.read(&stewards_key)?.unwrap_or_default();
-
     for action in stewards {
         match action {
-            AddRemove::Add(steward) => storage_stewards.insert(steward),
-            AddRemove::Remove(steward) => storage_stewards.remove(&steward),
-        };
+            AddRemove::Add(address) => {
+                pgf_storage::stewards_handle().insert(
+                    storage,
+                    address.to_owned(),
+                    StewardDetail::base(address),
+                )?;
+            }
+            AddRemove::Remove(address) => {
+                pgf_storage::stewards_handle().remove(storage, &address)?;
+            }
+        }
     }
 
-    let write_result = storage.write(&stewards_key, storage_stewards);
-    Ok(write_result.is_ok())
+    Ok(true)
 }
 
 fn execute_pgf_payment_proposal<S>(
     storage: &mut S,
     token: &Address,
     payments: Vec<PGFAction>,
+    proposal_id: u64,
 ) -> Result<bool>
 where
     S: StorageRead + StorageWrite,
 {
-    let continous_payments_key = pgf_storage::get_payments_key();
-    let mut continous_payments: BTreeSet<PGFTarget> =
-        storage.read(&continous_payments_key)?.unwrap_or_default();
-
     for payment in payments {
         match payment {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
-                    continous_payments.insert(target);
+                    pgf_storage::fundings_handle().insert(
+                        storage,
+                        target.target.clone(),
+                        StoragePgfFunding::new(target.clone(), proposal_id),
+                    )?;
+                    tracing::info!(
+                        "Execute ContinousPgf from proposal id {}: set {} to \
+                         {}.",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target
+                    );
                 }
                 AddRemove::Remove(target) => {
-                    continous_payments.remove(&target);
+                    pgf_storage::fundings_handle()
+                        .remove(storage, &target.target)?;
+                    tracing::info!(
+                        "Execute ContinousPgf from proposal id {}: set {} to \
+                         {}.",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target
+                    );
                 }
             },
             PGFAction::Retro(target) => {
@@ -370,11 +386,15 @@ where
                     &target.target,
                     target.amount,
                 )?;
+                tracing::info!(
+                    "Execute RetroPgf from proposal id {}: sent {} to {}.",
+                    proposal_id,
+                    target.amount.to_string_native(),
+                    target.target
+                );
             }
         }
     }
 
-    let write_result =
-        storage.write(&continous_payments_key, continous_payments);
-    Ok(write_result.is_ok())
+    Ok(true)
 }

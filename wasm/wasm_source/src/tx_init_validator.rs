@@ -4,7 +4,7 @@
 use namada_tx_prelude::transaction::pos::InitValidator;
 use namada_tx_prelude::*;
 
-#[transaction]
+#[transaction(gas = 730000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
@@ -20,6 +20,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .ok_or_err_msg("validator vp section must be tagged as extra")?
         .code
         .hash();
+
     // Register the validator in PoS
     match ctx.init_validator(init_validator, validator_vp_code_hash) {
         Ok(validator_address) => {

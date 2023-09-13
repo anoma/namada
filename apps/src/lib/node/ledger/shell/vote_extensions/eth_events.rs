@@ -276,11 +276,6 @@ where
                     return Err(VoteExtensionError::InvalidNamNonce);
                 }
             }
-            EthereumEvent::UpdateBridgeWhitelist { .. } => {
-                // TODO: check nonce of whitelist update;
-                // for this, we need to store the nonce of
-                // whitelist updates somewhere
-            }
             // consider other ethereum event kinds valid
             _ => {}
         }
@@ -459,15 +454,21 @@ mod test_vote_extensions {
     };
     use namada::eth_bridge::storage::bridge_pool;
     use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::consensus_validator_set_handle;
+    use namada::proof_of_stake::types::WeightedValidator;
+    use namada::proof_of_stake::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake,
+    };
     #[cfg(feature = "abcipp")]
     use namada::proto::{SignableEthMessage, Signed};
+    use namada::tendermint_proto::abci::VoteInfo;
     use namada::types::address::testing::gen_established_address;
     #[cfg(feature = "abcipp")]
     use namada::types::eth_abi::Encode;
     use namada::types::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
+    use namada::types::hash::Hash;
     #[cfg(feature = "abcipp")]
     use namada::types::keccak::keccak_hash;
     #[cfg(feature = "abcipp")]
@@ -485,6 +486,7 @@ mod test_vote_extensions {
     #[cfg(feature = "abcipp")]
     use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::*;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test validating Ethereum events.
     #[test]
@@ -600,10 +602,8 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -613,10 +613,8 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -664,10 +662,8 @@ mod test_vote_extensions {
             transfers: vec![TransferToEthereum {
                 amount: 100.into(),
                 asset: EthAddress([1; 20]),
-                sender: gen_established_address(),
                 receiver: EthAddress([2; 20]),
-                gas_amount: 10.into(),
-                gas_payer: gen_established_address(),
+                checksum: Hash::default(),
             }],
             valid_transfers_map: vec![true],
             relayer: gen_established_address(),
@@ -725,11 +721,9 @@ mod test_vote_extensions {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -819,11 +813,9 @@ mod test_vote_extensions {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -857,7 +849,37 @@ mod test_vote_extensions {
                 .expect("Test failed");
         }
         // we advance forward to the next epoch
-        assert_eq!(shell.start_new_epoch().0, 1);
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = shell.wl_storage.pos_queries().get_pos_params();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address.clone(),
+            Epoch::default(),
+        );
+        let votes = vec![VoteInfo {
+            validator: Some(namada::tendermint_proto::abci::Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as i64,
+            }),
+            signed_last_block: true,
+        }];
+        let req = FinalizeBlock {
+            proposer_address: pkh1,
+            votes,
+            ..Default::default()
+        };
+        assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
             shell
                 .wl_storage
@@ -896,11 +918,9 @@ mod test_vote_extensions {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
@@ -978,11 +998,9 @@ mod test_vote_extensions {
                 nonce: 0.into(),
                 transfers: vec![TransferToEthereum {
                     amount: 100.into(),
-                    sender: gen_established_address(),
                     asset: EthAddress([1; 20]),
                     receiver: EthAddress([2; 20]),
-                    gas_amount: 10.into(),
-                    gas_payer: gen_established_address(),
+                    checksum: Hash::default(),
                 }],
                 valid_transfers_map: vec![true],
                 relayer: gen_established_address(),

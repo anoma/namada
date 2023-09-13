@@ -1,12 +1,13 @@
 //! Functionality for accessing the storage subspace
 pub mod bridge_pool;
+pub mod whitelist;
 pub mod wrapped_erc20s;
 
 use super::ADDRESS;
 use crate::ledger::parameters::storage::*;
 use crate::ledger::parameters::ADDRESS as PARAM_ADDRESS;
 use crate::types::address::Address;
-use crate::types::storage::{Key, KeySeg};
+use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token::balance_key;
 
 /// Key prefix for the storage subspace
@@ -23,6 +24,15 @@ pub fn eth_start_height_key() -> Key {
 /// The key to the escrow of the VP.
 pub fn escrow_key(nam_addr: &Address) -> Key {
     balance_key(nam_addr, &ADDRESS)
+}
+
+/// Check if the given `key` contains an Ethereum
+/// bridge address segment.
+#[inline]
+pub fn has_eth_addr_segment(key: &Key) -> bool {
+    key.segments
+        .iter()
+        .any(|s| matches!(s, DbKeySeg::AddressSeg(ADDRESS)))
 }
 
 /// Returns whether a key belongs to this account or not

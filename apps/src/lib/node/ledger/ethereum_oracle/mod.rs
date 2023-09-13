@@ -565,15 +565,16 @@ mod test_oracle {
     use ethbridge_bridge_events::{
         TransferToErcFilter, TransferToNamadaFilter,
     };
-    use namada::eth_bridge::ethers::abi::AbiEncode;
     use namada::eth_bridge::ethers::types::H160;
     use namada::eth_bridge::structs::Erc20Transfer;
     use namada::types::address::testing::gen_established_address;
     use namada::types::ethereum_events::{EthAddress, TransferToEthereum};
+    use namada::types::hash::Hash;
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 
     use super::*;
+    use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
     use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
         event_signature, TestCmd, TestOracle, Web3Client, Web3Controller,
     };
@@ -715,11 +716,11 @@ mod test_oracle {
             valid_map: vec![],
             confirmations: 100.into(),
         }
-        .encode();
+        .get_log();
         let (sender, _) = channel();
         controller.apply_cmd(TestCmd::NewEvent {
             event_type: event_signature::<TransferToNamadaFilter>(),
-            data: new_event,
+            log: new_event,
             height: 101,
             seen: sender,
         });
@@ -765,11 +766,11 @@ mod test_oracle {
             valid_map: vec![],
             confirmations: 100.into(),
         }
-        .encode();
+        .get_log();
         let (sender, mut seen) = channel();
         controller.apply_cmd(TestCmd::NewEvent {
             event_type: event_signature::<TransferToNamadaFilter>(),
-            data: new_event,
+            log: new_event,
             height: 150,
             seen: sender,
         });
@@ -820,7 +821,7 @@ mod test_oracle {
             valid_map: vec![],
             confirmations: 100.into(),
         }
-        .encode();
+        .get_log();
 
         // confirmed after 125 blocks
         let gas_payer = gen_established_address();
@@ -828,29 +829,27 @@ mod test_oracle {
             transfers: vec![Erc20Transfer {
                 amount: 0.into(),
                 from: H160([0; 20]),
-                sender: gas_payer.to_string(),
                 to: H160([1; 20]),
-                fee: 0.into(),
-                fee_from: gas_payer.to_string(),
+                namada_data_digest: [0; 32],
             }],
             valid_map: vec![true],
             relayer_address: gas_payer.to_string(),
             nonce: 0.into(),
         }
-        .encode();
+        .get_log();
 
         // send in the events to the logs
         let (sender, seen_second) = channel();
         controller.apply_cmd(TestCmd::NewEvent {
             event_type: event_signature::<TransferToErcFilter>(),
-            data: second_event,
+            log: second_event,
             height: 125,
             seen: sender,
         });
         let (sender, _recv) = channel();
         controller.apply_cmd(TestCmd::NewEvent {
             event_type: event_signature::<TransferToNamadaFilter>(),
-            data: first_event,
+            log: first_event,
             height: 100,
             seen: sender,
         });
@@ -897,10 +896,8 @@ mod test_oracle {
                 TransferToEthereum {
                     amount: Default::default(),
                     asset: EthAddress([0; 20]),
-                    sender: gas_payer.clone(),
                     receiver: EthAddress([1; 20]),
-                    gas_amount: Default::default(),
-                    gas_payer: gas_payer.clone(),
+                    checksum: Hash::default(),
                 }
             );
         } else {

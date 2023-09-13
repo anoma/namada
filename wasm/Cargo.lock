@@ -1677,8 +1677,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -1688,8 +1688,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -1699,8 +1699,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-contract"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethbridge-governance-events",
  "ethbridge-structs",
@@ -1710,8 +1710,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-governance-events"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -1721,8 +1721,8 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.18.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.18.0#d49a0d110bb726c526896ff440d542585ced12f2"
+version = "0.23.0"
+source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.23.0#1bb96e06cbc3889aa46a01e3768bf25f0c78168a"
 dependencies = [
  "ethabi",
  "ethers",
@@ -3123,7 +3123,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "borsh 0.9.4",
  "chacha20 0.9.1",
@@ -3136,7 +3136,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3156,6 +3156,7 @@ dependencies = [
  "masp_note_encryption",
  "memuse",
  "nonempty",
+ "num-traits",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
@@ -3166,7 +3167,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=252a6059565b125c1444e9e7d0b7c8da0fba8f8f#252a6059565b125c1444e9e7d0b7c8da0fba8f8f"
+source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3332,7 +3333,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3392,7 +3393,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3422,6 +3423,7 @@ dependencies = [
  "num-rational 0.4.1",
  "num-traits",
  "num256",
+ "primitive-types",
  "proptest",
  "prost",
  "prost-types",
@@ -3444,7 +3446,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "ethers",
@@ -3464,7 +3466,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3473,7 +3475,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -3487,7 +3489,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3496,7 +3498,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3526,7 +3528,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3540,7 +3542,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3549,7 +3551,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3562,7 +3564,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -5786,7 +5788,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tx_template"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -5909,7 +5911,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -6046,8 +6048,7 @@ dependencies = [
 [[package]]
 name = "wasmer"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8d8361c9d006ea3d7797de7bd6b1492ffd0f91a22430cfda6c1658ad57bedf"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "indexmap 1.9.3",
@@ -6073,8 +6074,7 @@ dependencies = [
 [[package]]
 name = "wasmer-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aaf9428c29c1d8ad2ac0e45889ba8a568a835e33fd058964e5e500f2f7ce325"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enumset",
  "loupe",
@@ -6086,8 +6086,7 @@ dependencies = [
 [[package]]
 name = "wasmer-cache"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0def391ee1631deac5ac1e6ce919c07a5ccb936ad0fd44708cdc2365c49561a4"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "blake3",
  "hex",
@@ -6098,8 +6097,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67a6cd866aed456656db2cfea96c18baabbd33f676578482b85c51e1ee19d2c"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enumset",
  "loupe",
@@ -6116,8 +6114,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-cranelift"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48be2f9f6495f08649e4f8b946a2cbbe119faf5a654aa1457f9504a99d23dae0"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -6136,8 +6133,7 @@ dependencies = [
 [[package]]
 name = "wasmer-compiler-singlepass"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ca2a35204d8befa85062bc7aac259a8db8070b801b8a783770ba58231d729e"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -6155,8 +6151,7 @@ dependencies = [
 [[package]]
 name = "wasmer-derive"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00e50405cc2a2f74ff574584710a5f2c1d5c93744acce2ca0866084739284b51"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -6167,8 +6162,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f98f010978c244db431b392aeab0661df7ea0822343334f8f2a920763548e45"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "enumset",
@@ -6190,8 +6184,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-dylib"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad0358af9c154724587731175553805648d9acb8f6657880d165e378672b7e53"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "enum-iterator",
@@ -6216,8 +6209,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "440dc3d93c9ca47865a4f4edd037ea81bf983b5796b59b3d712d844b32dbef15"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -6236,8 +6228,7 @@ dependencies = [
 [[package]]
 name = "wasmer-engine-universal-artifact"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f1db3f54152657eb6e86c44b66525ff7801dad8328fe677da48dd06af9ad41"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "enum-iterator",
  "enumset",
@@ -6252,8 +6243,7 @@ dependencies = [
 [[package]]
 name = "wasmer-object"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d831335ff3a44ecf451303f6f891175c642488036b92ceceb24ac8623a8fa8b"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "object 0.28.4",
  "thiserror",
@@ -6264,8 +6254,7 @@ dependencies = [
 [[package]]
 name = "wasmer-types"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39df01ea05dc0a9bab67e054c7cb01521e53b35a7bb90bd02eca564ed0b2667f"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "enum-iterator",
@@ -6280,8 +6269,7 @@ dependencies = [
 [[package]]
 name = "wasmer-vm"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30d965fa61f4dc4cdb35a54daaf7ecec3563fbb94154a6c35433f879466247dd"
+source = "git+https://github.com/heliaxdev/wasmer?rev=833721a1b21cd192e7f044abe2139d03ba291149#833721a1b21cd192e7f044abe2139d03ba291149"
 dependencies = [
  "backtrace",
  "cc",

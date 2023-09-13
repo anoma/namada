@@ -3,6 +3,7 @@
 use namada_core::ledger::governance::storage::proposal::StorageProposal;
 use namada_core::ledger::governance::utils::Vote;
 
+use crate::core::ledger::governance::parameters::GovernanceParameters;
 use crate::ledger::queries::types::RequestCtx;
 use crate::ledger::storage::{DBIter, StorageHasher, DB};
 use crate::ledger::storage_api;
@@ -11,6 +12,7 @@ use crate::ledger::storage_api;
 router! {GOV,
     ( "proposal" / [id: u64 ] ) -> Option<StorageProposal> = proposal_id,
     ( "proposal" / [id: u64 ] / "votes" ) -> Vec<Vote> = proposal_id_votes,
+    ( "parameters" ) -> GovernanceParameters = parameters,
 }
 
 /// Find if the given address belongs to a validator account.
@@ -35,4 +37,15 @@ where
     H: 'static + StorageHasher + Sync,
 {
     storage_api::governance::get_proposal_votes(ctx.wl_storage, id)
+}
+
+/// Get the governane parameters
+fn parameters<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+) -> storage_api::Result<GovernanceParameters>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    storage_api::governance::get_parameters(ctx.wl_storage)
 }

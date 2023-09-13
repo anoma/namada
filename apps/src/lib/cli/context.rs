@@ -8,14 +8,17 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use namada::ledger::masp::ShieldedContext;
 use namada::ledger::wallet::Wallet;
-use namada::types::address::Address;
+use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthAddress;
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
 use crate::client::tx::CLIShieldedUtils;
+#[cfg(any(test, feature = "dev"))]
+use crate::config::genesis;
 use crate::config::genesis::genesis_config;
 use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
@@ -97,16 +100,35 @@ impl Context {
         let genesis_file_path = global_args
             .base_dir
             .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        let genesis = genesis_config::read_genesis_config(&genesis_file_path);
-        let native_token = genesis.native_token;
-        let default_genesis =
-            genesis_config::open_genesis_config(genesis_file_path)?;
-        let wallet = crate::wallet::load_or_new_from_genesis(
-            &chain_dir,
-            default_genesis,
-        );
+        // NOTE: workaround to make this function work both in integration tests
+        // and benchmarks
+        let (wallet, native_token) = if genesis_file_path.is_file() {
+            let genesis =
+                genesis_config::read_genesis_config(&genesis_file_path);
 
-        // If the WASM dir specified, put it in the config
+            let default_genesis =
+                genesis_config::open_genesis_config(genesis_file_path)?;
+
+            (
+                crate::wallet::load_or_new_from_genesis(
+                    &chain_dir,
+                    default_genesis,
+                ),
+                genesis.native_token,
+            ) // If the WASM dir specified, put it in the config
+        } else {
+            #[cfg(not(any(test, feature = "testing")))]
+            panic!("Missing genesis file");
+            #[cfg(any(test, feature = "testing"))]
+            {
+                let default_genesis = genesis::genesis(1);
+                (
+                    crate::wallet::load_or_new(&genesis_file_path),
+                    default_genesis.native_token,
+                )
+            }
+        };
+
         match global_args.wasm_dir.as_ref() {
             Some(wasm_dir) => {
                 config.wasm_dir = wasm_dir.clone();
@@ -240,6 +262,10 @@ impl<T> FromContext<T> {
             phantom: PhantomData,
         }
     }
+
+    pub fn into_raw(self) -> String {
+        self.raw
+    }
 }
 
 impl FromContext<TransferSource> {
@@ -325,16 +351,25 @@ impl ArgFromContext for Address {
         ctx: &Context,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
+        struct Skip;
         let raw = raw.as_ref();
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(raw)
-            // Or it can be an alias that may be found in the wallet
+            // An Ethereum address
             .or_else(|_| {
-                ctx.wallet
-                    .find_address(raw)
-                    .cloned()
-                    .ok_or_else(|| format!("Unknown address {}", raw))
+                (raw.len() == 42 && raw.starts_with("0x"))
+                    .then(|| {
+                        raw.parse::<EthAddress>()
+                            .map(|addr| {
+                                Address::Internal(InternalAddress::Erc20(addr))
+                            })
+                            .map_err(|_| Skip)
+                    })
+                    .unwrap_or(Err(Skip))
             })
+            // Or it can be an alias that may be found in the wallet
+            .or_else(|_| ctx.wallet.find_address(raw).cloned().ok_or(Skip))
+            .map_err(|_| format!("Unknown address {raw}"))
     }
 }
 

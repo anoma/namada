@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{Report, Result};
+use data_encoding::HEXUPPER;
 use lazy_static::lazy_static;
 use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
@@ -12,9 +13,17 @@ use namada::ledger::queries::{
 use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
+use namada::proof_of_stake::pos_queries::PosQueries;
+use namada::proof_of_stake::types::WeightedValidator;
+use namada::proof_of_stake::{
+    read_consensus_validator_set_addresses_with_stake,
+    validator_consensus_key_handle,
+};
+use namada::tendermint_proto::abci::VoteInfo;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::hash::Hash;
+use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use num_traits::cast::FromPrimitive;
@@ -22,7 +31,9 @@ use regex::Regex;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
-use crate::facade::tendermint_proto::abci::RequestProcessProposal;
+use crate::facade::tendermint_proto::abci::{
+    RequestPrepareProposal, RequestProcessProposal,
+};
 use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::{tendermint, tendermint_rpc};
@@ -126,9 +137,47 @@ impl MockNode {
             .0
     }
 
+    /// Get the address of the block proposer and the votes for the block
+    fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
+        let (val1, ck) = {
+            let locked = self.shell.lock().unwrap();
+            let params = locked.wl_storage.pos_queries().get_pos_params();
+            let current_epoch = locked.wl_storage.storage.get_current_epoch().0;
+            let consensus_set: Vec<WeightedValidator> =
+                read_consensus_validator_set_addresses_with_stake(
+                    &locked.wl_storage,
+                    current_epoch,
+                )
+                .unwrap()
+                .into_iter()
+                .collect();
+
+            let val1 = consensus_set[0].clone();
+            let ck = validator_consensus_key_handle(&val1.address)
+                .get(&locked.wl_storage, current_epoch, &params)
+                .unwrap()
+                .unwrap();
+            (val1, ck)
+        };
+
+        let hash_string = tm_consensus_key_raw_hash(&ck);
+        let pkh1 = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
+        let votes = vec![VoteInfo {
+            validator: Some(namada::tendermint_proto::abci::Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(val1.bonded_stake).unwrap() as i64,
+            }),
+            signed_last_block: true,
+        }];
+
+        (pkh1, votes)
+    }
+
     /// Simultaneously call the `FinalizeBlock` and
     /// `Commit` handlers.
     pub fn finalize_and_commit(&self) {
+        let (proposer_address, votes) = self.prepare_request();
+
         let mut req = FinalizeBlock {
             hash: BlockHash([0u8; 32]),
             header: Header {
@@ -138,8 +187,8 @@ impl MockNode {
             },
             byzantine_validators: vec![],
             txs: vec![],
-            proposer_address: vec![],
-            votes: vec![],
+            proposer_address,
+            votes,
         };
         req.header.time = DateTimeUtc::now();
         let mut locked = self.shell.lock().unwrap();
@@ -164,13 +213,16 @@ impl MockNode {
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
     fn submit_tx(&self, tx_bytes: Vec<u8>) {
-        let req = RequestProcessProposal {
-            txs: vec![tx_bytes.clone()],
-            ..Default::default()
-        };
         // The block space allocator disallows txs in certain blocks.
         // Advance to block height that allows txs.
         self.advance_to_allowed_block();
+        let (proposer_address, votes) = self.prepare_request();
+
+        let req = RequestProcessProposal {
+            txs: vec![tx_bytes.clone()],
+            proposer_address: proposer_address.clone(),
+            ..Default::default()
+        };
         let mut locked = self.shell.lock().unwrap();
         let mut result = locked.process_proposal(req);
         let mut errors: Vec<_> = result
@@ -202,8 +254,8 @@ impl MockNode {
                 tx: tx_bytes,
                 result: result.tx_results.remove(0),
             }],
-            proposer_address: vec![],
-            votes: vec![],
+            proposer_address,
+            votes,
         };
 
         // process the results
@@ -356,9 +408,14 @@ impl<'a> Client for &'a MockNode {
         } else {
             self.clear_results();
         }
+        let (proposer_address, _) = self.prepare_request();
+        let req = RequestPrepareProposal {
+            proposer_address,
+            ..Default::default()
+        };
         let tx_bytes = {
             let locked = self.shell.lock().unwrap();
-            locked.prepare_proposal(Default::default()).txs.remove(0)
+            locked.prepare_proposal(req).txs.remove(0)
         };
         self.submit_tx(tx_bytes);
         Ok(resp)

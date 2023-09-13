@@ -40,7 +40,8 @@ impl<IO: Io> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_custom::<_, IO>(&client, &mut ctx, args)
                             .await?;
                         if !dry_run {
@@ -108,7 +109,8 @@ impl<IO: Io> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let dry_run = args.tx.dry_run;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
                         tx::submit_init_account::<_, IO>(
                             &client, &mut ctx, args,
                         )
@@ -255,21 +257,22 @@ impl<IO: Io> CliApi<IO> {
                         let tx_args = args.tx.clone();
 
                         let default_signer = Some(args.sender.clone());
-                        let signing_data =
-                            signing::aux_signing_data::<_, _, IO>(
+                        let signing_data = tx::aux_signing_data::<_, IO>(
+                            &client,
+                            &mut ctx.wallet,
+                            &args.tx,
+                            &Some(args.sender.clone()),
+                            default_signer,
+                        )
+                        .await?;
+
+                        let (mut tx, _epoch) =
+                            bridge_pool::build_bridge_pool_tx::<_, _, _, IO>(
                                 &client,
                                 &mut ctx.wallet,
-                                &args.tx,
-                                &Some(args.sender.clone()),
-                                default_signer,
-                            )
-                            .await?;
-
-                        let mut tx =
-                            bridge_pool::build_bridge_pool_tx::<_, IO>(
-                                &client,
+                                &mut ctx.shielded,
                                 args.clone(),
-                                signing_data.gas_payer.clone(),
+                                signing_data.fee_payer.clone(),
                             )
                             .await?;
 
@@ -278,7 +281,7 @@ impl<IO: Io> CliApi<IO> {
                             &mut ctx.wallet,
                             &tx,
                         )
-                        .await;
+                        .await?;
 
                         if args.tx.dump_tx {
                             dump_tx::<IO>(&args.tx, tx);
@@ -296,7 +299,7 @@ impl<IO: Io> CliApi<IO> {
                                 &tx_args,
                                 &mut tx,
                                 signing_data,
-                            );
+                            )?;
 
                             sdk_tx::process_tx::<_, _, IO>(
                                 &client,
@@ -322,6 +325,38 @@ impl<IO: Io> CliApi<IO> {
                             &client, ctx, args,
                         )
                         .await?;
+                    }
+                    Sub::TxUpdateStewardCommission(
+                        TxUpdateStewardCommission(mut args),
+                    ) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_update_steward_commission::<_, IO>(
+                            &client, ctx, args,
+                        )
+                        .await?;
+                    }
+                    Sub::TxResignSteward(TxResignSteward(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_resign_steward::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     // Ledger queries
                     Sub::QueryEpoch(QueryEpoch(mut args)) => {
@@ -543,7 +578,6 @@ impl<IO: Io> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         rpc::query_raw_bytes::<_, IO>(&client, args).await;
                     }
-
                     Sub::QueryProposal(QueryProposal(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(

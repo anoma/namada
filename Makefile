@@ -5,6 +5,7 @@ NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
 NAMADA_E2E_DEBUG ?= true
 RUST_BACKTRACE ?= 1
 NAMADA_MASP_TEST_SEED ?= 0
+PROPTEST_CASES ?= 100
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -42,7 +43,7 @@ crates += namada_vm_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build $(jobs)
+	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
@@ -64,7 +65,8 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check && \
+	$(cargo) check --workspace --exclude namada_benchmarks && \
+	$(cargo) +$(nightly) check --benches && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
@@ -72,10 +74,12 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features
+# Check that every crate can be built with default features and that shared crate
+# can be built for wasm
 check-crates:
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
-		make -C $(wasms_for_tests) check
+		make -C $(wasms_for_tests) check && \
+		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "abciplus,namada-sdk"
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
@@ -149,7 +153,7 @@ test-integration:
 # Clear pre-built proofs, run integration tests and save the new proofs
 test-integration-save-proofs:
     # Clear old proofs first
-	rm --force test_fixtures/masp_proofs/*.bin || true
+	rm -f test_fixtures/masp_proofs/*.bin || true
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
 	NAMADA_MASP_TEST_PROOFS=save \
 	TEST_FILTER=masp \
@@ -202,6 +206,14 @@ test-debug:
 		--nocapture \
 		-Z unstable-options --report-time
 
+# Run PoS state machine tests
+test-pos-sm:
+	cd proof_of_stake && \
+	RUST_BACKTRACE=1 \
+		PROPTEST_CASES=$(PROPTEST_CASES) \
+		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
+		cargo test pos_state_machine_test --release 
+
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
 	$(cargo) +$(nightly) fmt --all && \
@@ -219,6 +231,9 @@ watch:
 
 clean:
 	$(cargo) clean
+
+bench:
+	$(cargo) bench
 
 build-doc:
 	$(cargo) doc --no-deps
@@ -273,4 +288,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit
+.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit bench

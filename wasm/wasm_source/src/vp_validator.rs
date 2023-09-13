@@ -20,6 +20,7 @@ enum KeyType<'a> {
     Token { owner: &'a Address },
     PoS,
     Vp(&'a Address),
+    PgfStward(&'a Address),
     GovernanceVote(&'a Address),
     Unknown,
 }
@@ -37,6 +38,8 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
             } else {
                 Self::Unknown
             }
+        } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
+            Self::PgfStward(address)
         } else if let Some(address) = key.is_validity_predicate() {
             Self::Vp(address)
         } else {
@@ -45,7 +48,7 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
     }
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 50000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -60,8 +63,9 @@ fn validate_tx(
         verifiers
     );
 
-    let valid_sig =
-        Lazy::new(|| verify_signatures(ctx, &tx_data, &addr).is_ok());
+    let valid_sig = Lazy::new(|| {
+        matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
+    });
 
     if !is_valid_tx(ctx, &tx_data)? {
         return reject();
@@ -137,6 +141,13 @@ fn validate_tx(
             }
             KeyType::GovernanceVote(voter) => {
                 if voter == &addr {
+                    *valid_sig
+                } else {
+                    true
+                }
+            }
+            KeyType::PgfStward(address) => {
+                if address == &addr {
                     *valid_sig
                 } else {
                     true

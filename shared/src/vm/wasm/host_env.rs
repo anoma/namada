@@ -60,7 +60,10 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            // Wasm middleware gas injectiong hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
+            // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
+            "namada_tx_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
             "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
             "namada_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
@@ -73,6 +76,7 @@ where
             "namada_tx_update_validity_predicate" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_validity_predicate),
             "namada_tx_init_account" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_init_account),
             "namada_tx_emit_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_ibc_event),
+            "namada_tx_get_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_ibc_event),
             "namada_tx_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_chain_id),
             "namada_tx_get_tx_index" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_tx_index),
             "namada_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
@@ -102,7 +106,10 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
+            // Wasm middleware gas injectiong hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
+            // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
+            "namada_vp_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             "namada_vp_read_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_pre),
             "namada_vp_read_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_post),
             "namada_vp_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_temp),
@@ -119,6 +126,7 @@ where
             "namada_vp_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_hash),
             "namada_vp_get_tx_code_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_tx_code_hash),
             "namada_vp_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_epoch),
+            "namada_vp_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_tx_section_signature),
             "namada_vp_verify_masp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_masp),
             "namada_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),
             "namada_vp_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_native_token),

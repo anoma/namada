@@ -1,6 +1,6 @@
 //! Functions to sign transactions
-use std::collections::HashMap;
-use std::io::ErrorKind;
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -14,29 +14,33 @@ use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
     masp, masp_tx_key, Address, ImplicitAddress,
 };
+use namada_core::types::token;
 // use namada_core::types::storage::Key;
-use namada_core::types::token::{self, Amount, DenominatedAmount, MaspDenom};
+use namada_core::types::token::{Amount, DenominatedAmount, MaspDenom};
 use namada_core::types::transaction::pos;
 use prost::Message;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use zeroize::Zeroizing;
 
-use crate::display_line;
+use super::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
+use super::rpc::validate_amount;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::masp::make_asset_type;
 use crate::ledger::parameters::storage as parameter_storage;
 use crate::ledger::rpc::{format_denominated_amount, query_wasm_code_hash};
 use crate::ledger::tx::{
-    Error, TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::ledger::{args, rpc};
 use crate::proto::{MaspBuilder, Section, Tx};
+use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::io::*;
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
@@ -48,6 +52,7 @@ use crate::types::transaction::governance::{
 };
 use crate::types::transaction::pos::InitValidator;
 use crate::types::transaction::{Fee, TxType};
+use crate::{display_line, edisplay_line};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -66,7 +71,7 @@ pub struct SigningTxData {
     /// The public keys to index map associated to an account
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public keys of the fee payer
-    pub gas_payer: common::PublicKey,
+    pub fee_payer: common::PublicKey,
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -91,7 +96,7 @@ pub async fn find_pk<
                 addr.encode()
             );
             rpc::get_public_key_at(client, addr, 0)
-                .await
+                .await?
                 .ok_or(Error::Other(format!(
                     "No public key found for the address {}",
                     addr.encode()
@@ -168,6 +173,7 @@ pub async fn tx_signers<
     // Now actually fetch the signing key and apply it
     match signer {
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
+
         Some(signer) => Ok(vec![
             find_pk::<C, U, IO>(client, wallet, &signer, args.password.clone())
                 .await?,
@@ -184,6 +190,9 @@ pub async fn tx_signers<
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
 ///
+/// It also takes a second, optional keypair to sign the wrapper header
+/// separately.
+///
 /// If this is not a dry run, the tx is put in a wrapper and returned along with
 /// hashes needed for monitoring the tx on chain.
 ///
@@ -193,7 +202,7 @@ pub fn sign_tx<U: WalletUtils>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-) {
+) -> Result<(), Error> {
     if !args.signatures.is_empty() {
         let signatures = args
             .signatures
@@ -218,8 +227,9 @@ pub fn sign_tx<U: WalletUtils>(
     }
 
     let fee_payer_keypair =
-        find_key_by_pk(wallet, args, &signing_data.gas_payer).expect("");
+        find_key_by_pk(wallet, args, &signing_data.fee_payer)?;
     tx.sign_wrapper(fee_payer_keypair);
+    Ok(())
 }
 
 /// Return the necessary data regarding an account to be able to generate a
@@ -235,7 +245,7 @@ pub async fn aux_signing_data<
     owner: &Option<Address>,
     default_signer: Option<Address>,
 ) -> Result<SigningTxData, Error> {
-    let public_keys = if owner.is_some() || args.gas_payer.is_none() {
+    let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
         tx_signers::<C, U, IO>(client, wallet, args, default_signer.clone())
             .await?
     } else {
@@ -244,11 +254,13 @@ pub async fn aux_signing_data<
 
     let (account_public_keys_map, threshold) = match owner {
         Some(owner @ Address::Established(_)) => {
-            let account = rpc::get_account_info::<C>(client, owner).await;
+            let account = rpc::get_account_info::<C>(client, owner).await?;
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {
-                return Err(Error::InvalidAccount(owner.encode()));
+                return Err(Error::from(TxError::InvalidAccount(
+                    owner.encode(),
+                )));
             }
         }
         Some(Address::Implicit(_)) => (
@@ -256,21 +268,32 @@ pub async fn aux_signing_data<
             1u8,
         ),
         Some(owner @ Address::Internal(_)) => {
-            return Err(Error::InvalidAccount(owner.encode()));
+            return Err(Error::from(TxError::InvalidAccount(owner.encode())));
         }
         None => (None, 0u8),
     };
 
-    let gas_payer = match &args.gas_payer {
-        Some(keypair) => keypair.ref_to(),
-        None => public_keys.get(0).ok_or(Error::InvalidFeePayer)?.clone(),
+    let fee_payer = if args.disposable_signing_key {
+        wallet.generate_disposable_signing_key().to_public()
+    } else {
+        match &args.wrapper_fee_payer {
+            Some(keypair) => keypair.to_public(),
+            None => public_keys.get(0).ok_or(TxError::InvalidFeePayer)?.clone(),
+        }
     };
+
+    if fee_payer == masp_tx_key().to_public() {
+        panic!(
+            "The gas payer cannot be the MASP, please provide a different gas \
+             payer."
+        );
+    }
 
     Ok(SigningTxData {
         public_keys,
         threshold,
         account_public_keys_map,
-        gas_payer,
+        fee_payer,
     })
 }
 
@@ -283,30 +306,18 @@ pub async fn solve_pow_challenge<
 >(
     client: &C,
     args: &args::Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
-) -> (Option<crate::core::ledger::testnet_pow::Solution>, Fee) {
-    let wrapper_tx_fees_key = parameter_storage::get_wrapper_tx_fees_key();
-    let gas_amount = rpc::query_storage_value::<C, token::Amount>(
-        client,
-        &wrapper_tx_fees_key,
-    )
-    .await
-    .unwrap_or_default();
-    let gas_token = &args.gas_token;
-    let source = Address::from(keypair);
-    let balance_key = token::balance_key(gas_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-    let is_bal_sufficient = gas_amount <= balance;
+    total_fee: Amount,
+    balance: Amount,
+    source: Address,
+) -> Option<crate::core::ledger::testnet_pow::Solution> {
+    let is_bal_sufficient = total_fee <= balance;
     if !is_bal_sufficient {
-        let token_addr = args.gas_token.clone();
+        let token_addr = args.fee_token.clone();
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount::<_, IO>(client, &token_addr, gas_amount)
+            format_denominated_amount::<_, IO>(client, &token_addr, total_fee)
                 .await,
             format_denominated_amount::<_, IO>(client, &token_addr, balance)
                 .await,
@@ -315,10 +326,6 @@ pub async fn solve_pow_challenge<
             panic!("{}", err_msg);
         }
     }
-    let fee = Fee {
-        amount: gas_amount,
-        token: gas_token.clone(),
-    };
     // A PoW solution can be used to allow zero-fee testnet transactions
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
@@ -332,9 +339,9 @@ pub async fn solve_pow_challenge<
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
-        (Some(solution), fee)
+        Some(solution)
     } else {
-        (None, fee)
+        None
     }
 }
 
@@ -347,42 +354,370 @@ pub async fn update_pow_challenge<
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
-    keypair: &common::PublicKey,
     requires_pow: bool,
+    source: Address,
 ) {
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .and_then(|map| {
+        map.get(&args.fee_token)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| Error::Other("no fee found".to_string()))
+    }) {
+        Ok(amount) => amount,
+        Err(_e) => {
+            edisplay_line!(
+                IO,
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
+            } else {
+                token::Amount::default()
+            }
+        }
+    };
+    let fee_amount = match args.fee_amount {
+        Some(amount) => {
+            let validated_fee_amount = validate_amount::<_, IO>(
+                client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
+
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
+
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                display_line!(
+                    IO,
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
+        }
+        None => minimum_fee,
+    };
+    let total_fee = fee_amount * u64::from(args.gas_limit);
+
+    let balance_key = token::balance_key(&args.fee_token, &source);
+    let balance =
+        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+            .await
+            .unwrap_or_default();
+
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
-        let (pow_solution, fee) =
-            solve_pow_challenge::<_, IO>(client, args, keypair, requires_pow)
-                .await;
-        wrapper.fee = fee;
+        let pow_solution = solve_pow_challenge::<_, IO>(
+            client,
+            args,
+            requires_pow,
+            total_fee,
+            balance,
+            source,
+        )
+        .await;
+        wrapper.fee = Fee {
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
+        };
         wrapper.pow_solution = pow_solution;
     }
+}
+
+/// Informations about the post-tx balance of the tx's source. Used to correctly
+/// handle fee validation in the wrapper tx
+pub struct TxSourcePostBalance {
+    /// The balance of the tx source after the tx has been applied
+    pub post_balance: Amount,
+    /// The source address of the tx
+    pub source: Address,
+    /// The token of the tx
+    pub token: Address,
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
 /// wrapper and its payload which is needed for monitoring its
 /// progress on chain.
-pub async fn wrap_tx<C: crate::ledger::queries::Client + Sync, IO: Io>(
+#[allow(clippy::too_many_arguments)]
+pub async fn wrap_tx<
+    C: crate::ledger::queries::Client + Sync,
+    V: ShieldedUtils,
+    IO: Io,
+>(
     client: &C,
+    shielded: &mut ShieldedContext<V>,
     tx: &mut Tx,
     args: &args::Tx,
+    tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
-    gas_payer: common::PublicKey,
+    fee_payer: common::PublicKey,
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
-) {
+) -> Option<Epoch> {
+    let fee_payer_address = Address::from(&fee_payer);
+    // Validate fee amount and token
+    let gas_cost_key = parameter_storage::get_gas_cost_key();
+    let minimum_fee = match rpc::query_storage_value::<
+        C,
+        BTreeMap<Address, Amount>,
+    >(client, &gas_cost_key)
+    .await
+    .and_then(|map| {
+        map.get(&args.fee_token)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| Error::Other("no fee found".to_string()))
+    }) {
+        Ok(amount) => amount,
+        Err(_e) => {
+            edisplay_line!(
+                IO,
+                "Could not retrieve the gas cost for token {}",
+                args.fee_token
+            );
+            if !args.force {
+                panic!();
+            } else {
+                token::Amount::default()
+            }
+        }
+    };
+    let fee_amount = match args.fee_amount {
+        Some(amount) => {
+            let validated_fee_amount = validate_amount::<_, IO>(
+                client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
+
+            let amount =
+                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
+
+            if amount >= minimum_fee {
+                amount
+            } else if !args.force {
+                // Update the fee amount if it's not enough
+                display_line!(
+                    IO,
+                    "The provided gas price {} is less than the minimum \
+                     amount required {}, changing it to match the minimum",
+                    amount.to_string_native(),
+                    minimum_fee.to_string_native()
+                );
+                minimum_fee
+            } else {
+                amount
+            }
+        }
+        None => minimum_fee,
+    };
+
+    let mut updated_balance = match tx_source_balance {
+        Some(TxSourcePostBalance {
+            post_balance: balance,
+            source,
+            token,
+        }) if token == args.fee_token && source == fee_payer_address => balance,
+        _ => {
+            let balance_key =
+                token::balance_key(&args.fee_token, &fee_payer_address);
+
+            rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
+                .await
+                .unwrap_or_default()
+        }
+    };
+
+    let total_fee = fee_amount * u64::from(args.gas_limit);
+
+    let (unshield, unshielding_epoch) = match total_fee
+        .checked_sub(updated_balance)
+    {
+        Some(diff) if !diff.is_zero() => {
+            if let Some(spending_key) = args.fee_unshield.clone() {
+                // Unshield funds for fee payment
+                let transfer_args = args::TxTransfer {
+                    tx: args.to_owned(),
+                    source: spending_key,
+                    target: namada_core::types::masp::TransferTarget::Address(
+                        fee_payer_address.clone(),
+                    ),
+                    token: args.fee_token.clone(),
+                    amount: args::InputAmount::Validated(DenominatedAmount {
+                        // NOTE: must unshield the total fee amount, not the
+                        // diff, because the ledger evaluates the transaction in
+                        // reverse (wrapper first, inner second) and cannot know
+                        // ahead of time if the inner will modify the balance of
+                        // the gas payer
+                        amount: total_fee,
+                        denom: 0.into(),
+                    }),
+                    // These last two fields are not used in the function, mock
+                    // them
+                    native_token: args.fee_token.clone(),
+                    tx_code_path: PathBuf::new(),
+                };
+
+                match shielded
+                    .gen_shielded_transfer::<_, IO>(client, transfer_args)
+                    .await
+                {
+                    Ok(Some(ShieldedTransfer {
+                        builder: _,
+                        masp_tx: transaction,
+                        metadata: _data,
+                        epoch: unshielding_epoch,
+                    })) => {
+                        let spends = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_spends
+                            .len();
+                        let converts = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_converts
+                            .len();
+                        let outs = transaction
+                            .sapling_bundle()
+                            .unwrap()
+                            .shielded_outputs
+                            .len();
+
+                        let descriptions = spends + converts + outs;
+
+                        let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
+                        let descriptions_limit =
+                            rpc::query_storage_value::<C, u64>(
+                                client,
+                                &descriptions_limit_key,
+                            )
+                            .await
+                            .unwrap();
+
+                        if u64::try_from(descriptions).unwrap()
+                            > descriptions_limit
+                            && !args.force
+                            && cfg!(feature = "mainnet")
+                        {
+                            panic!(
+                                "Fee unshielding descriptions exceed the limit"
+                            );
+                        }
+
+                        updated_balance += total_fee;
+                        (Some(transaction), Some(unshielding_epoch))
+                    }
+                    Ok(None) => {
+                        edisplay_line!(IO, "Missing unshielding transaction");
+                        if !args.force && cfg!(feature = "mainnet") {
+                            panic!();
+                        }
+
+                        (None, None)
+                    }
+                    Err(e) => {
+                        edisplay_line!(
+                            IO,
+                            "Error in fee unshielding generation: {}",
+                            e
+                        );
+                        if !args.force && cfg!(feature = "mainnet") {
+                            panic!();
+                        }
+
+                        (None, None)
+                    }
+                }
+            } else {
+                let token_addr = args.fee_token.clone();
+                let err_msg = format!(
+                    "The wrapper transaction source doesn't have enough \
+                     balance to pay fee {}, balance: {}.",
+                    format_denominated_amount::<_, IO>(
+                        client,
+                        &token_addr,
+                        total_fee
+                    )
+                    .await,
+                    format_denominated_amount::<_, IO>(
+                        client,
+                        &token_addr,
+                        updated_balance
+                    )
+                    .await,
+                );
+                edisplay_line!(IO, "{}", err_msg);
+                if !args.force && cfg!(feature = "mainnet") {
+                    panic!("{}", err_msg);
+                }
+
+                (None, None)
+            }
+        }
+        _ => {
+            if args.fee_unshield.is_some() {
+                display_line!(
+                    IO,
+                    "Enough transparent balance to pay fees: the fee \
+                     unshielding spending key will be ignored"
+                );
+            }
+            (None, None)
+        }
+    };
+
+    let unshield_section_hash = unshield.map(|masp_tx| {
+        let section = Section::MaspTx(masp_tx);
+        let mut hasher = sha2::Sha256::new();
+        section.hash(&mut hasher);
+        tx.add_section(section);
+        namada_core::types::hash::Hash(hasher.finalize().into())
+    });
+
     #[cfg(not(feature = "mainnet"))]
-    let (pow_solution, fee) =
-        solve_pow_challenge::<_, IO>(client, args, &gas_payer, requires_pow)
-            .await;
+    let pow_solution = solve_pow_challenge::<_, IO>(
+        client,
+        args,
+        requires_pow,
+        total_fee,
+        updated_balance,
+        fee_payer_address,
+    )
+    .await;
 
     tx.add_wrapper(
-        fee,
-        gas_payer,
+        Fee {
+            amount_per_gas_unit: fee_amount,
+            token: args.fee_token.clone(),
+        },
+        fee_payer,
         epoch,
-        args.gas_limit.clone(),
+        // TODO: partially validate the gas limit in client
+        args.gas_limit,
         #[cfg(not(feature = "mainnet"))]
         pow_solution,
+        unshield_section_hash,
     );
+
+    unshielding_epoch
 }
 
 #[allow(clippy::result_large_err)]
@@ -607,7 +942,7 @@ pub async fn generate_test_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) {
+) -> Result<(), Error> {
     use std::env;
     use std::fs::File;
     use std::io::Write;
@@ -617,19 +952,21 @@ pub async fn generate_test_vector<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector::<_, _, IO>(client, wallet, &tx)
-            .await
-            .expect("unable to decode transaction");
+        let decoding =
+            to_ledger_vector::<_, _, IO>(client, wallet, &tx).await?;
         let output = serde_json::to_string(&decoding)
-            .expect("failed to serialize decoding");
+            .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
         let mut f = File::options()
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{},", output)
-            .expect("unable to write test vector to file");
+            .map_err(|e| {
+                Error::Other(format!("failed to open test vector file: {}", e))
+            })?;
+        writeln!(f, "{},", output).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
 
     // Attempt to decode the construction
@@ -642,9 +979,14 @@ pub async fn generate_test_vector<
             .append(true)
             .create(true)
             .open(path)
-            .expect("failed to open test vector file");
-        writeln!(f, "{:x?},", tx).expect("unable to write test vector to file");
+            .map_err(|_| {
+                Error::Other("unable to write test vector to file".to_string())
+            })?;
+        writeln!(f, "{:x?},", tx).map_err(|_| {
+            Error::Other("unable to write test vector to file".to_string())
+        })?;
     }
+    Ok(())
 }
 
 /// Converts the given transaction to the form that is displayed on the Ledger
@@ -657,52 +999,31 @@ pub async fn to_ledger_vector<
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
-) -> Result<LedgerVector, std::io::Error> {
+) -> Result<LedgerVector, Error> {
     let init_account_hash =
-        query_wasm_code_hash::<_, IO>(client, TX_INIT_ACCOUNT_WASM)
-            .await
-            .unwrap();
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_ACCOUNT_WASM).await?;
     let init_validator_hash =
-        query_wasm_code_hash::<_, IO>(client, TX_INIT_VALIDATOR_WASM)
-            .await
-            .unwrap();
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_VALIDATOR_WASM).await?;
     let init_proposal_hash =
-        query_wasm_code_hash::<_, IO>(client, TX_INIT_PROPOSAL)
-            .await
-            .unwrap();
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_PROPOSAL).await?;
     let vote_proposal_hash =
-        query_wasm_code_hash::<_, IO>(client, TX_VOTE_PROPOSAL)
-            .await
-            .unwrap();
-    let reveal_pk_hash = query_wasm_code_hash::<_, IO>(client, TX_REVEAL_PK)
-        .await
-        .unwrap();
+        query_wasm_code_hash::<_, IO>(client, TX_VOTE_PROPOSAL).await?;
+    let reveal_pk_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_REVEAL_PK).await?;
     let update_account_hash =
-        query_wasm_code_hash::<_, IO>(client, TX_UPDATE_ACCOUNT_WASM)
-            .await
-            .unwrap();
-    let transfer_hash = query_wasm_code_hash::<_, IO>(client, TX_TRANSFER_WASM)
-        .await
-        .unwrap();
-    let ibc_hash = query_wasm_code_hash::<_, IO>(client, TX_IBC_WASM)
-        .await
-        .unwrap();
-    let bond_hash = query_wasm_code_hash::<_, IO>(client, TX_BOND_WASM)
-        .await
-        .unwrap();
-    let unbond_hash = query_wasm_code_hash::<_, IO>(client, TX_UNBOND_WASM)
-        .await
-        .unwrap();
-    let withdraw_hash = query_wasm_code_hash::<_, IO>(client, TX_WITHDRAW_WASM)
-        .await
-        .unwrap();
+        query_wasm_code_hash::<_, IO>(client, TX_UPDATE_ACCOUNT_WASM).await?;
+    let transfer_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_TRANSFER_WASM).await?;
+    let ibc_hash = query_wasm_code_hash::<_, IO>(client, TX_IBC_WASM).await?;
+    let bond_hash = query_wasm_code_hash::<_, IO>(client, TX_BOND_WASM).await?;
+    let unbond_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_UNBOND_WASM).await?;
+    let withdraw_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
         query_wasm_code_hash::<_, IO>(client, TX_CHANGE_COMMISSION_WASM)
-            .await
-            .unwrap();
-    let user_hash = query_wasm_code_hash::<_, IO>(client, VP_USER_WASM)
-        .await
-        .unwrap();
+            .await?;
+    let user_hash = query_wasm_code_hash::<_, IO>(client, VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
@@ -718,8 +1039,9 @@ pub async fn to_ledger_vector<
         .collect();
 
     let mut tv = LedgerVector {
-        blob: HEXLOWER
-            .encode(&tx.try_to_vec().expect("unable to serialize transaction")),
+        blob: HEXLOWER.encode(&tx.try_to_vec().map_err(|_| {
+            Error::Other("unable to serialize transaction".to_string())
+        })?),
         index: 0,
         valid: true,
         name: "Custom 0".to_string(),
@@ -728,26 +1050,32 @@ pub async fn to_ledger_vector<
 
     let code_hash = tx
         .get_section(tx.code_sechash())
-        .expect("expected tx code section to be present")
+        .ok_or_else(|| {
+            Error::Other("expected tx code section to be present".to_string())
+        })?
         .code_sec()
-        .expect("expected section to have code tag")
+        .ok_or_else(|| {
+            Error::Other("expected section to have code tag".to_string())
+        })?
         .code
         .hash();
     tv.output_expert
         .push(format!("Code hash : {}", HEXLOWER.encode(&code_hash.0)));
 
     if code_hash == init_account_hash {
-        let init_account =
-            InitAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
-
+        let init_account = InitAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         tv.name = "Init Account 0".to_string();
 
         let extra = tx
             .get_section(&init_account.vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -767,17 +1095,20 @@ pub async fn to_ledger_vector<
             format!("VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_validator_hash {
-        let init_validator =
-            InitValidator::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_validator = InitValidator::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Validator 0".to_string();
 
         let extra = tx
             .get_section(&init_validator.validator_vp_code_hash)
             .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
+            .ok_or_else(|| Error::Other("unable to load vp code".to_string()))?
             .code
             .hash();
         let vp_code = if extra == user_hash {
@@ -813,10 +1144,13 @@ pub async fn to_ledger_vector<
             format!("Validator VP type : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_hash == init_proposal_hash {
-        let init_proposal_data =
-            InitProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let init_proposal_data = InitProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Proposal 0".to_string();
 
@@ -858,10 +1192,13 @@ pub async fn to_ledger_vector<
         tv.output
             .push(format!("Content: {}", init_proposal_data.content));
     } else if code_hash == vote_proposal_hash {
-        let vote_proposal =
-            VoteProposalData::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let vote_proposal = VoteProposalData::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Vote Proposal 0".to_string();
 
@@ -887,8 +1224,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == reveal_pk_hash {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Init Account 0".to_string();
 
@@ -900,10 +1240,13 @@ pub async fn to_ledger_vector<
         tv.output_expert
             .extend(vec![format!("Public key : {}", public_key)]);
     } else if code_hash == update_account_hash {
-        let transfer =
-            UpdateAccount::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = UpdateAccount::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Update VP 0".to_string();
 
@@ -912,7 +1255,9 @@ pub async fn to_ledger_vector<
                 let extra = tx
                     .get_section(hash)
                     .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .expect("unable to load vp code")
+                    .ok_or_else(|| {
+                        Error::Other("unable to load vp code".to_string())
+                    })?
                     .code
                     .hash();
                 let vp_code = if extra == user_hash {
@@ -934,10 +1279,13 @@ pub async fn to_ledger_vector<
             None => (),
         };
     } else if code_hash == transfer_hash {
-        let transfer =
-            Transfer::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let transfer = Transfer::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
         // To facilitate lookups of MASP AssetTypes
         let mut asset_types = HashMap::new();
         let builder = if let Some(shielded_hash) = transfer.shielded {
@@ -946,10 +1294,16 @@ pub async fn to_ledger_vector<
                     if builder.target == shielded_hash =>
                 {
                     for (addr, denom, epoch) in &builder.asset_types {
-                        asset_types.insert(
-                            make_asset_type(Some(*epoch), addr, *denom),
-                            (addr.clone(), *denom, *epoch),
-                        );
+                        match make_asset_type(Some(*epoch), addr, *denom) {
+                            Err(_) => None,
+                            Ok(asset) => {
+                                asset_types.insert(
+                                    asset,
+                                    (addr.clone(), *denom, *epoch),
+                                );
+                                Some(builder)
+                            }
+                        }?;
                     }
                     Some(builder)
                 }
@@ -983,10 +1337,10 @@ pub async fn to_ledger_vector<
     } else if code_hash == ibc_hash {
         let any_msg = Any::decode(
             tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
                 .as_ref(),
         )
-        .map_err(|x| std::io::Error::new(ErrorKind::Other, x))?;
+        .map_err(|x| Error::from(EncodingError::Conversion(x.to_string())))?;
 
         tv.name = "IBC 0".to_string();
         tv.output.push("Type : IBC".to_string());
@@ -1038,10 +1392,13 @@ pub async fn to_ledger_vector<
             }
         }
     } else if code_hash == bond_hash {
-        let bond =
-            pos::Bond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let bond = pos::Bond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Bond 0".to_string();
 
@@ -1063,10 +1420,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", bond.amount.to_string_native()),
         ]);
     } else if code_hash == unbond_hash {
-        let unbond =
-            pos::Unbond::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let unbond = pos::Unbond::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Unbond 0".to_string();
 
@@ -1088,10 +1448,13 @@ pub async fn to_ledger_vector<
             format!("Amount : {}", unbond.amount.to_string_native()),
         ]);
     } else if code_hash == withdraw_hash {
-        let withdraw =
-            pos::Withdraw::try_from_slice(&tx.data().ok_or_else(|| {
-                std::io::Error::from(ErrorKind::InvalidData)
-            })?)?;
+        let withdraw = pos::Withdraw::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Withdraw 0".to_string();
 
@@ -1113,8 +1476,11 @@ pub async fn to_ledger_vector<
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()
-                .ok_or_else(|| std::io::Error::from(ErrorKind::InvalidData))?,
-        )?;
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
 
         tv.name = "Change Commission 0".to_string();
 
@@ -1138,10 +1504,10 @@ pub async fn to_ledger_vector<
             Amount::from(wrapper.gas_limit),
         )
         .await;
-        let gas_amount = format_denominated_amount::<_, IO>(
+        let fee_amount_per_gas_unit = format_denominated_amount::<_, IO>(
             client,
             &gas_token,
-            wrapper.fee.amount,
+            wrapper.fee.amount_per_gas_unit,
         )
         .await;
         tv.output_expert.extend(vec![
@@ -1152,11 +1518,15 @@ pub async fn to_ledger_vector<
             format!("Fee token : {}", gas_token),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
-            tv.output_expert
-                .push(format!("Fee amount : {} {}", token, gas_amount));
+            tv.output_expert.push(format!(
+                "Fee amount per gas unit : {} {}",
+                token, fee_amount_per_gas_unit
+            ));
         } else {
-            tv.output_expert
-                .push(format!("Fee amount : {}", gas_amount));
+            tv.output_expert.push(format!(
+                "Fee amount per gas unit : {}",
+                fee_amount_per_gas_unit
+            ));
         }
     }
 
