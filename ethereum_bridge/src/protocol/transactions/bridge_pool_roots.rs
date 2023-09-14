@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use borsh::BorshSerialize;
 use eyre::Result;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_signed_root_key;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
-use namada_core::ledger::storage_api::StorageWrite;
+use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
 use namada_core::types::transaction::TxResult;
@@ -60,17 +59,32 @@ where
     // if the root is confirmed, update storage and add
     // relevant key to changed.
     if let Some(proof) = confirmed_update {
-        wl_storage
-            .write_bytes(
-                &get_signed_root_key(),
-                (proof, root_height)
-                    .try_to_vec()
-                    .expect("Serializing a Bridge pool root shouldn't fail."),
-            )
+        let signed_root_key = get_signed_root_key();
+        let should_write_root = wl_storage
+            .read::<(BridgePoolRoot, BlockHeight)>(&signed_root_key)
             .expect(
-                "Writing a signed bridge pool root to storage should not fail.",
-            );
-        changed.insert(get_signed_root_key());
+                "Reading a signed Bridge pool root from storage should not \
+                 fail",
+            )
+            .map(|(_, existing_root_height)| {
+                // only write the newly confirmed signed root if
+                // it is more recent than the existing root in
+                // storage
+                existing_root_height < root_height
+            })
+            .unwrap_or({
+                // if no signed root was present in storage, write the new one
+                true
+            });
+        if should_write_root {
+            wl_storage
+                .write(&signed_root_key, (proof, root_height))
+                .expect(
+                    "Writing a signed Bridge pool root to storage should not \
+                     fail.",
+                );
+            changed.insert(get_signed_root_key());
+        }
     }
 
     Ok(TxResult {
