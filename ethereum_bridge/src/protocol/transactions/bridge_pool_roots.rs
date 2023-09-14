@@ -90,6 +90,10 @@ where
                 true
             });
         if should_write_root {
+            tracing::debug!(
+                ?root_height,
+                "New Bridge pool root proof acquired"
+            );
             wl_storage
                 .write(&signed_root_key, (proof, root_height))
                 .expect(
@@ -97,6 +101,11 @@ where
                      fail.",
                 );
             changed.insert(get_signed_root_key());
+        } else {
+            tracing::debug!(
+                ?root_height,
+                "Discarding outdated Bridge pool root proof"
+            );
         }
     }
 
