@@ -189,7 +189,7 @@ impl From<&Hash> for Keys<EthereumEvent> {
 
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool roots and nonces.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BridgePoolRoot(pub BridgePoolRootProof);
 
 impl BorshSerialize for BridgePoolRoot {
