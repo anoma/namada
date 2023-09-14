@@ -47,10 +47,23 @@ where
     let root_height = vext.iter().next().unwrap().data.block_height;
     let (partial_proof, seen_by) = parse_vexts(wl_storage, vext);
 
+    // return immediately if a complete proof has already been acquired
+    let bp_key = vote_tallies::Keys::from((&partial_proof, root_height));
+    let seen =
+        votes::storage::maybe_read_seen(wl_storage, &bp_key)?.unwrap_or(false);
+    if seen {
+        tracing::debug!(
+            ?root_height,
+            ?partial_proof,
+            "Bridge pool root tally is already complete"
+        );
+        return Ok(TxResult::default());
+    }
+
     // apply updates to the bridge pool root.
     let (mut changed, confirmed_update) = apply_update(
         wl_storage,
-        root_height,
+        bp_key,
         partial_proof,
         seen_by,
         &voting_powers,
@@ -149,7 +162,7 @@ where
 /// In all instances, the changed storage keys are returned.
 fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
-    root_height: BlockHeight,
+    bp_key: vote_tallies::Keys<BridgePoolRoot>,
     mut update: BridgePoolRoot,
     seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
@@ -158,7 +171,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let bp_key = vote_tallies::Keys::from((&update, root_height));
     let partial_proof = votes::storage::read_body(wl_storage, &bp_key);
     let (vote_tracking, changed, confirmed, already_present) = if let Ok(
         partial,
