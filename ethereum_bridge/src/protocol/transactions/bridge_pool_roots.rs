@@ -200,6 +200,7 @@ where
 mod test_apply_bp_roots_to_storage {
     use std::collections::BTreeSet;
 
+    use assert_matches::assert_matches;
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_key_from_hash, get_nonce_key,
@@ -253,6 +254,11 @@ mod test_apply_bp_roots_to_storage {
             ]),
         );
         bridge_pool_vp::init_storage(&mut wl_storage);
+        test_utils::commit_bridge_pool_root_at_height(
+            &mut wl_storage.storage,
+            &KeccakHash([1; 32]),
+            99.into(),
+        );
         test_utils::commit_bridge_pool_root_at_height(
             &mut wl_storage.storage,
             &KeccakHash([1; 32]),
@@ -834,5 +840,80 @@ mod test_apply_bp_roots_to_storage {
         let query_validators = query_validators!();
         let root_epoch_validators = query_validators(root_epoch.0);
         assert_eq!(epoch_0_validators, root_epoch_validators);
+    }
+
+    #[test]
+    /// Test that a signed root is not overwritten in storage
+    /// if a signed root is decided that had been signed at a
+    /// less recent block height.
+    fn test_more_recent_signed_root_not_overwritten() {
+        let TestPackage {
+            validators,
+            keys,
+            mut wl_storage,
+        } = setup();
+
+        let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
+        let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
+
+        macro_rules! decide_at_height {
+            ($block_height:expr) => {
+                let hot_key = &keys[&validators[0]].eth_bridge;
+                let vext = bridge_pool_roots::Vext {
+                    validator_addr: validators[0].clone(),
+                    block_height: $block_height.into(),
+                    sig: Signed::<_, SignableEthMessage>::new(
+                        hot_key,
+                        to_sign.clone(),
+                    )
+                    .sig,
+                }
+                .sign(&keys[&validators[0]].protocol);
+                _ = apply_derived_tx(&mut wl_storage, vext.into())
+                    .expect("Test failed");
+                let hot_key = &keys[&validators[1]].eth_bridge;
+                let vext = bridge_pool_roots::Vext {
+                    validator_addr: validators[1].clone(),
+                    block_height: $block_height.into(),
+                    sig: Signed::<_, SignableEthMessage>::new(
+                        hot_key,
+                        to_sign.clone(),
+                    )
+                    .sig,
+                }
+                .sign(&keys[&validators[1]].protocol);
+                _ = apply_derived_tx(&mut wl_storage, vext.into())
+                    .expect("Test failed");
+            };
+        }
+
+        // decide bridge pool root signed at block height 100
+        decide_at_height!(100);
+
+        // check the signed root in storage
+        let root_in_storage = wl_storage
+            .read::<(BridgePoolRoot, BlockHeight)>(&get_signed_root_key())
+            .expect("Test failed - storage read failed")
+            .expect("Test failed - no signed root in storage");
+        assert_matches!(
+            root_in_storage,
+            (BridgePoolRoot(r), BlockHeight(100))
+                if r.data.0 == root && r.data.1 == nonce
+        );
+
+        // decide bridge pool root signed at block height 99
+        decide_at_height!(99);
+
+        // check the signed root in storage is unchanged
+        let root_in_storage = wl_storage
+            .read::<(BridgePoolRoot, BlockHeight)>(&get_signed_root_key())
+            .expect("Test failed - storage read failed")
+            .expect("Test failed - no signed root in storage");
+        assert_matches!(
+            root_in_storage,
+            (BridgePoolRoot(r), BlockHeight(100))
+                if r.data.0 == root && r.data.1 == nonce
+        );
     }
 }
