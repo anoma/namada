@@ -49,20 +49,17 @@ where
     let (partial_proof, seen_by) = parse_vexts(wl_storage, vext);
 
     // apply updates to the bridge pool root.
-    let (mut changed, confirmed) = apply_update(
+    let (mut changed, confirmed_update) = apply_update(
         wl_storage,
-        partial_proof.clone(),
+        root_height,
+        partial_proof,
         seen_by,
         &voting_powers,
     )?;
 
     // if the root is confirmed, update storage and add
     // relevant key to changed.
-    if confirmed {
-        let proof = votes::storage::read_body(
-            wl_storage,
-            &vote_tallies::Keys::from(&partial_proof),
-        )?;
+    if let Some(proof) = confirmed_update {
         wl_storage
             .write_bytes(
                 &get_signed_root_key(),
@@ -138,15 +135,16 @@ where
 /// In all instances, the changed storage keys are returned.
 fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
+    root_height: BlockHeight,
     mut update: BridgePoolRoot,
     seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
-) -> Result<(ChangedKeys, bool)>
+) -> Result<(ChangedKeys, Option<BridgePoolRoot>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let bp_key = vote_tallies::Keys::from(&update);
+    let bp_key = vote_tallies::Keys::from((&update, root_height));
     let partial_proof = votes::storage::read_body(wl_storage, &bp_key);
     let (vote_tracking, changed, confirmed, already_present) = if let Ok(
         partial,
@@ -162,7 +160,7 @@ where
         let (vote_tracking, changed) =
             votes::update::calculate(wl_storage, &bp_key, new_votes)?;
         if changed.is_empty() {
-            return Ok((changed, false));
+            return Ok((changed, None));
         }
         let confirmed = vote_tracking.seen && changed.contains(&bp_key.seen());
         (vote_tracking, changed, confirmed, true)
@@ -181,7 +179,7 @@ where
         &vote_tracking,
         already_present,
     )?;
-    Ok((changed, confirmed))
+    Ok((changed, confirmed.then_some(update)))
 }
 
 #[cfg(test)]
@@ -292,8 +290,9 @@ mod test_apply_bp_roots_to_storage {
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut wl_storage, vext.into())
                 .expect("Test failed");
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
         let expected: BTreeSet<Key> = bp_root_key.into_iter().collect();
         assert_eq!(expected, changed_keys);
@@ -349,8 +348,9 @@ mod test_apply_bp_roots_to_storage {
         vexts.insert(vext);
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut wl_storage, vexts).expect("Test failed");
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
 
         let mut expected: BTreeSet<Key> = bp_root_key.into_iter().collect();
@@ -392,8 +392,9 @@ mod test_apply_bp_roots_to_storage {
         let TxResult { changed_keys, .. } =
             apply_derived_tx(&mut wl_storage, vext.into())
                 .expect("Test failed");
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
         let expected: BTreeSet<Key> = [
             bp_root_key.seen(),
@@ -417,8 +418,9 @@ mod test_apply_bp_roots_to_storage {
         let root = wl_storage.ethbridge_queries().get_bridge_pool_root();
         let nonce = wl_storage.ethbridge_queries().get_bridge_pool_nonce();
         let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
 
         let hot_key = &keys[&validators[0]].eth_bridge;
@@ -471,8 +473,9 @@ mod test_apply_bp_roots_to_storage {
         let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
 
         let vext = bridge_pool_roots::Vext {
@@ -529,8 +532,9 @@ mod test_apply_bp_roots_to_storage {
         let to_sign = keccak_hash([root.0, nonce.to_bytes()].concat());
         let hot_key = &keys[&validators[0]].eth_bridge;
 
-        let bp_root_key = vote_tallies::Keys::from(BridgePoolRoot(
-            BridgePoolRootProof::new((root, nonce)),
+        let bp_root_key = vote_tallies::Keys::from((
+            &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
+            100.into(),
         ));
 
         let vext = bridge_pool_roots::Vext {
@@ -593,7 +597,7 @@ mod test_apply_bp_roots_to_storage {
         let hot_key = &keys[&validators[0]].eth_bridge;
         let mut expected =
             BridgePoolRoot(BridgePoolRootProof::new((root, nonce)));
-        let bp_root_key = vote_tallies::Keys::from(&expected);
+        let bp_root_key = vote_tallies::Keys::from((&expected, 100.into()));
 
         let vext = bridge_pool_roots::Vext {
             validator_addr: validators[0].clone(),
