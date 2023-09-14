@@ -388,7 +388,7 @@ impl<P1, R1, N1>
 
 /// Abstracts platform specific details away from the logic of shielded pool
 /// operations.
-#[async_trait(? Send)]
+#[async_trait]
 pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {

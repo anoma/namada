@@ -574,7 +574,7 @@ impl Default for CLIShieldedUtils {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl masp::ShieldedUtils for CLIShieldedUtils {
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {

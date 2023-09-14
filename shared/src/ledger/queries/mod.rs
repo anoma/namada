@@ -172,7 +172,7 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait(?Send)]
+    #[async_trait::async_trait]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,

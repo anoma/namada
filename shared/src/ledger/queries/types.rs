@@ -81,7 +81,7 @@ pub trait Router {
 /// A client with async request dispatcher method, which can be used to invoke
 /// type-safe methods from a root [`Router`], generated via `router!` macro.
 #[cfg(any(test, feature = "async-client"))]
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
@@ -306,7 +306,7 @@ pub enum Error {
     InvalidHeight(BlockHeight),
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait::async_trait]
 impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
     type Error = Error;
 
