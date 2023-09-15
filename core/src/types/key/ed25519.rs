@@ -1,11 +1,14 @@
 //! Ed25519 keys and related functionality
 
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -38,7 +41,7 @@ impl super::PublicKey for PublicKey {
                 _ => Err(ParsePublicKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParsePublicKeyError::InvalidEncoding)
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
@@ -47,17 +50,17 @@ impl super::PublicKey for PublicKey {
 }
 
 impl BorshDeserialize for PublicKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         Ok(PublicKey(
             ed25519_consensus::VerificationKey::try_from(
-                <[u8; PUBLIC_KEY_LENGTH] as BorshDeserialize>::deserialize(
-                    buf,
+                <[u8; PUBLIC_KEY_LENGTH] as BorshDeserialize>::deserialize_reader(
+                    reader,
                 )?
-                .as_ref(),
+                    .as_ref(),
             )
-            .map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
-            })?,
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
+                })?,
         ))
     }
 }
@@ -70,7 +73,7 @@ impl BorshSerialize for PublicKey {
 
 impl BorshSchema for PublicKey {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -142,7 +145,7 @@ impl super::SecretKey for SecretKey {
                 _ => Err(ParseSecretKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParseSecretKeyError::InvalidEncoding)
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
@@ -165,17 +168,17 @@ impl Clone for SecretKey {
 }
 
 impl BorshDeserialize for SecretKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         Ok(SecretKey(Box::new(
             ed25519_consensus::SigningKey::try_from(
-                <[u8; SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize(
-                    buf,
+                <[u8; SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize_reader(
+                    reader,
                 )?
-                .as_ref(),
+                    .as_ref(),
             )
-            .map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
-            })?,
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
+                })?,
         )))
     }
 }
@@ -188,7 +191,7 @@ impl BorshSerialize for SecretKey {
 
 impl BorshSchema for SecretKey {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -245,7 +248,7 @@ impl super::Signature for Signature {
                 _ => Err(ParseSignatureError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParseSignatureError::InvalidEncoding)
         } else {
             Err(ParseSignatureError::MismatchedScheme)
@@ -254,10 +257,10 @@ impl super::Signature for Signature {
 }
 
 impl BorshDeserialize for Signature {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         Ok(Signature(
             ed25519_consensus::Signature::try_from(
-                <[u8; SIGNATURE_LENGTH] as BorshDeserialize>::deserialize(buf)?
+                <[u8; SIGNATURE_LENGTH] as BorshDeserialize>::deserialize_reader(reader)?
                     .as_ref(),
             )
             .map_err(|e| {
@@ -275,7 +278,7 @@ impl BorshSerialize for Signature {
 
 impl BorshSchema for Signature {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -302,6 +305,12 @@ impl Hash for Signature {
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.0.to_bytes().partial_cmp(&other.0.to_bytes())
+    }
+}
+
+impl Ord for Signature {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.to_bytes().cmp(&other.0.to_bytes())
     }
 }
 

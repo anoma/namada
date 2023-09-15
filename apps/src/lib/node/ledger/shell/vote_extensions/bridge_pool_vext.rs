@@ -270,7 +270,7 @@ where
 mod test_bp_vote_extensions {
     #[cfg(feature = "abcipp")]
     use borsh::BorshDeserialize;
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     #[cfg(not(feature = "abcipp"))]
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     #[cfg(not(feature = "abcipp"))]
@@ -325,13 +325,7 @@ mod test_bp_vote_extensions {
         let pk_key = protocol_pk_key(&bertha_address());
         shell
             .wl_storage
-            .write_bytes(
-                &pk_key,
-                bertha_keypair()
-                    .ref_to()
-                    .try_to_vec()
-                    .expect("Test failed."),
-            )
+            .write_bytes(&pk_key, bertha_keypair().ref_to().serialize_to_vec())
             .expect("Test failed.");
 
         // change pipeline length to 1
@@ -481,7 +475,7 @@ mod test_bp_vote_extensions {
                 .as_bytes()
                 .to_vec(),
             height: 0,
-            vote_extension: vote_extension.try_to_vec().expect("Test failed"),
+            vote_extension: vote_extension.serialize_to_vec(),
         };
         let res = shell.verify_vote_extension(req);
         assert_eq!(res.status, i32::from(VerifyStatus::Accept));
@@ -692,8 +686,7 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.wl_storage.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height =
-            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
         shell
             .wl_storage
             .storage
@@ -719,8 +712,7 @@ mod test_bp_vote_extensions {
             .delete(&key)
             .expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height =
-            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
         shell
             .wl_storage
             .storage
@@ -780,8 +772,7 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.wl_storage.storage.block.height = 4.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height =
-            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
         shell
             .wl_storage
             .storage
@@ -807,8 +798,7 @@ mod test_bp_vote_extensions {
             .delete(&key)
             .expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height =
-            shell.wl_storage.storage.block.height.try_to_vec().unwrap();
+        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
         shell
             .wl_storage
             .storage

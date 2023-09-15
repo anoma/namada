@@ -24,10 +24,12 @@ pub struct UpdateDkgSessionKey {
 
 #[cfg(feature = "ferveo-tpke")]
 mod protocol_txs {
-    use std::io::{ErrorKind, Write};
+    use std::collections::BTreeMap;
+    use std::io::{ErrorKind, Read, Write};
     use std::path::Path;
 
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use borsh_ext::BorshSerializeExt;
     use ferveo::dkg::pv::Message;
     use serde_json;
 
@@ -77,9 +79,7 @@ mod protocol_txs {
 
         /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(
-                self.try_to_vec().expect("unable to serialize protocol"),
-            );
+            hasher.update(self.serialize_to_vec());
             hasher
         }
     }
@@ -213,7 +213,7 @@ mod protocol_txs {
                 ( $( $type:ident ),* $(,)?) => {
                     match self {
                         $( EthereumTxData::$type(x) =>
-                            x.try_to_vec().map(|data| (data, ProtocolTxType::$type))),*
+                           (x.serialize_to_vec(), ProtocolTxType::$type)),*
                     }
                 }
             }
@@ -225,7 +225,6 @@ mod protocol_txs {
                 BridgePoolVext,
                 ValSetUpdateVext,
             }
-            .expect("Should be able to borsh-serialize tx data")
         }
 
         /// Deserialize Ethereum protocol transaction data.
@@ -330,10 +329,7 @@ mod protocol_txs {
                 })));
             outer_tx.header.chain_id = chain_id;
             outer_tx.set_code(Code::new(code));
-            outer_tx.set_data(Data::new(
-                data.try_to_vec()
-                    .expect("Serializing request should not fail"),
-            ));
+            outer_tx.set_data(Data::new(data.serialize_to_vec()));
             outer_tx.add_section(Section::Signature(Signature::new(
                 vec![
                     outer_tx.header_hash(),
@@ -375,8 +371,10 @@ mod protocol_txs {
     }
 
     impl BorshDeserialize for DkgMessage {
-        fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-            let blob: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+        fn deserialize_reader<R: Read>(
+            reader: &mut R,
+        ) -> std::io::Result<Self> {
+            let blob: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
             let json = String::from_utf8(blob).map_err(|err| {
                 std::io::Error::new(ErrorKind::InvalidData, err)
             })?;
@@ -389,7 +387,7 @@ mod protocol_txs {
 
     impl BorshSchema for DkgMessage {
         fn add_definitions_recursively(
-            definitions: &mut std::collections::HashMap<
+            definitions: &mut BTreeMap<
                 borsh::schema::Declaration,
                 borsh::schema::Definition,
             >,

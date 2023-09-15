@@ -3,14 +3,17 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
+#[cfg(feature = "ferveo-tpke")]
+use std::io::Read;
 use std::marker::PhantomData;
 
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::AffineCurve;
 #[cfg(feature = "ferveo-tpke")]
 use ark_ec::PairingEngine;
-use borsh::schema::{Declaration, Definition};
+use borsh::schema::{add_definition, Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
@@ -129,8 +132,7 @@ impl<T: BorshSerialize> Signable<T> for SerializeWithBorsh {
     type Output = Vec<u8>;
 
     fn as_signable(data: &T) -> Vec<u8> {
-        data.try_to_vec()
-            .expect("Encoding data for signing shouldn't fail")
+        data.serialize_to_vec()
     }
 }
 
@@ -183,17 +185,22 @@ impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
         self.data.partial_cmp(&other.data)
     }
 }
+impl<S, T: Ord> Ord for Signed<T, S> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.data.cmp(&other.data)
+    }
+}
 
 impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
     fn add_definitions_recursively(
-        definitions: &mut HashMap<Declaration, Definition>,
+        definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        let fields = borsh::schema::Fields::NamedFields(borsh::maybestd::vec![
+        let fields = borsh::schema::Fields::NamedFields(vec![
             ("data".to_string(), T::declaration()),
-            ("sig".to_string(), <common::Signature>::declaration())
+            ("sig".to_string(), <common::Signature>::declaration()),
         ]);
         let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
+        add_definition(Self::declaration(), definition, definitions);
         T::add_definitions_recursively(definitions);
         <common::Signature>::add_definitions_recursively(definitions);
     }
@@ -265,9 +272,7 @@ impl Data {
 
     /// Hash this data section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec().expect("unable to serialize data section"),
-        );
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 }
@@ -410,8 +415,7 @@ impl SignatureIndex {
     }
 
     pub fn serialize(&self) -> String {
-        let signature_bytes =
-            self.try_to_vec().expect("Signature should be serializable");
+        let signature_bytes = self.serialize_to_vec();
         HEXUPPER.encode(&signature_bytes)
     }
 
@@ -524,10 +528,7 @@ impl Signature {
 
     /// Hash this signature section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec()
-                .expect("unable to serialize multisignature section"),
-        );
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 
@@ -663,8 +664,7 @@ impl Ciphertext {
     #[cfg(feature = "ferveo-tpke")]
     pub fn new(sections: Vec<Section>, pubkey: &EncryptionKey) -> Self {
         let mut rng = rand::thread_rng();
-        let bytes =
-            sections.try_to_vec().expect("unable to serialize sections");
+        let bytes = sections.serialize_to_vec();
         Self {
             ciphertext: tpke::encrypt(&bytes, pubkey.0, &mut rng),
         }
@@ -683,9 +683,7 @@ impl Ciphertext {
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec().expect("unable to serialize decrypted tx"),
-        );
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 }
@@ -725,34 +723,42 @@ impl borsh::ser::BorshSerialize for Ciphertext {
 
 #[cfg(feature = "ferveo-tpke")]
 impl borsh::BorshDeserialize for Ciphertext {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        type VecTuple = (u32, Vec<u8>, Vec<u8>, Vec<u8>);
-        let (_length, nonce, ciphertext, auth_tag): VecTuple =
-            BorshDeserialize::deserialize(buf)?;
-        Ok(Self {
-            ciphertext: tpke::Ciphertext {
-                nonce: ark_serialize::CanonicalDeserialize::deserialize(
-                    &*nonce,
-                )
-                .map_err(|err| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-                })?,
-                ciphertext,
-                auth_tag: ark_serialize::CanonicalDeserialize::deserialize(
-                    &*auth_tag,
-                )
-                .map_err(|err| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-                })?,
-            },
-        })
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        {
+            type VecTuple = (u32, Vec<u8>, Vec<u8>, Vec<u8>);
+            let (_length, nonce, ciphertext, auth_tag): VecTuple =
+                BorshDeserialize::deserialize_reader(reader)?;
+            Ok(Self {
+                ciphertext: tpke::Ciphertext {
+                    nonce: ark_serialize::CanonicalDeserialize::deserialize(
+                        &*nonce,
+                    )
+                    .map_err(|err| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            err,
+                        )
+                    })?,
+                    ciphertext,
+                    auth_tag: ark_serialize::CanonicalDeserialize::deserialize(
+                        &*auth_tag,
+                    )
+                    .map_err(|err| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            err,
+                        )
+                    })?,
+                },
+            })
+        }
     }
 }
 
 #[cfg(feature = "ferveo-tpke")]
 impl borsh::BorshSchema for Ciphertext {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -785,9 +791,7 @@ struct SerializedCiphertext {
 impl From<Ciphertext> for SerializedCiphertext {
     fn from(tx: Ciphertext) -> Self {
         SerializedCiphertext {
-            payload: tx
-                .try_to_vec()
-                .expect("Unable to serialize encrypted transaction"),
+            payload: tx.serialize_to_vec(),
         }
     }
 }
@@ -824,7 +828,7 @@ where
     T: From<Vec<u8>>,
     T: serde::Serialize,
 {
-    Into::<T>::into(obj.try_to_vec().unwrap()).serialize(ser)
+    Into::<T>::into(obj.serialize_to_vec()).serialize(ser)
 }
 
 fn serde_borsh<'de, T, S, U>(ser: S) -> std::result::Result<U, S::Error>
@@ -901,16 +905,14 @@ impl MaspBuilder {
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec().expect("unable to serialize MASP builder"),
-        );
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 }
 
 impl borsh::BorshSchema for MaspBuilder {
     fn add_definitions_recursively(
-        _definitions: &mut std::collections::HashMap<
+        _definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -962,8 +964,7 @@ impl Section {
     /// allowing transaction sections to cross reference.
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         // Get the index corresponding to this variant
-        let discriminant =
-            self.try_to_vec().expect("sections should serialize")[0];
+        let discriminant = self.serialize_to_vec()[0];
         // Use Borsh's discriminant in the Section's hash
         hasher.update([discriminant]);
         match self {
@@ -1111,10 +1112,7 @@ impl Header {
 
     /// Get the hash of this transaction header.
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec()
-                .expect("unable to serialize transaction header"),
-        );
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 
@@ -1221,9 +1219,7 @@ impl Tx {
 
     /// Serialize tx to hex string
     pub fn serialize(&self) -> String {
-        let tx_bytes = self
-            .try_to_vec()
-            .expect("Transation should be serializable");
+        let tx_bytes = self.serialize_to_vec();
         HEXUPPER.encode(&tx_bytes)
     }
 
@@ -1351,7 +1347,7 @@ impl Tx {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = vec![];
         let tx: types::Tx = types::Tx {
-            data: self.try_to_vec().expect("encoding a transaction failed"),
+            data: self.serialize_to_vec(),
         };
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
@@ -1716,7 +1712,7 @@ impl Tx {
 
     /// Add wasm data to the tx builder
     pub fn add_data(&mut self, data: impl BorshSerialize) -> &mut Self {
-        let bytes = data.try_to_vec().expect("Encoding tx data shouldn't fail");
+        let bytes = data.serialize_to_vec();
         self.set_data(Data::new(bytes));
         self
     }
@@ -1987,16 +1983,13 @@ mod tests {
         // check that encryption doesn't do trivial things
         assert_ne!(
             encrypted.ciphertext.ciphertext,
-            plaintext.try_to_vec().expect("Test failed")
+            plaintext.serialize_to_vec()
         );
         // decrypt the payload and check we got original data back
         let decrypted = encrypted.decrypt(privkey);
         assert_eq!(
-            decrypted
-                .expect("Test failed")
-                .try_to_vec()
-                .expect("Test failed"),
-            plaintext.try_to_vec().expect("Test failed"),
+            decrypted.expect("Test failed").serialize_to_vec(),
+            plaintext.serialize_to_vec(),
         );
     }
 
@@ -2014,7 +2007,7 @@ mod tests {
         ))];
         let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
         // serialize via Borsh
-        let borsh = encrypted.try_to_vec().expect("Test failed");
+        let borsh = encrypted.serialize_to_vec();
         // deserialize again
         let new_encrypted: Ciphertext =
             BorshDeserialize::deserialize(&mut borsh.as_ref())
@@ -2022,11 +2015,8 @@ mod tests {
         // check that decryption works as expected
         let decrypted = new_encrypted.decrypt(privkey);
         assert_eq!(
-            decrypted
-                .expect("Test failed")
-                .try_to_vec()
-                .expect("Test failed"),
-            plaintext.try_to_vec().expect("Test failed"),
+            decrypted.expect("Test failed").serialize_to_vec(),
+            plaintext.serialize_to_vec(),
         );
     }
 
@@ -2051,11 +2041,8 @@ mod tests {
         let decrypted = new_encrypted.decrypt(privkey);
         // check that decryption works as expected
         assert_eq!(
-            decrypted
-                .expect("Test failed")
-                .try_to_vec()
-                .expect("Test failed"),
-            plaintext.try_to_vec().expect("Test failed"),
+            decrypted.expect("Test failed").serialize_to_vec(),
+            plaintext.serialize_to_vec(),
         );
     }
 }

@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -48,19 +49,19 @@ impl super::PublicKey for PublicKey {
         pk: &PK,
     ) -> Result<Self, ParsePublicKeyError> {
         if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParsePublicKeyError::InvalidEncoding)
         } else if PK::TYPE == ed25519::PublicKey::TYPE {
             Ok(Self::Ed25519(
                 ed25519::PublicKey::try_from_slice(
-                    pk.try_to_vec().unwrap().as_slice(),
+                    pk.serialize_to_vec().as_slice(),
                 )
                 .map_err(ParsePublicKeyError::InvalidEncoding)?,
             ))
         } else if PK::TYPE == secp256k1::PublicKey::TYPE {
             Ok(Self::Secp256k1(
                 secp256k1::PublicKey::try_from_slice(
-                    pk.try_to_vec().unwrap().as_slice(),
+                    pk.serialize_to_vec().as_slice(),
                 )
                 .map_err(ParsePublicKeyError::InvalidEncoding)?,
             ))
@@ -72,7 +73,7 @@ impl super::PublicKey for PublicKey {
 
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.try_to_vec().unwrap()))
+        write!(f, "{}", HEXLOWER.encode(&self.serialize_to_vec()))
     }
 }
 
@@ -174,19 +175,19 @@ impl super::SecretKey for SecretKey {
         sk: &SK,
     ) -> Result<Self, ParseSecretKeyError> {
         if SK::TYPE == Self::TYPE {
-            Self::try_from_slice(sk.try_to_vec().unwrap().as_ref())
+            Self::try_from_slice(sk.serialize_to_vec().as_ref())
                 .map_err(ParseSecretKeyError::InvalidEncoding)
         } else if SK::TYPE == ed25519::SecretKey::TYPE {
             Ok(Self::Ed25519(
                 ed25519::SecretKey::try_from_slice(
-                    sk.try_to_vec().unwrap().as_ref(),
+                    sk.serialize_to_vec().as_ref(),
                 )
                 .map_err(ParseSecretKeyError::InvalidEncoding)?,
             ))
         } else if SK::TYPE == secp256k1::SecretKey::TYPE {
             Ok(Self::Secp256k1(
                 secp256k1::SecretKey::try_from_slice(
-                    sk.try_to_vec().unwrap().as_ref(),
+                    sk.serialize_to_vec().as_ref(),
                 )
                 .map_err(ParseSecretKeyError::InvalidEncoding)?,
             ))
@@ -207,7 +208,7 @@ impl RefTo<PublicKey> for SecretKey {
 
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.try_to_vec().unwrap()))
+        write!(f, "{}", HEXLOWER.encode(&self.serialize_to_vec()))
     }
 }
 
@@ -230,6 +231,7 @@ impl FromStr for SecretKey {
     Eq,
     PartialEq,
     PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,
@@ -263,19 +265,19 @@ impl super::Signature for Signature {
         sig: &SIG,
     ) -> Result<Self, ParseSignatureError> {
         if SIG::TYPE == Self::TYPE {
-            Self::try_from_slice(sig.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(sig.serialize_to_vec().as_slice())
                 .map_err(ParseSignatureError::InvalidEncoding)
         } else if SIG::TYPE == ed25519::Signature::TYPE {
             Ok(Self::Ed25519(
                 ed25519::Signature::try_from_slice(
-                    sig.try_to_vec().unwrap().as_slice(),
+                    sig.serialize_to_vec().as_slice(),
                 )
                 .map_err(ParseSignatureError::InvalidEncoding)?,
             ))
         } else if SIG::TYPE == secp256k1::Signature::TYPE {
             Ok(Self::Secp256k1(
                 secp256k1::Signature::try_from_slice(
-                    sig.try_to_vec().unwrap().as_slice(),
+                    sig.serialize_to_vec().as_slice(),
                 )
                 .map_err(ParseSignatureError::InvalidEncoding)?,
             ))

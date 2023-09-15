@@ -1,6 +1,8 @@
 //! This module contains types related with validator voting power calculations.
 
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::io::Read;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Mul};
 
@@ -247,26 +249,30 @@ impl BorshSerialize for FractionalVotingPower {
 }
 
 impl BorshDeserialize for FractionalVotingPower {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let (numer, denom): (Uint, Uint) = BorshDeserialize::deserialize(buf)?;
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let (numer, denom): (Uint, Uint) =
+            BorshDeserialize::deserialize_reader(reader)?;
         Ok(FractionalVotingPower(Ratio::<Uint>::new(numer, denom)))
     }
 }
 
 impl BorshSchema for FractionalVotingPower {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
     ) {
-        let fields =
-            borsh::schema::Fields::UnnamedFields(borsh::maybestd::vec![
-                Uint::declaration(),
-                Uint::declaration()
-            ]);
+        let fields = borsh::schema::Fields::UnnamedFields(vec![
+            Uint::declaration(),
+            Uint::declaration(),
+        ]);
         let definition = borsh::schema::Definition::Struct { fields };
-        Self::add_definition(Self::declaration(), definition, definitions);
+        borsh::schema::add_definition(
+            Self::declaration(),
+            definition,
+            definitions,
+        );
     }
 
     fn declaration() -> borsh::schema::Declaration {

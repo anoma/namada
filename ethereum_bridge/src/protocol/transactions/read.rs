@@ -55,7 +55,7 @@ where
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::storage;
@@ -81,7 +81,7 @@ mod tests {
         let amount = Amount::from(1_000_000);
         let mut fake_storage = TestWlStorage::default();
         fake_storage
-            .write_bytes(&key, amount.try_to_vec().unwrap())
+            .write_bytes(&key, amount.serialize_to_vec())
             .unwrap();
 
         let amt = read::amount_or_default(&fake_storage, &key).unwrap();

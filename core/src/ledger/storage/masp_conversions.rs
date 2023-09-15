@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -203,11 +204,7 @@ where
         .into_storage_result()?;
     // We cannot borrow `conversion_state` at the same time as when we call
     // `wl_storage.write`, so we encode it manually first
-    let conv_bytes = wl_storage
-        .storage
-        .conversion_state
-        .try_to_vec()
-        .into_storage_result()?;
+    let conv_bytes = wl_storage.storage.conversion_state.serialize_to_vec();
     wl_storage.write_bytes(&state_key, conv_bytes)?;
     Ok(())
 }
@@ -218,9 +215,7 @@ pub fn encode_asset_type(
     denom: MaspDenom,
     epoch: Epoch,
 ) -> AssetType {
-    let new_asset_bytes = (addr, denom, epoch.0)
-        .try_to_vec()
-        .expect("unable to serialize address and epoch");
+    let new_asset_bytes = (addr, denom, epoch.0).serialize_to_vec();
     AssetType::new(new_asset_bytes.as_ref())
         .expect("unable to derive asset identifier")
 }

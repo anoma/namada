@@ -5,7 +5,8 @@ use std::fmt;
 
 use arse_merkle_tree::traits::{Hasher, Value};
 use arse_merkle_tree::{Key as TreeKey, H256};
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
@@ -199,7 +200,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
 
     fn subtree_get(&self, key: &Key) -> Result<Vec<u8>, Error> {
         match self.get(key) {
-            Ok(height) => Ok(height.try_to_vec().expect("Encoding failed")),
+            Ok(height) => Ok(height.serialize_to_vec()),
             Err(err) => Err(Error::MerkleTree(err.to_string())),
         }
     }

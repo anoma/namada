@@ -17,6 +17,8 @@ use core::slice;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use borsh_ext;
+use borsh_ext::BorshSerializeExt;
 pub use namada_core::ledger::eth_bridge;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters::storage as parameters_storage;
@@ -248,7 +250,7 @@ impl TxEnv for Ctx {
         key: &storage::Key,
         val: T,
     ) -> Result<(), Error> {
-        let buf = val.try_to_vec().unwrap();
+        let buf = val.serialize_to_vec();
         self.write_bytes_temp(key, buf)
     }
 
@@ -319,7 +321,7 @@ impl TxEnv for Ctx {
     }
 
     fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
-        let event = BorshSerialize::try_to_vec(event).unwrap();
+        let event = borsh::to_vec(event).unwrap();
         unsafe {
             namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
         };

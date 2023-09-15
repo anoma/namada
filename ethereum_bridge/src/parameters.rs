@@ -367,6 +367,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use borsh_ext::BorshSerializeExt;
     use eyre::Result;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::ethereum_events::EthAddress;
@@ -474,7 +475,7 @@ mod tests {
         wl_storage
             .write_bytes(
                 &bridge_storage::min_confirmations_key(),
-                MinimumConfirmations::default().try_to_vec().unwrap(),
+                MinimumConfirmations::default().serialize_to_vec(),
             )
             .unwrap();
 

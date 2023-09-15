@@ -21,6 +21,7 @@ use crate::types::storage::BlockHeight;
     Clone,
     PartialEq,
     PartialOrd,
+    Ord,
     Eq,
     Hash,
     BorshSerialize,

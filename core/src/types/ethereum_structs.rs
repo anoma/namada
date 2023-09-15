@@ -1,5 +1,6 @@
 //! Ethereum bridge struct re-exports and types to do with ethereum.
 use std::fmt;
+use std::io::Read;
 use std::num::NonZeroU64;
 use std::ops::{Add, AddAssign, Deref};
 
@@ -96,8 +97,8 @@ impl BorshSerialize for BlockHeight {
 }
 
 impl BorshDeserialize for BlockHeight {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let be: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let be: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
         Ok(Self(Uint256::from_bytes_be(&be)))
     }
 }

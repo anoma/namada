@@ -1,6 +1,7 @@
 //! IbcCommonContext implementation for IBC
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use prost::Message;
 use sha2::Digest;
 
@@ -374,10 +375,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             })
         })?;
         if !has_key {
-            let bytes = denom
-                .as_ref()
-                .try_to_vec()
-                .expect("encoding shouldn't fail");
+            let bytes = denom.as_ref().serialize_to_vec();
             self.write(&key, bytes).map_err(|_| {
                 ContextError::ChannelError(ChannelError::Other {
                     description: format!(
@@ -434,7 +432,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         if !has_key {
             // IBC denomination should be zero for U256
             let denom = token::Denomination::from(0);
-            let bytes = denom.try_to_vec().expect("encoding shouldn't fail");
+            let bytes = denom.serialize_to_vec();
             self.write(&key, bytes).map_err(|_| {
                 ContextError::ChannelError(ChannelError::Other {
                     description: format!(

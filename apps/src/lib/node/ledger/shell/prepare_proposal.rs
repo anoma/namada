@@ -493,7 +493,7 @@ mod test_prepare_proposal {
     #[cfg(feature = "abcipp")]
     use std::collections::{BTreeSet, HashMap};
 
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -584,8 +584,7 @@ mod test_prepare_proposal {
             bridge_pool_root: Some(bp_root),
             validator_set_update: None,
         }
-        .try_to_vec()
-        .expect("Test failed");
+        .serialize_to_vec();
 
         let vote = ExtendedVoteInfo {
             vote_extension,
@@ -1027,7 +1026,7 @@ mod test_prepare_proposal {
                 validator_set_update: None,
             };
             let vote = ExtendedVoteInfo {
-                vote_extension: vote_extension.try_to_vec().unwrap(),
+                vote_extension: vote_extension.serialize_to_vec(),
                 ..Default::default()
             };
             // this should panic
@@ -1082,10 +1081,7 @@ mod test_prepare_proposal {
         shell
             .wl_storage
             .storage
-            .write(
-                &balance_key,
-                Amount::native_whole(1_000).try_to_vec().unwrap(),
-            )
+            .write(&balance_key, Amount::native_whole(1_000).serialize_to_vec())
             .unwrap();
 
         let mut req = RequestPrepareProposal {
@@ -1150,11 +1146,11 @@ mod test_prepare_proposal {
         assert_eq!(
             received
                 .iter()
-                .map(|x| x.try_to_vec().unwrap())
+                .map(|x| x.serialize_to_vec())
                 .collect::<Vec<_>>(),
             expected_txs
                 .iter()
-                .map(|x| x.try_to_vec().unwrap())
+                .map(|x| x.serialize_to_vec())
                 .collect::<Vec<_>>(),
         );
     }

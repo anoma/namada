@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{DBIter, StorageHasher, StoreType, DB};
@@ -425,7 +426,7 @@ where
                     )),
                     appendices: with_appendix.then_some(appendices),
                 };
-                let data = rsp.try_to_vec().into_storage_result()?;
+                let data = rsp.serialize_to_vec();
                 Ok(EncodedResponseQuery {
                     data,
                     ..Default::default()
@@ -671,7 +672,6 @@ mod test_ethbridge_router {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use borsh::BorshSerialize;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
@@ -915,7 +915,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -958,7 +958,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -977,7 +977,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1023,7 +1023,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1044,7 +1044,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1053,9 +1053,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root.clone(), BlockHeight::from(0))
-                    .try_to_vec()
-                    .unwrap(),
+                (signed_root.clone(), BlockHeight::from(0)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1074,8 +1072,7 @@ mod test_ethbridge_router {
                         relayer: Cow::Owned(bertha_address()),
                         with_appendix: false,
                     }
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
                 ),
                 None,
                 false,
@@ -1141,7 +1138,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1166,7 +1163,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1175,7 +1172,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1199,8 +1196,7 @@ mod test_ethbridge_router {
                         relayer: Cow::Owned(bertha_address()),
                         with_appendix: false,
                     }
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
                 ),
                 None,
                 false,
@@ -1237,7 +1233,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1258,7 +1254,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1267,7 +1263,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1311,7 +1307,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1326,10 +1322,7 @@ mod test_ethbridge_router {
         let voting_power = FractionalVotingPower::HALF;
         client
             .wl_storage
-            .write_bytes(
-                &eth_msg_key.body(),
-                eth_event.try_to_vec().expect("Test failed"),
-            )
+            .write_bytes(&eth_msg_key.body(), eth_event.serialize_to_vec())
             .expect("Test failed");
         client
             .wl_storage
@@ -1339,8 +1332,7 @@ mod test_ethbridge_router {
                     0.into(),
                     voting_power * dummy_validator_stake,
                 )])
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
             )
             .expect("Test failed");
         client
@@ -1362,7 +1354,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1414,7 +1406,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer),
-                transfer.try_to_vec().expect("Test failed"),
+                transfer.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1435,7 +1427,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_pending_key(&transfer2),
-                transfer2.try_to_vec().expect("Test failed"),
+                transfer2.serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1444,7 +1436,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).try_to_vec().unwrap(),
+                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1463,8 +1455,7 @@ mod test_ethbridge_router {
                         relayer: Cow::Owned(bertha_address()),
                         with_appendix: false,
                     }
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
                 ),
                 None,
                 false,
@@ -1490,8 +1481,7 @@ mod test_ethbridge_router {
                         relayer: Cow::Owned(bertha_address()),
                         with_appendix: false,
                     }
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
                 ),
                 None,
                 false,

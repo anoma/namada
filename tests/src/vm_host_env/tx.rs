@@ -18,7 +18,8 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_tx_prelude::{storage_api, BorshSerialize, Ctx};
+use namada_tx_prelude::borsh_ext::BorshSerializeExt;
+use namada_tx_prelude::{storage_api, Ctx};
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
@@ -186,7 +187,7 @@ impl TestTxEnv {
         let storage_key = key::threshold_key(address);
         self.wl_storage
             .storage
-            .write(&storage_key, threshold.try_to_vec().unwrap())
+            .write(&storage_key, threshold.serialize_to_vec())
             .unwrap();
     }
 
@@ -216,7 +217,7 @@ impl TestTxEnv {
         let storage_key = token::balance_key(token, target);
         self.wl_storage
             .storage
-            .write(&storage_key, amount.try_to_vec().unwrap())
+            .write(&storage_key, amount.serialize_to_vec())
             .unwrap();
     }
 

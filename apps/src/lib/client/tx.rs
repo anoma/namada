@@ -599,7 +599,7 @@ const TMP_FILE_NAME: &str = "shielded.tmp";
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
 pub struct CLIShieldedUtils {
-    #[borsh_skip]
+    #[borsh(skip)]
     context_dir: PathBuf,
 }
 

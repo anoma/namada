@@ -6,7 +6,8 @@ use std::ops::Bound::{Excluded, Included};
 use std::path::Path;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 
 use super::merkle_tree::{MerkleTreeStoresRead, StoreType};
 use super::{
@@ -295,10 +296,9 @@ impl DB for MockDB {
                 let key = prefix_key
                     .push(&"header".to_owned())
                     .map_err(Error::KeyError)?;
-                self.0.borrow_mut().insert(
-                    key.to_string(),
-                    h.try_to_vec().expect("serialization failed"),
-                );
+                self.0
+                    .borrow_mut()
+                    .insert(key.to_string(), h.serialize_to_vec());
             }
         }
         // Block hash

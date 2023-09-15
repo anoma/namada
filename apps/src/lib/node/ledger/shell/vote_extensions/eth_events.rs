@@ -411,7 +411,7 @@ mod test_vote_extensions {
 
     #[cfg(feature = "abcipp")]
     use borsh::BorshDeserialize;
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -461,7 +461,7 @@ mod test_vote_extensions {
         shell
             .wl_storage
             .storage
-            .write(&bridge_pool::get_nonce_key(), nonce.try_to_vec().unwrap())
+            .write(&bridge_pool::get_nonce_key(), nonce.serialize_to_vec())
             .expect("Test failed");
 
         // write nam nonce to the eth events queue
@@ -642,7 +642,7 @@ mod test_vote_extensions {
                 .as_bytes()
                 .to_vec(),
             height: 1,
-            vote_extension: vote_extension.try_to_vec().expect("Test failed"),
+            vote_extension: vote_extension.serialize_to_vec(),
         };
         let res = shell.verify_vote_extension(req);
         assert_eq!(res.status, i32::from(VerifyStatus::Accept));
@@ -720,8 +720,7 @@ mod test_vote_extensions {
                 },
                 validator_set_update: None,
             }
-            .try_to_vec()
-            .expect("Test failed"),
+            .serialize_to_vec(),
         };
         #[cfg(feature = "abcipp")]
         assert_eq!(
@@ -899,15 +898,14 @@ mod test_vote_extensions {
             };
             let req = request::VerifyVoteExtension {
                 hash: vec![],
-                validator_address: address.try_to_vec().expect("Test failed"),
+                validator_address: address.serialize_to_vec(),
                 height: 0,
                 vote_extension: VoteExtension {
                     ethereum_events: Some(signed_vext),
                     bridge_pool_root: Some(bp_root),
                     validator_set_update: None,
                 }
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
             };
 
             assert_eq!(
@@ -952,9 +950,9 @@ mod test_vote_extensions {
         #[cfg(feature = "abcipp")]
         let req = request::VerifyVoteExtension {
             hash: vec![],
-            validator_address: address.try_to_vec().expect("Test failed"),
+            validator_address: address.serialize_to_vec(),
             height: 0,
-            vote_extension: vote_ext.try_to_vec().expect("Test failed"),
+            vote_extension: vote_ext.serialize_to_vec(),
         };
         #[cfg(feature = "abcipp")]
         assert_eq!(

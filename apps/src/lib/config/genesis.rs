@@ -729,7 +729,7 @@ pub mod genesis_config {
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
-#[borsh_init(init)]
+#[borsh(init=init)]
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
@@ -1136,7 +1136,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
 
 #[cfg(test)]
 pub mod tests {
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada::types::address::testing::gen_established_address;
     use namada::types::key::*;
     use rand::prelude::ThreadRng;
@@ -1152,7 +1152,7 @@ pub mod tests {
         let mut rng: ThreadRng = thread_rng();
         let keypair: common::SecretKey =
             ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap();
-        let kp_arr = keypair.try_to_vec().unwrap();
+        let kp_arr = keypair.serialize_to_vec();
         let (protocol_keypair, _eth_hot_bridge_keypair, dkg_keypair) =
             wallet::defaults::validator_keys();
 
@@ -1169,14 +1169,14 @@ pub mod tests {
         println!("address: {}", address);
         println!("keypair: {:?}", kp_arr);
         println!("protocol_keypair: {:?}", protocol_keypair);
-        println!("dkg_keypair: {:?}", dkg_keypair.try_to_vec().unwrap());
+        println!("dkg_keypair: {:?}", dkg_keypair.serialize_to_vec());
         println!(
             "eth_cold_gov_keypair: {:?}",
-            eth_cold_gov_keypair.try_to_vec().unwrap()
+            eth_cold_gov_keypair.serialize_to_vec()
         );
         println!(
             "eth_hot_bridge_keypair: {:?}",
-            eth_hot_bridge_keypair.try_to_vec().unwrap()
+            eth_hot_bridge_keypair.serialize_to_vec()
         );
     }
 }

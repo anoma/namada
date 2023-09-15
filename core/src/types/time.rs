@@ -1,7 +1,9 @@
 //! Types for dealing with time and durations.
 
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
+use std::io::Read;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
 
@@ -183,9 +185,9 @@ impl BorshSerialize for DateTimeUtc {
 }
 
 impl BorshDeserialize for DateTimeUtc {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let raw: String = BorshDeserialize::deserialize(buf)?;
+        let raw: String = BorshDeserialize::deserialize_reader(reader)?;
         let actual = DateTime::parse_from_rfc3339(&raw)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self(actual.into()))
@@ -194,7 +196,7 @@ impl BorshDeserialize for DateTimeUtc {
 
 impl BorshSchema for DateTimeUtc {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,

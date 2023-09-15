@@ -1,13 +1,15 @@
 //! secp256k1 keys and related functionality
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use ethabi::ethereum_types::U256;
 use ethabi::Token;
@@ -48,7 +50,7 @@ impl super::PublicKey for PublicKey {
                 _ => Err(ParsePublicKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParsePublicKeyError::InvalidEncoding)
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
@@ -57,10 +59,15 @@ impl super::PublicKey for PublicKey {
 }
 
 impl BorshDeserialize for PublicKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        use libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE;
         // deserialize the bytes first
+
+        let buf: &mut [u8; COMPRESSED_PUBLIC_KEY_SIZE] =
+            &mut [0u8; COMPRESSED_PUBLIC_KEY_SIZE];
+        reader.read_exact(buf)?;
         let pk = libsecp256k1::PublicKey::parse_compressed(
-            buf.get(0..libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE)
+            buf.get(0..COMPRESSED_PUBLIC_KEY_SIZE)
                 .ok_or_else(|| std::io::Error::from(ErrorKind::UnexpectedEof))?
                 .try_into()
                 .unwrap(),
@@ -71,7 +78,6 @@ impl BorshDeserialize for PublicKey {
                 format!("Error decoding secp256k1 public key: {}", e),
             )
         })?;
-        *buf = &buf[libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE..];
         Ok(PublicKey(pk))
     }
 }
@@ -85,7 +91,7 @@ impl BorshSerialize for PublicKey {
 
 impl BorshSchema for PublicKey {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -184,7 +190,7 @@ impl super::SecretKey for SecretKey {
                 _ => Err(ParseSecretKeyError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParseSecretKeyError::InvalidEncoding)
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
@@ -216,11 +222,11 @@ impl<'de> Deserialize<'de> for SecretKey {
 }
 
 impl BorshDeserialize for SecretKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         // deserialize the bytes first
         Ok(SecretKey(Box::new(
             libsecp256k1::SecretKey::parse(
-                &(BorshDeserialize::deserialize(buf)?),
+                &(BorshDeserialize::deserialize_reader(reader)?),
             )
             .map_err(|e| {
                 std::io::Error::new(
@@ -240,7 +246,7 @@ impl BorshSerialize for SecretKey {
 
 impl BorshSchema for SecretKey {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -297,7 +303,7 @@ impl super::Signature for Signature {
                 _ => Err(ParseSignatureError::MismatchedScheme),
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice())
+            Self::try_from_slice(pk.serialize_to_vec().as_slice())
                 .map_err(ParseSignatureError::InvalidEncoding)
         } else {
             Err(ParseSignatureError::MismatchedScheme)
@@ -371,9 +377,10 @@ impl<'de> Deserialize<'de> for Signature {
 }
 
 impl BorshDeserialize for Signature {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         // deserialize the bytes first
-        let (sig_bytes, recovery_id) = BorshDeserialize::deserialize(buf)?;
+        let (sig_bytes, recovery_id) =
+            BorshDeserialize::deserialize_reader(reader)?;
 
         Ok(Signature(
             libsecp256k1::Signature::parse_standard(&sig_bytes).map_err(
@@ -405,7 +412,7 @@ impl BorshSerialize for Signature {
 
 impl BorshSchema for Signature {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -669,7 +676,7 @@ mod test {
         let to_sign = "test".as_bytes();
         let mut signature = SigScheme::sign(&sk, to_sign);
         signature.1 = RecoveryId::parse(3).expect("Test failed");
-        let sig_bytes = signature.try_to_vec().expect("Test failed");
+        let sig_bytes = signature.serialize_to_vec();
         let sig = Signature::try_from_slice(sig_bytes.as_slice())
             .expect("Test failed");
         assert_eq!(sig, signature);

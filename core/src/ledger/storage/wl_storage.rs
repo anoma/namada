@@ -504,7 +504,8 @@ where
 mod tests {
     use std::collections::BTreeMap;
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh_ext::BorshSerializeExt;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to
@@ -638,16 +639,16 @@ mod tests {
                 | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
                 }
                 Level::TxWriteLog(WlMod::Write(val)) => {
-                    s.write_log.write(key, val.try_to_vec().unwrap()).unwrap();
+                    s.write_log.write(key, val.serialize_to_vec()).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Write(val)) => {
                     s.write_log
                         // protocol only writes at block level
-                        .protocol_write(key, val.try_to_vec().unwrap())
+                        .protocol_write(key, val.serialize_to_vec())
                         .unwrap();
                 }
                 Level::Storage(val) => {
-                    s.storage.write(key, val.try_to_vec().unwrap()).unwrap();
+                    s.storage.write(key, val.serialize_to_vec()).unwrap();
                 }
             }
         }

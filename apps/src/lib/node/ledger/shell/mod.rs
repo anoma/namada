@@ -26,7 +26,8 @@ use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::eth_bridge;
@@ -93,10 +94,10 @@ fn key_to_tendermint(
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
     match pk {
         common::PublicKey::Ed25519(_) => ed25519::PublicKey::try_from_pk(pk)
-            .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap())),
+            .map(|pk| public_key::Sum::Ed25519(pk.serialize_to_vec())),
         common::PublicKey::Secp256k1(_) => {
             secp256k1::PublicKey::try_from_pk(pk)
-                .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap()))
+                .map(|pk| public_key::Sum::Secp256k1(pk.serialize_to_vec()))
         }
     }
 }
@@ -1973,7 +1974,7 @@ mod test_utils {
             .wl_storage
             .write_bytes(
                 &active_key(),
-                EthBridgeStatus::Disabled.try_to_vec().expect("Test failed"),
+                EthBridgeStatus::Disabled.serialize_to_vec(),
             )
             .expect("Test failed");
     }
@@ -2307,7 +2308,7 @@ mod abciplus_mempool_tests {
                 })));
             // invalid tx type, it doesn't match the
             // tx type declared in the header
-            tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
+            tx.set_data(Data::new(ext.serialize_to_vec()));
             tx.add_section(Section::Signature(Signature::new(
                 tx.sechashes(),
                 [(0, protocol_key)].into_iter().collect(),

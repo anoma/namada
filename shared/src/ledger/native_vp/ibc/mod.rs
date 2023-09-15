@@ -291,7 +291,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::gas::TxGasMeter;
     use prost::Message;
     use sha2::Digest;
@@ -423,7 +423,7 @@ mod tests {
         };
         wl_storage
             .write_log
-            .write(&epoch_duration_key, epoch_duration.try_to_vec().unwrap())
+            .write(&epoch_duration_key, epoch_duration.serialize_to_vec())
             .expect("write failed");
         // max_expected_time_per_block
         let time = DurationSecs::from(Duration::new(60, 0));
@@ -1004,7 +1004,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.try_to_vec().expect("encoding failed");
+        let bytes = conn_list.serialize_to_vec();
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
@@ -1115,7 +1115,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.try_to_vec().expect("encoding failed");
+        let bytes = conn_list.serialize_to_vec();
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
@@ -1230,7 +1230,7 @@ mod tests {
         // client connection list
         let client_conn_key = client_connections_key(&msg.client_id_on_b);
         let conn_list = conn_id.to_string();
-        let bytes = conn_list.try_to_vec().expect("encoding failed");
+        let bytes = conn_list.serialize_to_vec();
         wl_storage
             .write_log
             .write(&client_conn_key, bytes)
@@ -1981,7 +1981,7 @@ mod tests {
         let amount = Amount::native_whole(100);
         wl_storage
             .write_log
-            .write(&balance_key, amount.try_to_vec().unwrap())
+            .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
@@ -2192,7 +2192,7 @@ mod tests {
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
         let denom_key = ibc_denom_key(&trace_hash);
-        let bytes = coin.denom.to_string().try_to_vec().unwrap();
+        let bytes = coin.denom.to_string().serialize_to_vec();
         wl_storage
             .write_log
             .write(&denom_key, bytes)
@@ -2455,7 +2455,7 @@ mod tests {
         let amount = Amount::native_whole(100);
         wl_storage
             .write_log
-            .write(&balance_key, amount.try_to_vec().unwrap())
+            .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
         // commitment
         let transfer_msg = MsgTransfer {
@@ -2606,7 +2606,7 @@ mod tests {
         let amount = Amount::native_whole(100);
         wl_storage
             .write_log
-            .write(&balance_key, amount.try_to_vec().unwrap())
+            .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
         // commitment
         let sender = established_address_1();

@@ -749,6 +749,7 @@ impl From<Amount> for Uint {
 )]
 #[repr(u8)]
 #[allow(missing_docs)]
+#[borsh(use_discriminant = true)]
 pub enum MaspDenom {
     Zero = 0,
     One,

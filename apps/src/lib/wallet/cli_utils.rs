@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::sdk::masp::find_valid_diversifier;
@@ -426,9 +426,7 @@ pub fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     wallet
         .find_key(alias.to_lowercase(), None)
         .map(|keypair| {
-            let file_data = keypair
-                .try_to_vec()
-                .expect("Encoding keypair shouldn't fail");
+            let file_data = keypair.serialize_to_vec();
             let file_name = format!("key_{}", alias.to_lowercase());
             let mut file = File::create(&file_name).unwrap();
 

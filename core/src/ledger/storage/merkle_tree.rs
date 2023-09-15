@@ -8,6 +8,7 @@ use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use thiserror::Error;
@@ -152,13 +153,12 @@ impl<'a> StoreRef<'a> {
     /// Borsh Seriliaze the backing stores of our Merkle tree.
     pub fn encode(&self) -> Vec<u8> {
         match self {
-            Self::Base(store) => store.try_to_vec(),
-            Self::Account(store) => store.try_to_vec(),
-            Self::Ibc(store) => store.try_to_vec(),
-            Self::PoS(store) => store.try_to_vec(),
-            Self::BridgePool(store) => store.try_to_vec(),
+            Self::Base(store) => store.serialize_to_vec(),
+            Self::Account(store) => store.serialize_to_vec(),
+            Self::Ibc(store) => store.serialize_to_vec(),
+            Self::PoS(store) => store.serialize_to_vec(),
+            Self::BridgePool(store) => store.serialize_to_vec(),
         }
-        .expect("Serialization failed")
     }
 }
 

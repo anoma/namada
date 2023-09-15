@@ -2,7 +2,8 @@
 mod test_bridge_pool_vp {
     use std::path::PathBuf;
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh_ext::BorshSerializeExt;
     use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada::ledger::eth_bridge::{
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeConfig,
@@ -124,7 +125,7 @@ mod test_bridge_pool_vp {
     }
 
     fn create_tx(transfer: PendingTransfer, keypair: &common::SecretKey) -> Tx {
-        let data = transfer.try_to_vec().expect("Test failed");
+        let data = transfer.serialize_to_vec();
         let wasm_code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
 

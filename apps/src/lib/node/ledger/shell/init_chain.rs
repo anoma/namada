@@ -53,7 +53,7 @@ where
             genesis::genesis(&self.base_dir, &self.wl_storage.storage.chain_id);
         #[cfg(not(any(test, feature = "dev")))]
         {
-            let genesis_bytes = genesis.try_to_vec().unwrap();
+            let genesis_bytes = genesis.serialize_to_vec();
             let errors =
                 self.wl_storage.storage.chain_id.validate(genesis_bytes);
             use itertools::Itertools;
@@ -210,7 +210,7 @@ where
             self.wl_storage
                 .write_bytes(
                     &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.try_to_vec().unwrap(),
+                    EthBridgeStatus::Disabled.serialize_to_vec(),
                 )
                 .unwrap();
         }

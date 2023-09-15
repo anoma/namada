@@ -6,6 +6,7 @@ use std::ops::{Add, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
 use eyre::{eyre, Context};
@@ -308,7 +309,7 @@ pub enum EthereumEvent {
 impl EthereumEvent {
     /// SHA256 of the Borsh serialization of the [`EthereumEvent`].
     pub fn hash(&self) -> Result<Hash, std::io::Error> {
-        let bytes = self.try_to_vec()?;
+        let bytes = self.serialize_to_vec();
         Ok(Hash::sha256(bytes))
     }
 }
