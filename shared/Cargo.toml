@@ -99,6 +99,7 @@ namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 async-trait = {version = "0.1.51", optional = true}
 bimap.workspace = true
 borsh.workspace = true
+borsh-ext.workspace = true
 circular-queue.workspace = true
 clru.workspace = true
 data-encoding.workspace = true

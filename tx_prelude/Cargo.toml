@@ -26,6 +26,7 @@ namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_vm_env = {path = "../vm_env", default-features = false}
 borsh.workspace = true
+borsh-ext.workspace = true
 masp_primitives.workspace = true
 sha2.workspace = true
 thiserror.workspace = true

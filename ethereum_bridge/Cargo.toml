@@ -33,6 +33,7 @@ namada_core = {path = "../core", default-features = false, features = ["secp256k
 namada_macros = {path = "../macros"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 borsh.workspace = true
+borsh-ext.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true

@@ -58,6 +58,7 @@ tracing.workspace = true
 namada_apps = {path = "../apps", features = ["testing"]}
 assert_cmd.workspace = true
 borsh.workspace = true
+borsh-ext.workspace = true
 color-eyre.workspace = true
 data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests

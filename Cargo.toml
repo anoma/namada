@@ -53,6 +53,7 @@ blake2b-rs = "0.2.0"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.0.0-alpha.4", features = ["schema", "derive"]}
+borsh-ext = {tag = "v1.0.0-alpha.4", git = "https://github.com/heliaxdev/borsh-ext"}
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
 clap = "4.3.4"
