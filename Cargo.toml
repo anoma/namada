@@ -58,7 +58,7 @@ chrono = {version = "0.4.22", default-features = false, features = ["clock", "st
 circular-queue = "0.2.6"
 clap = "4.3.4"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
-color-eyre = "0.5.10"
+color-eyre = "0.6.2"
 concat-idents = "1.1.2"
 config = "0.11.0"
 data-encoding = "2.3.2"
