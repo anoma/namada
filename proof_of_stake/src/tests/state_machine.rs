@@ -2972,6 +2972,12 @@ impl AbstractPosState {
                         modified_redelegation.validators_to_remove.clone();
                     updated_vals_to_remove.remove(val_to_modify);
 
+                    // Remove the updated_vals_to_remove keys from the
+                    // redelegated_bonds map first
+                    for val in &updated_vals_to_remove {
+                        rbonds.remove(val);
+                    }
+
                     if let Some(epoch_to_modify) =
                         modified_redelegation.epoch_to_modify
                     {
@@ -2987,14 +2993,7 @@ impl AbstractPosState {
                             epoch_to_modify,
                             modified_redelegation.new_amount.unwrap(),
                         );
-                        // Then, remove the updated_vals_to_remove keys from the
-                        // redelegated_bonds map before doing...
                     } else {
-                        // Remove the updated_vals_to_remove keys from the
-                        // redelegated_bonds map first
-                        for val in &updated_vals_to_remove {
-                            rbonds.remove(val);
-                        }
                         // Then remove to epochs_to_remove from the redelegated
                         // bonds of the val_to_modify
                         let val_bonds_to_modify =
