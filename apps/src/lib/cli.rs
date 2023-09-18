@@ -1898,6 +1898,7 @@ pub mod cmds {
     pub enum Utils {
         JoinNetwork(JoinNetwork),
         FetchWasms(FetchWasms),
+        ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
@@ -1913,6 +1914,8 @@ pub mod cmds {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
                 let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
+                let validate_wasm =
+                    SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
                     SubCmd::parse(matches).map(Self::InitNetwork);
                 let init_genesis =
@@ -1924,6 +1927,7 @@ pub mod cmds {
                 let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
                 join_network
                     .or(fetch_wasms)
+                    .or(validate_wasm)
                     .or(init_network)
                     .or(init_genesis)
                     .or(pk_to_tm_address)
@@ -1937,6 +1941,7 @@ pub mod cmds {
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
                 .subcommand(FetchWasms::def())
+                .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
@@ -1982,6 +1987,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Ensure pre-built wasms are present")
                 .add_args::<args::FetchWasms>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateWasm(pub args::ValidateWasm);
+
+    impl SubCmd for ValidateWasm {
+        const CMD: &'static str = "validate-wasm";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::ValidateWasm::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Check that the provided wasm code is valid by the Namada \
+                     standards.",
+                )
+                .add_args::<args::ValidateWasm>()
         }
     }
 
@@ -5478,6 +5505,26 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct ValidateWasm {
+        pub code_path: PathBuf,
+    }
+
+    impl Args for ValidateWasm {
+        fn parse(matches: &ArgMatches) -> Self {
+            let code_path = CODE_PATH.parse(matches);
+            Self { code_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                CODE_PATH
+                    .def()
+                    .help("The path to the wasm file to validate."),
+            )
         }
     }
 
