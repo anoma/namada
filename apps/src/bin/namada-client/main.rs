@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use namada_apps::cli::api::CliApi;
+use namada_apps::cli::api::{CliApi, CliIo};
 use namada_apps::facade::tendermint_rpc::HttpClient;
 use namada_apps::{cli, logging};
 use tracing_subscriber::filter::LevelFilter;
@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let _log_guard = logging::init_from_env_or(LevelFilter::INFO)?;
 
     // run the CLI
-    CliApi::<()>::handle_client_command::<HttpClient>(
+    CliApi::<CliIo>::handle_client_command::<HttpClient>(
         None,
         cli::namada_client_cli()?,
     )

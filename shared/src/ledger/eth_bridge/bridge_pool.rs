@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::Write;
 use std::sync::Arc;
 
 use borsh::BorshSerialize;
@@ -37,15 +36,18 @@ use crate::types::eth_abi::Encode;
 use crate::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
 };
+use crate::types::io::Io;
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
+use crate::{display, display_line};
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -65,7 +67,7 @@ pub async fn build_bridge_pool_tx<
     wrapper_fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>), Error> {
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
-    let DenominatedAmount { amount, .. } = validate_amount(
+    let DenominatedAmount { amount, .. } = validate_amount::<_, IO>(
         client,
         amount,
         &wrapped_erc20s::token(&asset),
@@ -75,7 +77,7 @@ pub async fn build_bridge_pool_tx<
     .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
     let DenominatedAmount {
         amount: fee_amount, ..
-    } = validate_amount(client, fee_amount, &fee_token, tx_args.force)
+    } = validate_amount::<_, IO>(client, fee_amount, &fee_token, tx_args.force)
         .await
         .map_err(|e| {
             Error::Other(format!(
@@ -103,7 +105,7 @@ pub async fn build_bridge_pool_tx<
     };
 
     let tx_code_hash =
-        query_wasm_code_hash(client, code_path.to_str().unwrap())
+        query_wasm_code_hash::<_, IO>(client, code_path.to_str().unwrap())
             .await
             .unwrap();
 
@@ -113,7 +115,7 @@ pub async fn build_bridge_pool_tx<
 
     // TODO(namada#1800): validate the tx on the client side
 
-    let epoch = prepare_tx::<C, U, V>(
+    let epoch = prepare_tx::<C, U, V, IO>(
         client,
         wallet,
         shielded,
@@ -138,7 +140,7 @@ struct BridgePoolResponse {
 
 /// Query the contents of the Ethereum bridge pool.
 /// Prints out a json payload.
-pub async fn query_bridge_pool<C>(client: &C)
+pub async fn query_bridge_pool<C, IO: Io>(client: &C)
 where
     C: Client + Sync,
 {
@@ -153,19 +155,19 @@ where
         .map(|transfer| (transfer.keccak256().to_string(), transfer))
         .collect();
     if pool_contents.is_empty() {
-        println!("Bridge pool is empty.");
+        display_line!(IO, "Bridge pool is empty.");
         return;
     }
     let contents = BridgePoolResponse {
         bridge_pool_contents: pool_contents,
     };
-    println!("{}", serde_json::to_string_pretty(&contents).unwrap());
+    display_line!(IO, "{}", serde_json::to_string_pretty(&contents).unwrap());
 }
 
 /// Query the contents of the Ethereum bridge pool that
 /// is covered by the latest signed root.
 /// Prints out a json payload.
-pub async fn query_signed_bridge_pool<C>(
+pub async fn query_signed_bridge_pool<C, IO: Io>(
     client: &C,
 ) -> Halt<HashMap<String, PendingTransfer>>
 where
@@ -182,13 +184,13 @@ where
         .map(|transfer| (transfer.keccak256().to_string(), transfer))
         .collect();
     if pool_contents.is_empty() {
-        println!("Bridge pool is empty.");
+        display_line!(IO, "Bridge pool is empty.");
         return control_flow::halt();
     }
     let contents = BridgePoolResponse {
         bridge_pool_contents: pool_contents.clone(),
     };
-    println!("{}", serde_json::to_string_pretty(&contents).unwrap());
+    display_line!(IO, "{}", serde_json::to_string_pretty(&contents).unwrap());
     control_flow::proceed(pool_contents)
 }
 
@@ -197,7 +199,7 @@ where
 /// backing each `TransferToEthereum` event.
 ///
 /// Prints a json payload.
-pub async fn query_relay_progress<C>(client: &C)
+pub async fn query_relay_progress<C, IO: Io>(client: &C)
 where
     C: Client + Sync,
 {
@@ -207,12 +209,12 @@ where
         .transfer_to_ethereum_progress(client)
         .await
         .unwrap();
-    println!("{}", serde_json::to_string_pretty(&resp).unwrap());
+    display_line!(IO, "{}", serde_json::to_string_pretty(&resp).unwrap());
 }
 
 /// Internal methdod to construct a proof that a set of transfers are in the
 /// bridge pool.
-async fn construct_bridge_pool_proof<C>(
+async fn construct_bridge_pool_proof<C, IO: Io>(
     client: &C,
     args: GenBridgePoolProofReq<'_, '_>,
 ) -> Halt<GenBridgePoolProofRsp>
@@ -242,27 +244,29 @@ where
         let warning = "Warning".on_yellow();
         let warning = warning.bold();
         let warning = warning.blink();
-        println!(
+        display_line!(
+            IO,
             "{warning}: The following hashes correspond to transfers that \
              have surpassed the security threshold in Namada, therefore have \
              likely been relayed to Ethereum, but do not yet have a quorum of \
              validator signatures behind them in Namada; thus they are still \
              in the Bridge pool:\n{warnings:?}",
         );
-        print!("\nDo you wish to proceed? (y/n): ");
-        std::io::stdout().flush().unwrap();
+        display!(IO, "\nDo you wish to proceed? (y/n): ");
+        IO::flush();
         loop {
-            let mut buffer = String::new();
-            let stdin = std::io::stdin();
-            stdin.read_line(&mut buffer).try_halt(|e| {
-                println!("Encountered error reading from STDIN: {e:?}");
+            let resp = IO::read().await.try_halt(|e| {
+                display_line!(
+                    IO,
+                    "Encountered error reading from STDIN: {e:?}"
+                );
             })?;
-            match buffer.trim() {
+            match resp.trim() {
                 "y" => break,
                 "n" => return control_flow::halt(),
                 _ => {
-                    print!("Expected 'y' or 'n'. Please try again: ");
-                    std::io::stdout().flush().unwrap();
+                    display!(IO, "Expected 'y' or 'n'. Please try again: ");
+                    IO::flush();
                 }
             }
         }
@@ -276,7 +280,7 @@ where
         .await;
 
     response.map(|response| response.data).try_halt(|e| {
-        println!("Encountered error constructing proof:\n{e}");
+        display_line!(IO, "Encountered error constructing proof:\n{:?}", e);
     })
 }
 
@@ -292,7 +296,7 @@ struct BridgePoolProofResponse {
 /// Construct a merkle proof of a batch of transfers in
 /// the bridge pool and return it to the user (as opposed
 /// to relaying it to ethereum).
-pub async fn construct_proof<C>(
+pub async fn construct_proof<C, IO: Io>(
     client: &C,
     args: args::BridgePoolProof,
 ) -> Halt<()>
@@ -302,7 +306,7 @@ where
     let GenBridgePoolProofRsp {
         abi_encoded_proof: bp_proof_bytes,
         appendices,
-    } = construct_bridge_pool_proof(
+    } = construct_bridge_pool_proof::<_, IO>(
         client,
         GenBridgePoolProofReq {
             transfers: args.transfers.as_slice().into(),
@@ -332,12 +336,12 @@ where
             .unwrap_or_default(),
         abi_encoded_proof: bp_proof_bytes,
     };
-    println!("{}", serde_json::to_string(&resp).unwrap());
+    display_line!(IO, "{}", serde_json::to_string(&resp).unwrap());
     control_flow::proceed(())
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_bridge_pool_proof<C, E>(
+pub async fn relay_bridge_pool_proof<C, E, IO: Io>(
     eth_client: Arc<E>,
     nam_client: &C,
     args: args::RelayBridgePoolProof,
@@ -350,7 +354,7 @@ where
     let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
-        block_on_eth_sync(
+        block_on_eth_sync::<_, IO>(
             &*eth_client,
             BlockOnEthSync {
                 deadline: Instant::now() + Duration::from_secs(60),
@@ -359,13 +363,13 @@ where
         )
         .await?;
     } else {
-        eth_sync_or_exit(&*eth_client).await?;
+        eth_sync_or_exit::<_, IO>(&*eth_client).await?;
     }
 
     let GenBridgePoolProofRsp {
         abi_encoded_proof: bp_proof,
         ..
-    } = construct_bridge_pool_proof(
+    } = construct_bridge_pool_proof::<_, IO>(
         nam_client,
         GenBridgePoolProofReq {
             transfers: Cow::Owned(args.transfers),
@@ -385,7 +389,8 @@ where
             let error = "Error".on_red();
             let error = error.bold();
             let error = error.blink();
-            println!(
+            display_line!(
+                IO,
                 "{error}: Failed to retrieve the Ethereum Bridge smart \
                  contract address from storage with \
                  reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
@@ -397,7 +402,11 @@ where
 
     let bp_proof: RelayProof =
         AbiDecode::decode(&bp_proof).try_halt(|error| {
-            println!("Unable to decode the generated proof: {:?}", error);
+            display_line!(
+                IO,
+                "Unable to decode the generated proof: {:?}",
+                error
+            );
         })?;
 
     // NOTE: this operation costs no gas on Ethereum
@@ -410,7 +419,8 @@ where
             let error = "Error".on_red();
             let error = error.bold();
             let error = error.blink();
-            println!(
+            display_line!(
+                IO,
                 "{error}: The Bridge pool nonce in the smart contract is \
                  {contract_nonce}, while the nonce in Namada is still {}. A \
                  relay of the former one has already happened, but a proof \
@@ -423,7 +433,8 @@ where
             let error = "Error".on_red();
             let error = error.bold();
             let error = error.blink();
-            println!(
+            display_line!(
+                IO,
                 "{error}: The Bridge pool nonce in the smart contract is \
                  {contract_nonce}, while the nonce in Namada is still {}. \
                  Somehow, Namada's nonce is ahead of the contract's nonce!",
@@ -450,7 +461,7 @@ where
         .await
         .unwrap();
 
-    println!("{transf_result:?}");
+    display_line!(IO, "{transf_result:?}");
     control_flow::proceed(())
 }
 
@@ -461,11 +472,13 @@ mod recommendations {
     use namada_core::types::uint::{self, Uint, I256};
 
     use super::*;
+    use crate::edisplay_line;
     use crate::eth_bridge::storage::bridge_pool::{
         get_nonce_key, get_signed_root_key,
     };
     use crate::eth_bridge::storage::proof::BridgePoolRootProof;
     use crate::types::ethereum_events::Uint as EthUint;
+    use crate::types::io::Io;
     use crate::types::storage::BlockHeight;
     use crate::types::vote_extensions::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
@@ -547,7 +560,7 @@ mod recommendations {
     /// Recommend the most economical batch of transfers to relay based
     /// on a conversion rate estimates from NAM to ETH and gas usage
     /// heuristics.
-    pub async fn recommend_batch<C>(
+    pub async fn recommend_batch<C, IO: Io>(
         client: &C,
         args: args::RecommendBatch,
     ) -> Halt<()>
@@ -580,12 +593,15 @@ mod recommendations {
                     )
                     .await
                     .try_halt(|err| {
-                        eprintln!("Failed to query Bridge pool proof: {err}");
+                        edisplay_line!(
+                            IO,
+                            "Failed to query Bridge pool proof: {err}"
+                        );
                     })?
                     .data,
             )
             .try_halt(|err| {
-                eprintln!("Failed to decode Bridge pool proof: {err}");
+                edisplay_line!(IO, "Failed to decode Bridge pool proof: {err}");
             })?;
 
         // get the latest bridge pool nonce
@@ -594,16 +610,20 @@ mod recommendations {
                 .storage_value(client, None, None, false, &get_nonce_key())
                 .await
                 .try_halt(|err| {
-                    eprintln!("Failed to query Bridge pool nonce: {err}");
+                    edisplay_line!(
+                        IO,
+                        "Failed to query Bridge pool nonce: {err}"
+                    );
                 })?
                 .data,
         )
         .try_halt(|err| {
-            eprintln!("Failed to decode Bridge pool nonce: {err}");
+            edisplay_line!(IO, "Failed to decode Bridge pool nonce: {err}");
         })?;
 
         if latest_bp_nonce != bp_root.data.1 {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "The signed Bridge pool nonce is not up to date, repeat this \
                  query at a later time"
             );
@@ -627,17 +647,17 @@ mod recommendations {
             + valset_fee() * valset_size;
 
         // we don't recommend transfers that have already been relayed
-        let eligible = generate_eligible(
+        let eligible = generate_eligible::<IO>(
             &args.conversion_table,
             &in_progress,
-            query_signed_bridge_pool(client).await?,
+            query_signed_bridge_pool::<_, IO>(client).await?,
         )?;
 
         let max_gas =
             args.max_gas.map(Uint::from_u64).unwrap_or(uint::MAX_VALUE);
         let max_cost = args.gas.map(I256::from).unwrap_or_default();
 
-        generate_recommendations(
+        generate_recommendations::<IO>(
             eligible,
             &args.conversion_table,
             validator_gas,
@@ -651,17 +671,22 @@ mod recommendations {
                  net_profit,
                  bridge_pool_gas_fees,
              }| {
-                println!("Recommended batch: {transfer_hashes:#?}");
-                println!(
+                display_line!(IO, "Recommended batch: {transfer_hashes:#?}");
+                display_line!(
+                    IO,
                     "Estimated Ethereum transaction gas (in gwei): \
                      {ethereum_gas_fees}",
                 );
-                println!("Estimated net profit (in gwei): {net_profit}");
-                println!("Total fees: {bridge_pool_gas_fees:#?}");
+                display_line!(
+                    IO,
+                    "Estimated net profit (in gwei): {net_profit}"
+                );
+                display_line!(IO, "Total fees: {bridge_pool_gas_fees:#?}");
             },
         )
         .unwrap_or_else(|| {
-            println!(
+            display_line!(
+                IO,
                 "Unable to find a recommendation satisfying the input \
                  parameters."
             );
@@ -705,7 +730,7 @@ mod recommendations {
     }
 
     /// Generate eligible recommendations.
-    fn generate_eligible(
+    fn generate_eligible<IO: Io>(
         conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         in_progress: &BTreeSet<String>,
         signed_pool: HashMap<String, PendingTransfer>,
@@ -721,21 +746,24 @@ mod recommendations {
                     .get(&pending.gas_fee.token)
                     .and_then(|entry| match entry.conversion_rate {
                         r if r == 0.0f64 => {
-                            eprintln!(
+                            edisplay_line!(
+                                IO,
                                 "{}: Ignoring null conversion rate",
                                 pending.gas_fee.token,
                             );
                             None
                         }
                         r if r < 0.0f64 => {
-                            eprintln!(
+                            edisplay_line!(
+                                IO,
                                 "{}: Ignoring negative conversion rate: {r:.1}",
                                 pending.gas_fee.token,
                             );
                             None
                         }
                         r if r > 1e9 => {
-                            eprintln!(
+                            edisplay_line!(
+                                IO,
                                 "{}: Ignoring high conversion rate: {r:.1} > \
                                  10^9",
                                 pending.gas_fee.token,
@@ -785,7 +813,7 @@ mod recommendations {
 
     /// Generates the actual recommendation from restrictions given by the
     /// input parameters.
-    fn generate_recommendations(
+    fn generate_recommendations<IO: Io>(
         contents: Vec<EligibleRecommendation>,
         conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         validator_gas: Uint,
@@ -853,6 +881,11 @@ mod recommendations {
                     bridge_pool_gas_fees: total_fees,
                 })
             } else {
+                display_line!(
+                    IO,
+                    "Unable to find a recommendation satisfying the input \
+                     parameters."
+                );
                 None
             },
         )
@@ -882,6 +915,7 @@ mod recommendations {
 
         use super::*;
         use crate::types::control_flow::ProceedOrElse;
+        use crate::types::io::DefaultIo;
 
         /// An established user address for testing & development
         pub fn bertha_address() -> Address {
@@ -987,8 +1021,12 @@ mod recommendations {
                 signed_pool: &mut signed_pool,
                 expected_eligible: &mut expected,
             });
-            let eligible =
-                generate_eligible(&table, &in_progress, signed_pool).proceed();
+            let eligible = generate_eligible::<DefaultIo>(
+                &table,
+                &in_progress,
+                signed_pool,
+            )
+            .proceed();
             assert_eq!(eligible, expected);
             eligible
         }
@@ -1078,7 +1116,7 @@ mod recommendations {
             let profitable = vec![transfer(100_000); 17];
             let hash = profitable[0].keccak256().to_string();
             let expected = vec![hash; 17];
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(profitable),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -1097,7 +1135,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             transfers.push(transfer(0));
             let expected: Vec<_> = vec![hash; 17];
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -1115,7 +1153,7 @@ mod recommendations {
             let transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 2];
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(50_000),
@@ -1137,7 +1175,7 @@ mod recommendations {
                 .map(|t| t.keccak256().to_string())
                 .take(5)
                 .collect();
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -1156,7 +1194,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 4];
             transfers.extend([transfer(17_500), transfer(17_500)]);
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -1172,7 +1210,7 @@ mod recommendations {
         #[test]
         fn test_wholly_infeasible() {
             let transfers = vec![transfer(75_000); 4];
-            let recommendation = generate_recommendations(
+            let recommendation = generate_recommendations::<DefaultIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(300_000),
@@ -1253,7 +1291,7 @@ mod recommendations {
 
             const VALIDATOR_GAS_FEE: Uint = Uint::from_u64(100_000);
 
-            let recommended_batch = generate_recommendations(
+            let recommended_batch = generate_recommendations::<DefaultIo>(
                 eligible,
                 &conversion_table,
                 // gas spent by validator signature checks

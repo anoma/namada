@@ -1,5 +1,4 @@
 //! Functions to sign transactions
-
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
@@ -41,9 +40,12 @@ use crate::sdk::tx::{
     TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
-pub use crate::sdk::wallet::store::AddressVpType;
-use crate::sdk::wallet::{Wallet, WalletUtils};
-use crate::sdk::{args, rpc};
+pub use crate::ledger::wallet::store::AddressVpType;
+use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::ledger::{args, rpc};
+use crate::proto::{MaspBuilder, Section, Tx};
+use crate::types::error::{EncodingError, Error, TxError};
+use crate::types::io::*;
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::Epoch;
@@ -54,6 +56,7 @@ use crate::types::transaction::governance::{
 };
 use crate::types::transaction::pos::InitValidator;
 use crate::types::transaction::{Fee, TxType};
+use crate::{display_line, edisplay_line};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -79,7 +82,11 @@ pub struct SigningTxData {
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_pk<C: crate::sdk::queries::Client + Sync, U: WalletUtils>(
+pub async fn find_pk<
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    IO: Io,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,
@@ -87,7 +94,8 @@ pub async fn find_pk<C: crate::sdk::queries::Client + Sync, U: WalletUtils>(
 ) -> Result<common::PublicKey, Error> {
     match addr {
         Address::Established(_) => {
-            println!(
+            display_line!(
+                IO,
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
@@ -148,6 +156,7 @@ pub fn find_key_by_pk<U: WalletUtils>(
 pub async fn tx_signers<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -170,7 +179,7 @@ pub async fn tx_signers<
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
 
         Some(signer) => Ok(vec![
-            find_pk::<C, U>(client, wallet, &signer, args.password.clone())
+            find_pk::<C, U, IO>(client, wallet, &signer, args.password.clone())
                 .await?,
         ]),
         None => other_err(
@@ -232,6 +241,7 @@ pub fn sign_tx<U: WalletUtils>(
 pub async fn aux_signing_data<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -240,7 +250,8 @@ pub async fn aux_signing_data<
     default_signer: Option<Address>,
 ) -> Result<SigningTxData, Error> {
     let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
-        tx_signers::<C, U>(client, wallet, args, default_signer.clone()).await?
+        tx_signers::<C, U, IO>(client, wallet, args, default_signer.clone())
+            .await?
     } else {
         vec![]
     };
@@ -293,7 +304,10 @@ pub async fn aux_signing_data<
 #[cfg(not(feature = "mainnet"))]
 /// Solve the PoW challenge if balance is insufficient to pay transaction fees
 /// or if solution is explicitly requested.
-pub async fn solve_pow_challenge<C: crate::sdk::queries::Client + Sync>(
+pub async fn solve_pow_challenge<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     args: &args::Tx,
     requires_pow: bool,
@@ -307,8 +321,10 @@ pub async fn solve_pow_challenge<C: crate::sdk::queries::Client + Sync>(
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(client, &token_addr, total_fee).await,
-            format_denominated_amount(client, &token_addr, balance).await,
+            format_denominated_amount::<_, IO>(client, &token_addr, total_fee)
+                .await,
+            format_denominated_amount::<_, IO>(client, &token_addr, balance)
+                .await,
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
@@ -318,7 +334,10 @@ pub async fn solve_pow_challenge<C: crate::sdk::queries::Client + Sync>(
     // If the address derived from the keypair doesn't have enough balance
     // to pay for the fee, allow to find a PoW solution instead.
     if (requires_pow || !is_bal_sufficient) && !args.dump_tx {
-        println!("The transaction requires the completion of a PoW challenge.");
+        display_line!(
+            IO,
+            "The transaction requires the completion of a PoW challenge."
+        );
         // Obtain a PoW challenge for faucet withdrawal
         let challenge = rpc::get_testnet_pow_challenge(client, source).await;
 
@@ -332,7 +351,10 @@ pub async fn solve_pow_challenge<C: crate::sdk::queries::Client + Sync>(
 
 #[cfg(not(feature = "mainnet"))]
 /// Update the PoW challenge inside the given transaction
-pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
+pub async fn update_pow_challenge<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     args: &args::Tx,
     tx: &mut Tx,
@@ -352,7 +374,8 @@ pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
     }) {
         Ok(amount) => amount,
         Err(_e) => {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "Could not retrieve the gas cost for token {}",
                 args.fee_token
             );
@@ -365,10 +388,14 @@ pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
     };
     let fee_amount = match args.fee_amount {
         Some(amount) => {
-            let validated_fee_amount =
-                validate_amount(client, amount, &args.fee_token, args.force)
-                    .await
-                    .expect("Expected to be able to validate fee");
+            let validated_fee_amount = validate_amount::<_, IO>(
+                client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
 
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
@@ -377,7 +404,8 @@ pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
                 amount
             } else if !args.force {
                 // Update the fee amount if it's not enough
-                println!(
+                display_line!(
+                    IO,
                     "The provided gas price {} is less than the minimum \
                      amount required {}, changing it to match the minimum",
                     amount.to_string_native(),
@@ -399,7 +427,7 @@ pub async fn update_pow_challenge<C: crate::sdk::queries::Client + Sync>(
             .unwrap_or_default();
 
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
-        let pow_solution = solve_pow_challenge(
+        let pow_solution = solve_pow_challenge::<_, IO>(
             client,
             args,
             requires_pow,
@@ -434,6 +462,7 @@ pub struct TxSourcePostBalance {
 pub async fn wrap_tx<
     C: crate::sdk::queries::Client + Sync,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     shielded: &mut ShieldedContext<V>,
@@ -459,7 +488,8 @@ pub async fn wrap_tx<
     }) {
         Ok(amount) => amount,
         Err(_e) => {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "Could not retrieve the gas cost for token {}",
                 args.fee_token
             );
@@ -472,10 +502,14 @@ pub async fn wrap_tx<
     };
     let fee_amount = match args.fee_amount {
         Some(amount) => {
-            let validated_fee_amount =
-                validate_amount(client, amount, &args.fee_token, args.force)
-                    .await
-                    .expect("Expected to be able to validate fee");
+            let validated_fee_amount = validate_amount::<_, IO>(
+                client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
 
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
@@ -484,7 +518,8 @@ pub async fn wrap_tx<
                 amount
             } else if !args.force {
                 // Update the fee amount if it's not enough
-                println!(
+                display_line!(
+                    IO,
                     "The provided gas price {} is less than the minimum \
                      amount required {}, changing it to match the minimum",
                     amount.to_string_native(),
@@ -545,7 +580,7 @@ pub async fn wrap_tx<
                 };
 
                 match shielded
-                    .gen_shielded_transfer(client, transfer_args)
+                    .gen_shielded_transfer::<_, IO>(client, transfer_args)
                     .await
                 {
                     Ok(Some(ShieldedTransfer {
@@ -595,7 +630,7 @@ pub async fn wrap_tx<
                         (Some(transaction), Some(unshielding_epoch))
                     }
                     Ok(None) => {
-                        eprintln!("Missing unshielding transaction");
+                        edisplay_line!(IO, "Missing unshielding transaction");
                         if !args.force && cfg!(feature = "mainnet") {
                             panic!();
                         }
@@ -603,7 +638,11 @@ pub async fn wrap_tx<
                         (None, None)
                     }
                     Err(e) => {
-                        eprintln!("Error in fee unshielding generation: {}", e);
+                        edisplay_line!(
+                            IO,
+                            "Error in fee unshielding generation: {}",
+                            e
+                        );
                         if !args.force && cfg!(feature = "mainnet") {
                             panic!();
                         }
@@ -616,16 +655,20 @@ pub async fn wrap_tx<
                 let err_msg = format!(
                     "The wrapper transaction source doesn't have enough \
                      balance to pay fee {}, balance: {}.",
-                    format_denominated_amount(client, &token_addr, total_fee)
-                        .await,
-                    format_denominated_amount(
+                    format_denominated_amount::<_, IO>(
+                        client,
+                        &token_addr,
+                        total_fee
+                    )
+                    .await,
+                    format_denominated_amount::<_, IO>(
                         client,
                         &token_addr,
                         updated_balance
                     )
                     .await,
                 );
-                eprintln!("{}", err_msg);
+                edisplay_line!(IO, "{}", err_msg);
                 if !args.force && cfg!(feature = "mainnet") {
                     panic!("{}", err_msg);
                 }
@@ -635,7 +678,8 @@ pub async fn wrap_tx<
         }
         _ => {
             if args.fee_unshield.is_some() {
-                println!(
+                display_line!(
+                    IO,
                     "Enough transparent balance to pay fees: the fee \
                      unshielding spending key will be ignored"
                 );
@@ -653,7 +697,7 @@ pub async fn wrap_tx<
     });
 
     #[cfg(not(feature = "mainnet"))]
-    let pow_solution = solve_pow_challenge(
+    let pow_solution = solve_pow_challenge::<_, IO>(
         client,
         args,
         requires_pow,
@@ -716,7 +760,10 @@ fn make_ledger_amount_addr(
 
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
-async fn make_ledger_amount_asset<C: crate::sdk::queries::Client + Sync>(
+async fn make_ledger_amount_asset<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
@@ -728,7 +775,8 @@ async fn make_ledger_amount_asset<C: crate::sdk::queries::Client + Sync>(
     if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
         let formatted_amt =
-            format_denominated_amount(client, token, amount.into()).await;
+            format_denominated_amount::<_, IO>(client, token, amount.into())
+                .await;
         if let Some(token) = tokens.get(token) {
             output
                 .push(
@@ -813,7 +861,8 @@ fn format_outputs(output: &mut Vec<String>) {
 /// Adds a Ledger output for the sender and destination for transparent and MASP
 /// transactions
 pub async fn make_ledger_masp_endpoints<
-    C: crate::sdk::queries::Client + Sync,
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
 >(
     client: &C,
     tokens: &HashMap<Address, String>,
@@ -837,7 +886,7 @@ pub async fn make_ledger_masp_endpoints<
         for sapling_input in builder.builder.sapling_inputs() {
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
-            make_ledger_amount_asset(
+            make_ledger_amount_asset::<_, IO>(
                 client,
                 tokens,
                 output,
@@ -864,7 +913,7 @@ pub async fn make_ledger_masp_endpoints<
         for sapling_output in builder.builder.sapling_outputs() {
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
-            make_ledger_amount_asset(
+            make_ledger_amount_asset::<_, IO>(
                 client,
                 tokens,
                 output,
@@ -892,6 +941,7 @@ pub async fn make_ledger_masp_endpoints<
 pub async fn generate_test_vector<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -906,7 +956,8 @@ pub async fn generate_test_vector<
         // Contract the large data blobs in the transaction
         tx.wallet_filter();
         // Convert the transaction to Ledger format
-        let decoding = to_ledger_vector(client, wallet, &tx).await?;
+        let decoding =
+            to_ledger_vector::<_, _, IO>(client, wallet, &tx).await?;
         let output = serde_json::to_string(&decoding)
             .map_err(|e| Error::from(EncodingError::Serde(e.to_string())))?;
         // Record the transaction at the identified path
@@ -947,30 +998,36 @@ pub async fn generate_test_vector<
 pub async fn to_ledger_vector<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     let init_account_hash =
-        query_wasm_code_hash(client, TX_INIT_ACCOUNT_WASM).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_ACCOUNT_WASM).await?;
     let init_validator_hash =
-        query_wasm_code_hash(client, TX_INIT_VALIDATOR_WASM).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_VALIDATOR_WASM).await?;
     let init_proposal_hash =
-        query_wasm_code_hash(client, TX_INIT_PROPOSAL).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_INIT_PROPOSAL).await?;
     let vote_proposal_hash =
-        query_wasm_code_hash(client, TX_VOTE_PROPOSAL).await?;
-    let reveal_pk_hash = query_wasm_code_hash(client, TX_REVEAL_PK).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_VOTE_PROPOSAL).await?;
+    let reveal_pk_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_REVEAL_PK).await?;
     let update_account_hash =
-        query_wasm_code_hash(client, TX_UPDATE_ACCOUNT_WASM).await?;
-    let transfer_hash = query_wasm_code_hash(client, TX_TRANSFER_WASM).await?;
-    let ibc_hash = query_wasm_code_hash(client, TX_IBC_WASM).await?;
-    let bond_hash = query_wasm_code_hash(client, TX_BOND_WASM).await?;
-    let unbond_hash = query_wasm_code_hash(client, TX_UNBOND_WASM).await?;
-    let withdraw_hash = query_wasm_code_hash(client, TX_WITHDRAW_WASM).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_UPDATE_ACCOUNT_WASM).await?;
+    let transfer_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_TRANSFER_WASM).await?;
+    let ibc_hash = query_wasm_code_hash::<_, IO>(client, TX_IBC_WASM).await?;
+    let bond_hash = query_wasm_code_hash::<_, IO>(client, TX_BOND_WASM).await?;
+    let unbond_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_UNBOND_WASM).await?;
+    let withdraw_hash =
+        query_wasm_code_hash::<_, IO>(client, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
-        query_wasm_code_hash(client, TX_CHANGE_COMMISSION_WASM).await?;
-    let user_hash = query_wasm_code_hash(client, VP_USER_WASM).await?;
+        query_wasm_code_hash::<_, IO>(client, TX_CHANGE_COMMISSION_WASM)
+            .await?;
+    let user_hash = query_wasm_code_hash::<_, IO>(client, VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
@@ -1263,7 +1320,7 @@ pub async fn to_ledger_vector<
         tv.name = "Transfer 0".to_string();
 
         tv.output.push("Type : Transfer".to_string());
-        make_ledger_masp_endpoints(
+        make_ledger_masp_endpoints::<_, IO>(
             client,
             &tokens,
             &mut tv.output,
@@ -1272,7 +1329,7 @@ pub async fn to_ledger_vector<
             &asset_types,
         )
         .await;
-        make_ledger_masp_endpoints(
+        make_ledger_masp_endpoints::<_, IO>(
             client,
             &tokens,
             &mut tv.output_expert,
@@ -1445,13 +1502,13 @@ pub async fn to_ledger_vector<
 
     if let Some(wrapper) = tx.header.wrapper() {
         let gas_token = wrapper.fee.token.clone();
-        let gas_limit = format_denominated_amount(
+        let gas_limit = format_denominated_amount::<_, IO>(
             client,
             &gas_token,
             Amount::from(wrapper.gas_limit),
         )
         .await;
-        let fee_amount_per_gas_unit = format_denominated_amount(
+        let fee_amount_per_gas_unit = format_denominated_amount::<_, IO>(
             client,
             &gas_token,
             wrapper.fee.amount_per_gas_unit,

@@ -40,15 +40,17 @@ use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::hash::Hash;
+use crate::types::io::Io;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::{storage, token};
+use crate::types::{error, storage, token};
+use crate::{display_line, edisplay_line};
 
 /// Query the status of a given transaction.
 ///
 /// If a response is not delivered until `deadline`, we exit the cli with an
 /// error.
-pub async fn query_tx_status<C>(
+pub async fn query_tx_status<C, IO: Io>(
     client: &C,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
@@ -89,7 +91,10 @@ where
     })
     .await
     .try_halt(|_| {
-        eprintln!("Transaction status query deadline of {deadline:?} exceeded");
+        edisplay_line!(
+            IO,
+            "Transaction status query deadline of {deadline:?} exceeded"
+        );
     })
 }
 
@@ -267,7 +272,10 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Query a wasm code hash
-pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
+pub async fn query_wasm_code_hash<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
@@ -278,7 +286,8 @@ pub async fn query_wasm_code_hash<C: crate::ledger::queries::Client + Sync>(
     {
         Some(hash) => Ok(Hash::try_from(&hash[..]).expect("Invalid code hash")),
         None => {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "The corresponding wasm code of the code path {} doesn't \
                  exist on chain.",
                 code_path.as_ref(),
@@ -352,7 +361,11 @@ pub async fn query_storage_value_bytes<
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<C: crate::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_prefix<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+    T,
+>(
     client: &C,
     key: &storage::Key,
 ) -> Result<Option<impl Iterator<Item = (storage::Key, T)>>, error::Error>
@@ -369,9 +382,11 @@ where
             &value[..],
         ) {
             Err(err) => {
-                eprintln!(
+                edisplay_line!(
+                    IO,
                     "Skipping a value for key {}. Error in decoding: {}",
-                    key, err
+                    key,
+                    err
                 );
                 None
             }
@@ -457,7 +472,7 @@ pub async fn query_tx_events<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
+pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync, IO: Io>(
     client: &C,
     tx_bytes: Vec<u8>,
 ) -> Result<namada_core::types::transaction::TxResult, Error> {
@@ -466,7 +481,7 @@ pub async fn dry_run_tx<C: crate::ledger::queries::Client + Sync>(
         RPC.shell().dry_run_tx(client, data, height, prove).await,
     )?
     .data;
-    println! {"Dry-run result: {}", result};
+    display_line!(IO, "Dry-run result: {}", result);
     Ok(result)
 }
 
@@ -738,8 +753,6 @@ pub async fn query_proposal_by_id<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Option<StorageProposal>, Error> {
-    // let a = RPC.vp().gov().proposal_id(client, &proposal_id).await;
-    // println!("{:?}", a.err().unwrap());
     convert_response::<C, _>(
         RPC.vp().gov().proposal_id(client, &proposal_id).await,
     )
@@ -811,6 +824,7 @@ pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
 /// Query a validator's unbonds for a given epoch
 pub async fn query_and_print_unbonds<
     C: crate::ledger::queries::Client + Sync,
+    IO: Io,
 >(
     client: &C,
     source: &Address,
@@ -831,16 +845,18 @@ pub async fn query_and_print_unbonds<
         }
     }
     if total_withdrawable != token::Amount::default() {
-        println!(
+        display_line!(
+            IO,
             "Total withdrawable now: {}.",
             total_withdrawable.to_string_native()
         );
     }
     if !not_yet_withdrawable.is_empty() {
-        println!("Current epoch: {current_epoch}.")
+        display_line!(IO, "Current epoch: {current_epoch}.")
     }
     for (withdraw_epoch, amount) in not_yet_withdrawable {
-        println!(
+        display_line!(
+            IO,
             "Amount {} withdrawable starting from epoch {withdraw_epoch}.",
             amount.to_string_native()
         );
@@ -930,6 +946,7 @@ pub async fn bonds_and_unbonds<C: crate::ledger::queries::Client + Sync>(
             .await,
     )
 }
+
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs, enriched with extra information calculated from
 /// the data.
@@ -955,7 +972,10 @@ pub async fn enriched_bonds_and_unbonds<
 }
 
 /// Get the correct representation of the amount given the token type.
-pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
+pub async fn validate_amount<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     amount: InputAmount,
     token: &Address,
@@ -972,13 +992,15 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
         Some(denom) => Ok(denom),
         None => {
             if force {
-                println!(
+                display_line!(
+                    IO,
                     "No denomination found for token: {token}, but --force \
                      was passed. Defaulting to the provided denomination."
                 );
                 Ok(input_amount.denom)
             } else {
-                println!(
+                display_line!(
+                    IO,
                     "No denomination found for token: {token}, the input \
                      arguments could not be parsed."
                 );
@@ -989,7 +1011,8 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
         }
     }?;
     if denom < input_amount.denom && !force {
-        println!(
+        display_line!(
+            IO,
             "The input amount contained a higher precision than allowed by \
              {token}."
         );
@@ -999,7 +1022,8 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
         ))))
     } else {
         input_amount.increase_precision(denom).map_err(|_err| {
-            println!(
+            display_line!(
+                IO,
                 "The amount provided requires more the 256 bits to represent."
             );
             Error::from(QueryError::General(
@@ -1012,7 +1036,7 @@ pub async fn validate_amount<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Wait for a first block and node to be synced.
-pub async fn wait_until_node_is_synched<C>(client: &C) -> Halt<()>
+pub async fn wait_until_node_is_synched<C, IO: Io>(client: &C) -> Halt<()>
 where
     C: crate::ledger::queries::Client + Sync,
 {
@@ -1036,7 +1060,8 @@ where
                 if is_at_least_height_one && !is_catching_up {
                     return ControlFlow::Break(Ok(()));
                 }
-                println!(
+                display_line!(
+                    IO,
                     " Waiting for {} ({}/{} tries)...",
                     if is_at_least_height_one {
                         "a first block"
@@ -1050,7 +1075,11 @@ where
                 ControlFlow::Continue(())
             }
             Err(e) => {
-                eprintln!("Failed to query node status with error: {}", e);
+                edisplay_line!(
+                    IO,
+                    "Failed to query node status with error: {}",
+                    e
+                );
                 ControlFlow::Break(Err(()))
             }
         }
@@ -1058,7 +1087,10 @@ where
     .await
     // maybe time out
     .try_halt(|_| {
-        println!("Node is still catching up, wait for it to finish synching.");
+        display_line!(
+            IO,
+            "Node is still catching up, wait for it to finish synching."
+        );
     })?
     // error querying rpc
     .try_halt(|_| ())
@@ -1068,6 +1100,7 @@ where
 /// correctly as a string.
 pub async fn format_denominated_amount<
     C: crate::ledger::queries::Client + Sync,
+    IO: Io,
 >(
     client: &C,
     token: &Address,
@@ -1077,11 +1110,12 @@ pub async fn format_denominated_amount<
         RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|t| {
-        println!("Error in querying for denomination: {t}");
+        display_line!(IO, "Error in querying for denomination: {t}");
         None
     })
     .unwrap_or_else(|| {
-        println!(
+        display_line!(
+            IO,
             "No denomination found for token: {token}, defaulting to zero \
              decimal places"
         );

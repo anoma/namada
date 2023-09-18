@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use namada::tendermint_rpc::HttpClient;
-use namada_apps::cli::api::CliApi;
+use namada_apps::cli::api::{CliApi, CliIo};
 use namada_apps::{cli, logging};
 use tracing_subscriber::filter::LevelFilter;
 
@@ -14,5 +14,5 @@ async fn main() -> Result<()> {
 
     let cmd = cli::namada_relayer_cli()?;
     // run the CLI
-    CliApi::<()>::handle_relayer_command::<HttpClient>(None, cmd).await
+    CliApi::<CliIo>::handle_relayer_command::<HttpClient>(None, cmd).await
 }

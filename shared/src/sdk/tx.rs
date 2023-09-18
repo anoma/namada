@@ -56,6 +56,8 @@ use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
+use crate::types::error::{EncodingError, Error, QueryError, Result, TxError};
+use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
 use crate::types::storage::Epoch;
@@ -63,7 +65,7 @@ use crate::types::time::DateTimeUtc;
 use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::{pos, TxType};
 use crate::types::{storage, token};
-use crate::vm;
+use crate::{display_line, edisplay_line, vm};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -120,7 +122,7 @@ impl ProcessTxResponse {
 }
 
 /// Build and dump a transaction either to file or to screen
-pub fn dump_tx(args: &args::Tx, tx: Tx) {
+pub fn dump_tx<IO: Io>(args: &args::Tx, tx: Tx) {
     let tx_id = tx.header_hash();
     let serialized_tx = tx.serialize();
     match args.output_folder.to_owned() {
@@ -130,14 +132,15 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
             let out = File::create(&tx_path).unwrap();
             serde_json::to_writer_pretty(out, &serialized_tx)
                 .expect("Should be able to write to file.");
-            println!(
+            display_line!(
+                IO,
                 "Transaction serialized to {}.",
                 tx_path.to_string_lossy()
             );
         }
         None => {
-            println!("Below the serialized transaction: \n");
-            println!("{}", serialized_tx)
+            display_line!(IO, "Below the serialized transaction: \n");
+            display_line!(IO, "{}", serialized_tx)
         }
     }
 }
@@ -149,6 +152,7 @@ pub async fn prepare_tx<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     _wallet: &mut Wallet<U>,
@@ -162,7 +166,7 @@ pub async fn prepare_tx<
     if !args.dry_run {
         let epoch = rpc::query_epoch(client).await?;
 
-        Ok(signing::wrap_tx(
+        Ok(signing::wrap_tx::<_, _, IO>(
             client,
             shielded,
             tx,
@@ -184,6 +188,7 @@ pub async fn prepare_tx<
 pub async fn process_tx<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -201,7 +206,7 @@ pub async fn process_tx<
     // println!("HTTP request body: {}", request_body);
 
     if args.dry_run || args.dry_run_wrapper {
-        expect_dry_broadcast(TxBroadcastData::DryRun(tx), client).await
+        expect_dry_broadcast::<_, IO>(TxBroadcastData::DryRun(tx), client).await
     } else {
         // We use this to determine when the wrapper tx makes it on-chain
         let wrapper_hash = tx.header_hash().to_string();
@@ -221,13 +226,13 @@ pub async fn process_tx<
         // of masp epoch Either broadcast or submit transaction and
         // collect result into sum type
         if args.broadcast_only {
-            broadcast_tx(client, &to_broadcast)
+            broadcast_tx::<_, IO>(client, &to_broadcast)
                 .await
                 .map(ProcessTxResponse::Broadcast)
         } else {
-            match submit_tx(client, to_broadcast).await {
+            match submit_tx::<_, IO>(client, to_broadcast).await {
                 Ok(x) => {
-                    save_initialized_accounts::<U>(
+                    save_initialized_accounts::<U, IO>(
                         wallet,
                         args,
                         x.initialized_accounts.clone(),
@@ -267,6 +272,7 @@ pub async fn build_reveal_pk<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -276,11 +282,12 @@ pub async fn build_reveal_pk<
     public_key: &common::PublicKey,
     fee_payer: &common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
-    println!(
+    display_line!(
+        IO,
         "Submitting a tx to reveal the public key for address {address}..."
     );
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -298,7 +305,7 @@ pub async fn build_reveal_pk<
 /// the tx has been successfully included into the mempool of a validator
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn broadcast_tx<C: crate::sdk::queries::Client + Sync>(
+pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync, IO: Io>(
     rpc_cli: &C,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response> {
@@ -323,12 +330,20 @@ pub async fn broadcast_tx<C: crate::sdk::queries::Client + Sync>(
         lift_rpc_error(rpc_cli.broadcast_tx_sync(tx.to_bytes().into()).await)?;
 
     if response.code == 0.into() {
-        println!("Transaction added to mempool: {:?}", response);
+        display_line!(IO, "Transaction added to mempool: {:?}", response);
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
-            println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
+            display_line!(
+                IO,
+                "Wrapper transaction hash: {:?}",
+                wrapper_tx_hash
+            );
+            display_line!(
+                IO,
+                "Inner transaction hash: {:?}",
+                decrypted_tx_hash
+            );
         }
         Ok(response)
     } else {
@@ -348,7 +363,7 @@ pub async fn broadcast_tx<C: crate::sdk::queries::Client + Sync>(
 /// 3. The decrypted payload of the tx has been included on the blockchain.
 ///
 /// In the case of errors in any of those stages, an error message is returned
-pub async fn submit_tx<C>(
+pub async fn submit_tx<C, IO: Io>(
     client: &C,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse>
@@ -365,7 +380,7 @@ where
     }?;
 
     // Broadcast the supplied transaction
-    broadcast_tx(client, &to_broadcast).await?;
+    broadcast_tx::<_, IO>(client, &to_broadcast).await?;
 
     let deadline = time::Instant::now()
         + time::Duration::from_secs(
@@ -380,18 +395,22 @@ where
 
     let parsed = {
         let wrapper_query =
-            crate::sdk::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event = rpc::query_tx_status(client, wrapper_query, deadline)
-            .await
-            .proceed_or(TxError::AcceptTimeout)?;
+            crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let event =
+            rpc::query_tx_status::<_, IO>(client, wrapper_query, deadline)
+                .await
+                .proceed_or(TxError::AcceptTimeout)?;
         let parsed = TxResponse::from_event(event);
-
         let tx_to_str = |parsed| {
             serde_json::to_string_pretty(parsed).map_err(|err| {
                 Error::from(EncodingError::Serde(err.to_string()))
             })
         };
-        println!("Transaction accepted with result: {}", tx_to_str(&parsed)?);
+        display_line!(
+            IO,
+            "Transaction accepted with result: {}",
+            tx_to_str(&parsed)?
+        );
         // The transaction is now on chain. We wait for it to be decrypted
         // and applied
         if parsed.code == 0.to_string() {
@@ -399,11 +418,16 @@ where
             // payload makes its way onto the blockchain
             let decrypted_query =
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event = rpc::query_tx_status(client, decrypted_query, deadline)
-                .await
-                .proceed_or(TxError::AppliedTimeout)?;
+            let event = rpc::query_tx_status::<_, IO>(
+                client,
+                decrypted_query,
+                deadline,
+            )
+            .await
+            .proceed_or(TxError::AppliedTimeout)?;
             let parsed = TxResponse::from_event(event);
-            println!(
+            display_line!(
+                IO,
                 "Transaction applied with result: {}",
                 tx_to_str(&parsed)?
             );
@@ -440,7 +464,7 @@ pub fn decode_component<K, F>(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils>(
+pub async fn save_initialized_accounts<U: WalletUtils, IO: Io>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
@@ -448,7 +472,8 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
     let len = initialized_accounts.len();
     if len != 0 {
         // Store newly initialized account addresses in the wallet
-        println!(
+        display_line!(
+            IO,
             "The transaction initialized {} new account{}",
             len,
             if len == 1 { "" } else { "s" }
@@ -479,12 +504,16 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
             );
             match added {
                 Some(new_alias) if new_alias != encoded => {
-                    println!(
+                    display_line!(
+                        IO,
                         "Added alias {} for address {}.",
-                        new_alias, encoded
+                        new_alias,
+                        encoded
                     );
                 }
-                _ => println!("No alias added for address {}.", encoded),
+                _ => {
+                    display_line!(IO, "No alias added for address {}.", encoded)
+                }
             };
         }
     }
@@ -495,6 +524,7 @@ pub async fn build_validator_commission_change<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -514,7 +544,11 @@ pub async fn build_validator_commission_change<
     let validator = validator.clone();
     if rpc::is_validator(client, &validator).await? {
         if rate < Dec::zero() || rate > Dec::one() {
-            eprintln!("Invalid new commission rate, received {}", rate);
+            edisplay_line!(
+                IO,
+                "Invalid new commission rate, received {}",
+                rate
+            );
             return Err(Error::from(TxError::InvalidCommissionRate(rate)));
         }
 
@@ -534,7 +568,8 @@ pub async fn build_validator_commission_change<
                 if rate.abs_diff(&commission_rate)
                     > max_commission_change_per_epoch
                 {
-                    eprintln!(
+                    edisplay_line!(
+                        IO,
                         "New rate is too large of a change with respect to \
                          the predecessor epoch in which the rate will take \
                          effect."
@@ -547,14 +582,14 @@ pub async fn build_validator_commission_change<
                 }
             }
             None => {
-                eprintln!("Error retrieving from storage");
+                edisplay_line!(IO, "Error retrieving from storage");
                 if !tx_args.force {
                     return Err(Error::from(TxError::Retrieval));
                 }
             }
         }
     } else {
-        eprintln!("The given address {validator} is not a validator.");
+        edisplay_line!(IO, "The given address {validator} is not a validator.");
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
                 validator,
@@ -567,7 +602,7 @@ pub async fn build_validator_commission_change<
         new_rate: rate,
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -586,6 +621,7 @@ pub async fn build_update_steward_commission<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -599,7 +635,7 @@ pub async fn build_update_steward_commission<
     gas_payer: &common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
-        eprintln!("The given address {} is not a steward.", &steward);
+        edisplay_line!(IO, "The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
@@ -607,7 +643,10 @@ pub async fn build_update_steward_commission<
         .map_err(|e| TxError::InvalidStewardCommission(e.to_string()))?;
 
     if !commission.is_valid() && !tx_args.force {
-        eprintln!("The sum of all percentage must not be greater than 1.");
+        edisplay_line!(
+            IO,
+            "The sum of all percentage must not be greater than 1."
+        );
         return Err(Error::from(TxError::InvalidStewardCommission(
             "Commission sum is greater than 1.".to_string(),
         )));
@@ -618,7 +657,7 @@ pub async fn build_update_steward_commission<
         commission: commission.reward_distribution,
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -637,6 +676,7 @@ pub async fn build_resign_steward<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -649,11 +689,11 @@ pub async fn build_resign_steward<
     gas_payer: &common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
-        eprintln!("The given address {} is not a steward.", &steward);
+        edisplay_line!(IO, "The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -672,6 +712,7 @@ pub async fn build_unjail_validator<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -684,7 +725,11 @@ pub async fn build_unjail_validator<
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
     if !rpc::is_validator(client, &validator).await? {
-        eprintln!("The given address {} is not a validator.", &validator);
+        edisplay_line!(
+            IO,
+            "The given address {} is not a validator.",
+            &validator
+        );
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
                 validator.clone(),
@@ -705,7 +750,8 @@ pub async fn build_unjail_validator<
                 ))
             })?;
     if validator_state_at_pipeline != ValidatorState::Jailed {
-        eprintln!(
+        edisplay_line!(
+            IO,
             "The given validator address {} is not jailed at the pipeline \
              epoch when it would be restored to one of the validator sets.",
             &validator
@@ -727,7 +773,8 @@ pub async fn build_unjail_validator<
             let eligible_epoch =
                 last_slash_epoch + params.slash_processing_epoch_offset();
             if current_epoch < eligible_epoch {
-                eprintln!(
+                edisplay_line!(
+                    IO,
                     "The given validator address {} is currently frozen and \
                      not yet eligible to be unjailed.",
                     &validator
@@ -753,7 +800,7 @@ pub async fn build_unjail_validator<
         Err(err) => return Err(err),
     }
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -772,6 +819,7 @@ pub async fn build_withdraw<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -786,9 +834,12 @@ pub async fn build_withdraw<
 ) -> Result<(Tx, Option<Epoch>)> {
     let epoch = rpc::query_epoch(client).await?;
 
-    let validator =
-        known_validator_or_err(validator.clone(), tx_args.force, client)
-            .await?;
+    let validator = known_validator_or_err::<_, IO>(
+        validator.clone(),
+        tx_args.force,
+        client,
+    )
+    .await?;
 
     let source = source.clone();
 
@@ -803,26 +854,29 @@ pub async fn build_withdraw<
     .await?;
 
     if tokens.is_zero() {
-        eprintln!(
+        edisplay_line!(
+            IO,
             "There are no unbonded bonds ready to withdraw in the current \
              epoch {}.",
             epoch
         );
-        rpc::query_and_print_unbonds(client, &bond_source, &validator).await?;
+        rpc::query_and_print_unbonds::<_, IO>(client, &bond_source, &validator)
+            .await?;
         if !tx_args.force {
             return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
     } else {
-        println!(
+        display_line!(
+            IO,
             "Found {} tokens that can be withdrawn.",
             tokens.to_string_native()
         );
-        println!("Submitting transaction to withdraw them...");
+        display_line!(IO, "Submitting transaction to withdraw them...");
     }
 
     let data = pos::Withdraw { validator, source };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -841,6 +895,7 @@ pub async fn build_unbond<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -859,18 +914,24 @@ pub async fn build_unbond<
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
 
     if !tx_args.force {
-        known_validator_or_err(validator.clone(), tx_args.force, client)
-            .await?;
+        known_validator_or_err::<_, IO>(
+            validator.clone(),
+            tx_args.force,
+            client,
+        )
+        .await?;
 
         let bond_amount =
             rpc::query_bond(client, &bond_source, &validator, None).await?;
-        println!(
+        display_line!(
+            IO,
             "Bond amount available for unbonding: {} NAM",
             bond_amount.to_string_native()
         );
 
         if amount > bond_amount {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "The total bonds of the source {} is lower than the amount to \
                  be unbonded. Amount to unbond is {} and the total bonds is \
                  {}.",
@@ -905,7 +966,7 @@ pub async fn build_unbond<
         source: source.clone(),
     };
 
-    let (tx, epoch) = build(
+    let (tx, epoch) = build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -921,7 +982,7 @@ pub async fn build_unbond<
 }
 
 /// Query the unbonds post-tx
-pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
+pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync, IO: Io>(
     client: &C,
     args: args::Unbond,
     latest_withdrawal_pre: Option<(Epoch, token::Amount)>,
@@ -950,7 +1011,8 @@ pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
         match latest_withdraw_epoch_post.cmp(&latest_withdraw_epoch_pre) {
             std::cmp::Ordering::Less => {
                 if args.tx.force {
-                    eprintln!(
+                    edisplay_line!(
+                        IO,
                         "Unexpected behavior reading the unbonds data has \
                          occurred"
                     );
@@ -959,7 +1021,8 @@ pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
                 }
             }
             std::cmp::Ordering::Equal => {
-                println!(
+                display_line!(
+                    IO,
                     "Amount {} withdrawable starting from epoch {}",
                     (latest_withdraw_amount_post - latest_withdraw_amount_pre)
                         .to_string_native(),
@@ -967,7 +1030,8 @@ pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
                 );
             }
             std::cmp::Ordering::Greater => {
-                println!(
+                display_line!(
+                    IO,
                     "Amount {} withdrawable starting from epoch {}",
                     latest_withdraw_amount_post.to_string_native(),
                     latest_withdraw_epoch_post,
@@ -975,7 +1039,8 @@ pub async fn query_unbonds<C: crate::sdk::queries::Client + Sync>(
             }
         }
     } else {
-        println!(
+        display_line!(
+            IO,
             "Amount {} withdrawable starting from epoch {}",
             latest_withdraw_amount_post.to_string_native(),
             latest_withdraw_epoch_post,
@@ -989,6 +1054,7 @@ pub async fn build_bond<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1003,15 +1069,20 @@ pub async fn build_bond<
     }: args::Bond,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
-    let validator =
-        known_validator_or_err(validator.clone(), tx_args.force, client)
-            .await?;
+    let validator = known_validator_or_err::<_, IO>(
+        validator.clone(),
+        tx_args.force,
+        client,
+    )
+    .await?;
 
     // Check that the source address exists on chain
     let source = match source.clone() {
-        Some(source) => source_exists_or_err(source, tx_args.force, client)
-            .await
-            .map(Some),
+        Some(source) => {
+            source_exists_or_err::<_, IO>(source, tx_args.force, client)
+                .await
+                .map(Some)
+        }
         None => Ok(source.clone()),
     }?;
     // Check bond's source (source for delegation or validator for self-bonds)
@@ -1020,7 +1091,7 @@ pub async fn build_bond<
     let balance_key = token::balance_key(&native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
-    let post_balance = check_balance_too_low_err(
+    let post_balance = check_balance_too_low_err::<_, IO>(
         &native_token,
         bond_source,
         amount,
@@ -1041,7 +1112,7 @@ pub async fn build_bond<
         source,
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1060,6 +1131,7 @@ pub async fn build_default_proposal<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1093,7 +1165,7 @@ pub async fn build_default_proposal<
             };
             Ok(())
         };
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1112,6 +1184,7 @@ pub async fn build_vote_proposal<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1175,7 +1248,7 @@ pub async fn build_vote_proposal<
         delegations,
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1194,6 +1267,7 @@ pub async fn build_pgf_funding_proposal<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1219,7 +1293,7 @@ pub async fn build_pgf_funding_proposal<
         data.content = extra_section_hash;
         Ok(())
     };
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1238,6 +1312,7 @@ pub async fn build_pgf_stewards_proposal<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1264,7 +1339,7 @@ pub async fn build_pgf_stewards_proposal<
         Ok(())
     };
 
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1283,6 +1358,7 @@ pub async fn build_ibc_transfer<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1291,16 +1367,22 @@ pub async fn build_ibc_transfer<
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
     // Check that the source address exists on chain
-    let source =
-        source_exists_or_err(args.source.clone(), args.tx.force, client)
-            .await?;
+    let source = source_exists_or_err::<_, IO>(
+        args.source.clone(),
+        args.tx.force,
+        client,
+    )
+    .await?;
     // We cannot check the receiver
 
     // validate the amount given
-    let validated_amount =
-        validate_amount(client, args.amount, &args.token, args.tx.force)
-            .await
-            .expect("expected to validate amount");
+    let validated_amount = validate_amount::<_, IO>(
+        client,
+        args.amount,
+        &args.token,
+        args.tx.force,
+    )
+    .await?;
     if validated_amount.canonical().denom.0 != 0 {
         return Err(Error::Other(format!(
             "The amount for the IBC transfer should be an integer: {}",
@@ -1311,7 +1393,7 @@ pub async fn build_ibc_transfer<
     // Check source balance
     let balance_key = token::balance_key(&args.token, &source);
 
-    let post_balance = check_balance_too_low_err(
+    let post_balance = check_balance_too_low_err::<_, IO>(
         &args.token,
         &source,
         validated_amount.amount,
@@ -1326,10 +1408,12 @@ pub async fn build_ibc_transfer<
         token: args.token.clone(),
     });
 
-    let tx_code_hash =
-        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
-            .await
-            .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
+    let tx_code_hash = query_wasm_code_hash::<_, IO>(
+        client,
+        args.tx_code_path.to_str().unwrap(),
+    )
+    .await
+    .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     let ibc_denom = match &args.token {
         Address::Internal(InternalAddress::IbcToken(hash)) => {
@@ -1397,7 +1481,7 @@ pub async fn build_ibc_transfer<
     tx.add_code_from_hash(tx_code_hash)
         .add_serialized_data(data);
 
-    let epoch = prepare_tx::<C, U, V>(
+    let epoch = prepare_tx::<C, U, V, IO>(
         client,
         wallet,
         shielded,
@@ -1415,7 +1499,7 @@ pub async fn build_ibc_transfer<
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-pub async fn build<C: crate::sdk::queries::Client + Sync, U, V, F, D>(
+pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D, IO>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
@@ -1431,8 +1515,9 @@ where
     D: BorshSerialize,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 {
-    build_pow_flag(
+    build_pow_flag::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1449,7 +1534,14 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn build_pow_flag<C: crate::sdk::queries::Client + Sync, U, V, F, D>(
+async fn build_pow_flag<
+    C: crate::ledger::queries::Client + Sync,
+    U,
+    V,
+    F,
+    D,
+    IO: Io,
+>(
     client: &C,
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
@@ -1471,15 +1563,16 @@ where
 
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
 
-    let tx_code_hash = query_wasm_code_hash(client, path.to_string_lossy())
-        .await
-        .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
+    let tx_code_hash =
+        query_wasm_code_hash::<_, IO>(client, path.to_string_lossy())
+            .await
+            .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     on_tx(&mut tx_builder, &mut data)?;
 
     tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let epoch = prepare_tx::<C, U, V>(
+    let epoch = prepare_tx::<C, U, V, IO>(
         client,
         wallet,
         shielded,
@@ -1572,6 +1665,7 @@ pub async fn build_transfer<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1584,18 +1678,21 @@ pub async fn build_transfer<
     let token = args.token.clone();
 
     // Check that the source address exists on chain
-    source_exists_or_err(source.clone(), args.tx.force, client).await?;
+    source_exists_or_err::<_, IO>(source.clone(), args.tx.force, client)
+        .await?;
     // Check that the target address exists on chain
-    target_exists_or_err(target.clone(), args.tx.force, client).await?;
+    target_exists_or_err::<_, IO>(target.clone(), args.tx.force, client)
+        .await?;
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, args.tx.force).await?;
+        validate_amount::<_, IO>(client, args.amount, &token, args.tx.force)
+            .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
-    let post_balance = check_balance_too_low_err::<C>(
+    let post_balance = check_balance_too_low_err::<C, IO>(
         &token,
         &source,
         validated_amount.amount,
@@ -1634,7 +1731,9 @@ pub async fn build_transfer<
     let is_source_faucet = false;
 
     // Construct the shielded part of the transaction, if any
-    let stx_result = shielded.gen_shielded_transfer(client, args.clone()).await;
+    let stx_result = shielded
+        .gen_shielded_transfer::<_, IO>(client, args.clone())
+        .await;
 
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),
@@ -1702,7 +1801,7 @@ pub async fn build_transfer<
         };
         Ok(())
     };
-    let (tx, unshielding_epoch) = build_pow_flag(
+    let (tx, unshielding_epoch) = build_pow_flag::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1743,6 +1842,7 @@ pub async fn build_init_account<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1756,7 +1856,8 @@ pub async fn build_init_account<
     }: args::TxInitAccount,
     fee_payer: &common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
-    let vp_code_hash = query_wasm_code_hash_buf(client, &vp_code_path).await?;
+    let vp_code_hash =
+        query_wasm_code_hash_buf::<_, IO>(client, &vp_code_path).await?;
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -1781,7 +1882,7 @@ pub async fn build_init_account<
         data.vp_code_hash = extra_section_hash;
         Ok(())
     };
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1800,6 +1901,7 @@ pub async fn build_update_account<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1825,7 +1927,8 @@ pub async fn build_update_account<
 
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
-            let vp_hash = query_wasm_code_hash_buf(client, &code_path).await?;
+            let vp_hash =
+                query_wasm_code_hash_buf::<_, IO>(client, &code_path).await?;
             Some(vp_hash)
         }
         None => None,
@@ -1849,7 +1952,7 @@ pub async fn build_update_account<
         data.vp_code_hash = extra_section_hash;
         Ok(())
     };
-    build(
+    build::<_, _, _, _, _, IO>(
         client,
         wallet,
         shielded,
@@ -1868,6 +1971,7 @@ pub async fn build_custom<
     C: crate::sdk::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
+    IO: Io,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -1886,7 +1990,7 @@ pub async fn build_custom<
             Error::Other("Invalid tx deserialization.".to_string())
         })?
     } else {
-        let tx_code_hash = query_wasm_code_hash_buf(
+        let tx_code_hash = query_wasm_code_hash_buf::<_, IO>(
             client,
             &code_path
                 .ok_or(Error::Other("No code path supplied".to_string()))?,
@@ -1899,7 +2003,7 @@ pub async fn build_custom<
         tx
     };
 
-    let epoch = prepare_tx::<C, U, V>(
+    let epoch = prepare_tx::<C, U, V, IO>(
         client,
         wallet,
         shielded,
@@ -1915,13 +2019,16 @@ pub async fn build_custom<
     Ok((tx, epoch))
 }
 
-async fn expect_dry_broadcast<C: crate::sdk::queries::Client + Sync>(
+async fn expect_dry_broadcast<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     to_broadcast: TxBroadcastData,
     client: &C,
 ) -> Result<ProcessTxResponse> {
     match to_broadcast {
         TxBroadcastData::DryRun(tx) => {
-            rpc::dry_run_tx(client, tx.to_bytes()).await?;
+            rpc::dry_run_tx::<_, IO>(client, tx.to_bytes()).await?;
             Ok(ProcessTxResponse::DryRun)
         }
         TxBroadcastData::Live {
@@ -1939,7 +2046,10 @@ fn lift_rpc_error<T>(res: std::result::Result<T, RpcError>) -> Result<T> {
 /// Returns the given validator if the given address is a validator,
 /// otherwise returns an error, force forces the address through even
 /// if it isn't a validator
-async fn known_validator_or_err<C: crate::sdk::queries::Client + Sync>(
+async fn known_validator_or_err<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     validator: Address,
     force: bool,
     client: &C,
@@ -1948,7 +2058,8 @@ async fn known_validator_or_err<C: crate::sdk::queries::Client + Sync>(
     let is_validator = rpc::is_validator(client, &validator).await?;
     if !is_validator {
         if force {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "The address {} doesn't belong to any known validator account.",
                 validator
             );
@@ -1964,7 +2075,7 @@ async fn known_validator_or_err<C: crate::sdk::queries::Client + Sync>(
 /// general pattern for checking if an address exists on the chain, or
 /// throwing an error if it's not forced. Takes a generic error
 /// message and the error type.
-async fn address_exists_or_err<C, F>(
+async fn address_exists_or_err<C, F, IO: Io>(
     addr: Address,
     force: bool,
     client: &C,
@@ -1978,7 +2089,7 @@ where
     let addr_exists = rpc::known_address::<C>(client, &addr).await?;
     if !addr_exists {
         if force {
-            eprintln!("{}", message);
+            edisplay_line!(IO, "{}", message);
             Ok(addr)
         } else {
             Err(err(addr))
@@ -1991,14 +2102,17 @@ where
 /// Returns the given source address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn source_exists_or_err<C: crate::sdk::queries::Client + Sync>(
+async fn source_exists_or_err<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     token: Address,
     force: bool,
     client: &C,
 ) -> Result<Address> {
     let message =
         format!("The source address {} doesn't exist on chain.", token);
-    address_exists_or_err(token, force, client, message, |err| {
+    address_exists_or_err::<_, _, IO>(token, force, client, message, |err| {
         Error::from(TxError::SourceDoesNotExist(err))
     })
     .await
@@ -2007,14 +2121,17 @@ async fn source_exists_or_err<C: crate::sdk::queries::Client + Sync>(
 /// Returns the given target address if the given address exists on chain
 /// otherwise returns an error, force forces the address through even
 /// if it isn't on chain
-async fn target_exists_or_err<C: crate::sdk::queries::Client + Sync>(
+async fn target_exists_or_err<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     token: Address,
     force: bool,
     client: &C,
 ) -> Result<Address> {
     let message =
         format!("The target address {} doesn't exist on chain.", token);
-    address_exists_or_err(token, force, client, message, |err| {
+    address_exists_or_err::<_, _, IO>(token, force, client, message, |err| {
         Error::from(TxError::TargetLocationDoesNotExist(err))
     })
     .await
@@ -2023,7 +2140,10 @@ async fn target_exists_or_err<C: crate::sdk::queries::Client + Sync>(
 /// Checks the balance at the given address is enough to transfer the
 /// given amount, along with the balance even existing. Force
 /// overrides this. Returns the updated balance for fee check if necessary
-async fn check_balance_too_low_err<C: crate::sdk::queries::Client + Sync>(
+async fn check_balance_too_low_err<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     token: &Address,
     source: &Address,
     amount: token::Amount,
@@ -2038,14 +2158,21 @@ async fn check_balance_too_low_err<C: crate::sdk::queries::Client + Sync>(
             Some(diff) => Ok(diff),
             None => {
                 if force {
-                    eprintln!(
+                    edisplay_line!(
+                        IO,
                         "The balance of the source {} of token {} is lower \
                          than the amount to be transferred. Amount to \
                          transfer is {} and the balance is {}.",
                         source,
                         token,
-                        format_denominated_amount(client, token, amount).await,
-                        format_denominated_amount(client, token, balance).await,
+                        format_denominated_amount::<_, IO>(
+                            client, token, amount
+                        )
+                        .await,
+                        format_denominated_amount::<_, IO>(
+                            client, token, balance
+                        )
+                        .await,
                     );
                     Ok(token::Amount::default())
                 } else {
@@ -2062,9 +2189,11 @@ async fn check_balance_too_low_err<C: crate::sdk::queries::Client + Sync>(
             QueryError::General(_) | QueryError::NoSuchKey(_),
         )) => {
             if force {
-                eprintln!(
+                edisplay_line!(
+                    IO,
                     "No balance found for the source {} of token {}",
-                    source, token
+                    source,
+                    token
                 );
                 Ok(token::Amount::default())
             } else {
@@ -2081,10 +2210,17 @@ async fn check_balance_too_low_err<C: crate::sdk::queries::Client + Sync>(
 }
 
 #[allow(dead_code)]
-fn validate_untrusted_code_err(vp_code: &Vec<u8>, force: bool) -> Result<()> {
+fn validate_untrusted_code_err<IO: Io>(
+    vp_code: &Vec<u8>,
+    force: bool,
+) -> Result<()> {
     if let Err(err) = vm::validate_untrusted_wasm(vp_code) {
         if force {
-            eprintln!("Validity predicate code validation failed with {}", err);
+            edisplay_line!(
+                IO,
+                "Validity predicate code validation failed with {}",
+                err
+            );
             Ok(())
         } else {
             Err(Error::from(TxError::WasmValidationFailure(err)))
@@ -2093,11 +2229,14 @@ fn validate_untrusted_code_err(vp_code: &Vec<u8>, force: bool) -> Result<()> {
         Ok(())
     }
 }
-async fn query_wasm_code_hash_buf<C: crate::sdk::queries::Client + Sync>(
+async fn query_wasm_code_hash_buf<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
     client: &C,
     path: &Path,
 ) -> Result<Hash> {
-    query_wasm_code_hash(client, path.to_string_lossy()).await
+    query_wasm_code_hash::<_, IO>(client, path.to_string_lossy()).await
 }
 
 /// A helper for [`fn build`] that can be used for `on_tx` arg that does nothing
