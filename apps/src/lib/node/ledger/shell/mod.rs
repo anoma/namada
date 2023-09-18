@@ -2203,12 +2203,60 @@ mod abciplus_mempool_tests {
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
+    use namada::types::transaction::protocol::{
+        ethereum_tx_data_variants, ProtocolTx, ProtocolTxType,
+    };
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
     use crate::wallet;
+
+    /// Check that broadcasting expired Ethereum events works
+    /// as expected.
+    #[test]
+    fn test_commit_broadcasts_expired_eth_events() {
+        let (mut shell, mut broadcaster_rx, _, _) =
+            test_utils::setup_at_height(5);
+
+        // push expired events to queue
+        let ethereum_event_0 = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        let ethereum_event_1 = EthereumEvent::TransfersToNamada {
+            nonce: 1u64.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        shell
+            .wl_storage
+            .storage
+            .expired_txs_queue
+            .push(ExpiredTx::EthereumEvent(ethereum_event_0.clone()));
+        shell
+            .wl_storage
+            .storage
+            .expired_txs_queue
+            .push(ExpiredTx::EthereumEvent(ethereum_event_1.clone()));
+
+        // broadcast them
+        shell.broadcast_expired_txs();
+
+        // attempt to receive vote extension tx aggregating
+        // all expired events
+        let serialized_tx = broadcaster_rx.blocking_recv().unwrap();
+        let tx = Tx::try_from(&serialized_tx[..]).unwrap();
+
+        // check data inside tx
+        let vote_extension =
+            ethereum_tx_data_variants::EthEventsVext::try_from(&tx).unwrap();
+        assert_eq!(
+            vote_extension.data.ethereum_events,
+            vec![ethereum_event_0, ethereum_event_1]
+        );
+    }
 
     /// Test that we do not include protocol txs in the mempool,
     /// voting on ethereum events or signing bridge pool roots
@@ -2347,7 +2395,7 @@ mod abciplus_mempool_tests {
 }
 
 #[cfg(test)]
-mod test_mempool_validate {
+mod tests {
     use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::transaction::{Fee, WrapperTx};
