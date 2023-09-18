@@ -1,12 +1,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{Result, WrapErr};
+use namada_core::hints;
 use namada_core::ledger::storage::{
     DBIter, PrefixIter, StorageHasher, WlStorage, DB,
 };
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::Key;
+use namada_core::types::voting_power::FractionalVotingPower;
 
-use super::{EpochedVotingPower, Tally, Votes};
+use super::{EpochedVotingPower, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
 
 pub fn write<D, H, T>(
@@ -36,21 +38,39 @@ where
     Ok(())
 }
 
+/// Delete a tally from storage, and return the associated payload of
+/// type `T` being voted on, in case it has accumulated more than 1/3
+/// of fractional voting power behind it.
+#[must_use = "The optional payload returned by this function must be used"]
 pub fn delete<D, H, T>(
     wl_storage: &mut WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
-) -> Result<()>
+) -> Result<Option<T>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    T: BorshSerialize,
+    T: BorshDeserialize,
 {
+    let opt_body = {
+        let voting_power: EpochedVotingPower =
+            super::read::value(wl_storage, &keys.voting_power())?;
+
+        if hints::unlikely(
+            voting_power.fractional_stake(wl_storage)
+                > FractionalVotingPower::ONE_THIRD,
+        ) {
+            let body: T = super::read::value(wl_storage, &keys.body())?;
+            Some(body)
+        } else {
+            None
+        }
+    };
     wl_storage.delete(&keys.body())?;
     wl_storage.delete(&keys.seen())?;
     wl_storage.delete(&keys.seen_by())?;
     wl_storage.delete(&keys.voting_power())?;
     wl_storage.delete(&keys.voting_started_epoch())?;
-    Ok(())
+    Ok(opt_body)
 }
 
 pub fn read<D, H, T>(
