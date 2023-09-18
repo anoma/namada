@@ -814,9 +814,6 @@ where
             )
         });
 
-        // NOTE: the oracle isn't started through governance votes, so we don't
-        // check to see if we need to start it after epoch transitions
-
         let root = self.wl_storage.storage.merkle_root();
         tracing::info!(
             "Committed block hash: {}, height: {}",
@@ -825,11 +822,13 @@ where
         );
         response.data = root.0.to_vec();
 
+        // validator specific actions
         if let ShellMode::Validator {
             eth_oracle: Some(eth_oracle),
             ..
         } = &self.mode
         {
+            // update the oracle's last processed eth block
             let last_processed_block = eth_oracle
                 .last_processed_block_receiver
                 .borrow()
@@ -849,32 +848,41 @@ where
                      blocks"
                 ),
             }
+
+            // broadcast any queued txs
+            self.broadcast_queued_txs();
         }
 
-        #[cfg(not(feature = "abcipp"))]
-        {
-            use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
-
-            if let ShellMode::Validator { .. } = &self.mode {
-                let ext = self.craft_extension();
-
-                let protocol_key = self
-                    .mode
-                    .get_protocol_key()
-                    .expect("Validators should have protocol keys");
-
-                let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
-                    protocol_tx
-                        .sign(protocol_key, self.chain_id.clone())
-                        .to_bytes()
-                });
-
-                for tx in protocol_txs {
-                    self.mode.broadcast(tx);
-                }
-            }
-        }
         response
+    }
+
+    /// Empties all the ledger's queues of transactions to be broadcasted
+    /// via CometBFT's P2P network.
+    #[inline]
+    fn broadcast_queued_txs(&mut self) {
+        self.broadcast_protocol_txs();
+    }
+
+    /// Broadcast any pending protocol transactions.
+    fn broadcast_protocol_txs(&mut self) {
+        use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
+
+        let ext = self.craft_extension();
+
+        let protocol_key = self
+            .mode
+            .get_protocol_key()
+            .expect("Validators should have protocol keys");
+
+        let protocol_txs = iter_protocol_txs(ext).map(|protocol_tx| {
+            protocol_tx
+                .sign(protocol_key, self.chain_id.clone())
+                .to_bytes()
+        });
+
+        for tx in protocol_txs {
+            self.mode.broadcast(tx);
+        }
     }
 
     /// Checks that neither the wrapper nor the inner transaction have already
