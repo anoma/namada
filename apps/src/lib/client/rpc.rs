@@ -52,8 +52,8 @@ use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
-use namada::types::{ storage, token};
-use namada::{display, display_line, edisplay_line};
+use namada::types::{storage, token};
+use namada::{display, display_line, edisplay_line, prompt};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
