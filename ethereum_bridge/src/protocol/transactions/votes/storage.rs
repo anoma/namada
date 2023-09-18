@@ -136,10 +136,52 @@ where
 mod tests {
     use std::collections::BTreeMap;
 
+    use assert_matches::assert_matches;
     use namada_core::types::ethereum_events::EthereumEvent;
 
     use super::*;
     use crate::test_utils;
+
+    #[test]
+    fn test_delete_expired_tally() {
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (validator, validator_voting_power) =
+            test_utils::default_validator();
+
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            transfers: vec![],
+            valid_transfers_map: vec![],
+        };
+        let keys = vote_tallies::Keys::from(&event);
+
+        // write some random ethereum event's tally to storage
+        // with >1/3 voting power behind it
+        let mut tally = Tally {
+            voting_power: EpochedVotingPower::from([(
+                0.into(),
+                // store only half of the available voting power,
+                // which is >1/3 but <=2/3
+                FractionalVotingPower::HALF * validator_voting_power,
+            )]),
+            seen_by: BTreeMap::from([(validator, 1.into())]),
+            seen: false,
+        };
+        assert!(write(&mut wl_storage, &keys, &event, &tally, false).is_ok());
+
+        // delete the tally and check that the body is returned
+        let opt_body = delete(&mut wl_storage, &keys).unwrap();
+        assert_matches!(opt_body, Some(e) if e == event);
+
+        // now, we write another tally, with <=1/3 voting power
+        tally.voting_power =
+            EpochedVotingPower::from([(0.into(), 1u64.into())]);
+        assert!(write(&mut wl_storage, &keys, &event, &tally, false).is_ok());
+
+        // delete the tally and check that no body is returned
+        let opt_body = delete(&mut wl_storage, &keys).unwrap();
+        assert_matches!(opt_body, None);
+    }
 
     #[test]
     fn test_write_tally() {
