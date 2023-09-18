@@ -27,7 +27,6 @@ use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::parameters::storage as parameter_storage;
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::sdk::{args, rpc};
 use crate::sdk::error::{EncodingError, Error, TxError};
 use crate::sdk::masp::{
     make_asset_type, ShieldedContext, ShieldedTransfer, ShieldedUtils,
@@ -43,6 +42,7 @@ use crate::sdk::tx::{
 };
 pub use crate::sdk::wallet::store::AddressVpType;
 use crate::sdk::wallet::{Wallet, WalletUtils};
+use crate::sdk::{args, rpc};
 use crate::types::io::*;
 use crate::types::key::*;
 use crate::types::masp::{ExtendedViewingKey, PaymentAddress};
