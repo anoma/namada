@@ -3985,7 +3985,7 @@ pub mod args {
                     safe_exit(1);
                 })
                 .amount;
-            let tx_code_path = PathBuf::from(TX_UNBOND_WASM);
+            let tx_code_path = PathBuf::from(TX_REDELEGATE_WASM);
             Self {
                 tx,
                 src_validator,
