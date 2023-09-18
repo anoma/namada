@@ -1781,7 +1781,7 @@ where
     let redelegated_bonds =
         delegator_redelegated_bonds_handle(source).at(validator);
     #[cfg(debug_assertions)]
-    let b_pre = redelegated_bonds.collect_map(storage)?;
+    let redel_bonds_pre = redelegated_bonds.collect_map(storage)?;
 
     // `resultUnbonding`
     // Find the bonds to fully unbond and one to partially unbond, if necessary
@@ -2007,7 +2007,7 @@ where
         slashes,
     )?;
     #[cfg(debug_assertions)]
-    let b_post = redelegated_bonds.collect_map(storage)?;
+    let redel_bonds_post = redelegated_bonds.collect_map(storage)?;
     debug_assert!(
         result_slashing.sum.change() <= amount,
         "Amount after slashing ({}) must be <= requested amount to unbond \
@@ -2058,7 +2058,8 @@ where
 
     // Invariant: in the affected epochs, the delta of bonds must be >= delta of
     // redelegated bonds deltas sum
-    if cfg!(debug_assertions) {
+    #[cfg(debug_assertions)]
+    {
         let mut epochs = bonds_to_unbond.epochs.clone();
         if let Some((epoch, _)) = bonds_to_unbond.new_entry {
             epochs.insert(epoch);
@@ -2078,8 +2079,8 @@ where
                 cur_bond >= redelegated_deltas,
                 "After unbonding, in epoch {epoch} the bond amount {} must be \
                  >= redelegated deltas at pipeline {}.\n\nredelegated_bonds \
-                 pre: {b_pre:#?}\nredelegated_bonds post: \
-                 {b_post:#?},\nmodified_redelegation: \
+                 pre: {redel_bonds_pre:#?}\nredelegated_bonds post: \
+                 {redel_bonds_post:#?},\nmodified_redelegation: \
                  {modified_redelegation:#?},\nbonds_to_unbond: \
                  {bonds_to_unbond:#?}",
                 cur_bond.to_string_native(),
