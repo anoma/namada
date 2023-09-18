@@ -185,10 +185,7 @@ impl Mul<&Amount> for FractionalVotingPower {
     fn mul(self, &rhs: &Amount) -> Self::Output {
         let whole: Uint = rhs.into();
         let fraction = (self.0 * whole).to_integer();
-        match Amount::from_uint(fraction, 0u8) {
-            Ok(amount) => amount,
-            _ => unreachable!(),
-        }
+        Amount::from_uint(fraction, 0u8).unwrap()
     }
 }
 
