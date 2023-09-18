@@ -52,10 +52,11 @@ use namada::proto::{self, Section, Tx};
 use namada::types::address::Address;
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
-use namada::types::internal::TxInQueue;
+use namada::types::internal::{ExpiredTx, TxInQueue};
 use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::DateTimeUtc;
+use namada::types::transaction::protocol::EthereumTxData;
 use namada::types::transaction::{
     hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -861,6 +862,7 @@ where
     #[inline]
     fn broadcast_queued_txs(&mut self) {
         self.broadcast_protocol_txs();
+        self.broadcast_expired_txs();
     }
 
     /// Broadcast any pending protocol transactions.
@@ -882,6 +884,35 @@ where
 
         for tx in protocol_txs {
             self.mode.broadcast(tx);
+        }
+    }
+
+    /// Broadcast any expired transactions.
+    fn broadcast_expired_txs(&mut self) {
+        let eth_events = {
+            let mut events: Vec<_> = self
+                .wl_storage
+                .storage
+                .expired_txs_queue
+                .drain()
+                .map(|expired_tx| match expired_tx {
+                    ExpiredTx::EthereumEvent(event) => event,
+                })
+                .collect();
+            events.sort();
+            events
+        };
+        if let Some(vote_extension) = self.sign_ethereum_events(eth_events) {
+            let protocol_key = self
+                .mode
+                .get_protocol_key()
+                .expect("Validators should have protocol keys");
+
+            let signed_tx = EthereumTxData::EthEventsVext(vote_extension)
+                .sign(protocol_key, self.chain_id.clone())
+                .to_bytes();
+
+            self.mode.broadcast(signed_tx);
         }
     }
 
@@ -2172,9 +2203,7 @@ mod abciplus_mempool_tests {
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
     use namada::types::storage::BlockHeight;
-    use namada::types::transaction::protocol::{
-        EthereumTxData, ProtocolTx, ProtocolTxType,
-    };
+    use namada::types::transaction::protocol::{ProtocolTx, ProtocolTxType};
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
