@@ -56,7 +56,6 @@ use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
-use crate::types::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::types::io::Io;
 use crate::types::key::*;
 use crate::types::masp::TransferTarget;
@@ -395,7 +394,7 @@ where
 
     let parsed = {
         let wrapper_query =
-            crate::ledger::rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+            rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event =
             rpc::query_tx_status::<_, IO>(client, wrapper_query, deadline)
                 .await

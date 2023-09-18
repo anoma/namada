@@ -43,7 +43,7 @@ use crate::types::hash::Hash;
 use crate::types::io::Io;
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
-use crate::types::{error, storage, token};
+use crate::types::{storage, token};
 use crate::{display_line, edisplay_line};
 
 /// Query the status of a given transaction.

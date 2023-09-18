@@ -52,7 +52,7 @@ use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::types::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::types::token::{Change, MaspDenom};
-use namada::types::{error, storage, token};
+use namada::types::{ storage, token};
 use namada::{display, display_line, edisplay_line};
 use tokio::time::Instant;
 
@@ -74,7 +74,7 @@ pub async fn query_tx_status<
     status: namada::sdk::rpc::TxEventQuery<'_>,
     deadline: Instant,
 ) -> Event {
-    namada::ledger::rpc::query_tx_status::<_, IO>(client, status, deadline)
+    rpc::query_tx_status::<_, IO>(client, status, deadline)
         .await
         .proceed()
 }
@@ -86,7 +86,7 @@ pub async fn query_and_print_epoch<
 >(
     client: &C,
 ) -> Epoch {
-    let epoch = namada::ledger::rpc::query_epoch(client).await.unwrap();
+    let epoch = rpc::query_epoch(client).await.unwrap();
     display_line!(IO, "Last committed epoch: {}", epoch);
     epoch
 }
@@ -2045,7 +2045,7 @@ where
     display_line!(
         IO,
         "Dry-run result: {}",
-        namada::ledger::rpc::dry_run_tx::<_, IO>(client, tx_bytes).await?
+        rpc::dry_run_tx::<_, IO>(client, tx_bytes).await?
     );
     Ok(())
 }
@@ -2056,7 +2056,7 @@ pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
     address: &Address,
     index: u8,
 ) -> Result<Option<common::PublicKey>, error::Error> {
-    namada::sdk::rpc::get_public_key_at(client, address, index).await
+    rpc::get_public_key_at(client, address, index).await
 }
 
 /// Check if the given address is a known validator.
@@ -2195,7 +2195,7 @@ pub async fn query_wasm_code_hash<
     client: &C,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
-    namada::ledger::rpc::query_wasm_code_hash::<_, IO>(client, code_path).await
+    rpc::query_wasm_code_hash::<_, IO>(client, code_path).await
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
@@ -2237,7 +2237,7 @@ pub async fn query_storage_prefix<
 where
     T: BorshDeserialize,
 {
-    namada::ledger::rpc::query_storage_prefix::<_, IO, _>(client, key)
+    rpc::query_storage_prefix::<_, IO, _>(client, key)
         .await
         .unwrap()
 }

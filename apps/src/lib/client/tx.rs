@@ -22,7 +22,6 @@ use namada::sdk::{error, masp, signing, tx};
 use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
-use namada::types::error;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
