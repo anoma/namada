@@ -1269,7 +1269,7 @@ where
     Ok(())
 }
 
-pub async fn submit_redelegation<C>(
+pub async fn submit_redelegate<C>(
     client: &C,
     mut ctx: Context,
     args: args::Redelegate,
