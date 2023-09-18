@@ -121,3 +121,12 @@ macro_rules! edisplay_line {
         <$io>::eprintln(format_args!($($args)*).to_string())
     };
 }
+
+#[macro_export]
+/// A convenience macro for formatting the user prompt before
+/// forwarding it to the [`Io::prompt`] method.
+macro_rules! prompt {
+    ($io:ty,$($arg:tt)*) => {{
+        <$io>::prompt(format!("{}", format_args!($($arg)*)))
+    }}
+}
