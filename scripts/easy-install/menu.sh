@@ -98,54 +98,51 @@ display_information() {
         fi
         
         echo ""
-
-        if [[ ! -z "$WALLET_NAME" ]]; then
-            print_colored_variable "Wallet name" "$WALLET_NAME"
-        fi
-        
-        if [[ ! -z "$WALLET_ADDRESS" ]]; then
-            print_colored_variable "Wallet address" "$WALLET_ADDRESS"
-
-            if [[ "$SYNC_STATUS" == "false" ]]; then
-                balance_output_wallet=$(namada client balance --owner $WALLET_NAME --token NAM)
-                WALLET_BALANCE=$(echo $balance_output_wallet | awk '{print $2}')
-
-                if [[ $WALLET_BALANCE =~ ^[0-9.]+$ ]]; then
-                    echo "Wallet balance:      $WALLET_BALANCE NAM"
-                else
-                    echo "Wallet balance:      0 NAM"
-                fi
-            fi
-        fi
-        
-        if [[ ! -z "$VALIDATOR_BOND" ]]; then
-            print_colored_variable "Validator bond" "$VALIDATOR_BOND"
-        fi
-        
-        echo ""
-        print_variable "Node block height" "$NODE_BLOCK_HEIGHT"
-        
-        if [[ "$SYNC_STATUS" == "true" ]]; then
-            echo -e "Sync status:         \e[31mIn progress\e[0m"  # RED
-        else
-            echo -e "Sync status:         \e[32mSynced\e[0m"  # GREEN
-        fi
-        
-        if [[ "$SERVICE_STATUS" == "active" ]]; then
-            echo -e "Service status:      \e[32mACTIVE\e[0m"  # GREEN
-        else
-            echo -e "Service status:      \e[31mNOT ACTIVE\e[0m"  # RED
-        fi
-        
-        echo "                                                                         "
     fi
 
+    if [[ ! -z "$WALLET_NAME" ]]; then
+        print_colored_variable "Wallet name" "$WALLET_NAME"
+    fi
+    
+    if [[ ! -z "$WALLET_ADDRESS" ]]; then
+        print_colored_variable "Wallet address" "$WALLET_ADDRESS"
+
+        if [[ "$SYNC_STATUS" == "false" ]]; then
+            balance_output_wallet=$(namada client balance --owner $WALLET_NAME --token NAM)
+            WALLET_BALANCE=$(echo $balance_output_wallet | awk '{print $2}')
+
+            if [[ $WALLET_BALANCE =~ ^[0-9.]+$ ]]; then
+                echo "Wallet balance:      $WALLET_BALANCE NAM"
+            else
+                echo "Wallet balance:      0 NAM"
+            fi
+        fi
+    fi
+    
+    if [[ ! -z "$VALIDATOR_BOND" ]]; then
+        print_colored_variable "Validator bond" "$VALIDATOR_BOND"
+    fi
+    
+    echo ""
+    print_variable "Node block height" "$NODE_BLOCK_HEIGHT"
+    
+    if [[ "$SYNC_STATUS" == "true" ]]; then
+        echo -e "Sync status:         \e[31mIn progress\e[0m"  # RED
+    else
+        echo -e "Sync status:         \e[32mSynced\e[0m"  # GREEN
+    fi
+    
+    if [[ "$SERVICE_STATUS" == "active" ]]; then
+        echo -e "Service status:      \e[32mACTIVE\e[0m"  # GREEN
+    else
+        echo -e "Service status:      \e[31mNOT ACTIVE\e[0m"  # RED
+    fi
+    
+    echo "                                                                         "
 }
 
 clear_logo
 display_information
-
-#!/bin/bash
 
 while true; do
     echo "                                                                         "

@@ -14,7 +14,6 @@ while true; do
 
     case $validator_choice in
         1)
-            echo "Checking Balance..."
             if [[ "$SYNC_STATUS" == "true" ]]; then
                 echo "Node synchronization is in progress. Balance check is not possible."
             else
@@ -33,9 +32,9 @@ while true; do
                 echo "Node synchronization is in progress. Validator initialization is not possible."
             else
                 init_validator() {
-                    echo "Initing validator..."
+                    echo "Initializing validator..."
                     
-                    # Run the command to init the validator
+                    # Run the command to initialize the validator
                     init_result=$(namada client init-validator \
                         --alias $MONIKER \
                         --account-keys $WALLET_NAME \
@@ -43,8 +42,8 @@ while true; do
                         --commission-rate 0.05 \
                         --max-commission-rate-change 0.01)
                     
-                    # Extract the validator address from the VPs result
-                    VALIDATOR_ADDRES=$(echo $init_result | grep -oE "atest1[0-9a-z]+" | tail -1)
+                    # Extract the validator address from the result
+                    VALIDATOR_ADDRESS=$(echo $init_result | grep -oE "atest1[0-9a-z]+" | tail -1)
                     
                     if [[ ! -z "$VALIDATOR_ADDRESS" ]]; then
                         # Save the validator address to VALIDATOR_ADDRESS variable
@@ -88,40 +87,37 @@ while true; do
             if [[ "$SYNC_STATUS" == "true" ]]; then
                 echo "Node synchronization is in progress. Delegation is not possible."
             else
-                echo "Delegating from Balance..."
                 delegate_tokens() {
-                    if [[ ! -z "$MONIKER" ]]; then
+                    if [[ ! -z "$MONIKER" || "$WALLET_NAME" ]]; then
                         echo "1. Delegating from Wallet Address"
                         echo "2. Delegating from Validator Address"
                         read -p "Enter your choice: " delegation_choice
                         
-               if [[ $delegation_choice == "1" ]]; then
-                   print_variable "Wallet address" "$WALLET_ADDRESS"
-                   print_variable "Wallet balance" "${WALLET_BALANCE:-NOT AVAILABLE}"
+                        if [[ $delegation_choice == "1" ]]; then
+                            print_variable "Wallet address" "$WALLET_ADDRESS"
+                            print_variable "Wallet balance" "${WALLET_BALANCE:-NOT AVAILABLE}"
     
-                   if [[ -z "$MONIKER" ]]; then
-                       read -p "Moniker is not set. Please enter the validator's Moniker: " MONIKER
-                       echo "export MONIKER=$MONIKER" >> "$HOME/.bash_profile"
-                       echo "Moniker set to: $MONIKER"
-                   fi
-                   
-                   if [[ "$SYNC_STATUS" == "false" ]]; then
-                       read -p "Enter the amount to delegate: " DELEGATION_AMOUNT
-                       
-                       if [[ $DELEGATION_AMOUNT =~ ^[0-9.]+$ ]]; then
-                           namada client bond \
-                               --source $WALLET_NAME \
-                               --validator $MONIKER \
-                               --amount $DELEGATION_AMOUNT \
-                               --signing-keys $WALLET_NAME
-                       else
-                           echo "Invalid input. Delegation amount must be a positive number."
-                       fi
-                   else
-                       echo "Node synchronization is in progress. Delegation is not possible."
-                   fi
-               fi
-
+                            if [[ -z "$MONIKER" ]]; then
+                                read -p "Moniker is not set. Please enter the validator's Moniker: " MONIKER
+                                echo "export MONIKER=$MONIKER" >> "$HOME/.bash_profile"
+                                echo "Moniker set to: $MONIKER"
+                            fi
+                            
+                            if [[ "$SYNC_STATUS" == "false" ]]; then
+                                read -p "Enter the amount to delegate: " DELEGATION_AMOUNT
+                                
+                                if [[ $DELEGATION_AMOUNT =~ ^[0-9.]+$ ]]; then
+                                    namada client bond \
+                                        --source $WALLET_NAME \
+                                        --validator $MONIKER \
+                                        --amount $DELEGATION_AMOUNT \
+                                        --signing-keys $WALLET_NAME
+                                else
+                                    echo "Invalid input. Delegation amount must be a positive number."
+                                fi
+                            else
+                                echo "Node synchronization is in progress. Delegation is not possible."
+                            fi
                         elif [[ $delegation_choice == "2" ]]; then
                             if [[ ! -z "$VALIDATOR_ADDRESS" ]]; then
                                 print_variable "Validator address" "$VALIDATOR_ADDRESS"

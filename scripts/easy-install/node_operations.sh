@@ -116,7 +116,7 @@ while true; do
                 echo "Namada $NAMADA_TAG installed successfully!"
 
                 # Download and install Cometbft
-                CBFT_TAG=$(curl -s https://api.github.com/repos/cometbft/cometbft/releases/latest | jq -r .tag_name)
+                CBFT_TAG=v0.37.2
                 CBFT_URL="https://github.com/cometbft/cometbft/releases/download/$CBFT_TAG/cometbft_${CBFT_TAG#v}_linux_amd64.tar.gz"
                 curl -L -o cometbft.tar.gz $CBFT_URL
                 tar -xzf cometbft.tar.gz -C /usr/local/bin/ cometbft
@@ -136,25 +136,24 @@ while true; do
                 # Set service
                 if [ ! -f "/etc/systemd/system/namadad.service" ]; then
                     echo "Creating service file..."
-                    sudo tee /etc/systemd/system/namadad.service > /dev/null <<EOF
-                [Unit]
-                Description=namada
-                After=network-online.target
-                [Service]
-                User=$USER
-                WorkingDirectory=$HOME/.local/share/namada
-                Environment=TM_LOG_LEVEL=p2p:none,pex:error
-                Environment=NAMADA_CMT_STDOUT=true
-                ExecStart=/usr/local/bin/namada node ledger run 
-                StandardOutput=syslog
-                StandardError=syslog
-                Restart=always
-                RestartSec=10
-                LimitNOFILE=65535
-                [Install]
-                WantedBy=multi-user.target
-                EOF
-
+                   sudo tee /etc/systemd/system/namadad.service > /dev/null <<EOF
+[Unit]
+Description=namada
+After=network-online.target
+[Service]
+User=$USER
+WorkingDirectory=$HOME/.local/share/namada
+Environment=TM_LOG_LEVEL=p2p:none,pex:error
+Environment=NAMADA_CMT_STDOUT=true
+ExecStart=/usr/local/bin/namada node ledger run 
+StandardOutput=syslog
+StandardError=syslog
+Restart=always
+RestartSec=10
+LimitNOFILE=65535
+[Install]
+WantedBy=multi-user.target
+EOF
                     sudo systemctl daemon-reload &>/dev/null
                     sudo systemctl enable namadad &>/dev/null
 
@@ -162,6 +161,8 @@ while true; do
                 else
                     echo "Service file namadad.service already exists. Proceeding to the next step."
                 fi
+                
+                export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 
                 # Join in network
                 echo "Joining the network..."
