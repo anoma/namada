@@ -215,13 +215,8 @@ where
             self.storage.next_epoch_min_start_height =
                 height + min_num_of_blocks;
             self.storage.next_epoch_min_start_time = time + min_duration;
-            // TODO put this into PoS parameters and pass it to tendermint
-            // `consensus_params` on `InitChain` and `EndBlock`
-            let evidence_max_age_num_blocks: u64 = 100000;
-            self.storage
-                .block
-                .pred_epochs
-                .new_epoch(height, evidence_max_age_num_blocks);
+
+            self.storage.block.pred_epochs.new_epoch(height);
             tracing::info!("Began a new epoch {}", self.storage.block.epoch);
         }
         Ok(new_epoch)

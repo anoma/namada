@@ -1168,29 +1168,8 @@ impl Default for Epochs {
 }
 
 impl Epochs {
-    /// Record start of a new epoch at the given block height and trim any
-    /// epochs that ended more than `max_age_num_blocks` ago.
-    pub fn new_epoch(
-        &mut self,
-        block_height: BlockHeight,
-        max_age_num_blocks: u64,
-    ) {
-        let min_block_height_to_keep = (block_height.0 + 1)
-            .checked_sub(max_age_num_blocks)
-            .unwrap_or_default();
-        // trim off any epochs whose last block is before the limit
-        while let Some((_first_known_epoch_height, rest)) =
-            self.first_block_heights.split_first()
-        {
-            if let Some(second_known_epoch_height) = rest.first() {
-                if second_known_epoch_height.0 < min_block_height_to_keep {
-                    self.first_known_epoch = self.first_known_epoch.next();
-                    self.first_block_heights = rest.to_vec();
-                    continue;
-                }
-            }
-            break;
-        }
+    /// Record start of a new epoch at the given block height
+    pub fn new_epoch(&mut self, block_height: BlockHeight) {
         self.first_block_heights.push(block_height);
     }
 
