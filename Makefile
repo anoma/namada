@@ -33,6 +33,7 @@ audit-ignores += RUSTSEC-2021-0076
 crates := namada_core
 crates += namada
 crates += namada_apps
+crates += namada_ethereum_bridge
 crates += namada_encoding_spec
 crates += namada_macros
 crates += namada_proof_of_stake
