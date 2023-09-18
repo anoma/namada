@@ -43,6 +43,7 @@ use crate::types::address::{
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::hash::{Error as HashError, Hash};
+use crate::types::internal::ExpiredTxsQueue;
 // TODO
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
@@ -104,6 +105,12 @@ where
     /// Wrapper txs to be decrypted in the next block proposal
     #[cfg(feature = "ferveo-tpke")]
     pub tx_queue: TxQueue,
+    /// Queue of expired transactions that need to be retransmitted.
+    ///
+    /// These transactions do not need to be persisted, as they are
+    /// retransmitted at the **COMMIT** phase immediately following
+    /// the block when they were queued.
+    pub expired_txs_queue: ExpiredTxsQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
@@ -412,6 +419,7 @@ where
             conversion_state: ConversionState::default(),
             #[cfg(feature = "ferveo-tpke")]
             tx_queue: TxQueue::default(),
+            expired_txs_queue: ExpiredTxsQueue::default(),
             native_token,
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
@@ -1168,6 +1176,7 @@ pub mod testing {
                 conversion_state: ConversionState::default(),
                 #[cfg(feature = "ferveo-tpke")]
                 tx_queue: TxQueue::default(),
+                expired_txs_queue: ExpiredTxsQueue::default(),
                 native_token: address::nam(),
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
