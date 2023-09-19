@@ -6,8 +6,9 @@ mod utils;
 
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
-use std::ops::Range;
+use std::ops::{Deref, Range};
 
+use assert_matches::assert_matches;
 use namada_core::ledger::storage::testing::TestWlStorage;
 use namada_core::ledger::storage_api::collections::lazy_map::{
     self, Collectable, NestedMap,
@@ -74,7 +75,8 @@ use crate::{
     validator_state_handle, validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, withdraw_tokens,
     write_validator_address_raw_hash, BecomeValidator, EagerRedelegatedUnbonds,
-    FoldRedelegatedBondsResult, ModifiedRedelegation, STORE_VALIDATOR_SETS_LEN,
+    FoldRedelegatedBondsResult, ModifiedRedelegation, RedelegationError,
+    STORE_VALIDATOR_SETS_LEN,
 };
 
 proptest! {
@@ -4592,6 +4594,24 @@ fn test_simple_redelegation_aux(
     let del_balance = token::Amount::from_uint(1_000_000, 0).unwrap();
     credit_tokens(&mut storage, &staking_token, &delegator, del_balance)
         .unwrap();
+
+    // Ensure that we cannot redelegate with the same src and dest validator
+    let err = super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &src_validator,
+        &src_validator,
+        current_epoch,
+        amount_redelegate,
+    )
+    .unwrap_err();
+    let err_str = err.to_string();
+    assert_matches!(
+        err.downcast::<RedelegationError>().unwrap().deref(),
+        RedelegationError::RedelegationSrcEqDest,
+        "Redelegation with the same src and dest validator must be rejected, \
+         got {err_str}",
+    );
 
     for _ in 0..5 {
         current_epoch = advance_epoch(&mut storage, &params);

@@ -128,6 +128,8 @@ pub enum UnjailValidatorError {
 pub enum RedelegationError {
     #[error("The redelegation is chained")]
     IsChainedRedelegation,
+    #[error("The source and destination validator must be different")]
+    RedelegationSrcEqDest,
 }
 
 impl From<BecomeValidatorError> for storage_api::Error {

@@ -5366,6 +5366,9 @@ where
     if amount == token::Amount::zero() {
         return Ok(());
     }
+    if src_validator == dest_validator {
+        return Err(RedelegationError::RedelegationSrcEqDest.into());
+    }
 
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
