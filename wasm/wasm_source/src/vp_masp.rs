@@ -90,185 +90,167 @@ fn validate_tx(
         verifiers,
     );
 
-    let signed = tx_data;
-    let transfer =
-        token::Transfer::try_from_slice(&signed.data().unwrap()[..]).unwrap();
+    let (transfer, shielded_tx) = ctx.get_shielded_action(tx_data)?;
+    let mut transparent_tx_pool = I128Sum::zero();
+    // The Sapling value balance adds to the transparent tx pool
+    transparent_tx_pool += shielded_tx.sapling_value_balance();
 
-    let shielded = transfer
-        .shielded
-        .as_ref()
-        .map(|hash| {
-            signed
-                .get_section(hash)
-                .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg("unable to find shielded section")
-        })
-        .transpose()?;
-    if let Some(shielded_tx) = shielded {
-        let mut transparent_tx_pool = I128Sum::zero();
-        // The Sapling value balance adds to the transparent tx pool
-        transparent_tx_pool += shielded_tx.sapling_value_balance();
+    if transfer.source != masp() {
+        // Handle transparent input
+        // Note that the asset type is timestamped so shields
+        // where the shielded value has an incorrect timestamp
+        // are automatically rejected
+        for denom in token::MaspDenom::iter() {
+            let (_transp_asset, transp_amt) = convert_amount(
+                ctx.get_block_epoch().unwrap(),
+                &transfer.token,
+                transfer.amount.into(),
+                denom,
+            );
 
-        if transfer.source != masp() {
-            // Handle transparent input
-            // Note that the asset type is timestamped so shields
-            // where the shielded value has an incorrect timestamp
-            // are automatically rejected
-            for denom in token::MaspDenom::iter() {
-                let (_transp_asset, transp_amt) = convert_amount(
+            // Non-masp sources add to transparent tx pool
+            transparent_tx_pool += transp_amt;
+        }
+    } else {
+        // Handle shielded input
+        // The following boundary conditions must be satisfied
+        // 1. Zero transparent input
+        // 2. the transparent transaction value pool's amount must equal the
+        // containing wrapper transaction's fee amount
+        // Satisfies 1.
+        if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+            if !transp_bundle.vin.is_empty() {
+                debug_log!(
+                    "Transparent input to a transaction from the masp must be \
+                     0 but is {}",
+                    transp_bundle.vin.len()
+                );
+                return reject();
+            }
+        }
+    }
+
+    if transfer.target != masp() {
+        // Handle transparent output
+        // The following boundary conditions must be satisfied
+        // 1. One to 4 transparent outputs
+        // 2. Asset type must be properly derived
+        // 3. Value from the output must be the same as the containing
+        // transfer
+        // 4. Public key must be the hash of the target
+
+        // Satisfies 1.
+        let transp_bundle = shielded_tx.transparent_bundle().ok_or_err_msg(
+            "Expected transparent outputs in unshielding transaction",
+        )?;
+
+        let out_length = transp_bundle.vout.len();
+        if !(1..=4).contains(&out_length) {
+            debug_log!(
+                "Transparent output to a transaction to the masp must be \
+                 beteween 1 and 4 but is {}",
+                transp_bundle.vout.len()
+            );
+
+            return reject();
+        }
+        let mut outs = transp_bundle.vout.iter();
+        let mut valid_count = 0;
+        for denom in token::MaspDenom::iter() {
+            let out = match outs.next() {
+                Some(out) => out,
+                None => continue,
+            };
+
+            let expected_asset_type: AssetType =
+                asset_type_from_epoched_address(
                     ctx.get_block_epoch().unwrap(),
                     &transfer.token,
-                    transfer.amount.into(),
                     denom,
                 );
 
-                // Non-masp sources add to transparent tx pool
-                transparent_tx_pool += transp_amt;
+            // Satisfies 2. and 3.
+            if !valid_asset_type(&expected_asset_type, &out.asset_type) {
+                // we don't know which masp denoms are necessary apriori.
+                // This is encoded via the asset types.
+                continue;
             }
-        } else {
-            // Handle shielded input
-            // The following boundary conditions must be satisfied
-            // 1. Zero transparent input
-            // 2. the transparent transaction value pool's amount must equal the
-            // containing wrapper transaction's fee amount
-            // Satisfies 1.
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vin.is_empty() {
-                    debug_log!(
-                        "Transparent input to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vin.len()
-                    );
-                    return reject();
-                }
+            if !valid_transfer_amount(
+                out.value,
+                denom.denominate(&transfer.amount.amount),
+            ) {
+                return reject();
             }
-        }
 
-        if transfer.target != masp() {
-            // Handle transparent output
-            // The following boundary conditions must be satisfied
-            // 1. One to 4 transparent outputs
-            // 2. Asset type must be properly derived
-            // 3. Value from the output must be the same as the containing
-            // transfer
-            // 4. Public key must be the hash of the target
+            let (_transp_asset, transp_amt) = convert_amount(
+                ctx.get_block_epoch().unwrap(),
+                &transfer.token,
+                transfer.amount.amount,
+                denom,
+            );
 
-            // Satisfies 1.
-            let transp_bundle =
-                shielded_tx.transparent_bundle().ok_or_err_msg(
-                    "Expected transparent outputs in unshielding transaction",
-                )?;
+            // Non-masp destinations subtract from transparent tx pool
+            transparent_tx_pool -= transp_amt;
 
-            let out_length = transp_bundle.vout.len();
-            if !(1..=4).contains(&out_length) {
+            // Satisfies 4.
+            let target_enc = transfer
+                .target
+                .try_to_vec()
+                .expect("target address encoding");
+
+            let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
+
+            if <[u8; 20]>::from(hash) != out.address.0 {
                 debug_log!(
-                    "Transparent output to a transaction to the masp must be \
-                     beteween 1 and 4 but is {}",
+                    "the public key of the output account does not match the \
+                     transfer target"
+                );
+                return reject();
+            }
+            valid_count += 1;
+        }
+        // one or more of the denoms in the batch failed to verify
+        // the asset derivation.
+        if valid_count != out_length {
+            return reject();
+        }
+    } else {
+        // Handle shielded output
+        // The following boundary conditions must be satisfied
+        // 1. Zero transparent output
+
+        // Satisfies 1.
+        if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+            if !transp_bundle.vout.is_empty() {
+                debug_log!(
+                    "Transparent output to a transaction from the masp must \
+                     be 0 but is {}",
                     transp_bundle.vout.len()
                 );
-
                 return reject();
-            }
-            let mut outs = transp_bundle.vout.iter();
-            let mut valid_count = 0;
-            for denom in token::MaspDenom::iter() {
-                let out = match outs.next() {
-                    Some(out) => out,
-                    None => continue,
-                };
-
-                let expected_asset_type: AssetType =
-                    asset_type_from_epoched_address(
-                        ctx.get_block_epoch().unwrap(),
-                        &transfer.token,
-                        denom,
-                    );
-
-                // Satisfies 2. and 3.
-                if !valid_asset_type(&expected_asset_type, &out.asset_type) {
-                    // we don't know which masp denoms are necessary apriori.
-                    // This is encoded via the asset types.
-                    continue;
-                }
-                if !valid_transfer_amount(
-                    out.value,
-                    denom.denominate(&transfer.amount.amount),
-                ) {
-                    return reject();
-                }
-
-                let (_transp_asset, transp_amt) = convert_amount(
-                    ctx.get_block_epoch().unwrap(),
-                    &transfer.token,
-                    transfer.amount.amount,
-                    denom,
-                );
-
-                // Non-masp destinations subtract from transparent tx pool
-                transparent_tx_pool -= transp_amt;
-
-                // Satisfies 4.
-                let target_enc = transfer
-                    .target
-                    .try_to_vec()
-                    .expect("target address encoding");
-
-                let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
-
-                if <[u8; 20]>::from(hash) != out.address.0 {
-                    debug_log!(
-                        "the public key of the output account does not match \
-                         the transfer target"
-                    );
-                    return reject();
-                }
-                valid_count += 1;
-            }
-            // one or more of the denoms in the batch failed to verify
-            // the asset derivation.
-            if valid_count != out_length {
-                return reject();
-            }
-        } else {
-            // Handle shielded output
-            // The following boundary conditions must be satisfied
-            // 1. Zero transparent output
-
-            // Satisfies 1.
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vout.is_empty() {
-                    debug_log!(
-                        "Transparent output to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vout.len()
-                    );
-                    return reject();
-                }
             }
         }
-
-        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
-            None | Some(Ordering::Less) => {
-                debug_log!(
-                    "Transparent transaction value pool must be nonnegative. \
-                     Violation may be caused by transaction being constructed \
-                     in previous epoch. Maybe try again."
-                );
-                // Section 3.4: The remaining value in the transparent
-                // transaction value pool MUST be nonnegative.
-                return reject();
-            }
-            Some(Ordering::Greater) => {
-                debug_log!(
-                    "Transaction fees cannot be paid inside MASP transaction."
-                );
-                return reject();
-            }
-            _ => {}
-        }
-        // Do the expensive proof verification in the VM at the end.
-        ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
-    } else {
-        reject()
     }
+
+    match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
+        None | Some(Ordering::Less) => {
+            debug_log!(
+                "Transparent transaction value pool must be nonnegative. \
+                 Violation may be caused by transaction being constructed in \
+                 previous epoch. Maybe try again."
+            );
+            // Section 3.4: The remaining value in the transparent
+            // transaction value pool MUST be nonnegative.
+            return reject();
+        }
+        Some(Ordering::Greater) => {
+            debug_log!(
+                "Transaction fees cannot be paid inside MASP transaction."
+            );
+            return reject();
+        }
+        _ => {}
+    }
+    // Do the expensive proof verification in the VM at the end.
+    ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
 }

@@ -7,7 +7,7 @@ pub use ics23::ProofSpec;
 use super::super::Error;
 use crate::ledger::storage_api;
 use crate::types::address::Address;
-use crate::types::ibc::IbcEvent;
+use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::storage::{BlockHeight, Header, Key};
 use crate::types::token::DenominatedAmount;
 
@@ -68,6 +68,12 @@ pub trait IbcStorageContext {
         dest: &Address,
         token: &Address,
         amount: DenominatedAmount,
+    ) -> Result<(), Self::Error>;
+
+    /// Handle masp tx
+    fn handle_masp_tx(
+        &mut self,
+        shielded: &IbcShieldedTransfer,
     ) -> Result<(), Self::Error>;
 
     /// Mint token

@@ -2,14 +2,17 @@
 //! inside validity predicates.
 
 use borsh::BorshDeserialize;
+use masp_primitives::transaction::Transaction;
 
-use super::storage_api::{self, StorageRead};
+use super::storage_api::{self, OptionExt, ResultExt, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
+use crate::types::ibc::{get_shielded_transfer, IbcEvent};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
+use crate::types::token::Transfer;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -75,6 +78,12 @@ where
     /// Get the address of the native token.
     fn get_native_token(&self) -> Result<Address, storage_api::Error>;
 
+    /// Get the IBC event.
+    fn get_ibc_event(
+        &self,
+        event_type: String,
+    ) -> Result<Option<IbcEvent>, storage_api::Error>;
+
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix<'iter>(
@@ -96,6 +105,45 @@ where
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error>;
+
+    /// Get the shielded action including the transfer and the masp tx
+    fn get_shielded_action(
+        &self,
+        tx_data: Tx,
+    ) -> Result<(Transfer, Transaction), storage_api::Error> {
+        let signed = tx_data;
+        match Transfer::try_from_slice(&signed.data().unwrap()[..]) {
+            Ok(transfer) => {
+                let shielded_hash = transfer
+                    .shielded
+                    .ok_or_err_msg("unable to find shielded hash")?;
+                let masp_tx = signed
+                    .get_section(&shielded_hash)
+                    .and_then(|x| x.as_ref().masp_tx())
+                    .ok_or_err_msg("unable to find shielded section")?;
+                Ok((transfer, masp_tx))
+            }
+            Err(_) => {
+                if let Some(event) =
+                    self.get_ibc_event("fungible_token_packet".to_string())?
+                {
+                    if let Some(shielded) =
+                        get_shielded_transfer(&event).into_storage_result()?
+                    {
+                        Ok((shielded.transfer, shielded.masp_tx))
+                    } else {
+                        Err(storage_api::Error::new_const(
+                            "No shielded transfer in the IBC event",
+                        ))
+                    }
+                } else {
+                    Err(storage_api::Error::new_const(
+                        "No IBC event for the shielded action",
+                    ))
+                }
+            }
+        }
+    }
 
     /// Verify a MASP transaction
     fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, storage_api::Error>;

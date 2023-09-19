@@ -23,6 +23,7 @@ use crate::ledger::storage::{Storage, StorageHasher};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
+use crate::types::ibc::IbcEvent;
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -445,6 +446,18 @@ where
         vp_host_fns::get_native_token(
             &mut self.gas_meter.borrow_mut(),
             self.storage,
+        )
+        .into_storage_result()
+    }
+
+    fn get_ibc_event(
+        &self,
+        event_type: String,
+    ) -> Result<Option<IbcEvent>, storage_api::Error> {
+        vp_host_fns::get_ibc_event(
+            &mut self.gas_meter.borrow_mut(),
+            self.write_log,
+            event_type,
         )
         .into_storage_result()
     }

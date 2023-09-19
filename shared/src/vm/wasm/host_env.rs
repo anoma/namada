@@ -127,6 +127,7 @@ where
             "namada_vp_get_block_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_hash),
             "namada_vp_get_tx_code_hash" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_tx_code_hash),
             "namada_vp_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_epoch),
+            "namada_vp_get_ibc_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_ibc_event),
             "namada_vp_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_tx_section_signature),
             "namada_vp_verify_masp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_masp),
             "namada_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),

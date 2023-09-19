@@ -445,12 +445,18 @@ impl FromStr for Address {
     }
 }
 
-/// for IBC signer
+/// Convert the IBC signer to an address for the IBC transfer
 impl TryFrom<Signer> for Address {
     type Error = DecodeError;
 
     fn try_from(signer: Signer) -> Result<Self> {
-        Address::decode(signer.as_ref())
+        // When IBC transfer, the address in this signer should be an address or
+        // a payment address. If it's a payment address, this returns
+        // the masp address.
+        Address::decode(signer.as_ref()).or(
+            crate::types::masp::PaymentAddress::from_str(signer.as_ref())
+                .and(Ok(masp())),
+        )
     }
 }
 

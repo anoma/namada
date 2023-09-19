@@ -10,11 +10,11 @@ pub use namada_core::ledger::ibc::{
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::ledger::tx_env::TxEnv;
 use namada_core::types::address::{Address, InternalAddress};
-pub use namada_core::types::ibc::IbcEvent;
+pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::storage::{BlockHeight, Header, Key};
 use namada_core::types::token::DenominatedAmount;
 
-use crate::token::{burn, mint, transfer};
+use crate::token::{burn, handle_masp_tx, mint, transfer};
 use crate::{Ctx, KeyValIterator};
 
 /// IBC actions to handle an IBC message
@@ -89,7 +89,14 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: DenominatedAmount,
     ) -> std::result::Result<(), Self::Error> {
-        transfer(self, src, dest, token, amount, &None, &None, &None)
+        transfer(self, src, dest, token, amount)
+    }
+
+    fn handle_masp_tx(
+        &mut self,
+        shielded: &IbcShieldedTransfer,
+    ) -> Result<(), Self::Error> {
+        handle_masp_tx(self, &shielded.transfer, &shielded.masp_tx)
     }
 
     fn mint_token(

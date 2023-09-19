@@ -29,7 +29,8 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::ibc::{
-    is_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+    get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
+    EVENT_TYPE_PACKET,
 };
 
 #[allow(missing_docs)]
@@ -53,6 +54,8 @@ pub enum Error {
     Denom(String),
     #[error("Invalid chain ID: {0}")]
     ChainId(ChainId),
+    #[error("Handling MASP transaction error: {0}")]
+    MaspTx(String),
 }
 
 /// IBC actions to handle IBC operations
@@ -128,15 +131,17 @@ where
                 let envelope =
                     MsgEnvelope::try_from(any_msg).map_err(Error::Execution)?;
                 execute(self, envelope.clone()).map_err(Error::Execution)?;
+                // For receiving the token to a shielded address
+                self.handle_masp_tx(&envelope)?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(envelope)
+                self.store_denom(&envelope)
             }
         }
     }
 
     /// Store the denom when transfer with MsgRecvPacket
-    fn store_denom(&mut self, envelope: MsgEnvelope) -> Result<(), Error> {
+    fn store_denom(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
         match envelope {
             MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
                 if let Some((trace_hash, ibc_denom, receiver)) =
@@ -247,6 +252,38 @@ where
                 validate(self, envelope).map_err(Error::Validation)
             }
         }
+    }
+
+    /// Handle the MASP transaction if needed
+    fn handle_masp_tx(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
+        let shielded_transfer = match envelope {
+            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+                let event = self
+                    .ctx
+                    .borrow()
+                    .get_ibc_event("fungible_token_packet")
+                    .map_err(|_| {
+                        Error::MaspTx(
+                            "Reading the IBC event failed".to_string(),
+                        )
+                    })?;
+                match event {
+                    Some(event) => get_shielded_transfer(&event)
+                        .map_err(|e| Error::MaspTx(e.to_string()))?,
+                    None => return Ok(()),
+                }
+            }
+            _ => return Ok(()),
+        };
+        if let Some(shielded_transfer) = shielded_transfer {
+            self.ctx
+                .borrow_mut()
+                .handle_masp_tx(&shielded_transfer)
+                .map_err(|_| {
+                    Error::MaspTx("Writing MASP components failed".to_string())
+                })?;
+        }
+        Ok(())
     }
 }
 

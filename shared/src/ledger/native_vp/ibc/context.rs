@@ -3,15 +3,21 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh::BorshSerialize;
+use masp_primitives::transaction::Transaction;
 use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::ledger::storage_api::StorageRead;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage::{BlockHeight, Header, Key};
-use namada_core::types::token::{self, Amount, DenominatedAmount};
+use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use namada_core::types::storage::{
+    BlockHeight, Epoch, Header, Key, KeySeg, TxIndex,
+};
+use namada_core::types::token::{
+    self, Amount, DenominatedAmount, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX,
+    TX_KEY_PREFIX,
+};
 
 use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
@@ -158,6 +164,54 @@ where
             &dest_key,
             dest_bal.try_to_vec().expect("encoding shouldn't failed"),
         )
+    }
+
+    fn handle_masp_tx(
+        &mut self,
+        shielded: &IbcShieldedTransfer,
+    ) -> Result<(), Self::Error> {
+        let masp_addr = address::masp();
+        let head_tx_key = Key::from(masp_addr.to_db_key())
+            .push(&HEAD_TX_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        let current_tx_idx: u64 =
+            self.ctx.read(&head_tx_key).unwrap_or(None).unwrap_or(0);
+        let current_tx_key = Key::from(masp_addr.to_db_key())
+            .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
+            .expect("Cannot obtain a storage key");
+        // Save the Transfer object and its location within the blockchain
+        // so that clients do not have to separately look these
+        // up
+        let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
+            self.ctx.get_block_epoch().map_err(Error::NativeVpError)?,
+            self.ctx.get_block_height().map_err(Error::NativeVpError)?,
+            self.ctx.get_tx_index().map_err(Error::NativeVpError)?,
+            shielded.transfer.clone(),
+            shielded.masp_tx.clone(),
+        );
+        self.write(
+            &current_tx_key,
+            record.try_to_vec().expect("encoding shouldn't failed"),
+        )?;
+        self.write(
+            &head_tx_key,
+            (current_tx_idx + 1)
+                .try_to_vec()
+                .expect("encoding shouldn't failed"),
+        )?;
+        // If storage key has been supplied, then pin this transaction to it
+        if let Some(key) = &shielded.transfer.key {
+            let pin_key = Key::from(masp_addr.to_db_key())
+                .push(&(PIN_KEY_PREFIX.to_owned() + key))
+                .expect("Cannot obtain a storage key");
+            self.write(
+                &pin_key,
+                current_tx_idx
+                    .try_to_vec()
+                    .expect("encoding shouldn't fail"),
+            )?;
+        }
+        Ok(())
     }
 
     fn mint_token(
@@ -342,6 +396,13 @@ where
         _amount: DenominatedAmount,
     ) -> Result<(), Self::Error> {
         unimplemented!("Validation doesn't transfer")
+    }
+
+    fn handle_masp_tx(
+        &mut self,
+        _shielded: &IbcShieldedTransfer,
+    ) -> Result<(), Self::Error> {
+        unimplemented!("Validation doesn't handle a masp tx")
     }
 
     fn mint_token(

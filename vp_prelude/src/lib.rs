@@ -297,6 +297,20 @@ impl<'view> VpEnv<'view> for Ctx {
         get_native_token()
     }
 
+    fn get_ibc_event(
+        &self,
+        event_type: String,
+    ) -> Result<Option<ibc::IbcEvent>, Error> {
+        let read_result = unsafe {
+            namada_vp_get_ibc_event(
+                event_type.as_ptr() as _,
+                event_type.len() as _,
+            )
+        };
+        Ok(read_from_buffer(read_result, namada_vp_result_buffer)
+            .and_then(|t| ibc::IbcEvent::try_from_slice(&t[..]).ok()))
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,

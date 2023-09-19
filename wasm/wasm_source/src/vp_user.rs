@@ -259,9 +259,6 @@ mod tests {
                 address,
                 &token,
                 amount,
-                &None,
-                &None,
-                &None,
             )
             .unwrap();
         });
@@ -317,9 +314,6 @@ mod tests {
                 &target,
                 &token,
                 amount,
-                &None,
-                &None,
-                &None,
             )
             .unwrap();
         });
@@ -379,9 +373,6 @@ mod tests {
                 &target,
                 &token,
                 amount,
-                &None,
-                &None,
-                &None,
             )
             .unwrap();
         });
@@ -612,9 +603,6 @@ mod tests {
                 &target,
                 &token,
                 amount,
-                &None,
-                &None,
-                &None,
             )
             .unwrap();
         });

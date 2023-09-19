@@ -23,9 +23,6 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         &bridge_pool::BRIDGE_POOL_ADDRESS,
         fee_token_addr,
         amount.native_denominated(),
-        &None,
-        &None,
-        &None,
     )?;
     log_string("Token transfer succeeded.");
     let TransferToEthereum {
@@ -43,9 +40,6 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             &eth_bridge::ADDRESS,
             &nam_addr,
             amount.native_denominated(),
-            &None,
-            &None,
-            &None,
         )?;
     } else {
         // Otherwise we escrow ERC20 tokens.
@@ -56,9 +50,6 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             &bridge_pool::BRIDGE_POOL_ADDRESS,
             &token,
             amount.native_denominated(),
-            &None,
-            &None,
-            &None,
         )?;
     }
     log_string("Escrow succeeded");

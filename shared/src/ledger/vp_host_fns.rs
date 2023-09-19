@@ -15,6 +15,7 @@ use crate::ledger::gas::{GasMetering, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
 use crate::ledger::storage::{self, write_log, Storage, StorageHasher};
 use crate::proto::{Section, Tx};
+use crate::types::ibc::IbcEvent;
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -331,6 +332,20 @@ where
 {
     add_gas(gas_meter, STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(storage.native_token.clone())
+}
+
+/// Getting the IBC event.
+pub fn get_ibc_event(
+    _gas_meter: &mut VpGasMeter,
+    write_log: &WriteLog,
+    event_type: String,
+) -> EnvResult<Option<IbcEvent>> {
+    for event in write_log.get_ibc_events() {
+        if event.event_type == event_type {
+            return Ok(Some(event.clone()));
+        }
+    }
+    Ok(None)
 }
 
 /// Storage prefix iterator for prior state (before tx execution), ordered by
