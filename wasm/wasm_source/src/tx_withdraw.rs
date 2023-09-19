@@ -194,7 +194,7 @@ mod tests {
         let handle = unbond_handle(&unbond_src, &withdraw.validator);
 
         let unbond_pre =
-            handle.at(&withdraw_epoch).get(ctx(), &bond_epoch).unwrap();
+            handle.at(&bond_epoch).get(ctx(), &withdraw_epoch).unwrap();
 
         assert_eq!(unbond_pre, Some(unbonded_amount));
 
