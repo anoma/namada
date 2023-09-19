@@ -42,6 +42,7 @@ use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
 use crate::ledger::ibc::storage::ibc_denom_key;
+use crate::sdk::signing::SigningTxData;
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
 use crate::sdk::error::{EncodingError, Error, QueryError, Result, TxError};
@@ -530,8 +531,17 @@ pub async fn build_validator_commission_change<
         rate,
         tx_code_path,
     }: args::CommissionRateChange,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(validator.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(validator.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let epoch = rpc::query_epoch(client).await?;
 
     let params: PosParams = rpc::get_pos_params(client).await?;
@@ -605,10 +615,10 @@ pub async fn build_validator_commission_change<
         tx_code_path,
         data,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Craft transaction to update a steward commission
@@ -627,8 +637,17 @@ pub async fn build_update_steward_commission<
         commission,
         tx_code_path,
     }: args::UpdateStewardCommission,
-    gas_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(steward.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(steward.clone()),
+        default_signer,
+    )
+        .await?;
+    
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         edisplay_line!(IO, "The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
@@ -660,10 +679,10 @@ pub async fn build_update_steward_commission<
         tx_code_path,
         data,
         do_nothing,
-        gas_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Craft transaction to resign as a steward
@@ -681,8 +700,17 @@ pub async fn build_resign_steward<
         steward,
         tx_code_path,
     }: args::ResignSteward,
-    gas_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(steward.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(steward.clone()),
+        default_signer,
+    )
+        .await?;
+    
     if !rpc::is_steward(client, &steward).await && !tx_args.force {
         edisplay_line!(IO, "The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
@@ -696,10 +724,10 @@ pub async fn build_resign_steward<
         tx_code_path,
         steward,
         do_nothing,
-        gas_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit transaction to unjail a jailed validator
@@ -717,8 +745,17 @@ pub async fn build_unjail_validator<
         validator,
         tx_code_path,
     }: args::TxUnjailValidator,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(validator.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(validator.clone()),
+        default_signer,
+    )
+        .await?;
+    
     if !rpc::is_validator(client, &validator).await? {
         edisplay_line!(
             IO,
@@ -803,10 +840,10 @@ pub async fn build_unjail_validator<
         tx_code_path,
         validator,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit transaction to withdraw an unbond
@@ -825,8 +862,18 @@ pub async fn build_withdraw<
         source,
         tx_code_path,
     }: args::Withdraw,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_address = source.clone().unwrap_or(validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(default_address),
+        default_signer,
+    )
+        .await?;
+    
     let epoch = rpc::query_epoch(client).await?;
 
     let validator = known_validator_or_err::<_, IO>(
@@ -879,10 +926,10 @@ pub async fn build_withdraw<
         tx_code_path,
         data,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit a transaction to unbond
@@ -902,8 +949,18 @@ pub async fn build_unbond<
         source,
         tx_code_path,
     }: args::Unbond,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>, Option<(Epoch, token::Amount)>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>, Option<(Epoch, token::Amount)>)> {
+    let default_address = source.clone().unwrap_or(validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(default_address),
+        default_signer,
+    )
+        .await?;
+    
     let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -969,11 +1026,11 @@ pub async fn build_unbond<
         tx_code_path,
         data,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
     .await?;
-    Ok((tx, epoch, latest_withdrawal_pre))
+    Ok((tx, signing_data, epoch, latest_withdrawal_pre))
 }
 
 /// Query the unbonds post-tx
@@ -1062,14 +1119,21 @@ pub async fn build_bond<
         native_token,
         tx_code_path,
     }: args::Bond,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
-    let validator = known_validator_or_err::<_, IO>(
-        validator.clone(),
-        tx_args.force,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_address = source.clone().unwrap_or(validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
         client,
+        wallet,
+        &tx_args,
+        Some(default_address.clone()),
+        default_signer,
     )
-    .await?;
+        .await?;
+    
+    let validator =
+        known_validator_or_err::<_, IO>(validator.clone(), tx_args.force, client)
+            .await?;
 
     // Check that the source address exists on chain
     let source = match source.clone() {
@@ -1115,10 +1179,10 @@ pub async fn build_bond<
         tx_code_path,
         data,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         tx_source_balance,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Build a default proposal governance
@@ -1141,8 +1205,17 @@ pub async fn build_default_proposal<
         tx_code_path,
     }: args::InitProposal,
     proposal: DefaultProposal,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(proposal.proposal.author.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx,
+        Some(proposal.proposal.author.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
@@ -1168,10 +1241,10 @@ pub async fn build_default_proposal<
         tx_code_path,
         init_proposal_data,
         push_data,
-        &fee_payer,
+        &signing_data.fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Build a proposal vote
@@ -1194,8 +1267,17 @@ pub async fn build_vote_proposal<
         tx_code_path,
     }: args::VoteProposal,
     epoch: Epoch,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(voter.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx,
+        Some(voter.clone()),
+        default_signer.clone(),
+    )
+        .await?;
+    
     let proposal_vote = ProposalVote::try_from(vote)
         .map_err(|_| TxError::InvalidProposalVote)?;
 
@@ -1255,10 +1337,10 @@ pub async fn build_vote_proposal<
         tx_code_path,
         data,
         do_nothing,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Build a pgf funding proposal governance
@@ -1281,8 +1363,17 @@ pub async fn build_pgf_funding_proposal<
         tx_code_path,
     }: args::InitProposal,
     proposal: PgfFundingProposal,
-    fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(proposal.proposal.author.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx,
+        Some(proposal.proposal.author.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
@@ -1300,10 +1391,10 @@ pub async fn build_pgf_funding_proposal<
         tx_code_path,
         init_proposal_data,
         add_section,
-        fee_payer,
+        &signing_data.fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Build a pgf funding proposal governance
@@ -1326,8 +1417,17 @@ pub async fn build_pgf_stewards_proposal<
         tx_code_path,
     }: args::InitProposal,
     proposal: PgfStewardProposal,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(proposal.proposal.author.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx,
+        Some(proposal.proposal.author.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxError::InvalidProposal(e.to_string()))?;
 
@@ -1346,10 +1446,10 @@ pub async fn build_pgf_stewards_proposal<
         tx_code_path,
         init_proposal_data,
         add_section,
-        &fee_payer,
+        &signing_data.fee_payer,
         None, // TODO: need to pay the fee to submit a proposal
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit an IBC transfer
@@ -1363,8 +1463,16 @@ pub async fn build_ibc_transfer<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     args: args::TxIbcTransfer,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(args.source.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &args.tx,
+        Some(args.source.clone()),
+        default_signer,
+    )
+    .await?;
     // Check that the source address exists on chain
     let source = source_exists_or_err::<_, IO>(
         args.source.clone(),
@@ -1486,12 +1594,12 @@ pub async fn build_ibc_transfer<
         shielded,
         &args.tx,
         &mut tx,
-        fee_payer,
+        signing_data.fee_payer.clone(),
         tx_source_balance,
     )
     .await?;
 
-    Ok((tx, epoch))
+    Ok((tx, signing_data, epoch))
 }
 
 /// Abstraction for helping build transactions
@@ -1663,8 +1771,17 @@ pub async fn build_transfer<
     wallet: &mut Wallet<U>,
     shielded: &mut ShieldedContext<V>,
     mut args: args::TxTransfer,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(args.source.effective_address());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &args.tx,
+        Some(args.source.effective_address()),
+        default_signer,
+    )
+        .await?;
+    
     let source = args.source.effective_address();
     let target = args.target.effective_address();
     let token = args.token.clone();
@@ -1796,7 +1913,7 @@ pub async fn build_transfer<
         args.tx_code_path,
         transfer,
         add_shielded,
-        &fee_payer,
+        &signing_data.fee_payer,
         tx_source_balance,
     )
     .await?;
@@ -1819,7 +1936,7 @@ pub async fn build_transfer<
         (None, Some(_transfer_unshield_epoch)) => shielded_tx_epoch,
         (None, None) => None,
     };
-    Ok((tx, masp_epoch))
+    Ok((tx, signing_data, masp_epoch))
 }
 
 /// Submit a transaction to initialize an account
@@ -1839,10 +1956,11 @@ pub async fn build_init_account<
         public_keys,
         threshold,
     }: args::TxInitAccount,
-    fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
-    let vp_code_hash =
-        query_wasm_code_hash_buf::<_, IO>(client, &vp_code_path).await?;
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let signing_data =
+        signing::aux_signing_data::<_, _, IO>(client, wallet, &tx_args, None, None).await?;
+    
+    let vp_code_hash = query_wasm_code_hash_buf::<_, IO>(client, &vp_code_path).await?;
 
     let threshold = match threshold {
         Some(threshold) => threshold,
@@ -1875,10 +1993,10 @@ pub async fn build_init_account<
         tx_code_path,
         data,
         add_code_hash,
-        fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit a transaction to update a VP
@@ -1899,8 +2017,17 @@ pub async fn build_update_account<
         public_keys,
         threshold,
     }: args::TxUpdateAccount,
-    fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(addr.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(addr.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let addr =
         if let Some(account) = rpc::get_account_info(client, &addr).await? {
             account.address
@@ -1945,10 +2072,10 @@ pub async fn build_update_account<
         tx_code_path,
         data,
         add_code_hash,
-        &fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Submit a custom transaction
@@ -1966,10 +2093,19 @@ pub async fn build_custom<
         code_path,
         data_path,
         serialized_tx,
-        owner: _,
+        owner,
     }: args::TxCustom,
-    fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(owner.clone());
+    let signing_data = signing::aux_signing_data::<_, _, IO>(
+        client,
+        wallet,
+        &tx_args,
+        Some(owner.clone()),
+        default_signer,
+    )
+        .await?;
+    
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
             Error::Other("Invalid tx deserialization.".to_string())
@@ -1994,12 +2130,12 @@ pub async fn build_custom<
         shielded,
         &tx_args,
         &mut tx,
-        fee_payer.clone(),
+        signing_data.fee_payer.clone(),
         None,
     )
     .await?;
 
-    Ok((tx, epoch))
+    Ok((tx, signing_data, epoch))
 }
 
 async fn expect_dry_broadcast<

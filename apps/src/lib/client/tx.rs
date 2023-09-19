@@ -146,25 +146,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.owner.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(args.owner.clone()),
-        default_signer,
-    )
-    .await?;
+    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &args.owner).await?;
 
-    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &args.owner)
-        .await?;
-
-    let (mut tx, _epoch) = tx::build_custom::<_, _, _, IO>(
+    let (mut tx, signing_data, _epoch) = tx::build_custom::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        &signing_data.fee_payer,
     )
     .await?;
 
@@ -191,22 +179,11 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.addr.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(args.addr.clone()),
-        default_signer,
-    )
-    .await?;
-
-    let (mut tx, _epoch) = tx::build_update_account::<_, _, _, IO>(
+    let (mut tx, signing_data, _epoch) = tx::build_update_account::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        signing_data.fee_payer.clone(),
     )
     .await?;
 
@@ -233,21 +210,11 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        None,
-        None,
-    )
-    .await?;
-
-    let (mut tx, _epoch) = tx::build_init_account::<_, _, _, IO>(
+    let (mut tx, signing_data, _epoch) = tx::build_init_account::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        &signing_data.fee_payer,
     )
     .await?;
 
@@ -714,16 +681,6 @@ pub async fn submit_transfer<
     args: args::TxTransfer,
 ) -> Result<(), error::Error> {
     for _ in 0..2 {
-        let default_signer = Some(args.source.effective_address());
-        let signing_data = aux_signing_data::<_, IO>(
-            client,
-            &mut ctx.wallet,
-            &args.tx,
-            Some(args.source.effective_address()),
-            default_signer,
-        )
-        .await?;
-
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
@@ -732,13 +689,11 @@ pub async fn submit_transfer<
         )
         .await?;
 
-        let arg = args.clone();
-        let (mut tx, tx_epoch) = tx::build_transfer::<_, _, _, IO>(
+        let (mut tx, signing_data, tx_epoch) = tx::build_transfer::<_, _, _, IO>(
             client,
             &mut ctx.wallet,
             &mut ctx.shielded,
-            arg,
-            signing_data.fee_payer.clone(),
+            args.clone(),
         )
         .await?;
         signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
@@ -795,25 +750,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.source.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(args.source.clone()),
-        default_signer,
-    )
-    .await?;
+    submit_reveal_aux::<_, IO>(client, &mut ctx, args.tx.clone(), &args.source).await?;
 
-    submit_reveal_aux::<_, IO>(client, &mut ctx, args.tx.clone(), &args.source)
-        .await?;
-
-    let (mut tx, _epoch) = tx::build_ibc_transfer::<_, _, _, IO>(
+    let (mut tx, signing_data, _epoch) = tx::build_ibc_transfer::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        signing_data.fee_payer.clone(),
     )
     .await?;
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
@@ -842,7 +785,7 @@ where
     let current_epoch = rpc::query_and_print_epoch::<_, IO>(client).await;
     let governance_parameters = rpc::query_governance_parameters(client).await;
 
-    let ((mut tx_builder, _fee_unshield_epoch), signing_data) = if args
+    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args
         .is_offline
     {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
@@ -889,16 +832,6 @@ where
                 .validate(&governance_parameters, current_epoch, args.tx.force)
                 .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = aux_signing_data::<_, IO>(
-            client,
-            &mut ctx.wallet,
-            &args.tx,
-            Some(proposal.proposal.author.clone()),
-            default_signer,
-        )
-        .await?;
-
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
@@ -907,18 +840,14 @@ where
         )
         .await?;
 
-        (
-            tx::build_pgf_funding_proposal::<_, _, _, IO>(
-                client,
-                &mut ctx.wallet,
-                &mut ctx.shielded,
-                args.clone(),
-                proposal,
-                &signing_data.fee_payer.clone(),
-            )
-            .await?,
-            signing_data,
+        tx::build_pgf_funding_proposal::<_, _, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &mut ctx.shielded,
+            args.clone(),
+            proposal,
         )
+            .await?
     } else if args.is_pgf_stewards {
         let proposal = PgfStewardProposal::try_from(
             args.proposal_data.as_ref(),
@@ -941,16 +870,6 @@ where
             )
             .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = aux_signing_data::<_, IO>(
-            client,
-            &mut ctx.wallet,
-            &args.tx,
-            Some(proposal.proposal.author.clone()),
-            default_signer,
-        )
-        .await?;
-
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
@@ -959,18 +878,14 @@ where
         )
         .await?;
 
-        (
-            tx::build_pgf_stewards_proposal::<_, _, _, IO>(
-                client,
-                &mut ctx.wallet,
-                &mut ctx.shielded,
-                args.clone(),
-                proposal,
-                signing_data.fee_payer.clone(),
-            )
-            .await?,
-            signing_data,
+        tx::build_pgf_stewards_proposal::<_, _, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &mut ctx.shielded,
+            args.clone(),
+            proposal,
         )
+            .await?
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
@@ -991,16 +906,6 @@ where
             )
             .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        let default_signer = Some(proposal.proposal.author.clone());
-        let signing_data = aux_signing_data::<_, IO>(
-            client,
-            &mut ctx.wallet,
-            &args.tx,
-            Some(proposal.proposal.author.clone()),
-            default_signer,
-        )
-        .await?;
-
         submit_reveal_aux::<_, IO>(
             client,
             &mut ctx,
@@ -1009,18 +914,14 @@ where
         )
         .await?;
 
-        (
-            tx::build_default_proposal::<_, _, _, IO>(
-                client,
-                &mut ctx.wallet,
-                &mut ctx.shielded,
-                args.clone(),
-                proposal,
-                signing_data.fee_payer.clone(),
-            )
-            .await?,
-            signing_data,
+        tx::build_default_proposal::<_, _, _, IO>(
+            client,
+            &mut ctx.wallet,
+            &mut ctx.shielded,
+            args.clone(),
+            proposal,
         )
+            .await?
     };
     signing::generate_test_vector::<_, _, IO>(
         client,
@@ -1059,19 +960,17 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let current_epoch = rpc::query_and_print_epoch::<_, IO>(client).await;
-
-    let default_signer = Some(args.voter.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(args.voter.clone()),
-        default_signer.clone(),
-    )
-    .await?;
-
-    let (mut tx_builder, _fee_unshield_epoch) = if args.is_offline {
+    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline {
+        let default_signer = Some(args.voter.clone());
+        let signing_data = aux_signing_data::<_, IO>(
+            client,
+            &mut ctx.wallet,
+            &args.tx,
+            Some(args.voter.clone()),
+            default_signer.clone(),
+        )
+            .await?;
+        
         let proposal_vote = ProposalVote::try_from(args.vote)
             .map_err(|_| error::TxError::InvalidProposalVote)?;
 
@@ -1113,15 +1012,15 @@ where
         display_line!(IO, "Proposal vote serialized to: {}", output_file_path);
         return Ok(());
     } else {
+        let current_epoch = rpc::query_and_print_epoch::<C, IO>(client).await;
         tx::build_vote_proposal::<_, _, _, IO>(
             client,
             &mut ctx.wallet,
             &mut ctx.shielded,
             args.clone(),
             current_epoch,
-            signing_data.fee_payer.clone(),
         )
-        .await?
+            .await?
     };
     signing::generate_test_vector::<_, _, IO>(
         client,
@@ -1269,25 +1168,13 @@ where
     C::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer = Some(default_address.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(default_address.clone()),
-        default_signer,
-    )
-    .await?;
+    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &default_address).await?;
 
-    submit_reveal_aux::<_, IO>(client, ctx, args.tx.clone(), &default_address)
-        .await?;
-
-    let (mut tx, _fee_unshield_epoch) = tx::build_bond::<_, _, _, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_bond::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        signing_data.fee_payer.clone(),
     )
     .await?;
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
@@ -1297,9 +1184,8 @@ where
         tx::dump_tx::<IO>(&args.tx, tx);
     } else {
         signing::sign_tx(&mut ctx.wallet, &args.tx, &mut tx, signing_data)?;
-
-        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx)
-            .await?;
+        
+        tx::process_tx::<_, _, IO>(client, &mut ctx.wallet, &args.tx, tx).await?;
     }
 
     Ok(())
@@ -1314,24 +1200,12 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer = Some(default_address.clone());
-    let signing_data = signing::aux_signing_data::<_, _, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(default_address),
-        default_signer,
-    )
-    .await?;
-
-    let (mut tx, _fee_unshield_epoch, latest_withdrawal_pre) =
+    let (mut tx, signing_data, _fee_unshield_epoch, latest_withdrawal_pre) =
         tx::build_unbond::<_, _, _, IO>(
             client,
             &mut ctx.wallet,
             &mut ctx.shielded,
             args.clone(),
-            signing_data.fee_payer.clone(),
         )
         .await?;
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
@@ -1361,23 +1235,11 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    let default_signer = Some(default_address.clone());
-    let signing_data = aux_signing_data::<_, IO>(
-        client,
-        &mut ctx.wallet,
-        &args.tx,
-        Some(default_address),
-        default_signer,
-    )
-    .await?;
-
-    let (mut tx, _fee_unshield_epoch) = tx::build_withdraw::<_, _, _, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_withdraw::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
         &mut ctx.shielded,
         args.clone(),
-        signing_data.fee_payer.clone(),
     )
     .await?;
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
@@ -1403,27 +1265,14 @@ pub async fn submit_validator_commission_change<C, IO: Io>(
 where
     C: namada::ledger::queries::Client + Sync,
 {
-    let default_signer = Some(args.validator.clone());
-    let signing_data = aux_signing_data::<_, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_validator_commission_change::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
-        &args.tx,
-        Some(args.validator.clone()),
-        default_signer,
+        &mut ctx.shielded,
+        args.clone(),
     )
     .await?;
-
-    let (mut tx, _fee_unshield_epoch) =
-        tx::build_validator_commission_change::<_, _, _, IO>(
-            client,
-            &mut ctx.wallet,
-            &mut ctx.shielded,
-            args.clone(),
-            signing_data.fee_payer.clone(),
-        )
-        .await?;
-    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
-        .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx::<IO>(&args.tx, tx);
@@ -1448,27 +1297,14 @@ pub async fn submit_unjail_validator<
 where
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.validator.clone());
-    let signing_data = aux_signing_data::<_, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_unjail_validator::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
-        &args.tx,
-        Some(args.validator.clone()),
-        default_signer,
+        &mut ctx.shielded,
+        args.clone(),
     )
     .await?;
-
-    let (mut tx, _fee_unshield_epoch) =
-        tx::build_unjail_validator::<_, _, _, IO>(
-            client,
-            &mut ctx.wallet,
-            &mut ctx.shielded,
-            args.clone(),
-            signing_data.fee_payer.clone(),
-        )
-        .await?;
-    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
-        .await?;
+    signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx::<IO>(&args.tx, tx);
@@ -1494,25 +1330,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.steward.clone());
-    let signing_data = signing::aux_signing_data::<_, _, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_update_steward_commission::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
-        &args.tx,
-        Some(args.steward.clone()),
-        default_signer,
+        &mut ctx.shielded,
+        args.clone(),
     )
     .await?;
-
-    let (mut tx, _fee_unshield_epoch) =
-        tx::build_update_steward_commission::<_, _, _, IO>(
-            client,
-            &mut ctx.wallet,
-            &mut ctx.shielded,
-            args.clone(),
-            &signing_data.fee_payer,
-        )
-        .await?;
 
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
         .await?;
@@ -1537,25 +1361,13 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let default_signer = Some(args.steward.clone());
-    let signing_data = signing::aux_signing_data::<_, _, IO>(
+    let (mut tx, signing_data, _fee_unshield_epoch) = tx::build_resign_steward::<_, _, _, IO>(
         client,
         &mut ctx.wallet,
-        &args.tx,
-        Some(args.steward.clone()),
-        default_signer,
+        &mut ctx.shielded,
+        args.clone(),
     )
     .await?;
-
-    let (mut tx, _fee_unshield_epoch) =
-        tx::build_resign_steward::<_, _, _, IO>(
-            client,
-            &mut ctx.wallet,
-            &mut ctx.shielded,
-            args.clone(),
-            &signing_data.fee_payer,
-        )
-        .await?;
 
     signing::generate_test_vector::<_, _, IO>(client, &mut ctx.wallet, &tx)
         .await?;
