@@ -1132,7 +1132,12 @@ fn pos_bonds() -> Result<()> {
                 pos_params,
                 ..genesis
             };
-            setup::set_validators(2, genesis, default_port_offset)
+            let mut genesis =
+                setup::set_validators(2, genesis, default_port_offset);
+            // Remove stake from the 2nd validator so chain can run with a
+            // single node
+            genesis.validator.get_mut("validator-1").unwrap().tokens = None;
+            genesis
         },
         None,
     )?;
@@ -1144,20 +1149,10 @@ fn pos_bonds() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        &Who::Validator(1),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
 
-    // 1. Run the ledger nodes
+    // 1. Run the ledger node
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-    let _bg_validator_1 =
-        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
