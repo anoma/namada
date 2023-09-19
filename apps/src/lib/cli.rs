@@ -3962,7 +3962,7 @@ pub mod args {
             Redelegate::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 src_validator: ctx.get(&self.src_validator),
-                dest_validator: ctx.get(&self.src_validator),
+                dest_validator: ctx.get(&self.dest_validator),
                 owner: ctx.get(&self.owner),
                 amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
