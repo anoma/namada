@@ -8,13 +8,12 @@ use namada_tx_prelude::*;
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
-    let redelegation =
-        transaction::pos::Redelegation::try_from_slice(&data[..])
-            .wrap_err("failed to decode an Address")?;
-    ctx.redelegate_tokens(
-        &redelegation.owner,
-        &redelegation.src_validator,
-        &redelegation.dest_validator,
-        redelegation.amount,
-    )
+    let transaction::pos::Redelegation {
+        src_validator,
+        dest_validator,
+        owner,
+        amount,
+    } = transaction::pos::Redelegation::try_from_slice(&data[..])
+        .wrap_err("failed to decode a Redelegation")?;
+    ctx.redelegate_tokens(&owner, &src_validator, &dest_validator, amount)
 }
