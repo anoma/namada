@@ -56,7 +56,7 @@ where
         .storage
         .block
         .pred_epochs
-        .get_height(signing_epoch)
+        .get_start_height_of_epoch(signing_epoch)
         // NOTE: The only way this can fail is if validator set updates do not
         // reach a `seen` state before the relevant epoch data is purged from
         // Namada. In most scenarios, we should reach a complete proof before
