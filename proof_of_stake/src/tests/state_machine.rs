@@ -3857,9 +3857,11 @@ impl AbstractPosState {
         // dbg!(&val_slash_amounts);
 
         // `updatedSlashedAmountMap`
-        val_slash_amounts
-            .entry(validator.clone())
-            .or_insert(result_slash);
+        let validator_slashes =
+            val_slash_amounts.entry(validator.clone()).or_default();
+        for (epoch, slash) in result_slash {
+            *validator_slashes.entry(epoch).or_default() += slash;
+        }
 
         // dbg!(&val_slash_amounts);
 
