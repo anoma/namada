@@ -193,7 +193,7 @@ mod test_apply_bp_roots_to_storage {
         get_key_from_hash, get_nonce_key,
     };
     use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::ledger::storage_api::StorageRead;
+    use namada_core::ledger::storage_api::{token, StorageRead};
     use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
     use namada_core::types::dec::Dec;
@@ -205,7 +205,8 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::vote_extensions::bridge_pool_roots;
     use namada_proof_of_stake::parameters::PosParams;
     use namada_proof_of_stake::{
-        become_validator, bond_tokens, write_pos_params, BecomeValidator,
+        become_validator, bond_tokens, staking_token_address, write_pos_params,
+        BecomeValidator,
     };
 
     use super::*;
@@ -743,6 +744,14 @@ mod test_apply_bp_roots_to_storage {
                 max_commission_rate_change: Dec::new(1, 2).unwrap(),
             })
             .expect("Test failed");
+            let staking_token = staking_token_address(&wl_storage);
+            token::credit_tokens(
+                &mut wl_storage,
+                &staking_token,
+                validator,
+                stake,
+            )
+            .unwrap();
             bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
                 .expect("Test failed");
         }
