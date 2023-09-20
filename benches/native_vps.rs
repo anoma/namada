@@ -97,30 +97,38 @@ fn governance(c: &mut Criterion) {
             "foreign_key_write" => {
                 generate_foreign_key_tx(&defaults::albert_keypair())
             }
-            "delegator_vote" => generate_tx(
-                TX_VOTE_PROPOSAL_WASM,
-                VoteProposalData {
-                    id: 0,
-                    vote: StorageProposalVote::Yay(VoteType::Default),
-                    voter: defaults::albert_address(),
-                    delegations: vec![defaults::validator_address()],
-                },
-                None,
-                None,
-                Some(&defaults::albert_keypair()),
-            ),
-            "validator_vote" => generate_tx(
-                TX_VOTE_PROPOSAL_WASM,
-                VoteProposalData {
-                    id: 0,
-                    vote: StorageProposalVote::Nay,
-                    voter: defaults::validator_address(),
-                    delegations: vec![],
-                },
-                None,
-                None,
-                Some(&defaults::validator_keypair()),
-            ),
+            "delegator_vote" => {
+                // Advance to the proposal voting period
+                shell.advance_epoch();
+                generate_tx(
+                    TX_VOTE_PROPOSAL_WASM,
+                    VoteProposalData {
+                        id: 0,
+                        vote: StorageProposalVote::Yay(VoteType::Default),
+                        voter: defaults::albert_address(),
+                        delegations: vec![defaults::validator_address()],
+                    },
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                )
+            }
+            "validator_vote" => {
+                // Advance to the proposal voting period
+                shell.advance_epoch();
+                generate_tx(
+                    TX_VOTE_PROPOSAL_WASM,
+                    VoteProposalData {
+                        id: 0,
+                        vote: StorageProposalVote::Nay,
+                        voter: defaults::validator_address(),
+                        delegations: vec![],
+                    },
+                    None,
+                    None,
+                    Some(&defaults::validator_keypair()),
+                )
+            }
             "minimal_proposal" => {
                 let content_section = Section::ExtraData(Code::new(vec![]));
                 let voting_start_epoch = Epoch(25);
