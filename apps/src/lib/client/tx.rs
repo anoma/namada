@@ -1625,15 +1625,19 @@ where
     .await?
     {
         let tx_id = shielded_transfer.masp_tx.txid().to_string();
-        let filename = format!("ibc_shielded_transfer_{}.memo", tx_id,);
+        let filename = format!("ibc_shielded_transfer_{}.memo", tx_id);
         let output_path = match &args.output_folder {
             Some(path) => path.join(filename),
             None => filename.into(),
         };
-        let out = File::create(&output_path)
+        let mut out = File::create(&output_path)
             .expect("Should be able to create the out file.");
-        serde_json::to_writer_pretty(out, &Memo::from(shielded_transfer))
+        out.write_all(Memo::from(shielded_transfer).as_ref().as_bytes())
             .expect("IBC memo should be deserializable.");
+        println!(
+            "Output IBC shielded transfer for {tx_id} to {}",
+            output_path.to_string_lossy()
+        );
     } else {
         eprintln!("No shielded transfer for this IBC transfer.")
     }

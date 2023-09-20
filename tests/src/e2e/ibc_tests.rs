@@ -13,6 +13,7 @@ use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
@@ -60,12 +61,14 @@ use namada::ledger::storage::traits::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};
+use namada::types::io::DefaultIo;
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
+use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
@@ -77,9 +80,10 @@ use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
-use super::helpers::wait_for_wasm_pre_compile;
 use super::setup::set_ethereum_bridge_mode;
-use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
+use crate::e2e::helpers::{
+    find_address, get_actor_rpc, get_validator_pk, wait_for_wasm_pre_compile,
+};
 use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
 use crate::{run, run_as};
 
@@ -124,10 +128,6 @@ fn run_ledger_ibc() -> Result<()> {
 
     wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;
-
-    // Wait for a first block
-    ledger_a.exp_string("Committed block hash")?;
-    ledger_b.exp_string("Committed block hash")?;
 
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -190,6 +190,18 @@ fn run_ledger_ibc() -> Result<()> {
     // The balance should not be changed
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
+    shielded_transfer(
+        &test_a,
+        &test_b,
+        &client_id_a,
+        &client_id_b,
+        &port_id_a,
+        &channel_id_a,
+        &port_id_b,
+        &channel_id_b,
+    )?;
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_b)?;
+
     // Skip tests for closing a channel and timeout_on_close since the transfer
     // channel cannot be closed
 
@@ -197,13 +209,18 @@ fn run_ledger_ibc() -> Result<()> {
 }
 
 fn setup_two_single_node_nets() -> Result<(Test, Test)> {
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+
     // epoch per 100 seconds
     let update_genesis = |mut genesis: GenesisConfig| {
-        genesis.parameters.epochs_per_year = 315_360;
+        genesis.parameters.epochs_per_year = 31536;
+        genesis.parameters.min_num_of_blocks = 1;
         genesis
     };
     let update_genesis_b = |mut genesis: GenesisConfig| {
-        genesis.parameters.epochs_per_year = 315_360;
+        genesis.parameters.epochs_per_year = 31536;
+        genesis.parameters.min_num_of_blocks = 1;
         setup::set_validators(1, genesis, |_| setup::ANOTHER_CHAIN_PORT_OFFSET)
     };
     Ok((
@@ -635,12 +652,13 @@ fn transfer_token(
     let height = transfer(
         test_a,
         ALBERT,
-        &receiver,
+        receiver.to_string(),
         NAM,
         "100000",
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        None,
         None,
         None,
         false,
@@ -704,12 +722,13 @@ fn try_invalid_transfers(
     transfer(
         test_a,
         ALBERT,
-        &receiver,
+        receiver.to_string(),
         NAM,
         "10.1",
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        None,
         None,
         Some("The amount for the IBC transfer should be an integer"),
         false,
@@ -719,12 +738,13 @@ fn try_invalid_transfers(
     transfer(
         test_a,
         ALBERT,
-        &receiver,
+        receiver.to_string(),
         NAM,
         "10",
         ALBERT_KEY,
         &"port".parse().unwrap(),
         channel_id_a,
+        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -734,12 +754,13 @@ fn try_invalid_transfers(
     transfer(
         test_a,
         ALBERT,
-        &receiver,
+        receiver.to_string(),
         NAM,
         "10",
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
+        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -795,12 +816,13 @@ fn transfer_back(
     let height = transfer(
         test_b,
         BERTHA,
-        &receiver,
+        receiver.to_string(),
         ibc_denom,
         "50000",
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
+        None,
         None,
         None,
         false,
@@ -858,12 +880,13 @@ fn transfer_timeout(
     let height = transfer(
         test_a,
         ALBERT,
-        &receiver,
+        receiver.to_string(),
         NAM,
         "100000",
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        None,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -891,6 +914,116 @@ fn transfer_timeout(
     submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
 
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn shielded_transfer(
+    test_a: &Test,
+    test_b: &Test,
+    client_id_a: &ClientId,
+    client_id_b: &ClientId,
+    port_id_a: &PortId,
+    channel_id_a: &ChannelId,
+    port_id_b: &PortId,
+    channel_id_b: &ChannelId,
+) -> Result<()> {
+    // Get masp proof for the following IBC transfer from the destination chain
+    // It will send 10 BTC from Chain A to PA(B) on Chain B
+    let sender = find_address(test_a, ALBERT)?;
+    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let output_folder = test_b.test_dir.path().to_string_lossy();
+    let amount = Amount::native_whole(10).to_string_native();
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--sender",
+        &sender.to_string(),
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        BTC,
+        "--amount",
+        &amount,
+        "--port-id",
+        port_id_b.as_ref(),
+        "--channel-id",
+        channel_id_b.as_ref(),
+        "--node",
+        &rpc_b,
+    ];
+    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    // Send a token from Chain A to PA(B) on Chain B
+    let amount = Amount::native_whole(10).to_string_native();
+    let height = transfer(
+        test_a,
+        ALBERT,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        amount,
+        ALBERT_KEY,
+        port_id_a,
+        channel_id_a,
+        Some(&file_path.to_string_lossy()),
+        None,
+        None,
+        false,
+    )?;
+    let events = get_events(test_a, height)?;
+    let packet =
+        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
+
+    let height_a = query_height(test_a)?;
+    let proof_commitment_on_a =
+        get_commitment_proof(test_a, &packet, height_a)?;
+    let msg = MsgRecvPacket {
+        packet,
+        proof_commitment_on_a,
+        proof_height_on_a: height_a,
+        signer: signer(),
+    };
+    // Update the client state of Chain A on Chain B
+    update_client_with_height(test_a, test_b, client_id_b, height_a)?;
+    // Receive the token on Chain B
+    let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    let events = get_events(test_b, height)?;
+    let packet =
+        get_packet_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    let ack =
+        get_ack_from_events(&events).ok_or(eyre!("Transaction failed"))?;
+    check_ibc_packet_query(
+        test_b,
+        &"write_acknowledgement".parse().unwrap(),
+        &packet,
+    )?;
+
+    // get the proof on Chain B
+    let height_b = query_height(test_b)?;
+    let proof_acked_on_b = get_ack_proof(test_b, &packet, height_b)?;
+    let msg = MsgAcknowledgement {
+        packet,
+        acknowledgement: ack.try_into().expect("invalid ack"),
+        proof_acked_on_b,
+        proof_height_on_b: height_b,
+        signer: signer(),
+    };
+    // Update the client state of Chain B on Chain A
+    update_client_with_height(test_b, test_a, client_id_a, height_b)?;
+    // Acknowledge on Chain A
+    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+
+    Ok(())
+}
+
+fn get_shielded_transfer_path(client: &mut NamadaCmd) -> Result<PathBuf> {
+    let (_unread, matched) =
+        client.exp_regex("Output IBC shielded transfer .*")?;
+    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
 
 fn get_commitment_proof(
@@ -987,19 +1120,19 @@ fn submit_ibc_tx(
 fn transfer(
     test: &Test,
     sender: impl AsRef<str>,
-    receiver: &Address,
+    receiver: impl AsRef<str>,
     token: impl AsRef<str>,
     amount: impl AsRef<str>,
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
+    memo: Option<&str>,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, &Who::Validator(0));
 
-    let receiver = receiver.to_string();
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
     let mut tx_args = vec![
@@ -1007,7 +1140,7 @@ fn transfer(
         "--source",
         sender.as_ref(),
         "--receiver",
-        &receiver,
+        receiver.as_ref(),
         "--signing-keys",
         signer.as_ref(),
         "--token",
@@ -1022,13 +1155,19 @@ fn transfer(
         &rpc,
     ];
 
+    let memo_path = memo.unwrap_or_default();
+    if memo.is_some() {
+        tx_args.push("--memo-path");
+        tx_args.push(memo_path);
+    }
+
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
         tx_args.push(&timeout);
     }
 
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
     match expected_err {
         Some(err) => {
             client.exp_string(err)?;
@@ -1124,10 +1263,7 @@ fn check_ibc_update_query(
         client_id,
         &consensus_height,
     )) {
-        Ok(Some(event)) => {
-            println!("Found the update event: {:?}", event);
-            Ok(())
-        }
+        Ok(Some(_)) => Ok(()),
         Ok(None) => Err(eyre!("No update event for the client {}", client_id)),
         Err(e) => Err(eyre!("IBC update event query failed: {}", e)),
     }
@@ -1150,10 +1286,7 @@ fn check_ibc_packet_query(
         &packet.chan_id_on_b,
         &packet.seq_on_a,
     )) {
-        Ok(Some(event)) => {
-            println!("Found the packet event: {:?}", event);
-            Ok(())
-        }
+        Ok(Some(_)) => Ok(()),
         Ok(None) => Err(eyre!("No packet event for the packet {}", packet)),
         Err(e) => Err(eyre!("IBC packet event query failed: {}", e)),
     }
@@ -1291,6 +1424,33 @@ fn check_balances_after_back(
         "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
     let expected = format!("{}/nam: 0", trace_path);
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
+/// Check balances after IBC shielded transfer
+fn check_shielded_balances(
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+    test_b: &Test,
+) -> Result<()> {
+    // Check the balance on Chain B
+    let token = find_address(test_b, BTC)?;
+    let denom = format!("{}/{}/{}", dest_port_id, dest_channel_id, &token);
+    let ibc_token = ibc_token(denom).to_string();
+    let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AB_VIEWING_KEY,
+        "--token",
+        &ibc_token,
+        "--node",
+        &rpc_b,
+    ];
+    let expected = format!("{}: 10", ibc_token);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();

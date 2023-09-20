@@ -20,7 +20,7 @@ use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::{
     is_receiver_chain_source, send_transfer_execute, send_transfer_validate,
-    BaseDenom, PrefixedDenom, TracePath, TracePrefix,
+    PrefixedDenom, TracePrefix,
 };
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
@@ -30,12 +30,13 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::router::{Module, ModuleId, Router};
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
-use crate::types::address::Address;
+use crate::types::address::{masp, Address};
 use crate::types::chain::ChainId;
 use crate::types::ibc::{
     get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
     EVENT_TYPE_PACKET,
 };
+use crate::types::masp::PaymentAddress;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -211,14 +212,20 @@ where
             .as_ref()
             .and_then(|event| event.attributes.get("receiver"))
         {
-            Some(receiver) => {
-                Some(Address::decode(receiver).map_err(|_| {
-                    Error::Denom(format!(
-                        "Decoding the receiver address failed: {:?}",
-                        receive_event
-                    ))
-                })?)
-            }
+            Some(receiver) => Some(
+                Address::decode(receiver)
+                    .or_else(|_| {
+                        // Replace it with MASP address when the receiver is a
+                        // payment address
+                        PaymentAddress::from_str(receiver).map(|_| masp())
+                    })
+                    .map_err(|_| {
+                        Error::Denom(format!(
+                            "Decoding the receiver address failed: {:?}",
+                            receive_event
+                        ))
+                    })?,
+            ),
             None => None,
         };
         let denom_event = self
@@ -306,35 +313,25 @@ pub struct ValidationParams {
 
 /// Get the IbcToken from the source/destination ports and channels
 pub fn received_ibc_token(
-    token: &Address,
-    trace_path: Option<TracePath>,
+    ibc_denom: &PrefixedDenom,
     src_port_id: &PortId,
     src_channel_id: &ChannelId,
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
 ) -> Result<Address, Error> {
-    if let Some(trace_path) = trace_path {
-        let mut ibc_denom = PrefixedDenom {
-            trace_path,
-            base_denom: BaseDenom::from_str(&token.to_string()).map_err(
-                |e| Error::Denom(format!("Trace path is invalid: error {e}")),
-            )?,
-        };
-        if is_receiver_chain_source(
-            src_port_id.clone(),
-            src_channel_id.clone(),
-            &ibc_denom,
-        ) {
-            let prefix =
-                TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
-            ibc_denom.remove_trace_prefix(&prefix);
-        } else {
-            let prefix =
-                TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
-            ibc_denom.add_trace_prefix(prefix);
-        }
-        Ok(storage::ibc_token(&ibc_denom.to_string()))
+    let mut ibc_denom = ibc_denom.clone();
+    if is_receiver_chain_source(
+        src_port_id.clone(),
+        src_channel_id.clone(),
+        &ibc_denom,
+    ) {
+        let prefix =
+            TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
+        ibc_denom.remove_trace_prefix(&prefix);
     } else {
-        Ok(token.clone())
+        let prefix =
+            TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
+        ibc_denom.add_trace_prefix(prefix);
     }
+    Ok(storage::ibc_token(ibc_denom.to_string()))
 }

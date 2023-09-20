@@ -71,7 +71,6 @@ use namada::ledger::queries::{
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
-use namada::sdk::args::InputAmount;
 use namada::sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };

@@ -2025,9 +2025,10 @@ pub async fn gen_ibc_shielded_transfer<
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(client, &args.port_id, &args.channel_id)
             .await?;
+    let ibc_denom =
+        rpc::query_ibc_denom::<_, IO>(client, &args.token, Some(&source)).await;
     let token = namada_core::ledger::ibc::received_ibc_token(
-        &args.token,
-        args.trace_path,
+        &ibc_denom.parse().expect("Invalid IBC denom"),
         &src_port_id,
         &src_channel_id,
         &args.port_id,

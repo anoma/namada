@@ -2687,7 +2687,7 @@ pub mod args {
     pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
         HD_WALLET_DERIVATION_PATH.opt();
     pub const HISTORIC: ArgFlag = flag("historic");
-    pub const IBC_TRANSFER_MEMO: ArgOpt<String> = arg_opt("memo");
+    pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -3603,7 +3603,10 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
-            let memo = IBC_TRANSFER_MEMO.parse(matches);
+            let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
+                std::fs::read_to_string(path)
+                    .expect("Expected a file at given path")
+            });
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -3640,9 +3643,9 @@ pub mod args {
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
                 .arg(
-                    IBC_TRANSFER_MEMO
+                    IBC_TRANSFER_MEMO_PATH
                         .def()
-                        .help("Memo field of ICS20 transfer."),
+                        .help("The path for the memo field of ICS20 transfer."),
                 )
         }
     }
@@ -4773,7 +4776,6 @@ pub mod args {
                 sender: self.sender,
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),
-                trace_path: self.trace_path,
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -4788,7 +4790,6 @@ pub mod args {
             let sender = SENDER.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
-            let trace_path = TRACE_PATH.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
@@ -4798,7 +4799,6 @@ pub mod args {
                 sender,
                 target,
                 token,
-                trace_path,
                 amount,
                 port_id,
                 channel_id,
@@ -4806,14 +4806,13 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Tx<CliTypes>>()
+            app.add_args::<Query<CliTypes>>()
                 .arg(OUTPUT_FOLDER_PATH.def().help(
                     "The output folder path where the artifact will be stored.",
                 ))
                 .arg(SENDER.def().help("The foreign sender address."))
                 .arg(TRANSFER_TARGET.def().help("The target address."))
                 .arg(TOKEN.def().help("The transfer token."))
-                .arg(TRACE_PATH.def().help("The IBC trace path of the token."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
                 .arg(
                     PORT_ID

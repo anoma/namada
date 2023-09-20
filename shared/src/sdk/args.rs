@@ -899,8 +899,6 @@ pub struct GenIbcShieldedTransafer<C: NamadaTypes = SdkTypes> {
     pub target: C::TransferTarget,
     /// The token address
     pub token: C::Address,
-    /// The trace path of the token
-    pub trace_path: Option<TracePath>,
     /// Transferred token amount
     pub amount: InputAmount,
     /// Port ID via which the token is received
