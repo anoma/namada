@@ -201,7 +201,8 @@ mod protocol_txs {
             outer_tx.set_data(Data::new(tx_data));
             outer_tx.add_section(Section::Signature(Signature::new(
                 outer_tx.sechashes(),
-                signing_key,
+                [(0, signing_key.clone())].into_iter().collect(),
+                None,
             )));
             outer_tx
         }
@@ -339,7 +340,8 @@ mod protocol_txs {
                     *outer_tx.code_sechash(),
                     *outer_tx.data_sechash(),
                 ],
-                signing_key,
+                [(0, signing_key.clone())].into_iter().collect(),
+                None,
             )));
             outer_tx
         }

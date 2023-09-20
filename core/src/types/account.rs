@@ -1,12 +1,12 @@
 //! Helper structures to manage accounts
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use super::address::Address;
-use super::key::common;
+use super::key::{common, RefTo};
 
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
@@ -88,5 +88,19 @@ impl AccountPublicKeysMap {
         public_key: &common::PublicKey,
     ) -> Option<u8> {
         self.pk_to_idx.get(public_key).cloned()
+    }
+
+    /// Index the given set of secret keys
+    pub fn index_secret_keys(
+        &self,
+        secret_keys: Vec<common::SecretKey>,
+    ) -> BTreeMap<u8, common::SecretKey> {
+        secret_keys
+            .into_iter()
+            .filter_map(|secret_key: common::SecretKey| {
+                self.get_index_from_public_key(&secret_key.ref_to())
+                    .map(|index| (index, secret_key))
+            })
+            .collect()
     }
 }

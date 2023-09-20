@@ -725,7 +725,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let ctx = Ctx::new(
             &ADDRESS,
@@ -1037,7 +1038,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
@@ -1370,7 +1372,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
@@ -1457,7 +1460,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
@@ -1581,7 +1585,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
@@ -1704,7 +1709,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
@@ -1812,7 +1818,8 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.add_section(Section::Signature(Signature::new(
             vec![*outer_tx.code_sechash(), *outer_tx.data_sechash()],
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         let gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),

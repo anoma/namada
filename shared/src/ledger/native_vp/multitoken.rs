@@ -171,7 +171,8 @@ mod tests {
         tx.set_data(Data::new(tx_data));
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),
-            &keypair_1(),
+            [(0, keypair_1())].into_iter().collect(),
+            None,
         )));
         tx
     }

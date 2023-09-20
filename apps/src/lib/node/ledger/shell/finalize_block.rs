@@ -1126,7 +1126,8 @@ mod test_finalize_block {
         ));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            keypair,
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
         )));
         let tx = wrapper_tx.to_bytes();
         (
@@ -2440,7 +2441,8 @@ mod test_finalize_block {
         ));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let wrapper_hash_key = replay_protection::get_replay_protection_key(
@@ -2511,7 +2513,8 @@ mod test_finalize_block {
         ));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
         )));
 
         let processed_tx = ProcessedTx {
@@ -2593,7 +2596,10 @@ mod test_finalize_block {
         ));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();

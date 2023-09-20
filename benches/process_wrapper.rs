@@ -47,7 +47,8 @@ fn process_tx(c: &mut Criterion) {
     )));
     tx.add_section(namada::proto::Section::Signature(Signature::new(
         tx.sechashes(),
-        &defaults::albert_keypair(),
+        [(0, defaults::albert_keypair())].into_iter().collect(),
+        None,
     )));
     let wrapper = tx.to_bytes();
 

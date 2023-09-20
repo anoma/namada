@@ -2233,7 +2233,8 @@ mod abciplus_mempool_tests {
             tx.set_data(Data::new(ext.try_to_vec().expect("Test falied")));
             tx.add_section(Section::Signature(Signature::new(
                 tx.sechashes(),
-                &protocol_key,
+                [(0, protocol_key)].into_iter().collect(),
+                None,
             )));
             tx
         }
@@ -2314,7 +2315,8 @@ mod test_mempool_validate {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         invalid_wrapper.add_section(Section::Signature(Signature::new(
             invalid_wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // we mount a malleability attack to try and remove the fee
@@ -2380,7 +2382,8 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Write wrapper hash to storage
@@ -2537,7 +2540,8 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
@@ -2569,7 +2573,8 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
@@ -2601,7 +2606,10 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
@@ -2633,7 +2641,10 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
@@ -2664,7 +2675,10 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
@@ -2695,7 +2709,10 @@ mod test_mempool_validate {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let result = shell.mempool_validate(
