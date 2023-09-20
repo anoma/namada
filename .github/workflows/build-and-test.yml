@@ -263,6 +263,10 @@ jobs:
           name: coverage${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: target/html
           retention-days: 3
+      - name: Run benchmarks tests
+        run: make test-benches${{ matrix.make.suffix }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
