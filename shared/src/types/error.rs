@@ -278,6 +278,19 @@ pub enum TxError {
     /// The redelegation amount is 0
     #[error("The amount requested to redelegate is 0 tokens")]
     RedelegationIsZero,
+    /// The src and dest validators are the same
+    #[error("The source and destination validators are the same")]
+    RedelegationSrcEqDest,
+    /// The redelegation owner is a validator
+    #[error("The redelegation owner {0} is a validator")]
+    RedelegatorIsValidator(Address),
+    /// There is an incoming redelegation that is still subject to possible
+    /// slashing
+    #[error(
+        "An incoming redelegation from delegator {0} to validator {1} is \
+         still subject to possible slashing"
+    )]
+    IncomingRedelIsStillSlashable(Address, Address),
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),

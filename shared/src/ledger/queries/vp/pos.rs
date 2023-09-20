@@ -18,7 +18,8 @@ use namada_proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_max_commission_rate_change,
     read_validator_stake, unbond_handle, validator_commission_rate_handle,
-    validator_slashes_handle, validator_state_handle,
+    validator_incoming_redelegations_handle, validator_slashes_handle,
+    validator_state_handle,
 };
 
 use crate::ledger::queries::types::RequestCtx;
@@ -47,6 +48,9 @@ router! {POS,
 
         ( "state" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<ValidatorState> = validator_state,
+
+        ( "incoming_redelegation" / [src_validator: Address] / [delegator: Address] )
+            -> Option<Epoch> = validator_incoming_redelegation,
     },
 
     ( "validator_set" ) = {
@@ -267,6 +271,21 @@ where
     } else {
         Ok(None)
     }
+}
+
+/// Get the incoming redelegation epoch for a source validator - delegator pair,
+/// if there is any.
+fn validator_incoming_redelegation<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    src_validator: Address,
+    delegator: Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let handle = validator_incoming_redelegations_handle(&src_validator);
+    handle.get(ctx.wl_storage, &delegator)
 }
 
 /// Get all the validator in the consensus set with their bonded stake.

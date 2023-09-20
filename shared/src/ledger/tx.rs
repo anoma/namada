@@ -787,9 +787,41 @@ pub async fn build_redelegation<
     }: args::Redelegate,
     fee_payer: common::PublicKey,
 ) -> Result<Tx> {
-    let epoch = rpc::query_epoch(client).await?;
+    // The src and dest validators must actually be validators
+    let src_validator =
+        known_validator_or_err(src_validator.clone(), tx_args.force, client)
+            .await?;
+    let dest_validator =
+        known_validator_or_err(dest_validator.clone(), tx_args.force, client)
+            .await?;
 
-    if redel_amount == token::Amount::zero() {
+    // The delegator (owner) must not be a validator
+    if rpc::is_validator(client, &owner).await? {
+        eprintln!(
+            "The given address {} is a validator. A validator is prohibited \
+             from redelegating its own bonds.",
+            &owner
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegatorIsValidator(
+                owner.clone(),
+            )));
+        }
+    }
+
+    // Prohibit redelegation to the same validator
+    if src_validator == dest_validator {
+        eprintln!(
+            "The provided source and destination validators are the same. \
+             Redelegation is not allowed to the same validator."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationSrcEqDest));
+        }
+    }
+
+    // Require a positive amount of tokens to be redelegated
+    if redel_amount.is_zero() {
         eprintln!(
             "The requested redelegation amount is 0. A positive amount must \
              be requested."
@@ -799,6 +831,36 @@ pub async fn build_redelegation<
         }
     }
 
+    // Prohibit chained redelegations
+    let params = rpc::get_pos_params(client).await?;
+    let incoming_redel_epoch =
+        rpc::query_incoming_redelegations(client, &src_validator, &owner)
+            .await?;
+    let current_epoch = rpc::query_epoch(client).await?;
+    let is_not_chained = if let Some(redel_end_epoch) = incoming_redel_epoch {
+        let last_contrib_epoch = redel_end_epoch.prev();
+        last_contrib_epoch + params.slash_processing_epoch_offset()
+            <= current_epoch
+    } else {
+        true
+    };
+    if !is_not_chained {
+        eprintln!(
+            "The source validator {} has an incoming redelegation from the \
+             delegator {} that may still be subject to future slashing. \
+             Redelegation is not allowed until this is no longer the case.",
+            &src_validator, &owner
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::IncomingRedelIsStillSlashable(
+                src_validator.clone(),
+                owner.clone(),
+            )));
+        }
+    }
+
+    // There must be at least as many tokens in the bond as the requested
+    // redelegation amount
     let bond_amount =
         rpc::query_bond(client, &owner, &src_validator, None).await?;
     if redel_amount > bond_amount {
@@ -806,7 +868,7 @@ pub async fn build_redelegation<
             "There are not enough tokens available for the desired \
              redelegation at the current epoch {}. Requested to redelegate {} \
              tokens but only {} tokens are available.",
-            epoch,
+            current_epoch,
             redel_amount.to_string_native(),
             bond_amount.to_string_native()
         );

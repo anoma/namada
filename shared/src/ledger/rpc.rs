@@ -759,6 +759,23 @@ pub async fn query_commission_rate<C: crate::ledger::queries::Client + Sync>(
     )
 }
 
+/// Query and return the incoming redelegation epoch for a given pair of source
+/// validator and delegator, if there is any.
+pub async fn query_incoming_redelegations<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    src_validator: &Address,
+    delegator: &Address,
+) -> Result<Option<Epoch>, Error> {
+    convert_response::<C, Option<Epoch>>(
+        RPC.vp()
+            .pos()
+            .validator_incoming_redelegation(client, src_validator, delegator)
+            .await,
+    )
+}
+
 /// Query a validator's bonds for a given epoch
 pub async fn query_bond<C: crate::ledger::queries::Client + Sync>(
     client: &C,
