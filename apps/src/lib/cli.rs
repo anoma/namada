@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada::types::io::DefaultIo;
+use namada::types::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -3525,8 +3525,8 @@ pub mod args {
                 target,
                 token,
                 amount,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
@@ -3881,8 +3881,8 @@ pub mod args {
                 validator,
                 amount,
                 source,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
@@ -5799,7 +5799,7 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
                 cmds::EthBridgePool::WithContext(sub_cmd),
             ) => {
                 let global_args = args::Global::parse(&matches);
-                let context = Context::new::<DefaultIo>(global_args)?;
+                let context = Context::new::<StdIo>(global_args)?;
                 Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
                     sub_cmd, context,
                 ))))

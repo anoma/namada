@@ -20,7 +20,7 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::Address;
-use namada::types::io::DefaultIo;
+use namada::types::io::StdIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
@@ -688,7 +688,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<StdIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -836,7 +836,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<StdIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

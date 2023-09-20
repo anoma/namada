@@ -9,7 +9,6 @@ use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -23,10 +22,8 @@ use crate::ledger::queries::{
 use crate::proto::Tx;
 use crate::sdk::args;
 use crate::sdk::error::Error;
-use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
 use crate::sdk::tx::prepare_tx;
-use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
@@ -41,17 +38,14 @@ use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
 use crate::{display, display_line};
+use crate::ledger::Namada;
+use crate::sdk::signing::aux_signing_data;
+use crate::sdk::signing::SigningTxData;
+
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn build_bridge_pool_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
-    IO: Io,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_bridge_pool_tx<'a>(
+    context: &mut impl Namada<'a>,
     args::EthereumBridgePool {
         tx: tx_args,
         nut,
@@ -64,11 +58,18 @@ pub async fn build_bridge_pool_tx<
         fee_token,
         code_path,
     }: args::EthereumBridgePool,
-    wrapper_fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>), Error> {
+    let default_signer = Some(sender.clone());
+    let signing_data = aux_signing_data(
+        context,
+        &tx_args,
+        Some(sender.clone()),
+        default_signer,
+    )
+        .await?;
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
-    let DenominatedAmount { amount, .. } = validate_amount::<_, IO>(
-        client,
+    let DenominatedAmount { amount, .. } = validate_amount(
+        context.client,
         amount,
         &wrapped_erc20s::token(&asset),
         tx_args.force,
@@ -77,7 +78,7 @@ pub async fn build_bridge_pool_tx<
     .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
     let DenominatedAmount {
         amount: fee_amount, ..
-    } = validate_amount::<_, IO>(client, fee_amount, &fee_token, tx_args.force)
+    } = validate_amount(context.client, fee_amount, &fee_token, tx_args.force)
         .await
         .map_err(|e| {
             Error::Other(format!(
@@ -105,7 +106,7 @@ pub async fn build_bridge_pool_tx<
     };
 
     let tx_code_hash =
-        query_wasm_code_hash::<_, IO>(client, code_path.to_str().unwrap())
+        query_wasm_code_hash(context.client, code_path.to_str().unwrap())
             .await
             .unwrap();
 
@@ -115,18 +116,16 @@ pub async fn build_bridge_pool_tx<
 
     // TODO(namada#1800): validate the tx on the client side
 
-    let epoch = prepare_tx::<C, U, V, IO>(
-        client,
-        wallet,
-        shielded,
+    let epoch = prepare_tx(
+        context,
         &tx_args,
         &mut tx,
-        wrapper_fee_payer,
+        signing_data.fee_payer.clone(),
         None,
     )
     .await?;
 
-    Ok((tx, epoch))
+    Ok((tx, signing_data, epoch))
 }
 
 /// A json serializable representation of the Ethereum
@@ -913,7 +912,7 @@ mod recommendations {
 
         use super::*;
         use crate::types::control_flow::ProceedOrElse;
-        use crate::types::io::DefaultIo;
+        use crate::types::io::StdIo;
 
         /// An established user address for testing & development
         pub fn bertha_address() -> Address {
@@ -1019,7 +1018,7 @@ mod recommendations {
                 signed_pool: &mut signed_pool,
                 expected_eligible: &mut expected,
             });
-            let eligible = generate_eligible::<DefaultIo>(
+            let eligible = generate_eligible::<StdIo>(
                 &table,
                 &in_progress,
                 signed_pool,
@@ -1114,7 +1113,7 @@ mod recommendations {
             let profitable = vec![transfer(100_000); 17];
             let hash = profitable[0].keccak256().to_string();
             let expected = vec![hash; 17];
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(profitable),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -1133,7 +1132,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             transfers.push(transfer(0));
             let expected: Vec<_> = vec![hash; 17];
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(800_000),
@@ -1151,7 +1150,7 @@ mod recommendations {
             let transfers = vec![transfer(75_000); 4];
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 2];
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(50_000),
@@ -1173,7 +1172,7 @@ mod recommendations {
                 .map(|t| t.keccak256().to_string())
                 .take(5)
                 .collect();
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -1192,7 +1191,7 @@ mod recommendations {
             let hash = transfers[0].keccak256().to_string();
             let expected = vec![hash; 4];
             transfers.extend([transfer(17_500), transfer(17_500)]);
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(150_000),
@@ -1208,7 +1207,7 @@ mod recommendations {
         #[test]
         fn test_wholly_infeasible() {
             let transfers = vec![transfer(75_000); 4];
-            let recommendation = generate_recommendations::<DefaultIo>(
+            let recommendation = generate_recommendations::<StdIo>(
                 process_transfers(transfers),
                 &Default::default(),
                 Uint::from_u64(300_000),
@@ -1289,7 +1288,7 @@ mod recommendations {
 
             const VALIDATOR_GAS_FEE: Uint = Uint::from_u64(100_000);
 
-            let recommended_batch = generate_recommendations::<DefaultIo>(
+            let recommended_batch = generate_recommendations::<StdIo>(
                 eligible,
                 &conversion_table,
                 // gas spent by validator signature checks

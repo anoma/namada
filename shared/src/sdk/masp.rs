@@ -68,7 +68,7 @@ use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
-use crate::types::io::Io;
+use crate::types::io::{Io, StdIo};
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
@@ -77,6 +77,7 @@ use crate::types::token::{
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
 use crate::{display_line, edisplay_line};
+use crate::ledger::Namada;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1035,7 +1036,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(balance) = self.compute_shielded_balance(client, vk).await?
         {
             let exchanged_amount = self
-                .compute_exchanged_amount::<_, IO>(
+                .compute_exchanged_amount(
                     client,
                     balance,
                     target_epoch,
@@ -1058,7 +1059,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     #[allow(clippy::too_many_arguments)]
-    async fn apply_conversion<C: Client + Sync, IO: Io>(
+    async fn apply_conversion<C: Client + Sync>(
         &mut self,
         client: &C,
         conv: AllowedConversion,
@@ -1080,7 +1081,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
             edisplay_line!(
-                IO,
+                StdIo,
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
                 masp_asset
@@ -1110,7 +1111,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount<C: Client + Sync, IO: Io>(
+    pub async fn compute_exchanged_amount<C: Client + Sync>(
         &mut self,
         client: &C,
         mut input: MaspAmount,
@@ -1149,14 +1150,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
                     display_line!(
-                        IO,
+                        StdIo,
                         "converting current asset type to latest asset type..."
                     );
                     // Not at the target asset type, not at the latest asset
                     // type. Apply conversion to get from
                     // current asset type to the latest
                     // asset type.
-                    self.apply_conversion::<_, IO>(
+                    self.apply_conversion(
                         client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
@@ -1171,14 +1172,14 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     at_target_asset_type,
                 ) {
                     display_line!(
-                        IO,
+                        StdIo,
                         "converting latest asset type to target asset type..."
                     );
                     // Not at the target asset type, yet at the latest asset
                     // type. Apply inverse conversion to get
                     // from latest asset type to the target
                     // asset type.
-                    self.apply_conversion::<_, IO>(
+                    self.apply_conversion(
                         client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
@@ -1213,7 +1214,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes<C: Client + Sync, IO: Io>(
+    pub async fn collect_unspent_notes<C: Client + Sync>(
         &mut self,
         client: &C,
         vk: &ViewingKey,
@@ -1259,7 +1260,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         })?;
                 let input = self.decode_all_amounts(client, pre_contr).await;
                 let (contr, proposed_convs) = self
-                    .compute_exchanged_amount::<_, IO>(
+                    .compute_exchanged_amount(
                         client,
                         input,
                         target_epoch,
@@ -1413,7 +1414,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         display_line!(IO, "Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount::<_, IO>(
+            .compute_exchanged_amount(
                 client,
                 amount,
                 ep,
@@ -1483,10 +1484,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
     #[cfg(feature = "masp-tx-gen")]
-    pub async fn gen_shielded_transfer<C: Client + Sync, IO: Io>(
-        &mut self,
-        client: &C,
-        args: args::TxTransfer,
+    pub async fn gen_shielded_transfer<'a>(
+        context: &mut impl Namada<'a>,
+        args: &args::TxTransfer,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
@@ -1507,12 +1507,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let spending_key = spending_key.map(|x| x.into());
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
         // Load the current shielded context given the spending key we possess
-        let _ = self.load().await;
-        self.fetch(client, &spending_keys, &[]).await?;
+        let _ = context.shielded.load().await;
+        let context = &mut **context;
+        context.shielded.fetch(context.client, &spending_keys, &[]).await?;
         // Save the update state so that future fetches can be short-circuited
-        let _ = self.save().await;
+        let _ = context.shielded.save().await;
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(client).await?;
+        let epoch = rpc::query_epoch(context.client).await?;
         // Context required for storing which notes are in the source's
         // possesion
         let memo = MemoBytes::empty();
@@ -1552,9 +1553,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // If there are shielded inputs
         if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction amount
-            let (_, unspent_notes, used_convs) = self
-                .collect_unspent_notes::<_, IO>(
-                    client,
+            let (_, unspent_notes, used_convs) = context
+                .shielded
+                .collect_unspent_notes(
+                    context.client,
                     &to_viewing_key(&sk).vk,
                     I128Sum::from_sum(amount),
                     epoch,
@@ -1743,7 +1745,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let build_transfer =
             || -> Result<ShieldedTransfer, builder::Error<std::convert::Infallible>> {
                 let (masp_tx, metadata) = builder.build(
-                    &self.utils.local_tx_prover(),
+                    &context.shielded.utils.local_tx_prover(),
                     &FeeRule::non_standard(U64Sum::zero()),
                 )?;
                 Ok(ShieldedTransfer {

@@ -26,7 +26,7 @@ use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
 use crate::types::ethereum_events::EthAddress;
-use crate::types::io::{DefaultIo, Io};
+use crate::types::io::{Io, StdIo};
 use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 use crate::{display_line, edisplay_line};
 
@@ -513,7 +513,7 @@ where
         time::sleep(sleep_for).await;
 
         let is_synchronizing =
-            eth_sync_or::<_, _, _, DefaultIo>(&*eth_client, || ())
+            eth_sync_or::<_, _, _, StdIo>(&*eth_client, || ())
                 .await
                 .is_break();
         if is_synchronizing {

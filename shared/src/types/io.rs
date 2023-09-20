@@ -3,10 +3,10 @@
 //! functions.
 
 /// Rust native I/O handling.
-pub struct DefaultIo;
+pub struct StdIo;
 
 #[async_trait::async_trait(?Send)]
-impl Io for DefaultIo {}
+impl Io for StdIo {}
 
 #[async_trait::async_trait(?Send)]
 #[allow(missing_docs)]

@@ -80,7 +80,7 @@ use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
-use namada::types::io::DefaultIo;
+use namada::types::io::StdIo;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
@@ -104,6 +104,7 @@ use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+use namada::ledger::NamadaImpl;
 
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -682,7 +683,7 @@ impl Default for BenchShieldedCtx {
         let mut shell = BenchShell::default();
 
         let mut ctx =
-            Context::new::<DefaultIo>(namada_apps::cli::args::Global {
+            Context::new::<StdIo>(namada_apps::cli::args::Global {
                 chain_id: None,
                 base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
                 wasm_dir: Some(WASM_DIR.into()),
@@ -803,11 +804,13 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
+        let mut namada = NamadaImpl::new(
+            &self.shell,
+            &mut self.wallet,
+            &mut self.shielded,
+        );
         let shielded = async_runtime
-            .block_on(
-                self.shielded
-                    .gen_shielded_transfer::<_, DefaultIo>(&self.shell, args),
-            )
+            .block_on(ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(&mut namada, &args))
             .unwrap()
             .map(
                 |ShieldedTransfer {

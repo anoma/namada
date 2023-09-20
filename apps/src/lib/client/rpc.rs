@@ -173,7 +173,7 @@ pub async fn query_transfers<
             // Realize the rewards that would have been attained upon the
             // transaction's reception
             let amt = shielded
-                .compute_exchanged_amount::<_, IO>(
+                .compute_exchanged_amount(
                     client,
                     amt,
                     epoch,
@@ -224,7 +224,7 @@ pub async fn query_transfers<
                     IO,
                     " {}{} {}",
                     sign,
-                    format_denominated_amount::<_, IO>(
+                    format_denominated_amount(
                         client,
                         asset,
                         change.into(),
@@ -252,7 +252,7 @@ pub async fn query_transfers<
                         IO,
                         " {}{} {}",
                         sign,
-                        format_denominated_amount::<_, IO>(
+                        format_denominated_amount(
                             client,
                             &token_addr,
                             val.into(),
@@ -358,7 +358,7 @@ pub async fn query_transparent_balance<
                 .await
             {
                 Ok(balance) => {
-                    let balance = format_denominated_amount::<_, IO>(
+                    let balance = format_denominated_amount(
                         client, &token, balance,
                     )
                     .await;
@@ -380,7 +380,7 @@ pub async fn query_transparent_balance<
             for (token_alias, token) in tokens {
                 let balance = get_token_balance(client, &token, &owner).await;
                 if !balance.is_zero() {
-                    let balance = format_denominated_amount::<_, IO>(
+                    let balance = format_denominated_amount(
                         client, &token, balance,
                     )
                     .await;
@@ -518,7 +518,7 @@ pub async fn query_pinned_balance<
                         token_alias
                     );
                 } else {
-                    let formatted = format_denominated_amount::<_, IO>(
+                    let formatted = format_denominated_amount(
                         client,
                         token,
                         total_balance.into(),
@@ -552,7 +552,7 @@ pub async fn query_pinned_balance<
                         );
                         found_any = true;
                     }
-                    let formatted = format_denominated_amount::<_, IO>(
+                    let formatted = format_denominated_amount(
                         client,
                         token_addr,
                         (*value).into(),
@@ -599,7 +599,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync, IO: Io>(
                 owner.clone(),
                 format!(
                     ": {}, owned by {}",
-                    format_denominated_amount::<_, IO>(client, tok, balance)
+                    format_denominated_amount(client, tok, balance)
                         .await,
                     wallet.lookup_alias(owner)
                 ),
@@ -785,7 +785,7 @@ pub async fn query_shielded_balance<
                     IO,
                     "{}: {}",
                     token_alias,
-                    format_denominated_amount::<_, IO>(
+                    format_denominated_amount(
                         client,
                         &token,
                         token::Amount::from(total_balance)
@@ -853,7 +853,7 @@ pub async fn query_shielded_balance<
                     .map(|a| a.to_string())
                     .unwrap_or_else(|| token.to_string());
                 display_line!(IO, "Shielded Token {}:", alias);
-                let formatted = format_denominated_amount::<_, IO>(
+                let formatted = format_denominated_amount(
                     client,
                     &token,
                     token_balance.into(),
@@ -904,7 +904,7 @@ pub async fn query_shielded_balance<
                     if !val.is_zero() {
                         found_any = true;
                     }
-                    let formatted = format_denominated_amount::<_, IO>(
+                    let formatted = format_denominated_amount(
                         client,
                         address,
                         (*val).into(),
@@ -975,7 +975,7 @@ pub async fn print_decoded_balance<
                 IO,
                 "{} : {}",
                 wallet.lookup_alias(token_addr),
-                format_denominated_amount::<_, IO>(
+                format_denominated_amount(
                     client,
                     token_addr,
                     (*amount).into()
@@ -1009,7 +1009,7 @@ pub async fn print_decoded_balance_with_epoch<
             "{} | {} : {}",
             alias,
             epoch,
-            format_denominated_amount::<_, IO>(client, token_addr, asset_value)
+            format_denominated_amount(client, token_addr, asset_value)
                 .await,
         );
     }
@@ -2195,7 +2195,7 @@ pub async fn query_wasm_code_hash<
     client: &C,
     code_path: impl AsRef<str>,
 ) -> Result<Hash, error::Error> {
-    rpc::query_wasm_code_hash::<_, IO>(client, code_path).await
+    rpc::query_wasm_code_hash(client, code_path).await
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].

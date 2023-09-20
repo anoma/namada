@@ -1,9 +1,11 @@
 use color_eyre::eyre::{eyre, Report, Result};
-use namada::ledger::eth_bridge::bridge_pool;
+
 use namada::sdk::tx::dump_tx;
-use namada::sdk::{signing, tx as sdk_tx};
+use namada::sdk::signing;
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::io::Io;
+use namada::ledger::NamadaImpl;
+use namada::ledger::Namada;
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -256,58 +258,30 @@ impl<IO: Io> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
 
-                        let default_signer = Some(args.sender.clone());
-                        let signing_data = tx::aux_signing_data::<_, IO>(
+                        let mut namada = NamadaImpl::new(
                             &client,
                             &mut ctx.wallet,
-                            &args.tx,
-                            Some(args.sender.clone()),
-                            default_signer,
-                        )
-                        .await?;
+                            &mut ctx.shielded,
+                        );
 
-                        let (mut tx, _epoch) =
-                            bridge_pool::build_bridge_pool_tx::<_, _, _, IO>(
-                                &client,
-                                &mut ctx.wallet,
-                                &mut ctx.shielded,
-                                args.clone(),
-                                signing_data.fee_payer.clone(),
-                            )
-                            .await?;
+                        let (mut tx, signing_data, _epoch) =
+                            args.clone().build(&mut namada).await?;
 
-                        signing::generate_test_vector::<_, _, IO>(
-                            &client,
-                            &mut ctx.wallet,
-                            &tx,
-                        )
-                        .await?;
+                        signing::generate_test_vector(&mut namada, &tx).await?;
 
                         if args.tx.dump_tx {
                             dump_tx::<IO>(&args.tx, tx);
                         } else {
-                            tx::submit_reveal_aux::<_, IO>(
-                                &client,
-                                &mut ctx,
+                            tx::submit_reveal_aux(
+                                &mut namada,
                                 tx_args.clone(),
                                 &args.sender,
                             )
                             .await?;
 
-                            signing::sign_tx(
-                                &mut ctx.wallet,
-                                &tx_args,
-                                &mut tx,
-                                signing_data,
-                            )?;
+                            namada.sign(&mut tx, &tx_args, signing_data)?;
 
-                            sdk_tx::process_tx::<_, _, IO>(
-                                &client,
-                                &mut ctx.wallet,
-                                &tx_args,
-                                tx,
-                            )
-                            .await?;
+                            namada.submit(tx, &tx_args).await?;
                         }
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {

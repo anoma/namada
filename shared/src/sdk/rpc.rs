@@ -38,7 +38,7 @@ use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::control_flow::{time, Halt, TryHalt};
 use crate::types::hash::Hash;
-use crate::types::io::Io;
+use crate::types::io::{Io, StdIo};
 use crate::types::key::common;
 use crate::types::storage::{BlockHeight, BlockResults, Epoch, PrefixValue};
 use crate::types::{storage, token};
@@ -239,7 +239,6 @@ pub async fn query_conversion<C: crate::ledger::queries::Client + Sync>(
 /// Query a wasm code hash
 pub async fn query_wasm_code_hash<
     C: crate::ledger::queries::Client + Sync,
-    IO: Io,
 >(
     client: &C,
     code_path: impl AsRef<str>,
@@ -252,7 +251,7 @@ pub async fn query_wasm_code_hash<
         Some(hash) => Ok(Hash::try_from(&hash[..]).expect("Invalid code hash")),
         None => {
             edisplay_line!(
-                IO,
+                StdIo,
                 "The corresponding wasm code of the code path {} doesn't \
                  exist on chain.",
                 code_path.as_ref(),
@@ -789,7 +788,6 @@ pub async fn get_public_key_at<C: crate::ledger::queries::Client + Sync>(
 /// Query a validator's unbonds for a given epoch
 pub async fn query_and_print_unbonds<
     C: crate::ledger::queries::Client + Sync,
-    IO: Io,
 >(
     client: &C,
     source: &Address,
@@ -811,17 +809,17 @@ pub async fn query_and_print_unbonds<
     }
     if total_withdrawable != token::Amount::default() {
         display_line!(
-            IO,
+            StdIo,
             "Total withdrawable now: {}.",
             total_withdrawable.to_string_native()
         );
     }
     if !not_yet_withdrawable.is_empty() {
-        display_line!(IO, "Current epoch: {current_epoch}.")
+        display_line!(StdIo, "Current epoch: {current_epoch}.")
     }
     for (withdraw_epoch, amount) in not_yet_withdrawable {
         display_line!(
-            IO,
+            StdIo,
             "Amount {} withdrawable starting from epoch {withdraw_epoch}.",
             amount.to_string_native()
         );
@@ -939,7 +937,6 @@ pub async fn enriched_bonds_and_unbonds<
 /// Get the correct representation of the amount given the token type.
 pub async fn validate_amount<
     C: crate::ledger::queries::Client + Sync,
-    IO: Io,
 >(
     client: &C,
     amount: InputAmount,
@@ -958,14 +955,14 @@ pub async fn validate_amount<
         None => {
             if force {
                 display_line!(
-                    IO,
+                    StdIo,
                     "No denomination found for token: {token}, but --force \
                      was passed. Defaulting to the provided denomination."
                 );
                 Ok(input_amount.denom)
             } else {
                 display_line!(
-                    IO,
+                    StdIo,
                     "No denomination found for token: {token}, the input \
                      arguments could not be parsed."
                 );
@@ -977,7 +974,7 @@ pub async fn validate_amount<
     }?;
     if denom < input_amount.denom && !force {
         display_line!(
-            IO,
+            StdIo,
             "The input amount contained a higher precision than allowed by \
              {token}."
         );
@@ -988,7 +985,7 @@ pub async fn validate_amount<
     } else {
         input_amount.increase_precision(denom).map_err(|_err| {
             display_line!(
-                IO,
+                StdIo,
                 "The amount provided requires more the 256 bits to represent."
             );
             Error::from(QueryError::General(
@@ -1065,7 +1062,6 @@ where
 /// correctly as a string.
 pub async fn format_denominated_amount<
     C: crate::ledger::queries::Client + Sync,
-    IO: Io,
 >(
     client: &C,
     token: &Address,
@@ -1075,12 +1071,12 @@ pub async fn format_denominated_amount<
         RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|t| {
-        display_line!(IO, "Error in querying for denomination: {t}");
+        display_line!(StdIo, "Error in querying for denomination: {t}");
         None
     })
     .unwrap_or_else(|| {
         display_line!(
-            IO,
+            StdIo,
             "No denomination found for token: {token}, defaulting to zero \
              decimal places"
         );
