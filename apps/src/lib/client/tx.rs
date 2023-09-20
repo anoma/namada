@@ -489,8 +489,6 @@ where
         &mut tx,
         signing_data.fee_payer.clone(),
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
 

@@ -407,10 +407,7 @@ pub fn generate_tx(
     signer: Option<&SecretKey>,
 ) -> Tx {
     let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
+        namada::types::transaction::DecryptedTx::Decrypted,
     ));
 
     // NOTE: don't use the hash to avoid computing the cost of loading the wasm
@@ -446,10 +443,7 @@ pub fn generate_tx(
 pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
     // This function avoid serializaing the tx data with Borsh
     let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
+        namada::types::transaction::DecryptedTx::Decrypted,
     ));
     tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
@@ -468,10 +462,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
 
     let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: true,
-        },
+        namada::types::transaction::DecryptedTx::Decrypted,
     ));
     tx.set_code(Code::new(wasm_code));
     tx.set_data(Data::new(

@@ -23,7 +23,6 @@ wasms += tx_update_steward_commission
 wasms += tx_resign_steward
 wasms += vp_implicit
 wasms += vp_masp
-wasms += vp_testnet_faucet
 wasms += vp_user
 wasms += vp_validator
 

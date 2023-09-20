@@ -1,8 +1,6 @@
 # Developer network
 genesis_time = "2021-12-20T15:00:00.00Z"
 native_token = "NAM"
-faucet_pow_difficulty = 0
-faucet_withdrawal_limit = "1000"
 
 # Some tokens present at genesis.
 
@@ -19,8 +17,6 @@ Christel = "1000000"
 "Christel.public_key" = "100"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "922337203685400000000"
-"faucet.public_key" = "100"
 [token.NAM.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -37,7 +33,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.BTC.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -54,7 +49,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.ETH.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -71,7 +65,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.DOT.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -88,7 +81,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.Schnitzel.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -105,7 +97,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.Apfel.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
@@ -123,16 +114,11 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 [token.Kartoffel.parameters]
 max_reward_rate = "0.1"
 kd_gain_nom = "0.1"
 kp_gain_nom = "0.1"
 locked_ratio_target_key = "0.6667"
-
-# Some established accounts present at genesis.
-[established.faucet]
-vp = "vp_testnet_faucet"
 
 [established.Albert]
 vp = "vp_user"
@@ -167,10 +153,6 @@ filename = "vp_user.wasm"
 [wasm.vp_validator]
 # filename (relative to wasm path used by the node)
 filename = "vp_validator.wasm"
-
-# Faucet VP
-[wasm.vp_testnet_faucet]
-filename = "vp_testnet_faucet.wasm"
 
 # MASP VP
 [wasm.vp_masp]

@@ -123,8 +123,6 @@ pub async fn build_bridge_pool_tx<
         &mut tx,
         wrapper_fee_payer,
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
 

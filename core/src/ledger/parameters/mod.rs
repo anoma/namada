@@ -61,9 +61,6 @@ pub struct Parameters {
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: token::Amount,
-    #[cfg(not(feature = "mainnet"))]
-    /// Faucet account for free token withdrawal
-    pub faucet_account: Option<Address>,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
     /// Fee unshielding descriptions limit
@@ -133,8 +130,6 @@ impl Parameters {
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_account,
             gas_cost,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
@@ -217,12 +212,6 @@ impl Parameters {
 
         let pos_inflation_key = storage::get_pos_inflation_amount_key();
         storage.write(&pos_inflation_key, pos_inflation_amount)?;
-
-        #[cfg(not(feature = "mainnet"))]
-        if let Some(faucet_account) = faucet_account {
-            let faucet_account_key = storage::get_faucet_account_key();
-            storage.write(&faucet_account_key, faucet_account)?;
-        }
 
         let gas_cost_key = storage::get_gas_cost_key();
         storage.write(&gas_cost_key, gas_cost)?;
@@ -414,18 +403,6 @@ where
         .into_storage_result()
 }
 
-#[cfg(not(feature = "mainnet"))]
-/// Read the faucet account's address, if any
-pub fn read_faucet_account_parameter<S>(
-    storage: &S,
-) -> storage_api::Result<Option<Address>>
-where
-    S: StorageRead,
-{
-    let faucet_account_key = storage::get_faucet_account_key();
-    storage.read(&faucet_account_key)
-}
-
 /// Read the cost per unit of gas for the provided token
 pub fn read_gas_cost<S>(
     storage: &S,
@@ -558,10 +535,6 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read faucet account
-    #[cfg(not(feature = "mainnet"))]
-    let faucet_account = read_faucet_account_parameter(storage)?;
-
     // read gas cost
     let gas_cost_key = storage::get_gas_cost_key();
     let value = storage.read(&gas_cost_key)?;
@@ -583,8 +556,6 @@ where
         pos_gain_d,
         staked_ratio,
         pos_inflation_amount,
-        #[cfg(not(feature = "mainnet"))]
-        faucet_account,
         gas_cost,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,

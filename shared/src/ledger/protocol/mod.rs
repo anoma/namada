@@ -147,7 +147,6 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     block_proposer: Option<&'a Address>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -156,10 +155,7 @@ where
 {
     match tx.header().tx_type {
         TxType::Raw => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
-        }) => apply_wasm_tx(
+        TxType::Decrypted(DecryptedTx::Decrypted) => apply_wasm_tx(
             tx,
             &tx_index,
             ShellParams {
@@ -168,8 +164,6 @@ where
                 vp_wasm_cache,
                 tx_wasm_cache,
             },
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
         ),
         TxType::Protocol(protocol_tx) => {
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
@@ -197,8 +191,6 @@ where
                     tx_wasm_cache,
                 },
                 block_proposer,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow,
             )?;
             Ok(TxResult {
                 gas_used: tx_gas_meter.get_tx_consumed_gas(),
@@ -242,7 +234,6 @@ pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'a, CA, WLS>,
     block_proposer: Option<&Address>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<BTreeSet<Key>>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -269,8 +260,6 @@ where
         wrapper,
         fee_unshield_transaction,
         &mut shell_params,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow,
         block_proposer,
         &mut changed_keys,
     )?;
@@ -301,7 +290,6 @@ pub fn charge_fee<'a, D, H, CA, WLS>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'a, CA, WLS>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     block_proposer: Option<&Address>,
     changed_keys: &mut BTreeSet<Key>,
 ) -> Result<()>
@@ -354,8 +342,6 @@ where
                         vp_wasm_cache,
                         tx_wasm_cache,
                     },
-                    #[cfg(not(feature = "mainnet"))]
-                    false,
                 ) {
                     Ok(result) => {
                         // NOTE: do not commit yet cause this could be
@@ -385,19 +371,8 @@ where
 
     // Charge or check fees
     match block_proposer {
-        Some(proposer) => transfer_fee(
-            *wl_storage,
-            proposer,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
-            wrapper,
-        )?,
-        None => check_fees(
-            *wl_storage,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
-            wrapper,
-        )?,
+        Some(proposer) => transfer_fee(*wl_storage, proposer, wrapper)?,
+        None => check_fees(*wl_storage, wrapper)?,
     }
 
     changed_keys.extend(wl_storage.write_log_mut().get_keys_with_precommit());
@@ -413,7 +388,6 @@ where
 pub fn transfer_fee<WLS>(
     wl_storage: &mut WLS,
     block_proposer: &Address,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     wrapper: &WrapperTx,
 ) -> Result<()>
 where
@@ -439,45 +413,31 @@ where
                 .map_err(|e| Error::FeeError(e.to_string()))
             } else {
                 // Balance was insufficient for fee payment
-                #[cfg(not(feature = "mainnet"))]
-                let reject = !has_valid_pow;
-                #[cfg(feature = "mainnet")]
-                let reject = true;
+                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
+                {
+                    // Move all the available funds in the transparent
+                    // balance of the fee payer
+                    token_transfer(
+                        wl_storage,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                        block_proposer,
+                        balance,
+                    )
+                    .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                if reject {
-                    #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
-                    {
-                        // Move all the available funds in the transparent
-                        // balance of the fee payer
-                        token_transfer(
-                            wl_storage,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
-                            block_proposer,
-                            balance,
-                        )
-                        .map_err(|e| Error::FeeError(e.to_string()))?;
-
-                        return Err(Error::FeeError(
-                            "Transparent balance of wrapper's signer was \
-                             insufficient to pay fee. All the available \
-                             transparent funds have been moved to the block \
-                             proposer"
-                                .to_string(),
-                        ));
-                    }
-                    #[cfg(any(feature = "abciplus", feature = "abcipp"))]
                     return Err(Error::FeeError(
-                        "Insufficient transparent balance to pay fees"
+                        "Transparent balance of wrapper's signer was \
+                         insufficient to pay fee. All the available \
+                         transparent funds have been moved to the block \
+                         proposer"
                             .to_string(),
                     ));
-                } else {
-                    tracing::debug!(
-                        "Balance was insufficient for fee payment but a valid \
-                         PoW was provided"
-                    );
-                    Ok(())
                 }
+                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
+                return Err(Error::FeeError(
+                    "Insufficient transparent balance to pay fees".to_string(),
+                ));
             }
         }
         Err(e) => {
@@ -564,11 +524,7 @@ where
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
-pub fn check_fees<WLS>(
-    wl_storage: &WLS,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
-    wrapper: &WrapperTx,
-) -> Result<()>
+pub fn check_fees<WLS>(wl_storage: &WLS, wrapper: &WrapperTx) -> Result<()>
 where
     WLS: WriteLogAndStorage + StorageRead,
 {
@@ -586,23 +542,9 @@ where
     if balance.checked_sub(fees).is_some() {
         Ok(())
     } else {
-        // Balance was insufficient for fee payment
-        #[cfg(not(feature = "mainnet"))]
-        let reject = !has_valid_pow;
-        #[cfg(feature = "mainnet")]
-        let reject = true;
-
-        if reject {
-            Err(Error::FeeError(
-                "Insufficient transparent balance to pay fees".to_string(),
-            ))
-        } else {
-            tracing::debug!(
-                "Balance was insufficient for fee payment but a valid PoW was \
-                 provided"
-            );
-            Ok(())
-        }
+        Err(Error::FeeError(
+            "Insufficient transparent balance to pay fees".to_string(),
+        ))
     }
 }
 
@@ -612,7 +554,6 @@ pub fn apply_wasm_tx<'a, D, H, CA, WLS>(
     tx: Tx,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, CA, WLS>,
-    #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
 ) -> Result<TxResult>
 where
     CA: 'static + WasmCacheAccess + Sync,
@@ -656,8 +597,6 @@ where
         write_log,
         verifiers_from_tx: &verifiers,
         vp_wasm_cache,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow,
     })?;
 
     let gas_used = tx_gas_meter.get_tx_consumed_gas();
@@ -798,8 +737,6 @@ where
     write_log: &'a WriteLog,
     verifiers_from_tx: &'a BTreeSet<Address>,
     vp_wasm_cache: &'a mut VpCache<CA>,
-    #[cfg(not(feature = "mainnet"))]
-    has_valid_pow: bool,
 }
 
 /// Check the acceptance of a transaction by validity predicates
@@ -812,8 +749,6 @@ fn check_vps<D, H, CA>(
         write_log,
         verifiers_from_tx,
         vp_wasm_cache,
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow,
     }: CheckVps<'_, D, H, CA>,
 ) -> Result<VpsResult>
 where
@@ -833,7 +768,6 @@ where
         write_log,
         tx_gas_meter,
         vp_wasm_cache,
-        has_valid_pow,
     )?;
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
@@ -853,10 +787,6 @@ fn execute_vps<D, H, CA>(
     write_log: &WriteLog,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
-    #[cfg(not(feature = "mainnet"))]
-    // This is true when the wrapper of this tx contained a valid
-    // `testnet_pow::Solution`
-    has_valid_pow: bool,
 ) -> Result<VpsResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -892,8 +822,6 @@ where
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
-                        #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow,
                     )
                     .map_err(Error::VpRunnerError)
                 }

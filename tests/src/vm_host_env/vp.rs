@@ -52,8 +52,6 @@ pub struct TestVpEnv {
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
-    #[cfg(not(feature = "mainnet"))]
-    pub has_valid_pow: bool,
 }
 
 impl Default for TestVpEnv {
@@ -87,8 +85,6 @@ impl Default for TestVpEnv {
             result_buffer: None,
             vp_wasm_cache,
             vp_cache_dir,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
         }
     }
 }
@@ -270,8 +266,6 @@ mod native_vp_host_env {
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -287,8 +281,6 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
-                                #[cfg(not(feature = "mainnet"))]
-                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -317,8 +309,6 @@ mod native_vp_host_env {
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -334,8 +324,6 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
-                                #[cfg(not(feature = "mainnet"))]
-                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -372,7 +360,6 @@ mod native_vp_host_env {
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64);
-    native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
     native_host_fn!(vp_verify_tx_section_signature(
             hash_list_ptr: u64,
