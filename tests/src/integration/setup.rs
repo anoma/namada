@@ -5,14 +5,12 @@ use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
 use namada::ledger::wallet::alias::Alias;
-use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
 use namada_apps::cli::args;
-use namada_apps::client::utils::{validator_pre_genesis_dir, PRE_GENESIS_DIR};
+use namada_apps::client::utils::PRE_GENESIS_DIR;
 use namada_apps::config;
 use namada_apps::config::genesis::chain::Finalized;
-use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::config::genesis::templates::load_and_validate;
-use namada_apps::config::genesis::{genesis_config, templates};
+use namada_apps::config::genesis::templates;
 use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;

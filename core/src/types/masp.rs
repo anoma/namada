@@ -9,7 +9,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 
 use crate::impl_display_and_from_str_via_format;
-use crate::types::address::{masp, Address, DecodeError, HASH_HEX_LEN};
+use crate::types::address::{Address, DecodeError, HASH_HEX_LEN, masp};
 use crate::types::string_encoding::{
     self, BECH32M_VARIANT, MASP_EXT_FULL_VIEWING_KEY_HRP,
     MASP_EXT_SPENDING_KEY_HRP, MASP_PAYMENT_ADDRESS_HRP,
@@ -377,12 +377,7 @@ pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
-    PaymentAddress {
-        /// The actual shielded address
-        address: PaymentAddress,
-        /// The address of the masp account
-        masp: Address,
-    },
+    PaymentAddress(PaymentAddress),
 }
 
 impl TransferTarget {
@@ -392,14 +387,14 @@ impl TransferTarget {
             Self::Address(x) => x.clone(),
             // An ExtendedSpendingKey for a source effectively means that
             // assets will be drawn from the MASP
-            Self::PaymentAddress { masp, .. } => masp.clone(),
+            Self::PaymentAddress(_) => masp(),
         }
     }
 
     /// Get the contained PaymentAddress, if any
     pub fn payment_address(&self) -> Option<PaymentAddress> {
         match self {
-            Self::PaymentAddress { address, .. } => Some(*address),
+            Self::PaymentAddress ( address) => Some(*address),
             _ => None,
         }
     }
@@ -417,7 +412,7 @@ impl Display for TransferTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::PaymentAddress { address, .. } => address.fmt(f),
+            Self::PaymentAddress (address) => address.fmt(f),
         }
     }
 }

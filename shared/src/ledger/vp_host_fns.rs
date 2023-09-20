@@ -320,7 +320,7 @@ pub fn get_tx_index(
     Ok(*tx_index)
 }
 
-/// Getting the chain ID.
+/// Getting the native token's address.
 pub fn get_native_token<DB, H>(
     gas_meter: &mut VpGasMeter,
     storage: &Storage<DB, H>,

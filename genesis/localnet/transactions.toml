@@ -53,10 +53,6 @@ signature = "sigtest1qpss2x7vewnr2sr2wxj0ftldcmvv7v7t7qsr26k2l2hx4gls7y9sksrcq0m
 # 2.
 
 [[established_account]]
-alias = "masp"
-vp = "vp_masp"
-
-[[established_account]]
 alias = "faucet"
 vp = "vp_testnet_faucet"
 
@@ -79,6 +75,14 @@ vp = "vp_user"
 [established_account.public_key]
 pk = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
 authorization = "sigtest1qqfh5v2shrxe6f5qjczvykp3geen3kzq5haev4ryqlteppzeqf3jetstkn6l0zdw95w6kph4u9dx5gmlvtsyuw3c43jzcsf09feck3qf33zynh"
+
+[[established_account]]
+alias = "christel"
+vp = "vp_user"
+
+[established_account.public_key]
+pk = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+authorization = "sigtest1qrx0h0zxwl5rd4zqrk6heth4602xqek505gcd9g9wuau4yxkxarzy8hh32avaxg55guanqzdd76h8lcc9fkclzuukf4ay0a5euwk32ggn0akrn"
 
 [[transfer]]
 token = "nam"
@@ -137,6 +141,13 @@ amount = "1000000"
 signature = "sigtest1qq826qel8zn5p4dfx25ma45uxeskx0yjlsaxp38uyvehvds6t93c8wkhaydunm4nzz9750dwhkjst00mfrwmu066y3rj6gtk5wjskxq9zvk7ed"
 
 [[transfer]]
+token = "eth"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qzghddk0u6kpqaxhskrj8ah69d3hce95wndgvlpuyvuw0h0fnyrnp026ltvtfmfhpzywkf88yyhv80hzkus57s9nn6vn3ljvmkkf7zgq2nzn40"
+
+[[transfer]]
 token = "dot"
 source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
 target = "albert"
@@ -163,6 +174,41 @@ source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
 target = "bertha"
 amount = "1000000"
 signature = "sigtest1qpe3ms76cxvqsa58624ked5ndjr3jr3u7lf9ypalxdh29gajwmsxtzjxzswk0xmza90u47tgksr0d7enpd730ps7fq5u76l7ekxeyvgfnl0qxj"
+
+[[transfer]]
+token = "btc"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qqq4yc6s3h4ysezcmgsdgyfsqu8mmrwwc8a358sm864zehx74ums8fmgmkyyr3wz9qqrc5fagwrw0a4mgqkkleumc0u6ynshj5ns0tcdrygupg"
+
+[[transfer]]
+token = "eth"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+signature = "sigtest1qzyqkdxt3cxf0huv0hzskqmuthw38s3kj2sx50znzc68gzx64hrd3hkyx0g27pruwa9fv42suw3k8gkfaelcp4ymnvfw7ltx0mz2z9qr2lwwcs"
+
+[[transfer]]
+token = "nam"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
+amount = "1000000"
+signature = "sigtest1qran2jh0dwuwchh45snhk3p9uyxqym57eg527pcjeekwhvpr5j0fy6dte7x3v2dwwc6vqmv49drpvmk6uhzlt2p8rqx0th3h7smf8rqrcpfxc7"
+
+[[transfer]]
+token = "btc"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
+amount = "1000000"
+signature = "sigtest1qrxp6p56qtvsyp7jfs4jru3mkfv6l4t7hpguur72579pqjaexdry9turgmzwzj6qmua3s2y2a4krtuxwaag66j4dpz44aaqksy30tfcxmnhw2k"
+
+[[transfer]]
+token = "eth"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
+amount = "1000000"
+signature = "sigtest1qrtrec6mps9p7zhmm7sywxwc7zdm32umt0zdwpuflrkh6952rx74amnsf9hn0yughs4e6czgpdmwsmujvkr4ptk2x24vtc8phz0s2asvtyy9pf"
 
 [[bond]]
 source = "albert"

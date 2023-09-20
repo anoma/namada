@@ -19,6 +19,8 @@ pub struct ConversionState {
     pub prev_root: Node,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
+    /// A map from token alias to actual address.
+    pub tokens: BTreeMap<String, Address>,
     /// Map assets to their latest conversion and position in Merkle tree
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<
@@ -52,7 +54,24 @@ where
     let masp_addr = address::masp();
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
-    let masp_rewards = address::masp_rewards();
+    let masp_rewards = address::masp_rewards()
+        .into_iter()
+        .map(|(alias, reward)| {
+            (
+                wl_storage
+                    .storage
+                    .conversion_state
+                    .tokens
+                    .get(alias)
+                    .cloned()
+                    .expect(&format!(
+                        "Missing token alias {} from storage conversion state.",
+                        alias
+                    )),
+                reward,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
     // The total transparent value of the rewards being distributed
     let mut total_reward = token::Amount::native_whole(0);
 
@@ -61,7 +80,7 @@ where
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
     let reward_asset =
-        encode_asset_type(address::nam(), MaspDenom::Zero, Epoch(0));
+        encode_asset_type(wl_storage.storage.native_token.clone(), MaspDenom::Zero, Epoch(0));
     // Conversions from the previous to current asset for each address
     let mut current_convs =
         BTreeMap::<(Address, MaspDenom), AllowedConversion>::new();
@@ -143,7 +162,7 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    let reward_key = token::balance_key(&address::nam(), &masp_addr);
+    let reward_key = token::balance_key(&wl_storage.storage.native_token, &masp_addr);
     let addr_bal: token::Amount =
         wl_storage.read(&reward_key)?.unwrap_or_default();
     let new_bal = addr_bal + total_reward;

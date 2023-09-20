@@ -11,11 +11,6 @@
 # This file is used to produce `signed-transactions.toml` with
 # the `sign-genesis-tx` command.
 
-# MASP
-[[established_account]]
-alias = "masp"
-vp = "vp_masp"
-
 # Faucet
 [[established_account]]
 alias = "faucet"
@@ -33,6 +28,12 @@ public_key = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44
 alias = "bertha"
 vp = "vp_user"
 public_key = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+
+# Christel
+[[established_account]]
+alias = "christel"
+vp = "vp_user"
+public_key = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
 
 # Transfer all the Faucet's tokens into it's established account:
 [[transfer]]
@@ -85,6 +86,12 @@ target = "albert"
 amount = "1000000"
 
 [[transfer]]
+token = "ETH"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+
+[[transfer]]
 token = "DOT"
 source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
 target = "albert"
@@ -102,11 +109,40 @@ source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
 target = "albert"
 amount = "1000000"
 
-# transfer NAM to Bertha
 [[transfer]]
 token = "NAM"
 source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
 target = "bertha"
+amount = "1000000"
+
+[[transfer]]
+token = "BTC"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+
+[[transfer]]
+token = "ETH"
+source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+target = "bertha"
+amount = "1000000"
+
+[[transfer]]
+token = "NAM"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
+amount = "1000000"
+
+[[transfer]]
+token = "BTC"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
+amount = "1000000"
+
+[[transfer]]
+token = "ETH"
+source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+target = "christel"
 amount = "1000000"
 
 [[bond]]

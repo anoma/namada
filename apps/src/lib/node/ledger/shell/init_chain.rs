@@ -13,6 +13,7 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::{BecomeValidator, Epoch};
+use namada::types::address::masp_rewards;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
@@ -240,6 +241,7 @@ where
 
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
+        let masp_rewards = masp_rewards();
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
@@ -249,6 +251,15 @@ where
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
+            // add token addresses to the masp reward conversions lookup table.
+            let alias = alias.to_string();
+            if masp_rewards.contains_key(&alias.as_str()) {
+                self.wl_storage
+                    .storage
+                    .conversion_state
+                    .tokens
+                    .insert(alias, address.clone());
+            }
         }
     }
 
@@ -293,6 +304,11 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) {
+        let vp_code = self.lookup_vp("vp_masp", genesis, vp_cache);
+        let code_hash = CodeHash::sha256(&vp_code);
+        self.wl_storage
+            .write_bytes(&Key::validity_predicate(&masp()), code_hash)
+            .unwrap();
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {
                 address,
@@ -308,16 +324,19 @@ where
                     "Applying genesis tx to init an established account \
                      {alias}"
                 );
-
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache);
+                let code_hash = CodeHash::sha256(&vp_code);
                 self.wl_storage
-                    .write_bytes(&Key::validity_predicate(address), vp_code)
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
                 if let Some(pk) = public_key {
                     let pk_storage_key = pk_key(address);
                     self.wl_storage
-                        .write_bytes(&pk_storage_key, pk.try_to_vec().unwrap())
+                        .write_bytes(
+                            &pk_storage_key,
+                            pk.pk.try_to_vec().unwrap(),
+                        )
                         .unwrap();
                 }
 
@@ -477,7 +496,7 @@ where
                     &mut self.wl_storage,
                     token,
                     &source,
-                    target,
+                    &target,
                     amount.amount,
                 ) {
                     tracing::warn!(
@@ -510,7 +529,7 @@ where
                 let source = match source {
                     genesis::transactions::AliasOrPk::Alias(alias) => {
                         match genesis.get_user_address(alias) {
-                            Some(addr) => addr.clone(),
+                            Some(addr) => addr,
                             None => {
                                 tracing::warn!(
                                     "Cannot find bond source address with \

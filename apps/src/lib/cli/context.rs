@@ -486,13 +486,8 @@ impl ArgFromContext for TransferTarget {
         Address::arg_from_ctx(ctx, raw)
             .map(Self::Address)
             .or_else(|_| {
-                let masp = ctx
-                    .wallet
-                    .find_address("masp")
-                    .expect("MASP address should exist in the wallet.")
-                    .clone();
                 PaymentAddress::arg_from_ctx(ctx, raw)
-                    .map(|address| Self::PaymentAddress { address, masp })
+                    .map(Self::PaymentAddress)
             })
     }
 }
