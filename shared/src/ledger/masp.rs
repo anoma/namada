@@ -78,6 +78,7 @@ use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
+use crate::ledger::Namada;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1475,10 +1476,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
     #[cfg(feature = "masp-tx-gen")]
-    pub async fn gen_shielded_transfer<C: Client + Sync>(
-        &mut self,
-        client: &C,
-        args: args::TxTransfer,
+    pub async fn gen_shielded_transfer<'a>(
+        context: &mut impl Namada<'a>,
+        args: &args::TxTransfer,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
@@ -1499,12 +1499,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let spending_key = spending_key.map(|x| x.into());
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
         // Load the current shielded context given the spending key we possess
-        let _ = self.load().await;
-        self.fetch(client, &spending_keys, &[]).await?;
+        let _ = context.shielded.load().await;
+        let context = &mut **context;
+        context.shielded.fetch(context.client, &spending_keys, &[]).await?;
         // Save the update state so that future fetches can be short-circuited
-        let _ = self.save().await;
+        let _ = context.shielded.save().await;
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(client).await?;
+        let epoch = rpc::query_epoch(context.client).await?;
         // Context required for storing which notes are in the source's
         // possesion
         let memo = MemoBytes::empty();
@@ -1544,9 +1545,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // If there are shielded inputs
         if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction amount
-            let (_, unspent_notes, used_convs) = self
+            let (_, unspent_notes, used_convs) = context
+                .shielded
                 .collect_unspent_notes(
-                    client,
+                    context.client,
                     &to_viewing_key(&sk).vk,
                     I128Sum::from_sum(amount),
                     epoch,
@@ -1735,7 +1737,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let build_transfer =
             || -> Result<ShieldedTransfer, builder::Error<std::convert::Infallible>> {
                 let (masp_tx, metadata) = builder.build(
-                    &self.utils.local_tx_prover(),
+                    &context.shielded.utils.local_tx_prover(),
                     &FeeRule::non_standard(U64Sum::zero()),
                 )?;
                 Ok(ShieldedTransfer {

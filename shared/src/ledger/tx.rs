@@ -46,7 +46,7 @@ use crate::ibc::Height as IbcHeight;
 use crate::ledger::args::{self, InputAmount};
 use crate::ledger::ibc::storage::ibc_denom_key;
 use crate::ledger::masp::TransferErr::Build;
-use crate::ledger::masp::{ShieldedContext, ShieldedTransfer, ShieldedUtils};
+use crate::ledger::masp::{ShieldedContext, ShieldedTransfer};
 use crate::ledger::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
     TxResponse,
@@ -66,11 +66,14 @@ use crate::types::transaction::account::{InitAccount, UpdateAccount};
 use crate::types::transaction::{pos, TxType};
 use crate::types::{storage, token};
 use crate::vm;
+use crate::ledger::Namada;
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 /// Initialize validator transaction WASM path
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+/// Unjail validator transaction WASM path
+pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 /// Initialize proposal transaction WASM path
 pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 /// Vote transaction WASM path
@@ -91,9 +94,16 @@ pub const TX_BOND_WASM: &str = "tx_bond.wasm";
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 /// Withdraw WASM path
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+/// Bridge pool WASM path
+pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 /// Change commission WASM path
 pub const TX_CHANGE_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
+/// Resign steward WASM path
+pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
+/// Update steward commission WASM path
+pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+        "tx_update_steward_commission.wasm";
 
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
@@ -147,14 +157,8 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 #[allow(clippy::too_many_arguments)]
-pub async fn prepare_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    _wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn prepare_tx<'a>(
+    context: &mut impl Namada<'a>,
     args: &args::Tx,
     tx: &mut Tx,
     fee_payer: common::PublicKey,
@@ -162,11 +166,10 @@ pub async fn prepare_tx<
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Option<Epoch>> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(client).await?;
+        let epoch = rpc::query_epoch(context.client).await?;
 
         Ok(signing::wrap_tx(
-            client,
-            shielded,
+            context,
             tx,
             args,
             tx_source_balance,
@@ -265,35 +268,25 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Submit transaction to reveal the given public key
-pub async fn build_reveal_pk<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_reveal_pk<'a>(
+    context: &mut impl Namada<'a>,
     args: &args::Tx,
-    address: &Address,
     public_key: &common::PublicKey,
-    fee_payer: &common::PublicKey,
-) -> Result<(Tx, Option<Epoch>)> {
-    println!(
-        "Submitting a tx to reveal the public key for address {address}..."
-    );
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let signing_data =
+        signing::aux_signing_data(context, args, None, None)
+        .await?;
 
     build(
-        client,
-        wallet,
-        shielded,
+        context,
         args,
         args.tx_reveal_code_path.clone(),
         public_key,
         do_nothing,
-        fee_payer,
+        &signing_data.fee_payer,
         None,
     )
-    .await
+    .await.map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
@@ -493,46 +486,39 @@ pub async fn save_initialized_accounts<U: WalletUtils>(
 }
 
 /// Submit validator comission rate change
-pub async fn build_validator_commission_change<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_validator_commission_change<'a>(
+    context: &mut impl Namada<'a>,
     args::CommissionRateChange {
         tx: tx_args,
         validator,
         rate,
         tx_code_path,
-    }: args::CommissionRateChange,
+    }: &args::CommissionRateChange,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(validator.clone()),
         default_signer,
     )
         .await?;
     
-    let epoch = rpc::query_epoch(client).await?;
+    let epoch = rpc::query_epoch(context.client).await?;
 
-    let params: PosParams = rpc::get_pos_params(client).await?;
+    let params: PosParams = rpc::get_pos_params(context.client).await?;
 
     let validator = validator.clone();
-    if rpc::is_validator(client, &validator).await? {
-        if rate < Dec::zero() || rate > Dec::one() {
+    if rpc::is_validator(context.client, &validator).await? {
+        if *rate < Dec::zero() || *rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
-            return Err(Error::from(TxError::InvalidCommissionRate(rate)));
+            return Err(Error::from(TxError::InvalidCommissionRate(*rate)));
         }
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
         match rpc::query_commission_rate(
-            client,
+            context.client,
             &validator,
             Some(pipeline_epoch_minus_one),
         )
@@ -552,7 +538,7 @@ pub async fn build_validator_commission_change<
                     );
                     if !tx_args.force {
                         return Err(Error::from(
-                            TxError::InvalidCommissionRate(rate),
+                            TxError::InvalidCommissionRate(*rate),
                         ));
                     }
                 }
@@ -575,15 +561,13 @@ pub async fn build_validator_commission_change<
 
     let data = pos::CommissionChange {
         validator: validator.clone(),
-        new_rate: rate,
+        new_rate: *rate,
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -593,32 +577,25 @@ pub async fn build_validator_commission_change<
 }
 
 /// Craft transaction to update a steward commission
-pub async fn build_update_steward_commission<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_update_steward_commission<'a>(
+    context: &mut impl Namada<'a>,
     args::UpdateStewardCommission {
         tx: tx_args,
         steward,
         commission,
         tx_code_path,
-    }: args::UpdateStewardCommission,
+    }: &args::UpdateStewardCommission,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(steward.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(steward.clone()),
         default_signer,
     )
         .await?;
     
-    if !rpc::is_steward(client, &steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client, steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
@@ -639,11 +616,9 @@ pub async fn build_update_steward_commission<
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -653,42 +628,33 @@ pub async fn build_update_steward_commission<
 }
 
 /// Craft transaction to resign as a steward
-pub async fn build_resign_steward<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_resign_steward<'a>(
+    context: &mut impl Namada<'a>,
     args::ResignSteward {
         tx: tx_args,
         steward,
         tx_code_path,
-    }: args::ResignSteward,
+    }: &args::ResignSteward,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(steward.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(steward.clone()),
         default_signer,
     )
         .await?;
     
-    if !rpc::is_steward(client, &steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client, steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
-        steward,
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        steward.clone(),
         do_nothing,
         &signing_data.fee_payer,
         None,
@@ -697,31 +663,24 @@ pub async fn build_resign_steward<
 }
 
 /// Submit transaction to unjail a jailed validator
-pub async fn build_unjail_validator<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_unjail_validator<'a>(
+    context: &mut impl Namada<'a>,
     args::TxUnjailValidator {
         tx: tx_args,
         validator,
         tx_code_path,
-    }: args::TxUnjailValidator,
+    }: &args::TxUnjailValidator,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(validator.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(validator.clone()),
         default_signer,
     )
         .await?;
     
-    if !rpc::is_validator(client, &validator).await? {
+    if !rpc::is_validator(context.client, validator).await? {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
@@ -730,12 +689,12 @@ pub async fn build_unjail_validator<
         }
     }
 
-    let params: PosParams = rpc::get_pos_params(client).await?;
-    let current_epoch = rpc::query_epoch(client).await?;
+    let params: PosParams = rpc::get_pos_params(context.client).await?;
+    let current_epoch = rpc::query_epoch(context.client).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     let validator_state_at_pipeline =
-        rpc::get_validator_state(client, &validator, Some(pipeline_epoch))
+        rpc::get_validator_state(context.client, validator, Some(pipeline_epoch))
             .await?
             .ok_or_else(|| {
                 Error::from(TxError::Other(
@@ -756,9 +715,9 @@ pub async fn build_unjail_validator<
     }
 
     let last_slash_epoch_key =
-        crate::ledger::pos::validator_last_slash_key(&validator);
+        crate::ledger::pos::validator_last_slash_key(validator);
     let last_slash_epoch =
-        rpc::query_storage_value::<C, Epoch>(client, &last_slash_epoch_key)
+        rpc::query_storage_value::<_, Epoch>(context.client, &last_slash_epoch_key)
             .await;
     match last_slash_epoch {
         Ok(last_slash_epoch) => {
@@ -792,12 +751,10 @@ pub async fn build_unjail_validator<
     }
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
-        validator,
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        validator.clone(),
         do_nothing,
         &signing_data.fee_payer,
         None,
@@ -806,36 +763,29 @@ pub async fn build_unjail_validator<
 }
 
 /// Submit transaction to withdraw an unbond
-pub async fn build_withdraw<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_withdraw<'a>(
+    context: &mut impl Namada<'a>,
     args::Withdraw {
         tx: tx_args,
         validator,
         source,
         tx_code_path,
-    }: args::Withdraw,
+    }: &args::Withdraw,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(default_address),
         default_signer,
     )
         .await?;
     
-    let epoch = rpc::query_epoch(client).await?;
+    let epoch = rpc::query_epoch(context.client).await?;
 
     let validator =
-        known_validator_or_err(validator.clone(), tx_args.force, client)
+        known_validator_or_err(validator.clone(), tx_args.force, context.client)
             .await?;
 
     let source = source.clone();
@@ -843,7 +793,7 @@ pub async fn build_withdraw<
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
     let tokens = rpc::query_withdrawable_tokens(
-        client,
+        context.client,
         &bond_source,
         &validator,
         Some(epoch),
@@ -856,7 +806,7 @@ pub async fn build_withdraw<
              epoch {}.",
             epoch
         );
-        rpc::query_and_print_unbonds(client, &bond_source, &validator).await?;
+        rpc::query_and_print_unbonds(context.client, &bond_source, &validator).await?;
         if !tx_args.force {
             return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
@@ -871,11 +821,9 @@ pub async fn build_withdraw<
     let data = pos::Withdraw { validator, source };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -885,28 +833,21 @@ pub async fn build_withdraw<
 }
 
 /// Submit a transaction to unbond
-pub async fn build_unbond<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_unbond<'a>(
+    context: &mut impl Namada<'a>,
     args::Unbond {
         tx: tx_args,
         validator,
         amount,
         source,
         tx_code_path,
-    }: args::Unbond,
+    }: &args::Unbond,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>, Option<(Epoch, token::Amount)>)> {
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(default_address),
         default_signer,
     )
@@ -917,17 +858,17 @@ pub async fn build_unbond<
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
 
     if !tx_args.force {
-        known_validator_or_err(validator.clone(), tx_args.force, client)
+        known_validator_or_err(validator.clone(), tx_args.force, context.client)
             .await?;
 
         let bond_amount =
-            rpc::query_bond(client, &bond_source, &validator, None).await?;
+            rpc::query_bond(context.client, &bond_source, validator, None).await?;
         println!(
             "Bond amount available for unbonding: {} NAM",
             bond_amount.to_string_native()
         );
 
-        if amount > bond_amount {
+        if *amount > bond_amount {
             eprintln!(
                 "The total bonds of the source {} is lower than the amount to \
                  be unbonded. Amount to unbond is {} and the total bonds is \
@@ -948,7 +889,7 @@ pub async fn build_unbond<
 
     // Query the unbonds before submitting the tx
     let unbonds =
-        rpc::query_unbond_with_slashing(client, &bond_source, &validator)
+        rpc::query_unbond_with_slashing(context.client, &bond_source, validator)
             .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
@@ -959,16 +900,14 @@ pub async fn build_unbond<
 
     let data = pos::Unbond {
         validator: validator.clone(),
-        amount,
+        amount: *amount,
         source: source.clone(),
     };
 
     let (tx, epoch) = build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -1043,14 +982,8 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
 }
 
 /// Submit a transaction to bond
-pub async fn build_bond<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_bond<'a>(
+    context: &mut impl Namada<'a>,
     args::Bond {
         tx: tx_args,
         validator,
@@ -1058,26 +991,25 @@ pub async fn build_bond<
         source,
         native_token,
         tx_code_path,
-    }: args::Bond,
+    }: &args::Bond,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(default_address.clone()),
         default_signer,
     )
         .await?;
     
     let validator =
-        known_validator_or_err(validator.clone(), tx_args.force, client)
+        known_validator_or_err(validator.clone(), tx_args.force, context.client)
             .await?;
 
     // Check that the source address exists on chain
     let source = match source.clone() {
-        Some(source) => source_exists_or_err(source, tx_args.force, client)
+        Some(source) => source_exists_or_err(source, tx_args.force, context.client)
             .await
             .map(Some),
         None => Ok(source.clone()),
@@ -1085,36 +1017,34 @@ pub async fn build_bond<
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
-    let balance_key = token::balance_key(&native_token, bond_source);
+    let balance_key = token::balance_key(native_token, bond_source);
 
     // TODO Should we state the same error message for the native token?
     let post_balance = check_balance_too_low_err(
-        &native_token,
+        native_token,
         bond_source,
-        amount,
+        *amount,
         balance_key,
         tx_args.force,
-        client,
+        context.client,
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
         source: bond_source.clone(),
-        token: native_token,
+        token: native_token.clone(),
     });
 
     let data = pos::Bond {
         validator,
-        amount,
+        amount: *amount,
         source,
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -1124,14 +1054,8 @@ pub async fn build_bond<
 }
 
 /// Build a default proposal governance
-pub async fn build_default_proposal<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_default_proposal<'a>(
+    context: &mut impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1140,14 +1064,13 @@ pub async fn build_default_proposal<
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
-    }: args::InitProposal,
+    }: &args::InitProposal,
     proposal: DefaultProposal,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx,
+        context,
+        tx,
         Some(proposal.proposal.author.clone()),
         default_signer,
     )
@@ -1171,11 +1094,9 @@ pub async fn build_default_proposal<
             Ok(())
         };
     build(
-        client,
-        wallet,
-        shielded,
-        &tx,
-        tx_code_path,
+        context,
+        tx,
+        tx_code_path.clone(),
         init_proposal_data,
         push_data,
         &signing_data.fee_payer,
@@ -1185,14 +1106,8 @@ pub async fn build_default_proposal<
 }
 
 /// Build a proposal vote
-pub async fn build_vote_proposal<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_vote_proposal<'a>(
+    context: &mut impl Namada<'a>,
     args::VoteProposal {
         tx,
         proposal_id,
@@ -1201,27 +1116,26 @@ pub async fn build_vote_proposal<
         is_offline: _,
         proposal_data: _,
         tx_code_path,
-    }: args::VoteProposal,
+    }: &args::VoteProposal,
     epoch: Epoch,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(voter.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx,
+        context,
+        tx,
         Some(voter.clone()),
         default_signer.clone(),
     )
         .await?;
     
-    let proposal_vote = ProposalVote::try_from(vote)
+    let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxError::InvalidProposalVote)?;
 
     let proposal_id = proposal_id.ok_or_else(|| {
         Error::Other("Proposal id must be defined.".to_string())
     })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(client, proposal_id).await?
+        rpc::query_proposal_by_id(context.client, proposal_id).await?
     {
         proposal
     } else {
@@ -1236,7 +1150,7 @@ pub async fn build_vote_proposal<
                 ))
             })?;
 
-    let is_validator = rpc::is_validator(client, &voter).await?;
+    let is_validator = rpc::is_validator(context.client, voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::from(TxError::InvalidProposalVotingPeriod(
@@ -1245,8 +1159,8 @@ pub async fn build_vote_proposal<
     }
 
     let delegations = rpc::get_delegators_delegation_at(
-        client,
-        &voter,
+        context.client,
+        voter,
         proposal.voting_start_epoch,
     )
     .await?
@@ -1262,11 +1176,9 @@ pub async fn build_vote_proposal<
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx,
-        tx_code_path,
+        context,
+        tx,
+        tx_code_path.clone(),
         data,
         do_nothing,
         &signing_data.fee_payer,
@@ -1276,14 +1188,8 @@ pub async fn build_vote_proposal<
 }
 
 /// Build a pgf funding proposal governance
-pub async fn build_pgf_funding_proposal<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_pgf_funding_proposal<'a>(
+    context: &mut impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1292,14 +1198,13 @@ pub async fn build_pgf_funding_proposal<
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
-    }: args::InitProposal,
+    }: &args::InitProposal,
     proposal: PgfFundingProposal,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx,
+        context,
+        tx,
         Some(proposal.proposal.author.clone()),
         default_signer,
     )
@@ -1315,11 +1220,9 @@ pub async fn build_pgf_funding_proposal<
         Ok(())
     };
     build(
-        client,
-        wallet,
-        shielded,
-        &tx,
-        tx_code_path,
+        context,
+        tx,
+        tx_code_path.clone(),
         init_proposal_data,
         add_section,
         &signing_data.fee_payer,
@@ -1329,14 +1232,8 @@ pub async fn build_pgf_funding_proposal<
 }
 
 /// Build a pgf funding proposal governance
-pub async fn build_pgf_stewards_proposal<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_pgf_stewards_proposal<'a>(
+    context: &mut impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1345,14 +1242,13 @@ pub async fn build_pgf_stewards_proposal<
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
-    }: args::InitProposal,
+    }: &args::InitProposal,
     proposal: PgfStewardProposal,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(proposal.proposal.author.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx,
+        context,
+        tx,
         Some(proposal.proposal.author.clone()),
         default_signer,
     )
@@ -1369,11 +1265,9 @@ pub async fn build_pgf_stewards_proposal<
     };
 
     build(
-        client,
-        wallet,
-        shielded,
-        &tx,
-        tx_code_path,
+        context,
+        tx,
+        tx_code_path.clone(),
         init_proposal_data,
         add_section,
         &signing_data.fee_payer,
@@ -1383,20 +1277,13 @@ pub async fn build_pgf_stewards_proposal<
 }
 
 /// Submit an IBC transfer
-pub async fn build_ibc_transfer<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
-    args: args::TxIbcTransfer,
+pub async fn build_ibc_transfer<'a>(
+    context: &mut impl Namada<'a>,
+    args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
+        context,
         &args.tx,
         Some(args.source.clone()),
         default_signer,
@@ -1404,13 +1291,13 @@ pub async fn build_ibc_transfer<
     .await?;
     // Check that the source address exists on chain
     let source =
-        source_exists_or_err(args.source.clone(), args.tx.force, client)
+        source_exists_or_err(args.source.clone(), args.tx.force, context.client)
             .await?;
     // We cannot check the receiver
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &args.token, args.tx.force)
+        validate_amount(context.client, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
     if validated_amount.canonical().denom.0 != 0 {
@@ -1429,7 +1316,7 @@ pub async fn build_ibc_transfer<
         validated_amount.amount,
         balance_key,
         args.tx.force,
-        client,
+        context.client,
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
@@ -1439,14 +1326,14 @@ pub async fn build_ibc_transfer<
     });
 
     let tx_code_hash =
-        query_wasm_code_hash(client, args.tx_code_path.to_str().unwrap())
+        query_wasm_code_hash(context.client, args.tx_code_path.to_str().unwrap())
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     let ibc_denom = match &args.token {
         Address::Internal(InternalAddress::IbcToken(hash)) => {
             let ibc_denom_key = ibc_denom_key(hash);
-            rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
+            rpc::query_storage_value::<_, String>(context.client, &ibc_denom_key)
                 .await
                 .map_err(|_e| TxError::TokenDoesNotExist(args.token.clone()))?
         }
@@ -1460,8 +1347,8 @@ pub async fn build_ibc_transfer<
     let packet_data = PacketData {
         token,
         sender: source.to_string().into(),
-        receiver: args.receiver.into(),
-        memo: args.memo.unwrap_or_default().into(),
+        receiver: args.receiver.clone().into(),
+        memo: args.memo.clone().unwrap_or_default().into(),
     };
 
     // this height should be that of the destination chain, not this chain
@@ -1492,8 +1379,8 @@ pub async fn build_ibc_transfer<
     };
 
     let msg = MsgTransfer {
-        port_id_on_a: args.port_id,
-        chan_id_on_a: args.channel_id,
+        port_id_on_a: args.port_id.clone(),
+        chan_id_on_a: args.channel_id.clone(),
         packet_data,
         timeout_height_on_b: timeout_height,
         timeout_timestamp_on_b: timeout_timestamp,
@@ -1509,10 +1396,8 @@ pub async fn build_ibc_transfer<
     tx.add_code_from_hash(tx_code_hash)
         .add_serialized_data(data);
 
-    let epoch = prepare_tx::<C, U, V>(
-        client,
-        wallet,
-        shielded,
+    let epoch = prepare_tx(
+        context,
         &args.tx,
         &mut tx,
         signing_data.fee_payer.clone(),
@@ -1527,10 +1412,8 @@ pub async fn build_ibc_transfer<
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build<'a, F, D>(
+    context: &mut impl Namada<'a>,
     tx_args: &crate::ledger::args::Tx,
     path: PathBuf,
     data: D,
@@ -1541,13 +1424,9 @@ pub async fn build<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
-    U: WalletUtils,
-    V: ShieldedUtils,
 {
     build_pow_flag(
-        client,
-        wallet,
-        shielded,
+        context,
         tx_args,
         path,
         data,
@@ -1561,10 +1440,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+async fn build_pow_flag<'a, F, D>(
+    context: &mut impl Namada<'a>,
     tx_args: &crate::ledger::args::Tx,
     path: PathBuf,
     mut data: D,
@@ -1576,14 +1453,12 @@ async fn build_pow_flag<C: crate::ledger::queries::Client + Sync, U, V, F, D>(
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
     D: BorshSerialize,
-    U: WalletUtils,
-    V: ShieldedUtils,
 {
     let chain_id = tx_args.chain_id.clone().unwrap();
 
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
 
-    let tx_code_hash = query_wasm_code_hash(client, path.to_string_lossy())
+    let tx_code_hash = query_wasm_code_hash(context.client, path.to_string_lossy())
         .await
         .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
@@ -1591,10 +1466,8 @@ where
 
     tx_builder.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let epoch = prepare_tx::<C, U, V>(
-        client,
-        wallet,
-        shielded,
+    let epoch = prepare_tx(
+        context,
         tx_args,
         &mut tx_builder,
         gas_payer.clone(),
@@ -1608,17 +1481,14 @@ where
 
 /// Try to decode the given asset type and add its decoding to the supplied set.
 /// Returns true only if a new decoding has been added to the given set.
-async fn add_asset_type<
-    C: crate::ledger::queries::Client + Sync,
-    U: ShieldedUtils,
->(
+async fn add_asset_type<'a>(
     asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
-    shielded: &mut ShieldedContext<U>,
-    client: &C,
+    context: &mut impl Namada<'a>,
     asset_type: AssetType,
 ) -> bool {
+    let context = &mut **context;
     if let Some(asset_type) =
-        shielded.decode_asset_type(client, asset_type).await
+        context.shielded.decode_asset_type(context.client, asset_type).await
     {
         asset_types.insert(asset_type)
     } else {
@@ -1629,42 +1499,33 @@ async fn add_asset_type<
 /// Collect the asset types used in the given Builder and decode them. This
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
-async fn used_asset_types<
-    C: crate::ledger::queries::Client + Sync,
-    U: ShieldedUtils,
-    P,
-    R,
-    K,
-    N,
->(
-    shielded: &mut ShieldedContext<U>,
-    client: &C,
+async fn used_asset_types<'a, P, R, K, N>(
+    context: &mut impl Namada<'a>,
     builder: &Builder<P, R, K, N>,
 ) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
     for input in builder.sapling_inputs() {
-        add_asset_type(&mut asset_types, shielded, client, input.asset_type())
+        add_asset_type(&mut asset_types, context, input.asset_type())
             .await;
     }
     // Collect all the asset types used in the transparent inputs
     for input in builder.transparent_inputs() {
         add_asset_type(
             &mut asset_types,
-            shielded,
-            client,
+            context,
             input.coin().asset_type(),
         )
         .await;
     }
     // Collect all the asset types used in the Sapling outputs
     for output in builder.sapling_outputs() {
-        add_asset_type(&mut asset_types, shielded, client, output.asset_type())
+        add_asset_type(&mut asset_types, context, output.asset_type())
             .await;
     }
     // Collect all the asset types used in the transparent outputs
     for output in builder.transparent_outputs() {
-        add_asset_type(&mut asset_types, shielded, client, output.asset_type())
+        add_asset_type(&mut asset_types, context, output.asset_type())
             .await;
     }
     // Collect all the asset types used in the Sapling converts
@@ -1672,7 +1533,7 @@ async fn used_asset_types<
         for (asset_type, _) in
             I32Sum::from(output.conversion().clone()).components()
         {
-            add_asset_type(&mut asset_types, shielded, client, *asset_type)
+            add_asset_type(&mut asset_types, context, *asset_type)
                 .await;
         }
     }
@@ -1680,20 +1541,13 @@ async fn used_asset_types<
 }
 
 /// Submit an ordinary transfer
-pub async fn build_transfer<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_transfer<'a, N: Namada<'a>>(
+    context: &mut N,
     mut args: args::TxTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.effective_address());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
+        context,
         &args.tx,
         Some(args.source.effective_address()),
         default_signer,
@@ -1705,24 +1559,24 @@ pub async fn build_transfer<
     let token = args.token.clone();
 
     // Check that the source address exists on chain
-    source_exists_or_err(source.clone(), args.tx.force, client).await?;
+    source_exists_or_err(source.clone(), args.tx.force, context.client).await?;
     // Check that the target address exists on chain
-    target_exists_or_err(target.clone(), args.tx.force, client).await?;
+    target_exists_or_err(target.clone(), args.tx.force, context.client).await?;
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
     let validated_amount =
-        validate_amount(client, args.amount, &token, args.tx.force).await?;
+        validate_amount(context.client, args.amount, &token, args.tx.force).await?;
 
     args.amount = InputAmount::Validated(validated_amount);
-    let post_balance = check_balance_too_low_err::<C>(
+    let post_balance = check_balance_too_low_err(
         &token,
         &source,
         validated_amount.amount,
         balance_key,
         args.tx.force,
-        client,
+        context.client,
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
@@ -1750,12 +1604,12 @@ pub async fn build_transfer<
     };
 
     #[cfg(not(feature = "mainnet"))]
-    let is_source_faucet = rpc::is_faucet_account(client, &source).await;
+    let is_source_faucet = rpc::is_faucet_account(context.client, &source).await;
     #[cfg(feature = "mainnet")]
     let is_source_faucet = false;
 
     // Construct the shielded part of the transaction, if any
-    let stx_result = shielded.gen_shielded_transfer(client, args.clone()).await;
+    let stx_result = ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(context, &args).await;
 
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),
@@ -1777,7 +1631,7 @@ pub async fn build_transfer<
             // Get the decoded asset types used in the transaction to give
             // offline wallet users more information
             let asset_types =
-                used_asset_types(shielded, client, &transfer.builder)
+                used_asset_types(context, &transfer.builder)
                     .await
                     .unwrap_or_default();
             Some(asset_types)
@@ -1824,11 +1678,9 @@ pub async fn build_transfer<
         Ok(())
     };
     let (tx, unshielding_epoch) = build_pow_flag(
-        client,
-        wallet,
-        shielded,
+        context,
         &args.tx,
-        args.tx_code_path,
+        args.tx_code_path.clone(),
         transfer,
         add_shielded,
         &signing_data.fee_payer,
@@ -1860,29 +1712,23 @@ pub async fn build_transfer<
 }
 
 /// Submit a transaction to initialize an account
-pub async fn build_init_account<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_init_account<'a>(
+    context: &mut impl Namada<'a>,
     args::TxInitAccount {
         tx: tx_args,
         vp_code_path,
         tx_code_path,
         public_keys,
         threshold,
-    }: args::TxInitAccount,
+    }: &args::TxInitAccount,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let signing_data =
-        signing::aux_signing_data(client, wallet, &tx_args, None, None).await?;
+        signing::aux_signing_data(context, tx_args, None, None).await?;
     
-    let vp_code_hash = query_wasm_code_hash_buf(client, &vp_code_path).await?;
+    let vp_code_hash = query_wasm_code_hash_buf(context.client, vp_code_path).await?;
 
     let threshold = match threshold {
-        Some(threshold) => threshold,
+        Some(threshold) => *threshold,
         None => {
             if public_keys.len() == 1 {
                 1u8
@@ -1893,7 +1739,7 @@ pub async fn build_init_account<
     };
 
     let data = InitAccount {
-        public_keys,
+        public_keys: public_keys.clone(),
         // We will add the hash inside the add_code_hash function
         vp_code_hash: Hash::zero(),
         threshold,
@@ -1905,11 +1751,9 @@ pub async fn build_init_account<
         Ok(())
     };
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         add_code_hash,
         &signing_data.fee_payer,
@@ -1919,14 +1763,8 @@ pub async fn build_init_account<
 }
 
 /// Submit a transaction to update a VP
-pub async fn build_update_account<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_update_account<'a>(
+    context: &mut impl Namada<'a>,
     args::TxUpdateAccount {
         tx: tx_args,
         vp_code_path,
@@ -1934,30 +1772,29 @@ pub async fn build_update_account<
         addr,
         public_keys,
         threshold,
-    }: args::TxUpdateAccount,
+    }: &args::TxUpdateAccount,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(addr.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(addr.clone()),
         default_signer,
     )
         .await?;
     
     let addr =
-        if let Some(account) = rpc::get_account_info(client, &addr).await? {
+        if let Some(account) = rpc::get_account_info(context.client, addr).await? {
             account.address
         } else if tx_args.force {
-            addr
+            addr.clone()
         } else {
-            return Err(Error::from(TxError::LocationDoesNotExist(addr)));
+            return Err(Error::from(TxError::LocationDoesNotExist(addr.clone())));
         };
 
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
-            let vp_hash = query_wasm_code_hash_buf(client, &code_path).await?;
+            let vp_hash = query_wasm_code_hash_buf(context.client, code_path).await?;
             Some(vp_hash)
         }
         None => None,
@@ -1971,8 +1808,8 @@ pub async fn build_update_account<
     let data = UpdateAccount {
         addr,
         vp_code_hash: extra_section_hash,
-        public_keys,
-        threshold,
+        public_keys: public_keys.clone(),
+        threshold: *threshold,
     };
 
     let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
@@ -1982,11 +1819,9 @@ pub async fn build_update_account<
         Ok(())
     };
     build(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
-        tx_code_path,
+        context,
+        tx_args,
+        tx_code_path.clone(),
         data,
         add_code_hash,
         &signing_data.fee_payer,
@@ -1996,27 +1831,20 @@ pub async fn build_update_account<
 }
 
 /// Submit a custom transaction
-pub async fn build_custom<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_custom<'a>(
+    context: &mut impl Namada<'a>,
     args::TxCustom {
         tx: tx_args,
         code_path,
         data_path,
         serialized_tx,
         owner,
-    }: args::TxCustom,
+    }: &args::TxCustom,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(owner.clone());
     let signing_data = signing::aux_signing_data(
-        client,
-        wallet,
-        &tx_args,
+        context,
+        tx_args,
         Some(owner.clone()),
         default_signer,
     )
@@ -2028,23 +1856,21 @@ pub async fn build_custom<
         })?
     } else {
         let tx_code_hash = query_wasm_code_hash_buf(
-            client,
-            &code_path
+            context.client,
+            code_path.as_ref()
                 .ok_or(Error::Other("No code path supplied".to_string()))?,
         )
         .await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration);
         tx.add_code_from_hash(tx_code_hash);
-        data_path.map(|data| tx.add_serialized_data(data));
+        data_path.clone().map(|data| tx.add_serialized_data(data));
         tx
     };
 
-    let epoch = prepare_tx::<C, U, V>(
-        client,
-        wallet,
-        shielded,
-        &tx_args,
+    let epoch = prepare_tx(
+        context,
+        tx_args,
         &mut tx,
         signing_data.fee_payer.clone(),
         None,

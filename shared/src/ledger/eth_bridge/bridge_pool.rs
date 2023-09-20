@@ -10,7 +10,6 @@ use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-use namada_core::types::key::common;
 use namada_core::types::storage::Epoch;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -19,13 +18,11 @@ use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::args;
-use crate::ledger::masp::{ShieldedContext, ShieldedUtils};
 use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
 };
 use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
 use crate::ledger::tx::prepare_tx;
-use crate::ledger::wallet::{Wallet, WalletUtils};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
@@ -40,16 +37,13 @@ use crate::types::eth_bridge_pool::{
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
+use crate::ledger::Namada;
+use crate::ledger::signing::aux_signing_data;
+use crate::ledger::SigningTxData;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn build_bridge_pool_tx<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
-    V: ShieldedUtils,
->(
-    client: &C,
-    wallet: &mut Wallet<U>,
-    shielded: &mut ShieldedContext<V>,
+pub async fn build_bridge_pool_tx<'a>(
+    context: &mut impl Namada<'a>,
     args::EthereumBridgePool {
         tx: tx_args,
         nut,
@@ -62,11 +56,18 @@ pub async fn build_bridge_pool_tx<
         fee_token,
         code_path,
     }: args::EthereumBridgePool,
-    wrapper_fee_payer: common::PublicKey,
-) -> Result<(Tx, Option<Epoch>), Error> {
+) -> Result<(Tx, SigningTxData, Option<Epoch>), Error> {
+    let default_signer = Some(sender.clone());
+    let signing_data = aux_signing_data(
+        context,
+        &tx_args,
+        Some(sender.clone()),
+        default_signer,
+    )
+        .await?;
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } = validate_amount(
-        client,
+        context.client,
         amount,
         &wrapped_erc20s::token(&asset),
         tx_args.force,
@@ -75,7 +76,7 @@ pub async fn build_bridge_pool_tx<
     .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
     let DenominatedAmount {
         amount: fee_amount, ..
-    } = validate_amount(client, fee_amount, &fee_token, tx_args.force)
+    } = validate_amount(context.client, fee_amount, &fee_token, tx_args.force)
         .await
         .map_err(|e| {
             Error::Other(format!(
@@ -103,7 +104,7 @@ pub async fn build_bridge_pool_tx<
     };
 
     let tx_code_hash =
-        query_wasm_code_hash(client, code_path.to_str().unwrap())
+        query_wasm_code_hash(context.client, code_path.to_str().unwrap())
             .await
             .unwrap();
 
@@ -113,20 +114,18 @@ pub async fn build_bridge_pool_tx<
 
     // TODO(namada#1800): validate the tx on the client side
 
-    let epoch = prepare_tx::<C, U, V>(
-        client,
-        wallet,
-        shielded,
+    let epoch = prepare_tx(
+        context,
         &tx_args,
         &mut tx,
-        wrapper_fee_payer,
+        signing_data.fee_payer.clone(),
         None,
         #[cfg(not(feature = "mainnet"))]
         false,
     )
     .await?;
 
-    Ok((tx, epoch))
+    Ok((tx, signing_data, epoch))
 }
 
 /// A json serializable representation of the Ethereum

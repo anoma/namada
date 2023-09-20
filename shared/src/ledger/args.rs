@@ -19,6 +19,16 @@ use crate::types::masp::MaspValue;
 use crate::types::storage::Epoch;
 use crate::types::transaction::GasLimit;
 use crate::types::{storage, token};
+use crate::ledger::Namada;
+use crate::ledger::SigningTxData;
+use crate::ledger::{tx, rpc};
+use crate::ledger::eth_bridge::bridge_pool;
+use namada_core::ledger::governance::cli::onchain::{
+    DefaultProposal, PgfFundingProposal, PgfStewardProposal,
+};
+
+/// The Namada token
+pub const NAM: &str = "NAM";
 
 /// [`Duration`](StdDuration) wrapper that provides a
 /// method to parse a value from a string.
@@ -124,6 +134,52 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub owner: C::Address,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        TxCustom { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> TxCustom<C> {
+    /// Path to the tx WASM code file
+    pub fn code_path(self, code_path: PathBuf) -> Self {
+        Self { code_path: Some(code_path), ..self }
+    }
+    /// Path to the data file
+    pub fn data_path(self, data_path: C::Data) -> Self {
+        Self { data_path: Some(data_path), ..self }
+    }
+    /// Path to the serialized transaction
+    pub fn serialized_tx(self, serialized_tx: C::Data) -> Self {
+        Self { serialized_tx: Some(serialized_tx), ..self }
+    }
+    /// The address that correspond to the signatures/signing-keys
+    pub fn owner(self, owner: C::Address) -> Self {
+        Self { owner, ..self }
+    }
+}
+
+impl TxCustom {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_custom(context, self).await
+    }
+}
+
+/// An amount read in by the cli
+#[derive(Copy, Clone, Debug)]
+pub enum InputAmount {
+    /// An amount whose representation has been validated
+    /// against the allowed representation in storage
+    Validated(token::DenominatedAmount),
+    /// The parsed amount read in from the cli. It has
+    /// not yet been validated against the allowed
+    /// representation in storage.
+    Unvalidated(token::DenominatedAmount),
+}
+
 /// Transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
@@ -142,16 +198,47 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
-/// An amount read in by the cli
-#[derive(Copy, Clone, Debug)]
-pub enum InputAmount {
-    /// An amount whose representation has been validated
-    /// against the allowed representation in storage
-    Validated(token::DenominatedAmount),
-    /// The parsed amount read in from the cli. It has
-    /// not yet been validated against the allowed
-    /// representation in storage.
-    Unvalidated(token::DenominatedAmount),
+
+impl<C: NamadaTypes> TxBuilder<C> for TxTransfer<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        TxTransfer { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> TxTransfer<C> {
+    /// Transfer source address
+    pub fn source(self, source: C::TransferSource) -> Self {
+        Self { source, ..self }
+    }
+    /// Transfer target address
+    pub fn receiver(self, target: C::TransferTarget) -> Self {
+        Self { target, ..self }
+    }
+    /// Transferred token address
+    pub fn token(self, token: C::Address) -> Self {
+        Self { token, ..self }
+    }
+    /// Transferred token amount
+    pub fn amount(self, amount: InputAmount) -> Self {
+        Self { amount, ..self }
+    }
+    /// Native token address
+    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
+        Self { native_token, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl TxTransfer {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_transfer(context, self).await
+    }
 }
 
 /// IBC transfer transaction arguments
@@ -163,7 +250,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::Address,
     /// Transfer target address
     pub receiver: String,
-    /// Transferred token addres    s
+    /// Transferred token address
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
@@ -180,6 +267,65 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
+
+impl<C: NamadaTypes> TxBuilder<C> for TxIbcTransfer<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        TxIbcTransfer { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> TxIbcTransfer<C> {
+    /// Transfer source address
+    pub fn source(self, source: C::Address) -> Self {
+        Self { source, ..self }
+    }
+    /// Transfer target address
+    pub fn receiver(self, receiver: String) -> Self {
+        Self { receiver, ..self }
+    }
+    /// Transferred token address
+    pub fn token(self, token: C::Address) -> Self {
+        Self { token, ..self }
+    }
+    /// Transferred token amount
+    pub fn amount(self, amount: InputAmount) -> Self {
+        Self { amount, ..self }
+    }
+    /// Port ID
+    pub fn port_id(self, port_id: PortId) -> Self {
+        Self { port_id, ..self }
+    }
+    /// Channel ID
+    pub fn channel_id(self, channel_id: ChannelId) -> Self {
+        Self { channel_id, ..self }
+    }
+    /// Timeout height of the destination chain
+    pub fn timeout_height(self, timeout_height: u64) -> Self {
+        Self { timeout_height: Some(timeout_height), ..self }
+    }
+    /// Timeout timestamp offset
+    pub fn timeout_sec_offset(self, timeout_sec_offset: u64) -> Self {
+        Self { timeout_sec_offset: Some(timeout_sec_offset), ..self }
+    }
+    /// Memo
+    pub fn memo(self, memo: String) -> Self {
+        Self { memo: Some(memo), ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl TxIbcTransfer {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_ibc_transfer(context, self).await
+    }
+}
+
 
 /// Transaction to initialize create a new proposal
 #[derive(Clone, Debug)]
@@ -200,6 +346,121 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for InitProposal<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        InitProposal { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> InitProposal<C> {
+    /// The proposal data
+    pub fn proposal_data(self, proposal_data: C::Data) -> Self {
+        Self { proposal_data, ..self }
+    }
+    /// Native token address
+    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
+        Self { native_token, ..self }
+    }
+    /// Flag if proposal should be run offline
+    pub fn is_offline(self, is_offline: bool) -> Self {
+        Self { is_offline, ..self }
+    }
+    /// Flag if proposal is of type Pgf stewards
+    pub fn is_pgf_stewards(self, is_pgf_stewards: bool) -> Self {
+        Self { is_pgf_stewards, ..self }
+    }
+    /// Flag if proposal is of type Pgf funding
+    pub fn is_pgf_funding(self, is_pgf_funding: bool) -> Self {
+        Self { is_pgf_funding, ..self }
+    }
+    /// Path to the tx WASM file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl InitProposal {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        let current_epoch = rpc::query_epoch(context.client).await?;
+        let governance_parameters = rpc::query_governance_parameters(context.client).await;
+        
+        if self.is_pgf_funding {
+            let proposal =
+                PgfFundingProposal::try_from(self.proposal_data.as_ref())
+                .map_err(|e| {
+                    crate::types::error::TxError::FailedGovernaneProposalDeserialize(
+                        e.to_string(),
+                    )
+                })?
+                .validate(&governance_parameters, current_epoch, self.tx.force)
+                .map_err(|e| crate::types::error::TxError::InvalidProposal(e.to_string()))?;
+            
+            tx::build_pgf_funding_proposal(
+                context,
+                self,
+                proposal,
+            )
+                .await
+        } else if self.is_pgf_stewards {
+            let proposal = PgfStewardProposal::try_from(
+                self.proposal_data.as_ref(),
+            )
+                .map_err(|e| {
+                    crate::types::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
+                })?;
+            let author_balance = rpc::get_token_balance(
+                context.client,
+                context.wallet.find_address(NAM).expect("NAM not in wallet"),
+                &proposal.proposal.author,
+            )
+                .await?;
+            let proposal = proposal
+                .validate(
+                    &governance_parameters,
+                    current_epoch,
+                    author_balance,
+                    self.tx.force,
+                )
+                .map_err(|e| crate::types::error::TxError::InvalidProposal(e.to_string()))?;
+            
+            tx::build_pgf_stewards_proposal(
+                context,
+                self,
+                proposal,
+            )
+                .await
+        } else {
+            let proposal = DefaultProposal::try_from(self.proposal_data.as_ref())
+                .map_err(|e| {
+                    crate::types::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
+                })?;
+            let author_balance = rpc::get_token_balance(
+                context.client,
+                context.wallet.find_address(NAM).expect("NAM not in wallet"),
+                &proposal.proposal.author,
+            )
+                .await?;
+            let proposal = proposal
+                .validate(
+                    &governance_parameters,
+                    current_epoch,
+                    author_balance,
+                    self.tx.force,
+                )
+                .map_err(|e| crate::types::error::TxError::InvalidProposal(e.to_string()))?;
+            tx::build_default_proposal(
+                context,
+                self,
+                proposal,
+            )
+                .await
+        }
+    }
+}
+
 /// Transaction to vote on a proposal
 #[derive(Clone, Debug)]
 pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
@@ -217,6 +478,49 @@ pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
     pub proposal_data: Option<C::Data>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for VoteProposal<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        VoteProposal { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> VoteProposal<C> {
+    /// Proposal id
+    pub fn proposal_id(self, proposal_id: u64) -> Self {
+        Self { proposal_id: Some(proposal_id), ..self }
+    }
+    /// The vote
+    pub fn vote(self, vote: String) -> Self {
+        Self { vote, ..self }
+    }
+    /// The address of the voter
+    pub fn voter(self, voter: C::Address) -> Self {
+        Self { voter, ..self }
+    }
+    /// Flag if proposal vote should be run offline
+    pub fn is_offline(self, is_offline: bool) -> Self {
+        Self { is_offline, ..self }
+    }
+    /// The proposal file path
+    pub fn proposal_data(self, proposal_data: C::Data) -> Self {
+        Self { proposal_data: Some(proposal_data), ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl VoteProposal {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        let current_epoch = rpc::query_epoch(context.client).await?;
+        tx::build_vote_proposal(context, self, current_epoch).await
+    }
 }
 
 /// Transaction to initialize a new account
@@ -282,6 +586,44 @@ pub struct TxUpdateAccount<C: NamadaTypes = SdkTypes> {
     pub threshold: Option<u8>,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxUpdateAccount<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        TxUpdateAccount { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> TxUpdateAccount<C> {
+    /// Path to the VP WASM code file
+    pub fn vp_code_path(self, vp_code_path: PathBuf) -> Self {
+        Self { vp_code_path: Some(vp_code_path), ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+    /// Address of the account whose VP is to be updated
+    pub fn addr(self, addr: C::Address) -> Self {
+        Self { addr, ..self }
+    }
+    /// Public keys
+    pub fn public_keys(self, public_keys: Vec<C::PublicKey>) -> Self {
+        Self { public_keys, ..self }
+    }
+    /// The account threshold
+    pub fn threshold(self, threshold: u8) -> Self {
+        Self { threshold: Some(threshold), ..self }
+    }
+}
+
+impl TxUpdateAccount {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_update_account(context, self).await
+    }
+}
+
 /// Bond arguments
 #[derive(Clone, Debug)]
 pub struct Bond<C: NamadaTypes = SdkTypes> {
@@ -300,6 +642,45 @@ pub struct Bond<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for Bond<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        Bond { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> Bond<C> {
+    /// Validator address
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+    /// Amount of tokens to stake in a bond
+    pub fn amount(self, amount: token::Amount) -> Self {
+        Self { amount, ..self }
+    }
+    /// Source address for delegations. For self-bonds, the validator is
+    /// also the source.
+    pub fn source(self, source: C::Address) -> Self {
+        Self { source: Some(source), ..self }
+    }
+    /// Native token address
+    pub fn native_token(self, native_token: C::NativeAddress) -> Self {
+        Self { native_token, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl Bond {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_bond(context, self).await
+    }
+}
+
 /// Unbond arguments
 #[derive(Clone, Debug)]
 pub struct Unbond<C: NamadaTypes = SdkTypes> {
@@ -316,6 +697,41 @@ pub struct Unbond<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl Unbond {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>, Option<(Epoch, token::Amount)>)>
+    {
+        tx::build_unbond(context, self).await
+    }
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for Unbond<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        Unbond { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> Unbond<C> {
+    /// Validator address
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+    /// Amount of tokens to unbond from a bond
+    pub fn amount(self, amount: token::Amount) -> Self {
+        Self { amount, ..self }
+    }
+    /// Source address for unbonding from delegations. For unbonding from
+    /// self-bonds, the validator is also the source
+    pub fn source(self, source: C::Address) -> Self {
+        Self { source: Some(source), ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
 /// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {
@@ -323,6 +739,32 @@ pub struct RevealPk<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// A public key to be revealed on-chain
     pub public_key: C::PublicKey,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for RevealPk<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        RevealPk { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> RevealPk<C> {
+    /// A public key to be revealed on-chain
+    pub fn public_key(self, public_key: C::PublicKey) -> Self {
+        Self { public_key, ..self }
+    }
+}
+
+impl RevealPk {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_reveal_pk(
+            context,
+            &self.tx,
+            &self.public_key,
+        ).await
+    }
 }
 
 /// Query proposal
@@ -360,6 +802,37 @@ pub struct Withdraw<C: NamadaTypes = SdkTypes> {
     pub source: Option<C::Address>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for Withdraw<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        Withdraw { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> Withdraw<C> {
+    /// Validator address
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+    /// Source address for withdrawing from delegations. For withdrawing
+    /// from self-bonds, the validator is also the source
+    pub fn source(self, source: C::Address) -> Self {
+        Self { source: Some(source), ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl Withdraw {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_withdraw(context, self).await
+    }
 }
 
 /// Query asset conversions
@@ -452,6 +925,37 @@ pub struct CommissionRateChange<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for CommissionRateChange<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        CommissionRateChange { tx: func(self.tx), ..self }
+    }
+}
+
+
+impl<C: NamadaTypes> CommissionRateChange<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+    /// Value to which the tx changes the commission rate
+    pub fn rate(self, rate: Dec) -> Self {
+        Self { rate, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl CommissionRateChange {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_validator_commission_change(context, self).await
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Commission rate change args
 pub struct UpdateStewardCommission<C: NamadaTypes = SdkTypes> {
@@ -465,6 +969,36 @@ pub struct UpdateStewardCommission<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for UpdateStewardCommission<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        UpdateStewardCommission { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> UpdateStewardCommission<C> {
+    /// Steward address
+    pub fn steward(self, steward: C::Address) -> Self {
+        Self { steward, ..self }
+    }
+    /// Value to which the tx changes the commission rate
+    pub fn commission(self, commission: C::Data) -> Self {
+        Self { commission, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl UpdateStewardCommission {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_update_steward_commission(context, self).await
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Commission rate change args
 pub struct ResignSteward<C: NamadaTypes = SdkTypes> {
@@ -476,6 +1010,32 @@ pub struct ResignSteward<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for ResignSteward<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        ResignSteward { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> ResignSteward<C> {
+    /// Validator address
+    pub fn steward(self, steward: C::Address) -> Self {
+        Self { steward, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl ResignSteward {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_resign_steward(context, self).await
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Re-activate a jailed validator args
 pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
@@ -485,6 +1045,32 @@ pub struct TxUnjailValidator<C: NamadaTypes = SdkTypes> {
     pub validator: C::Address,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxUnjailValidator<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        TxUnjailValidator { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> TxUnjailValidator<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+    /// Path to the TX WASM code file
+    pub fn tc_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self { tx_code_path, ..self }
+    }
+}
+
+impl TxUnjailValidator {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(&self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_unjail_validator(context, self).await
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -595,6 +1181,109 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+}
+
+/// Builder functions for Tx
+pub trait TxBuilder<C: NamadaTypes> : Sized {
+    /// Apply the given function to the Tx inside self
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C>;
+    /// Simulate applying the transaction
+    fn dry_run(self, dry_run: bool) -> Self {
+        self.tx(|x| Tx { dry_run, ..x })
+    }
+    /// Simulate applying both the wrapper and inner transactions
+    fn dry_run_wrapper(self, dry_run_wrapper: bool) -> Self {
+        self.tx(|x| Tx { dry_run_wrapper, ..x })
+    }
+    /// Dump the transaction bytes to file
+    fn dump_tx(self, dump_tx: bool) -> Self {
+        self.tx(|x| Tx { dump_tx, ..x })
+    }
+    /// The output directory path to where serialize the data
+    fn output_folder(self, output_folder: PathBuf) -> Self {
+        self.tx(|x| Tx { output_folder: Some(output_folder), ..x })
+    }
+    /// Submit the transaction even if it doesn't pass client checks
+    fn force(self, force: bool) -> Self {
+        self.tx(|x| Tx { force, ..x })
+    }
+    /// Do not wait for the transaction to be added to the blockchain
+    fn broadcast_only(self, broadcast_only: bool) -> Self {
+        self.tx(|x| Tx { broadcast_only, ..x })
+    }
+    /// The address of the ledger node as host:port
+    fn ledger_address(self, ledger_address: C::TendermintAddress) -> Self {
+        self.tx(|x| Tx { ledger_address, ..x })
+    }
+    /// If any new account is initialized by the tx, use the given alias to
+    /// save it in the wallet.
+    fn initialized_account_alias(self, initialized_account_alias: String) -> Self {
+        self.tx(|x| Tx { initialized_account_alias: Some(initialized_account_alias), ..x })
+    }
+    /// Whether to force overwrite the above alias, if it is provided, in the
+    /// wallet.
+    fn wallet_alias_force(self, wallet_alias_force: bool) -> Self {
+        self.tx(|x| Tx { wallet_alias_force, ..x })
+    }
+    /// The amount being payed (for gas unit) to include the transaction
+    fn fee_amount(self, fee_amount: InputAmount) -> Self {
+        self.tx(|x| Tx { fee_amount: Some(fee_amount), ..x })
+    }
+    /// The fee payer signing key
+    fn wrapper_fee_payer(self, wrapper_fee_payer: C::Keypair) -> Self {
+        self.tx(|x| Tx { wrapper_fee_payer: Some(wrapper_fee_payer), ..x })
+    }
+    /// The token in which the fee is being paid
+    fn fee_token(self, fee_token: C::Address) -> Self {
+        self.tx(|x| Tx { fee_token, ..x })
+    }
+    /// The optional spending key for fee unshielding
+    fn fee_unshield(self, fee_unshield: C::TransferSource) -> Self {
+        self.tx(|x| Tx { fee_unshield: Some(fee_unshield), ..x })
+    }
+    /// The max amount of gas used to process tx
+    fn gas_limit(self, gas_limit: GasLimit) -> Self {
+        self.tx(|x| Tx { gas_limit, ..x })
+    }
+    /// The optional expiration of the transaction
+    fn expiration(self, expiration: DateTimeUtc) -> Self {
+        self.tx(|x| Tx { expiration: Some(expiration), ..x })
+    }
+    /// Generate an ephimeral signing key to be used only once to sign a
+    /// wrapper tx
+    fn disposable_signing_key(self, disposable_signing_key: bool) -> Self {
+        self.tx(|x| Tx { disposable_signing_key, ..x })
+    }
+    /// The chain id for which the transaction is intended
+    fn chain_id(self, chain_id: ChainId) -> Self {
+        self.tx(|x| Tx { chain_id: Some(chain_id), ..x })
+    }
+    /// Sign the tx with the key for the given alias from your wallet
+    fn signing_keys(self, signing_keys: Vec<C::Keypair>) -> Self {
+        self.tx(|x| Tx { signing_keys, ..x })
+    }
+    /// List of signatures to attach to the transaction
+    fn signatures(self, signatures: Vec<C::Data>) -> Self {
+        self.tx(|x| Tx { signatures, ..x })
+    }
+    /// Path to the TX WASM code file to reveal PK
+    fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {
+        self.tx(|x| Tx { tx_reveal_code_path, ..x })
+    }
+    /// Sign the tx with the public key for the given alias from your wallet
+    fn verification_key(self, verification_key: C::PublicKey) -> Self {
+        self.tx(|x| Tx { verification_key: Some(verification_key), ..x })
+    }
+    /// Password to decrypt key
+    fn password(self, password: Zeroizing<String>) -> Self {
+        self.tx(|x| Tx { password: Some(password), ..x })
+    }
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for Tx<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        func(self)
+    }
 }
 
 /// MASP add key or address arguments
@@ -773,6 +1462,65 @@ pub struct EthereumBridgePool<C: NamadaTypes = SdkTypes> {
     pub fee_token: C::Address,
     /// Path to the tx WASM code file
     pub code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for EthereumBridgePool<C> {
+    fn tx<F>(self, func: F) -> Self where F: FnOnce(Tx<C>) -> Tx<C> {
+        EthereumBridgePool { tx: func(self.tx), ..self }
+    }
+}
+
+impl<C: NamadaTypes> EthereumBridgePool<C> {
+    /// Whether the transfer is for a NUT.
+    ///
+    /// By default, we add wrapped ERC20s onto the
+    /// Bridge pool.
+    pub fn nut(self, nut: bool) -> Self {
+        Self { nut, ..self }
+    }
+    /// The type of token
+    pub fn asset(self, asset: EthAddress) -> Self {
+        Self { asset, ..self }
+    }
+    /// The recipient address
+    pub fn recipient(self, recipient: EthAddress) -> Self {
+        Self { recipient, ..self }
+    }
+    /// The sender of the transfer
+    pub fn sender(self, sender: C::Address) -> Self {
+        Self { sender, ..self }
+    }
+    /// The amount to be transferred
+    pub fn amount(self, amount: InputAmount) -> Self {
+        Self { amount, ..self }
+    }
+    /// The amount of gas fees
+    pub fn fee_amount(self, fee_amount: InputAmount) -> Self {
+        Self { fee_amount, ..self }
+    }
+    /// The account of fee payer.
+    ///
+    /// If unset, it is the same as the sender.
+    pub fn fee_payer(self, fee_payer: C::Address) -> Self {
+        Self { fee_payer: Some(fee_payer), ..self }
+    }
+    /// The token in which the gas is being paid
+    pub fn fee_token(self, fee_token: C::Address) -> Self {
+        Self { fee_token, ..self }
+    }
+    /// Path to the tx WASM code file
+    pub fn code_path(self, code_path: PathBuf) -> Self {
+        Self { code_path, ..self }
+    }
+}
+
+impl EthereumBridgePool {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(self, context: &mut impl Namada<'a>) ->
+        crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        bridge_pool::build_bridge_pool_tx(context, self).await
+    }
 }
 
 /// Bridge pool proof arguments.

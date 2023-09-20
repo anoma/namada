@@ -3435,8 +3435,8 @@ pub mod args {
                 target,
                 token,
                 amount,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
@@ -3791,8 +3791,8 @@ pub mod args {
                 validator,
                 amount,
                 source,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
