@@ -165,6 +165,9 @@ pub enum TxError {
     /// Error retrieving from storage
     #[error("Error retrieving from storage")]
     Retrieval,
+    /// Bond amount is zero
+    #[error("The requested bond amount is 0.")]
+    BondIsZero,
     /// No unbonded bonds ready to withdraw in the current epoch
     #[error(
         "There are no unbonded bonds ready to withdraw in the current epoch \

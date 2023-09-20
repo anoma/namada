@@ -822,13 +822,18 @@ pub fn bond_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let amount = amount.change();
     tracing::debug!(
         "Bonding token amount {} at epoch {current_epoch}",
         amount.to_string_native()
     );
+    if amount.is_zero() {
+        return Ok(());
+    }
+
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Check that the source is not a validator
     if let Some(source) = source {
         if source != validator && is_validator(storage, source)? {
             return Err(
@@ -836,6 +841,8 @@ where
             );
         }
     }
+
+    // Check that the validator is actually a validator
     let validator_state_handle = validator_state_handle(validator);
     let state = validator_state_handle.get(storage, pipeline_epoch, &params)?;
     if state.is_none() {
@@ -844,6 +851,7 @@ where
 
     let source = source.unwrap_or(validator);
     tracing::debug!("Source {} --> Validator {}", source, validator);
+
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
 
@@ -863,9 +871,14 @@ where
     }
 
     // Initialize or update the bond at the pipeline offset
-    let offset = params.pipeline_len;
-    bond_handle.add(storage, amount, current_epoch, offset)?;
-    total_bonded_handle.add(storage, amount, current_epoch, offset)?;
+    let amount = amount.change();
+    bond_handle.add(storage, amount, current_epoch, params.pipeline_len)?;
+    total_bonded_handle.add(
+        storage,
+        amount,
+        current_epoch,
+        params.pipeline_len,
+    )?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
@@ -873,7 +886,7 @@ where
     }
 
     // Update the validator set
-    // Allow bonding if the validator is jailed. However, if jailed, there
+    // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
     let is_jailed_at_pipeline = matches!(
         validator_state_handle
@@ -892,9 +905,15 @@ where
     }
 
     // Update the validator and total deltas
-    update_validator_deltas(storage, validator, amount, current_epoch, offset)?;
+    update_validator_deltas(
+        storage,
+        validator,
+        amount,
+        current_epoch,
+        params.pipeline_len,
+    )?;
 
-    update_total_deltas(storage, amount, current_epoch, offset)?;
+    update_total_deltas(storage, amount, current_epoch, params.pipeline_len)?;
 
     // Transfer the bonded tokens from the source to PoS
     let staking_token = staking_token_address(storage);

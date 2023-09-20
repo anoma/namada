@@ -1147,6 +1147,18 @@ pub async fn build_bond<
     }: args::Bond,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>)> {
+    // Require a positive amount of tokens to be bonded
+    if amount.is_zero() {
+        eprintln!(
+            "The requested bond amount is 0. A positive amount must be \
+             requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::BondIsZero));
+        }
+    }
+
+    // The validator must actually be a validator
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, client)
             .await?;
