@@ -72,6 +72,7 @@ use namada::ledger::masp::{
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada::ledger::storage_api::StorageRead;
 use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
@@ -82,7 +83,7 @@ use namada::types::chain::ChainId;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
-use namada::types::storage::{BlockHeight, KeySeg, TxIndex};
+use namada::types::storage::{BlockHeight, Epoch, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
 use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::InitProposalData;
@@ -215,6 +216,7 @@ impl Default for BenchShell {
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(vec![]));
+        let voting_start_epoch = Epoch(25);
         let signed_tx = generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
@@ -222,9 +224,9 @@ impl Default for BenchShell {
                 content: content_section.get_hash(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
-                voting_start_epoch: 12.into(),
-                voting_end_epoch: 15.into(),
-                grace_epoch: 18.into(),
+                voting_start_epoch,
+                voting_end_epoch: 28.into(),
+                grace_epoch: 34.into(),
             },
             None,
             Some(vec![content_section]),
@@ -239,6 +241,11 @@ impl Default for BenchShell {
         for _ in 0..=(params.pipeline_len + params.unbonding_len) {
             bench_shell.advance_epoch();
         }
+        // Must start after current epoch
+        debug_assert_eq!(
+            bench_shell.wl_storage.get_block_epoch().unwrap().next(),
+            voting_start_epoch
+        );
 
         bench_shell
     }
