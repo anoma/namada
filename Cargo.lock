@@ -4248,6 +4248,7 @@ dependencies = [
  "sha2 0.9.9",
  "tempfile",
  "tokio",
+ "tracing-subscriber 0.3.17",
 ]
 
 [[package]]

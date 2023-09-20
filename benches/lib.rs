@@ -18,6 +18,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::sync::Once;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
@@ -124,6 +125,10 @@ const BERTHA_SPENDING_KEY: &str = "bertha_spending";
 const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
 
+/// For `tracing_subscriber`, which fails if called more than once in the same
+/// process
+static SHELL_INIT: Once = Once::new();
+
 pub struct BenchShell {
     pub inner: Shell,
     /// NOTE: Temporary directory should be dropped last since Shell need to
@@ -147,6 +152,14 @@ impl DerefMut for BenchShell {
 
 impl Default for BenchShell {
     fn default() -> Self {
+        SHELL_INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env(),
+                )
+                .init();
+        });
+
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().canonicalize().unwrap();
