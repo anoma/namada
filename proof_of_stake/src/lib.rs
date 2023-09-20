@@ -2957,9 +2957,8 @@ where
             .at(&start_epoch)
             .remove_all(storage, &withdraw_epoch)?;
 
-        // TODO: check if the outer keys are now empty
-        if unbond_handle.at(&withdraw_epoch).is_empty(storage)? {
-            unbond_handle.remove_all(storage, &withdraw_epoch)?;
+        if unbond_handle.at(&start_epoch).is_empty(storage)? {
+            unbond_handle.remove_all(storage, &start_epoch)?;
         }
         if redelegated_unbonds.at(&start_epoch).is_empty(storage)? {
             redelegated_unbonds.remove_all(storage, &start_epoch)?;
