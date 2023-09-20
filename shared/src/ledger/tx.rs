@@ -998,37 +998,52 @@ pub async fn build_unbond<
     }: args::Unbond,
     fee_payer: common::PublicKey,
 ) -> Result<(Tx, Option<Epoch>, Option<(Epoch, token::Amount)>)> {
-    let source = source.clone();
-    // Check the source's current bond amount
-    let bond_source = source.clone().unwrap_or_else(|| validator.clone());
+    // Require a positive amount of tokens to be unbonded
+    if amount.is_zero() {
+        eprintln!(
+            "The requested unbbond amount is 0. A positive amount must be \
+             requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::UnbondIsZero));
+        }
+    }
 
-    if !tx_args.force {
+    // The validator must actually be a validator
+    let validator =
         known_validator_or_err(validator.clone(), tx_args.force, client)
             .await?;
 
-        let bond_amount =
-            rpc::query_bond(client, &bond_source, &validator, None).await?;
-        println!(
-            "Bond amount available for unbonding: {} NAM",
+    // Check that the source address exists on chain
+    let source = match source.clone() {
+        Some(source) => source_exists_or_err(source, tx_args.force, client)
+            .await
+            .map(Some),
+        None => Ok(source.clone()),
+    }?;
+    let bond_source = source.clone().unwrap_or(validator.clone());
+
+    // Check the source's current bond amount
+    let bond_amount =
+        rpc::query_bond(client, &bond_source, &validator, None).await?;
+    println!(
+        "Bond amount available for unbonding: {} NAM",
+        bond_amount.to_string_native()
+    );
+    if amount > bond_amount {
+        eprintln!(
+            "The total bonds of the source {} is lower than the amount to be \
+             unbonded. Amount to unbond is {} and the total bonds is {}.",
+            bond_source,
+            amount.to_string_native(),
             bond_amount.to_string_native()
         );
-
-        if amount > bond_amount {
-            eprintln!(
-                "The total bonds of the source {} is lower than the amount to \
-                 be unbonded. Amount to unbond is {} and the total bonds is \
-                 {}.",
+        if !tx_args.force {
+            return Err(Error::from(TxError::LowerBondThanUnbond(
                 bond_source,
                 amount.to_string_native(),
-                bond_amount.to_string_native()
-            );
-            if !tx_args.force {
-                return Err(Error::from(TxError::LowerBondThanUnbond(
-                    bond_source,
-                    amount.to_string_native(),
-                    bond_amount.to_string_native(),
-                )));
-            }
+                bond_amount.to_string_native(),
+            )));
         }
     }
 
@@ -1046,7 +1061,7 @@ pub async fn build_unbond<
     let data = pos::Unbond {
         validator: validator.clone(),
         amount,
-        source: source.clone(),
+        source,
     };
 
     let (tx, epoch) = build(

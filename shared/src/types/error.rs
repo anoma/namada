@@ -168,6 +168,9 @@ pub enum TxError {
     /// Bond amount is zero
     #[error("The requested bond amount is 0.")]
     BondIsZero,
+    /// Unond amount is zero
+    #[error("The requested unbond amount is 0.")]
+    UnbondIsZero,
     /// No unbonded bonds ready to withdraw in the current epoch
     #[error(
         "There are no unbonded bonds ready to withdraw in the current epoch \
