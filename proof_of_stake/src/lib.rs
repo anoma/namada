@@ -2234,7 +2234,7 @@ where
                 Some((bond_epoch, bond_amount - to_unbond));
         }
         remaining -= to_unbond;
-        if remaining == token::Change::zero() {
+        if remaining.is_zero() {
             break;
         }
     }
@@ -2298,7 +2298,7 @@ where
     // determined in Quint spec yet either)
     let mut remaining = amount;
     for src_validator in src_validators.into_iter() {
-        if remaining == token::Change::zero() {
+        if remaining.is_zero() {
             break;
         }
         let rbonds = redelegated_bonds.at(&src_validator);
@@ -3390,7 +3390,7 @@ where
                 }
                 // If both previous and current voting powers are 0, and the
                 // validator_stake_threshold is 0, skip update
-                if params.validator_stake_threshold == token::Amount::zero()
+                if params.validator_stake_threshold.is_zero()
                     && *prev_tm_voting_power == 0
                     && *new_tm_voting_power == 0
                 {
@@ -3449,7 +3449,7 @@ where
             // it in the `new_consensus_validators` iterator above
             if matches!(new_state, Some(ValidatorState::Consensus)) {
                 return None;
-            } else if params.validator_stake_threshold == token::Amount::zero()
+            } else if params.validator_stake_threshold.is_zero()
                 && *prev_tm_voting_power == 0
             {
                 // If the new state is not Consensus but its prev voting power
@@ -4093,7 +4093,7 @@ where
         // When below-threshold validator set is added, this shouldn't be needed
         // anymore since some minimal stake will be required to be in at least
         // the consensus set
-        if stake == token::Amount::zero() {
+        if stake.is_zero() {
             continue;
         }
 
@@ -5362,7 +5362,7 @@ where
         src_validator,
         dest_validator
     );
-    if amount == token::Amount::zero() {
+    if amount.is_zero() {
         return Ok(());
     }
     if src_validator == dest_validator {
@@ -5433,7 +5433,7 @@ where
 
     // `updatedDelegator` with updates to `bonded`
     let bond_handle = bond_handle(delegator, dest_validator);
-    if amount_after_slashing != token::Change::zero() {
+    if !amount_after_slashing.is_zero() {
         bond_handle.add(
             storage,
             amount_after_slashing,

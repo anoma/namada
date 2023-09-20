@@ -171,7 +171,7 @@ where
             amount
         }
         None => {
-            storage.write(&key, token::Amount::default())?;
+            storage.write(&key, token::Amount::zero())?;
             balance
         }
     };

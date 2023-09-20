@@ -596,7 +596,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
         amount_self_bond + (validator.tokens / 2);
     // When the difference is 0, only the non-genesis self-bond is unbonded
     let unbonded_genesis_self_bond =
-        amount_self_unbond - amount_self_bond != token::Amount::default();
+        amount_self_unbond - amount_self_bond != token::Amount::zero();
     dbg!(
         amount_self_unbond,
         amount_self_bond,
@@ -1873,7 +1873,7 @@ fn test_validator_sets_swap() {
         max_validator_slots: 2,
         // Set the stake threshold to 0 so no validators are in the
         // below-threshold set
-        validator_stake_threshold: token::Amount::default(),
+        validator_stake_threshold: token::Amount::zero(),
         // Set 0.1 votes per token
         tm_votes_per_token: Dec::new(1, 1).expect("Dec creation failed"),
         ..Default::default()
@@ -4989,7 +4989,7 @@ fn test_redelegation_with_slashing_aux(
     let params = PosParams {
         unbonding_len: 4,
         // Avoid empty consensus set by removing the threshold
-        validator_stake_threshold: token::Amount::default(),
+        validator_stake_threshold: token::Amount::zero(),
         ..Default::default()
     };
 

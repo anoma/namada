@@ -3110,7 +3110,7 @@ mod test_finalize_block {
             .read(&slash_balance_key)
             .expect("must be able to read")
             .unwrap_or_default();
-        debug_assert_eq!(slash_pool_balance_init, token::Amount::default());
+        debug_assert_eq!(slash_pool_balance_init, token::Amount::zero());
 
         let consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
@@ -3621,7 +3621,7 @@ mod test_finalize_block {
         //     .unwrap_or_default();
 
         // let exp_slashed_4 = if dec!(2) * cubic_rate >= Decimal::ONE {
-        //     token::Amount::default()
+        //     token::Amount::zero()
         // } else if dec!(3) * cubic_rate >= Decimal::ONE {
         //     decimal_mult_amount(
         //         Decimal::ONE - dec!(2) * cubic_rate,

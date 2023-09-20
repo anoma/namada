@@ -1278,7 +1278,7 @@ pub async fn query_and_print_unbonds<
     let unbonds = query_unbond_with_slashing(client, source, validator).await;
     let current_epoch = query_epoch(client).await.unwrap();
 
-    let mut total_withdrawable = token::Amount::default();
+    let mut total_withdrawable = token::Amount::zero();
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
@@ -1289,7 +1289,7 @@ pub async fn query_and_print_unbonds<
             *withdrawable_amount += amount;
         }
     }
-    if total_withdrawable != token::Amount::default() {
+    if !total_withdrawable.is_zero() {
         println!(
             "Total withdrawable now: {}.",
             total_withdrawable.to_string_native()
@@ -1359,7 +1359,7 @@ pub async fn query_bonds<C: namada::ledger::queries::Client + Sync>(
                 bond.amount.to_string_native()
             )?;
         }
-        if details.bonds_total != token::Amount::zero() {
+        if !details.bonds_total.is_zero() {
             writeln!(
                 w,
                 "Active (slashed) bonds total: {}",

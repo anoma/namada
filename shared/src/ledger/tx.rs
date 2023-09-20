@@ -1760,7 +1760,7 @@ pub async fn build_transfer<
     // This has no side-effect because transaction is to self.
     let (_amount, token) = if source == masp_addr && target == masp_addr {
         // TODO Refactor me, we shouldn't rely on any specific token here.
-        (token::Amount::default(), args.native_token.clone())
+        (token::Amount::zero(), args.native_token.clone())
     } else {
         (validated_amount.amount, token)
     };
@@ -2189,7 +2189,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                         format_denominated_amount(client, token, amount).await,
                         format_denominated_amount(client, token, balance).await,
                     );
-                    Ok(token::Amount::default())
+                    Ok(token::Amount::zero())
                 } else {
                     Err(Error::from(TxError::BalanceTooLow(
                         source.clone(),
@@ -2208,7 +2208,7 @@ async fn check_balance_too_low_err<C: crate::ledger::queries::Client + Sync>(
                     "No balance found for the source {} of token {}",
                     source, token
                 );
-                Ok(token::Amount::default())
+                Ok(token::Amount::zero())
             } else {
                 Err(Error::from(TxError::NoBalanceForToken(
                     source.clone(),

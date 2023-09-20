@@ -360,7 +360,7 @@ pub async fn update_pow_challenge<C: crate::ledger::queries::Client + Sync>(
             if !args.force {
                 panic!();
             } else {
-                token::Amount::default()
+                token::Amount::zero()
             }
         }
     };
@@ -467,7 +467,7 @@ pub async fn wrap_tx<
             if !args.force {
                 panic!();
             } else {
-                token::Amount::default()
+                token::Amount::zero()
             }
         }
     };

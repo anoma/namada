@@ -208,7 +208,7 @@ mod tests {
 
         let expected_amount_before_pipeline = if is_delegation {
             // When this is a delegation, there will be no bond until pipeline
-            token::Amount::default()
+            token::Amount::zero()
         } else {
             // Before pipeline offset, there can only be self-bond
             initial_stake

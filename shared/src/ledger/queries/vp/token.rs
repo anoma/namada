@@ -52,7 +52,7 @@ pub mod client_only_methods {
                 .await?;
 
             let balance = if response.data.is_empty() {
-                token::Amount::default()
+                token::Amount::zero()
             } else {
                 token::Amount::try_from_slice(&response.data)
                     .unwrap_or_default()

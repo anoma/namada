@@ -539,7 +539,7 @@ impl AbstractPosState {
     //         .unwrap_or_default();
 
     //     let mut remaining = change;
-    //     let mut amount_after_slashing = token::Change::default();
+    //     let mut amount_after_slashing = token::Change::zero();
 
     //     tracing::debug!("Bonds before decrementing");
     //     for (start, amnt) in bonds.iter() {
@@ -1325,7 +1325,7 @@ impl AbstractPosState {
         for epoch in Epoch::iter_bounds_inclusive(epoch_start, epoch_end) {
             let consensus_stake =
                 self.consensus_set.get(&epoch).unwrap().iter().fold(
-                    token::Amount::default(),
+                    token::Amount::zero(),
                     |sum, (val_stake, validators)| {
                         sum + *val_stake * validators.len() as u64
                     },
@@ -1403,7 +1403,7 @@ impl AbstractPosState {
                     debug_assert_eq!(*val_state, ValidatorState::Consensus);
                 }
             }
-            let mut max_bc = token::Amount::default();
+            let mut max_bc = token::Amount::zero();
             let bc = self.below_capacity_set.get(&epoch).unwrap();
             for (amount, vals) in bc {
                 if token::Amount::from(*amount) > max_bc {
@@ -3903,13 +3903,13 @@ impl ReferenceStateMachine for AbstractPosState {
                 state.debug_validators();
             }
             Transition::Bond { id, amount } => {
-                if *amount != token::Amount::default() {
+                if !amount.is_zero() {
                     state.bond(id, *amount);
                     state.debug_validators();
                 }
             }
             Transition::Unbond { id, amount } => {
-                if *amount != token::Amount::default() {
+                if !amount.is_zero() {
                     state.unbond(id, *amount);
                     state.debug_validators();
                 }
@@ -3926,7 +3926,7 @@ impl ReferenceStateMachine for AbstractPosState {
                 if *is_chained {
                     return state;
                 }
-                if *amount != token::Amount::default() {
+                if !amount.is_zero() {
                     state.redelegate(id, new_validator, *amount);
                     state.debug_validators();
                 }
@@ -4279,7 +4279,7 @@ impl ReferenceStateMachine for AbstractPosState {
                 let is_withdrawable = state
                     .withdrawable_unbonds()
                     .get(id)
-                    .map(|amount| *amount > token::Amount::default())
+                    .map(|amount| *amount > token::Amount::zero())
                     .unwrap_or_default();
 
                 // The validator must not be jailed currently

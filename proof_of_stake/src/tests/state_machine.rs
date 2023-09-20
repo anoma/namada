@@ -661,7 +661,7 @@ impl StateMachineTest for ConcretePosState {
                     }
                 }
 
-                if is_chained && amount != token::Amount::zero() {
+                if is_chained && !amount.is_zero() {
                     assert!(result.is_err());
                     let err = result.unwrap_err();
                     let err_str = err.to_string();
@@ -2078,7 +2078,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     id
                 );
 
-                if *amount != token::Amount::zero() {
+                if !amount.is_zero() {
                     let change = token::Change::from(*amount);
                     let pipeline_state = state
                         .validator_states
@@ -2119,9 +2119,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     })
                     .unwrap_or_default();
 
-                if *amount != token::Amount::zero()
-                    && amount.change() <= sum_bonded
-                {
+                if !amount.is_zero() && amount.change() <= sum_bonded {
                     let change = token::Change::from(*amount);
                     state.update_state_with_unbond(id, change);
 
@@ -2179,7 +2177,7 @@ impl ReferenceStateMachine for AbstractPosState {
                 if *is_chained {
                     return state;
                 }
-                if *amount != token::Amount::zero() {
+                if !amount.is_zero() {
                     // Remove the amount from source validator
                     let change = token::Change::from(*amount);
                     state.update_state_with_redelegation(
@@ -5126,7 +5124,7 @@ impl AbstractPosState {
                     Some((bond_epoch, bond_amount - to_unbond));
             }
             remaining -= to_unbond;
-            if remaining == token::Change::zero() {
+            if remaining.is_zero() {
                 break;
             }
         }
@@ -5165,7 +5163,7 @@ impl AbstractPosState {
 
         let mut remaining = amount;
         for src_val in src_validators {
-            if remaining == token::Change::zero() {
+            if remaining.is_zero() {
                 break;
             }
             let bonds = redelegated_bonds.get(&src_val).unwrap();

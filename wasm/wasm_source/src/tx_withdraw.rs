@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
     let slashed =
         ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
-    if slashed != token::Amount::default() {
+    if !slashed.is_zero() {
         debug_log!("New withdrawal slashed for {}", slashed.to_string_native());
     }
     Ok(())
@@ -72,7 +72,7 @@ mod tests {
     ) -> TxResult {
         // Remove the validator stake threshold for simplicity
         let pos_params = PosParams {
-            validator_stake_threshold: token::Amount::default(),
+            validator_stake_threshold: token::Amount::zero(),
             ..pos_params
         };
 
@@ -90,7 +90,7 @@ mod tests {
                 // If we're withdrawing a delegation, we'll give the initial
                 // stake to the delegation instead of the
                 // validator
-                token::Amount::default()
+                token::Amount::zero()
             } else {
                 initial_stake
             },

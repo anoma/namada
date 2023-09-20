@@ -68,7 +68,7 @@ mod tests {
     ) -> TxResult {
         // Remove the validator stake threshold for simplicity
         let pos_params = PosParams {
-            validator_stake_threshold: token::Amount::default(),
+            validator_stake_threshold: token::Amount::zero(),
             ..pos_params
         };
 

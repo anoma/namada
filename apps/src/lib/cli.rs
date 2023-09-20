@@ -2550,7 +2550,7 @@ pub mod args {
         arg_default(
             "pool-gas-amount",
             DefaultFn(|| token::DenominatedAmount {
-                amount: token::Amount::default(),
+                amount: token::Amount::zero(),
                 denom: NATIVE_MAX_DECIMAL_PLACES.into(),
             }),
         );
