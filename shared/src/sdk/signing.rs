@@ -1,6 +1,5 @@
 //! Functions to sign transactions
 use std::collections::{BTreeMap, HashMap};
-use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -119,6 +118,10 @@ pub async fn find_pk<
             .ref_to()),
         Address::Internal(_) => other_err(format!(
             "Internal address {} doesn't have any signing keys.",
+            addr
+        )),
+        Address::Foreign(_) => other_err(format!(
+            "Foreign address {} doesn't have any signing keys.",
             addr
         )),
     }
@@ -275,7 +278,8 @@ pub async fn aux_signing_data<
             Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
             1u8,
         ),
-        Some(owner @ Address::Internal(_)) => {
+        Some(owner @ Address::Internal(_))
+        | Some(owner @ Address::Foreign(_)) => {
             return Err(Error::from(TxError::InvalidAccount(owner.encode())));
         }
         None => (None, 0u8),
@@ -419,30 +423,27 @@ pub async fn wrap_tx<
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
-                let transfer_args = args::TxTransfer {
-                    tx: args.to_owned(),
-                    source: spending_key,
-                    target: namada_core::types::masp::TransferTarget::Address(
-                        fee_payer_address.clone(),
-                    ),
-                    token: args.fee_token.clone(),
-                    amount: args::InputAmount::Validated(DenominatedAmount {
-                        // NOTE: must unshield the total fee amount, not the
-                        // diff, because the ledger evaluates the transaction in
-                        // reverse (wrapper first, inner second) and cannot know
-                        // ahead of time if the inner will modify the balance of
-                        // the gas payer
-                        amount: total_fee,
-                        denom: 0.into(),
-                    }),
-                    // These last two fields are not used in the function, mock
-                    // them
-                    native_token: args.fee_token.clone(),
-                    tx_code_path: PathBuf::new(),
+                let target = namada_core::types::masp::TransferTarget::Address(
+                    fee_payer_address.clone(),
+                );
+                let fee_amount = DenominatedAmount {
+                    // NOTE: must unshield the total fee amount, not the
+                    // diff, because the ledger evaluates the transaction in
+                    // reverse (wrapper first, inner second) and cannot know
+                    // ahead of time if the inner will modify the balance of
+                    // the gas payer
+                    amount: total_fee,
+                    denom: 0.into(),
                 };
 
                 match shielded
-                    .gen_shielded_transfer::<_, IO>(client, transfer_args)
+                    .gen_shielded_transfer::<_, IO>(
+                        client,
+                        &spending_key,
+                        &target,
+                        &args.fee_token,
+                        fee_amount,
+                    )
                     .await
                 {
                     Ok(Some(ShieldedTransfer {

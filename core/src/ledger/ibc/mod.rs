@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::time::Duration;
 
 pub use context::common::IbcCommonContext;
@@ -18,11 +19,14 @@ use thiserror::Error;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::{
-    send_transfer_execute, send_transfer_validate,
+    is_receiver_chain_source, send_transfer_execute, send_transfer_validate,
+    BaseDenom, PrefixedDenom, TracePath, TracePrefix,
 };
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
-use crate::ibc::core::ics24_host::identifier::{ChainId as IbcChainId, PortId};
+use crate::ibc::core::ics24_host::identifier::{
+    ChainId as IbcChainId, ChannelId, PortId,
+};
 use crate::ibc::core::router::{Module, ModuleId, Router};
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
@@ -298,4 +302,39 @@ pub struct ValidationParams {
     pub unbonding_period: Duration,
     /// Upgrade path
     pub upgrade_path: Vec<String>,
+}
+
+/// Get the IbcToken from the source/destination ports and channels
+pub fn received_ibc_token(
+    token: &Address,
+    trace_path: Option<TracePath>,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<Address, Error> {
+    if let Some(trace_path) = trace_path {
+        let mut ibc_denom = PrefixedDenom {
+            trace_path,
+            base_denom: BaseDenom::from_str(&token.to_string()).map_err(
+                |e| Error::Denom(format!("Trace path is invalid: error {e}")),
+            )?,
+        };
+        if is_receiver_chain_source(
+            src_port_id.clone(),
+            src_channel_id.clone(),
+            &ibc_denom,
+        ) {
+            let prefix =
+                TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
+            ibc_denom.remove_trace_prefix(&prefix);
+        } else {
+            let prefix =
+                TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
+            ibc_denom.add_trace_prefix(prefix);
+        }
+        Ok(storage::ibc_token(&ibc_denom.to_string()))
+    } else {
+        Ok(token.clone())
+    }
 }

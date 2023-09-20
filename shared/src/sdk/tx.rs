@@ -22,6 +22,7 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::ibc::storage::channel_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
@@ -38,6 +39,7 @@ use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::packet::PacketData;
 use crate::ibc::applications::transfer::PrefixedCoin;
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
+use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
@@ -55,9 +57,10 @@ use crate::sdk::wallet::{Wallet, WalletUtils};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::types::control_flow::{time, ProceedOrElse};
+use crate::types::ibc::IbcShieldedTransfer;
 use crate::types::io::Io;
 use crate::types::key::*;
-use crate::types::masp::TransferTarget;
+use crate::types::masp::{TransferSource, TransferTarget};
 use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::transaction::account::{InitAccount, UpdateAccount};
@@ -1714,7 +1717,13 @@ pub async fn build_transfer<
 
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded
-        .gen_shielded_transfer::<_, IO>(client, args.clone())
+        .gen_shielded_transfer::<_, IO>(
+            client,
+            &args.source,
+            &args.target,
+            &args.token,
+            validated_amount,
+        )
         .await;
 
     let shielded_parts = match stx_result {
@@ -1995,6 +2004,104 @@ pub async fn build_custom<
     .await?;
 
     Ok((tx, epoch))
+}
+
+/// Generate IBC shielded transfer
+pub async fn gen_ibc_shielded_transfer<
+    C: crate::ledger::queries::Client + Sync,
+    V: ShieldedUtils,
+    IO: Io,
+>(
+    client: &C,
+    shielded: &mut ShieldedContext<V>,
+    args: args::GenIbcShieldedTransafer,
+) -> Result<Option<IbcShieldedTransfer>> {
+    let key = match args.target.payment_address() {
+        Some(pa) if pa.is_pinned() => Some(pa.hash()),
+        Some(_) => None,
+        None => return Ok(None),
+    };
+    let source = Address::Foreign(args.sender.clone());
+    let (src_port_id, src_channel_id) =
+        get_ibc_src_port_channel(client, &args.port_id, &args.channel_id)
+            .await?;
+    let token = namada_core::ledger::ibc::received_ibc_token(
+        &args.token,
+        args.trace_path,
+        &src_port_id,
+        &src_channel_id,
+        &args.port_id,
+        &args.channel_id,
+    )
+    .map_err(|e| {
+        Error::Other(format!("Getting IBC Token failed: error {e}"))
+    })?;
+    let validated_amount =
+        validate_amount::<_, IO>(client, args.amount, &token, false)
+            .await
+            .expect("expected to validate amount");
+
+    let shielded = shielded
+        .gen_shielded_transfer::<_, IO>(
+            client,
+            &TransferSource::Address(source.clone()),
+            &args.target,
+            &token,
+            validated_amount,
+        )
+        .await
+        .map_err(|err| TxError::MaspError(err.to_string()))?;
+    let transfer = token::Transfer {
+        source: source.clone(),
+        target: masp(),
+        token,
+        amount: validated_amount,
+        key,
+        shielded: None,
+    };
+    if let Some(shielded) = shielded {
+        Ok(Some(IbcShieldedTransfer {
+            transfer,
+            masp_tx: shielded.masp_tx,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn get_ibc_src_port_channel<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<(PortId, ChannelId)> {
+    use crate::ibc::core::ics04_channel::channel::ChannelEnd;
+    use crate::ibc_proto::protobuf::Protobuf;
+
+    let channel_key = channel_key(dest_port_id, dest_channel_id);
+    match rpc::query_storage_value_bytes::<C>(client, &channel_key, None, false)
+        .await
+    {
+        Ok((Some(bytes), _)) => {
+            let channel = ChannelEnd::decode_vec(&bytes).map_err(|_| {
+                Error::Other(format!(
+                    "Decoding channel end failed: port {}, channel {}",
+                    dest_port_id, dest_channel_id
+                ))
+            })?;
+            if let Some(src_channel) = channel.remote.channel_id() {
+                Ok((channel.remote.port_id.clone(), src_channel.clone()))
+            } else {
+                Err(Error::Other(format!(
+                    "The source channel doesn't exist: port {dest_port_id}, \
+                     channel {dest_channel_id}"
+                )))
+            }
+        }
+        _ => Err(Error::Other(format!(
+            "Reading channel end failed: port {dest_port_id}, channel \
+             {dest_channel_id}"
+        ))),
+    }
 }
 
 async fn expect_dry_broadcast<
