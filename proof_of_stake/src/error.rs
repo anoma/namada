@@ -130,6 +130,10 @@ pub enum RedelegationError {
     IsChainedRedelegation,
     #[error("The source and destination validator must be different")]
     RedelegationSrcEqDest,
+    #[error("The delegator must not be a validator")]
+    DelegatorIsValidator,
+    #[error("The address {0} must be a validator")]
+    NotAValidator(Address),
 }
 
 impl From<BecomeValidatorError> for storage_api::Error {

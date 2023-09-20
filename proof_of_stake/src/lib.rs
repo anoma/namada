@@ -5365,8 +5365,27 @@ where
     if amount.is_zero() {
         return Ok(());
     }
+
+    // The src and dest validators must be different
     if src_validator == dest_validator {
         return Err(RedelegationError::RedelegationSrcEqDest.into());
+    }
+
+    // The delegator must not be a validator
+    if is_validator(storage, delegator)? {
+        return Err(RedelegationError::DelegatorIsValidator.into());
+    }
+
+    // The src and dest validators must actually be validators
+    if !is_validator(storage, src_validator)? {
+        return Err(
+            RedelegationError::NotAValidator(src_validator.clone()).into()
+        );
+    }
+    if !is_validator(storage, dest_validator)? {
+        return Err(
+            RedelegationError::NotAValidator(dest_validator.clone()).into()
+        );
     }
 
     let params = read_pos_params(storage)?;

@@ -768,7 +768,7 @@ pub async fn build_unjail_validator<
     .await
 }
 
-/// Redelegate tokens from one validator to another
+/// Redelegate bonded tokens from one validator to another
 pub async fn build_redelegation<
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
@@ -787,6 +787,17 @@ pub async fn build_redelegation<
     }: args::Redelegate,
     fee_payer: common::PublicKey,
 ) -> Result<Tx> {
+    // Require a positive amount of tokens to be redelegated
+    if redel_amount.is_zero() {
+        eprintln!(
+            "The requested redelegation amount is 0. A positive amount must \
+             be requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationIsZero));
+        }
+    }
+
     // The src and dest validators must actually be validators
     let src_validator =
         known_validator_or_err(src_validator.clone(), tx_args.force, client)
@@ -795,7 +806,9 @@ pub async fn build_redelegation<
         known_validator_or_err(dest_validator.clone(), tx_args.force, client)
             .await?;
 
-    // The delegator (owner) must not be a validator
+    // The delegator (owner) must exist on-chain and must not be a validator
+    let owner =
+        source_exists_or_err(owner.clone(), tx_args.force, client).await?;
     if rpc::is_validator(client, &owner).await? {
         eprintln!(
             "The given address {} is a validator. A validator is prohibited \
@@ -817,17 +830,6 @@ pub async fn build_redelegation<
         );
         if !tx_args.force {
             return Err(Error::from(TxError::RedelegationSrcEqDest));
-        }
-    }
-
-    // Require a positive amount of tokens to be redelegated
-    if redel_amount.is_zero() {
-        eprintln!(
-            "The requested redelegation amount is 0. A positive amount must \
-             be requested."
-        );
-        if !tx_args.force {
-            return Err(Error::from(TxError::RedelegationIsZero));
         }
     }
 
