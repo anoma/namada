@@ -26,6 +26,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::ibc::storage::port_key;
+use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address::{self, Address};
 use namada::core::types::key::common::SecretKey;
 use namada::core::types::storage::Key;
@@ -75,7 +76,7 @@ use namada::ledger::queries::{
 use namada::ledger::storage_api::StorageRead;
 use namada::ledger::wallet::Wallet;
 use namada::proof_of_stake;
-use namada::proto::{Code, Data, Section, Signature, Tx};
+use namada::proto::{Code, Data, MultiSignature, Section, Signature, Tx};
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
@@ -453,9 +454,12 @@ pub fn generate_tx(
     }
 
     if let Some(signer) = signer {
-        tx.add_section(Section::Signature(Signature::new(
+        let pk = signer.to_public();
+        let pks_map = AccountPublicKeysMap::from_iter(vec![pk]);
+        tx.add_section(Section::SectionSignature(MultiSignature::new(
             tx.sechashes(),
-            signer,
+            &[signer.clone()],
+            &pks_map,
         )));
     }
 

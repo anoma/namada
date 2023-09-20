@@ -164,7 +164,8 @@ fn vp_user(c: &mut Criterion) {
                         #[cfg(not(feature = "mainnet"))]
                         false,
                     )
-                    .unwrap()
+                    .unwrap(),
+                    "VP \"{bench_name}\" bench call failed"
                 );
             })
         });
