@@ -1272,6 +1272,7 @@ where
                             None
                         }
                     });
+
                 // Validate wrapper fees
                 if let Err(e) = self.wrapper_fee_check(
                     &wrapper,
@@ -1305,56 +1306,6 @@ where
             response.log = VALID_MSG.into();
         }
         response
-    }
-
-    #[cfg(not(feature = "mainnet"))]
-    /// Check if the tx has a valid PoW solution. Unlike
-    /// `apply_pow_solution_if_valid`, this won't invalidate the solution.
-    fn has_valid_pow_solution(
-        &self,
-        tx: &namada::types::transaction::WrapperTx,
-    ) -> bool {
-        if let Some(solution) = &tx.pow_solution {
-            if let Some(faucet_address) =
-                namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.wl_storage,
-                )
-                .expect("Must be able to read faucet account parameter")
-            {
-                let source = Address::from(&tx.pk);
-                return solution
-                    .validate(&self.wl_storage, &faucet_address, source)
-                    .expect("Must be able to validate PoW solutions");
-            }
-        }
-        false
-    }
-
-    #[cfg(not(feature = "mainnet"))]
-    /// Check if the tx has a valid PoW solution and if so invalidate it to
-    /// prevent replay.
-    fn invalidate_pow_solution_if_valid(
-        &mut self,
-        tx: &namada::types::transaction::WrapperTx,
-    ) -> bool {
-        if let Some(solution) = &tx.pow_solution {
-            if let Some(faucet_address) =
-                namada::ledger::parameters::read_faucet_account_parameter(
-                    &self.wl_storage,
-                )
-                .expect("Must be able to read faucet account parameter")
-            {
-                let source = Address::from(&tx.pk);
-                return solution
-                    .invalidate_if_valid(
-                        &mut self.wl_storage,
-                        &faucet_address,
-                        &source,
-                    )
-                    .expect("Must be able to validate PoW solutions");
-            }
-        }
-        false
     }
 
     /// Check that the Wrapper's signer has enough funds to pay fees. If a block
@@ -1437,8 +1388,6 @@ where
                     vp_wasm_cache,
                     tx_wasm_cache,
                 ),
-                #[cfg(not(feature = "mainnet"))]
-                false,
             ) {
                 Ok(result) => {
                     if !result.is_accepted() {
@@ -1462,19 +1411,10 @@ where
         }
 
         let result = match block_proposer {
-            Some(proposer) => protocol::transfer_fee(
-                temp_wl_storage,
-                proposer,
-                #[cfg(not(feature = "mainnet"))]
-                self.has_valid_pow_solution(wrapper),
-                wrapper,
-            ),
-            None => protocol::check_fees(
-                temp_wl_storage,
-                #[cfg(not(feature = "mainnet"))]
-                self.has_valid_pow_solution(wrapper),
-                wrapper,
-            ),
+            Some(proposer) => {
+                protocol::transfer_fee(temp_wl_storage, proposer, wrapper)
+            }
+            None => protocol::check_fees(temp_wl_storage, wrapper),
         };
 
         result.map_err(Error::TxApply)
@@ -1836,8 +1776,6 @@ mod test_utils {
             self.shell.wl_storage.storage.tx_queue.push(TxInQueue {
                 tx,
                 gas: inner_tx_gas,
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
             });
         }
 
@@ -2054,8 +1992,6 @@ mod test_utils {
                 keypair.ref_to(),
                 Epoch(0),
                 300_000.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2065,8 +2001,6 @@ mod test_utils {
         shell.wl_storage.storage.tx_queue.push(TxInQueue {
             tx: wrapper,
             gas: u64::MAX.into(),
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
         });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
@@ -2336,8 +2270,6 @@ mod test_mempool_validate {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2374,8 +2306,6 @@ mod test_mempool_validate {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2443,8 +2373,6 @@ mod test_mempool_validate {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2602,8 +2530,6 @@ mod test_mempool_validate {
                 keypair.ref_to(),
                 Epoch(0),
                 (block_gas_limit + 1).into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2636,8 +2562,6 @@ mod test_mempool_validate {
                 keypair.ref_to(),
                 Epoch(0),
                 0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2670,8 +2594,6 @@ mod test_mempool_validate {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2704,8 +2626,6 @@ mod test_mempool_validate {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2737,8 +2657,6 @@ mod test_mempool_validate {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 150_000.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2770,8 +2688,6 @@ mod test_mempool_validate {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();

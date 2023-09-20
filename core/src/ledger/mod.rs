@@ -10,6 +10,5 @@ pub mod pgf;
 pub mod replay_protection;
 pub mod storage;
 pub mod storage_api;
-pub mod testnet_pow;
 pub mod tx_env;
 pub mod vp_env;

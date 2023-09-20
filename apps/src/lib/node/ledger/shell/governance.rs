@@ -265,10 +265,7 @@ where
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
         shell.wl_storage.write(&pending_execution_key, ())?;
 
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code));
@@ -284,8 +281,6 @@ where
             &mut shell.vp_wasm_cache,
             &mut shell.tx_wasm_cache,
             None,
-            #[cfg(not(feature = "mainnet"))]
-            false,
         );
         shell
             .wl_storage

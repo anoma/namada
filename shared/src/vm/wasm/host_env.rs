@@ -130,7 +130,6 @@ where
             "namada_vp_verify_masp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_masp),
             "namada_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),
             "namada_vp_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_native_token),
-            "namada_vp_has_valid_pow" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_has_valid_pow),
             "namada_vp_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_log_string),
         },
     }

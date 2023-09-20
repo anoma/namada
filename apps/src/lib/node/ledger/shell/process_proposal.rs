@@ -1598,8 +1598,6 @@ mod test_process_proposal {
                 public_key,
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1651,8 +1649,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1724,8 +1720,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1790,8 +1784,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1846,8 +1838,6 @@ mod test_process_proposal {
                     keypair.ref_to(),
                     Epoch(0),
                     GAS_LIMIT_MULTIPLIER.into(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
                     None,
                 ))));
             outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1861,10 +1851,7 @@ mod test_process_proposal {
                     .unwrap();
             shell.enqueue_tx(outer_tx.clone(), gas_limit);
 
-            outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }));
+            outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             txs.push(outer_tx);
         }
         #[cfg(feature = "abcipp")]
@@ -1929,8 +1916,6 @@ mod test_process_proposal {
             keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         tx.header.chain_id = shell.chain_id.clone();
@@ -1985,8 +1970,6 @@ mod test_process_proposal {
             keypair.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         tx.header.chain_id = shell.chain_id.clone();
@@ -2035,8 +2018,6 @@ mod test_process_proposal {
             pk: keypair.ref_to(),
             epoch: Epoch(0),
             gas_limit: GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            pow_solution: None,
             unshield_section_hash: None,
         };
 
@@ -2071,10 +2052,7 @@ mod test_process_proposal {
     #[test]
     fn test_too_many_decrypted_txs() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -2155,8 +2133,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2232,8 +2208,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2291,8 +2265,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2355,8 +2327,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2378,8 +2348,6 @@ mod test_process_proposal {
             keypair_2.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
@@ -2427,8 +2395,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
@@ -2491,8 +2457,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = wrong_chain_id.clone();
@@ -2501,9 +2465,7 @@ mod test_process_proposal {
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
 
-        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            has_valid_pow: false,
-        }));
+        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         decrypted.add_section(Section::Signature(Signature::new(
             decrypted.sechashes(),
             &keypair,
@@ -2514,7 +2476,6 @@ mod test_process_proposal {
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
             gas: gas_limit,
-            has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
 
@@ -2557,8 +2518,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2601,8 +2560,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2612,9 +2569,7 @@ mod test_process_proposal {
             .set_data(Data::new("new transaction data".as_bytes().to_owned()));
         let mut decrypted = wrapper.clone();
 
-        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-            has_valid_pow: false,
-        }));
+        decrypted.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         decrypted.add_section(Section::Signature(Signature::new(
             decrypted.sechashes(),
             &keypair,
@@ -2625,7 +2580,6 @@ mod test_process_proposal {
         let wrapper_in_queue = TxInQueue {
             tx: wrapper,
             gas: gas_limit,
-            has_valid_pow: false,
         };
         shell.wl_storage.storage.tx_queue.push(wrapper_in_queue);
 
@@ -2665,8 +2619,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 (block_gas_limit + 1).into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2708,8 +2660,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 0.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2750,8 +2700,6 @@ mod test_process_proposal {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2792,8 +2740,6 @@ mod test_process_proposal {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2834,8 +2780,6 @@ mod test_process_proposal {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 150_000.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2876,8 +2820,6 @@ mod test_process_proposal {
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2921,8 +2863,6 @@ mod test_process_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();

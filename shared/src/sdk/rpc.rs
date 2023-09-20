@@ -12,8 +12,6 @@ use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::governance::storage::proposal::StorageProposal;
 use namada_core::ledger::governance::utils::Vote;
 use namada_core::ledger::storage::LastBlock;
-#[cfg(not(feature = "mainnet"))]
-use namada_core::ledger::testnet_pow;
 use namada_core::types::account::Account;
 use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
@@ -217,39 +215,6 @@ pub async fn known_address<C: crate::ledger::queries::Client + Sync>(
         }
         Address::Implicit(_) | Address::Internal(_) => Ok(true),
     }
-}
-
-#[cfg(not(feature = "mainnet"))]
-/// Check if the given address is a testnet faucet account address.
-pub async fn is_faucet_account<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-    address: &Address,
-) -> bool {
-    unwrap_client_response::<C, bool>(RPC.vp().is_faucet(client, address).await)
-}
-
-#[cfg(not(feature = "mainnet"))]
-/// Get faucet account address, if any is setup for the network.
-pub async fn get_faucet_address<C: crate::ledger::queries::Client + Sync>(
-    client: &C,
-) -> Option<Address> {
-    unwrap_client_response::<C, Option<Address>>(
-        RPC.vp().get_faucet_address(client).await,
-    )
-}
-
-#[cfg(not(feature = "mainnet"))]
-/// Obtain a PoW challenge for a withdrawal from a testnet faucet account, if
-/// any is setup for the network.
-pub async fn get_testnet_pow_challenge<
-    C: crate::ledger::queries::Client + Sync,
->(
-    client: &C,
-    source: Address,
-) -> testnet_pow::Challenge {
-    unwrap_client_response::<C, testnet_pow::Challenge>(
-        RPC.vp().testnet_pow_challenge(client, source).await,
-    )
 }
 
 // Consider how we want to handle this unwrap. It gets used in contexts that

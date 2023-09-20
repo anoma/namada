@@ -53,7 +53,7 @@ use crate::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use crate::types::transaction::pos::InitValidator;
-use crate::types::transaction::{Fee, TxType};
+use crate::types::transaction::Fee;
 use crate::{display_line, edisplay_line};
 
 #[cfg(feature = "std")]
@@ -299,149 +299,6 @@ pub async fn aux_signing_data<
     })
 }
 
-#[cfg(not(feature = "mainnet"))]
-/// Solve the PoW challenge if balance is insufficient to pay transaction fees
-/// or if solution is explicitly requested.
-pub async fn solve_pow_challenge<
-    C: crate::ledger::queries::Client + Sync,
-    IO: Io,
->(
-    client: &C,
-    args: &args::Tx,
-    requires_pow: bool,
-    total_fee: Amount,
-    balance: Amount,
-    source: Address,
-) -> Option<crate::core::ledger::testnet_pow::Solution> {
-    let is_bal_sufficient = total_fee <= balance;
-    if !is_bal_sufficient {
-        let token_addr = args.fee_token.clone();
-        let err_msg = format!(
-            "The wrapper transaction source doesn't have enough balance to \
-             pay fee {}, got {}.",
-            format_denominated_amount::<_, IO>(client, &token_addr, total_fee)
-                .await,
-            format_denominated_amount::<_, IO>(client, &token_addr, balance)
-                .await,
-        );
-        if !args.force && cfg!(feature = "mainnet") {
-            panic!("{}", err_msg);
-        }
-    }
-    // A PoW solution can be used to allow zero-fee testnet transactions
-    // If the address derived from the keypair doesn't have enough balance
-    // to pay for the fee, allow to find a PoW solution instead.
-    if (requires_pow || !is_bal_sufficient) && !args.dump_tx {
-        display_line!(
-            IO,
-            "The transaction requires the completion of a PoW challenge."
-        );
-        // Obtain a PoW challenge for faucet withdrawal
-        let challenge = rpc::get_testnet_pow_challenge(client, source).await;
-
-        // Solve the solution, this blocks until a solution is found
-        let solution = challenge.solve();
-        Some(solution)
-    } else {
-        None
-    }
-}
-
-#[cfg(not(feature = "mainnet"))]
-/// Update the PoW challenge inside the given transaction
-pub async fn update_pow_challenge<
-    C: crate::ledger::queries::Client + Sync,
-    IO: Io,
->(
-    client: &C,
-    args: &args::Tx,
-    tx: &mut Tx,
-    requires_pow: bool,
-    source: Address,
-) {
-    let gas_cost_key = parameter_storage::get_gas_cost_key();
-    let minimum_fee = match rpc::query_storage_value::<
-        C,
-        BTreeMap<Address, Amount>,
-    >(client, &gas_cost_key)
-    .await
-    .and_then(|map| {
-        map.get(&args.fee_token)
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| Error::Other("no fee found".to_string()))
-    }) {
-        Ok(amount) => amount,
-        Err(_e) => {
-            edisplay_line!(
-                IO,
-                "Could not retrieve the gas cost for token {}",
-                args.fee_token
-            );
-            if !args.force {
-                panic!();
-            } else {
-                token::Amount::default()
-            }
-        }
-    };
-    let fee_amount = match args.fee_amount {
-        Some(amount) => {
-            let validated_fee_amount = validate_amount::<_, IO>(
-                client,
-                amount,
-                &args.fee_token,
-                args.force,
-            )
-            .await
-            .expect("Expected to be able to validate fee");
-
-            let amount =
-                Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
-
-            if amount >= minimum_fee {
-                amount
-            } else if !args.force {
-                // Update the fee amount if it's not enough
-                display_line!(
-                    IO,
-                    "The provided gas price {} is less than the minimum \
-                     amount required {}, changing it to match the minimum",
-                    amount.to_string_native(),
-                    minimum_fee.to_string_native()
-                );
-                minimum_fee
-            } else {
-                amount
-            }
-        }
-        None => minimum_fee,
-    };
-    let total_fee = fee_amount * u64::from(args.gas_limit);
-
-    let balance_key = token::balance_key(&args.fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<C, token::Amount>(client, &balance_key)
-            .await
-            .unwrap_or_default();
-
-    if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
-        let pow_solution = solve_pow_challenge::<_, IO>(
-            client,
-            args,
-            requires_pow,
-            total_fee,
-            balance,
-            source,
-        )
-        .await;
-        wrapper.fee = Fee {
-            amount_per_gas_unit: fee_amount,
-            token: args.fee_token.clone(),
-        };
-        wrapper.pow_solution = pow_solution;
-    }
-}
-
 /// Informations about the post-tx balance of the tx's source. Used to correctly
 /// handle fee validation in the wrapper tx
 pub struct TxSourcePostBalance {
@@ -469,7 +326,6 @@ pub async fn wrap_tx<
     tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
     fee_payer: common::PublicKey,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Option<Epoch> {
     let fee_payer_address = Address::from(&fee_payer);
     // Validate fee amount and token
@@ -617,7 +473,6 @@ pub async fn wrap_tx<
                         if u64::try_from(descriptions).unwrap()
                             > descriptions_limit
                             && !args.force
-                            && cfg!(feature = "mainnet")
                         {
                             panic!(
                                 "Fee unshielding descriptions exceed the limit"
@@ -629,7 +484,7 @@ pub async fn wrap_tx<
                     }
                     Ok(None) => {
                         edisplay_line!(IO, "Missing unshielding transaction");
-                        if !args.force && cfg!(feature = "mainnet") {
+                        if !args.force {
                             panic!();
                         }
 
@@ -641,7 +496,7 @@ pub async fn wrap_tx<
                             "Error in fee unshielding generation: {}",
                             e
                         );
-                        if !args.force && cfg!(feature = "mainnet") {
+                        if !args.force {
                             panic!();
                         }
 
@@ -667,7 +522,7 @@ pub async fn wrap_tx<
                     .await,
                 );
                 edisplay_line!(IO, "{}", err_msg);
-                if !args.force && cfg!(feature = "mainnet") {
+                if !args.force {
                     panic!("{}", err_msg);
                 }
 
@@ -694,17 +549,6 @@ pub async fn wrap_tx<
         namada_core::types::hash::Hash(hasher.finalize().into())
     });
 
-    #[cfg(not(feature = "mainnet"))]
-    let pow_solution = solve_pow_challenge::<_, IO>(
-        client,
-        args,
-        requires_pow,
-        total_fee,
-        updated_balance,
-        fee_payer_address,
-    )
-    .await;
-
     tx.add_wrapper(
         Fee {
             amount_per_gas_unit: fee_amount,
@@ -714,8 +558,6 @@ pub async fn wrap_tx<
         epoch,
         // TODO: partially validate the gas limit in client
         args.gas_limit,
-        #[cfg(not(feature = "mainnet"))]
-        pow_solution,
         unshield_section_hash,
     );
 

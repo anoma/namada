@@ -15,7 +15,6 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::ledger::testnet_pow;
     use crate::proto::{Code, Data, Section, Tx};
     use crate::types::address::{masp, Address};
     use crate::types::hash::Hash;
@@ -191,9 +190,6 @@ pub mod wrapper_tx {
         /// The hash of the optional, unencrypted, unshielding transaction for
         /// fee payment
         pub unshield_section_hash: Option<Hash>,
-        #[cfg(not(feature = "mainnet"))]
-        /// A PoW solution can be used to allow zero-fee testnet transactions
-        pub pow_solution: Option<crate::ledger::testnet_pow::Solution>,
     }
 
     impl WrapperTx {
@@ -207,9 +203,6 @@ pub mod wrapper_tx {
             pk: common::PublicKey,
             epoch: Epoch,
             gas_limit: GasLimit,
-            #[cfg(not(feature = "mainnet"))] pow_solution: Option<
-                testnet_pow::Solution,
-            >,
             unshield_hash: Option<Hash>,
         ) -> WrapperTx {
             Self {
@@ -218,8 +211,6 @@ pub mod wrapper_tx {
                 epoch,
                 gas_limit,
                 unshield_section_hash: unshield_hash,
-                #[cfg(not(feature = "mainnet"))]
-                pow_solution,
             }
         }
 
@@ -293,10 +284,7 @@ pub mod wrapper_tx {
         ) -> Result<Tx, WrapperTxErr> {
             let mut tx =
                 Tx::from_type(crate::types::transaction::TxType::Decrypted(
-                    crate::types::transaction::DecryptedTx::Decrypted {
-                        #[cfg(not(feature = "mainnet"))]
-                        has_valid_pow: false,
-                    },
+                    crate::types::transaction::DecryptedTx::Decrypted,
                 ));
             let masp_section = tx.add_section(Section::MaspTx(unshield));
             let masp_hash = Hash(
@@ -441,8 +429,6 @@ pub mod wrapper_tx {
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -476,8 +462,6 @@ pub mod wrapper_tx {
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
                     None,
                 ))));
             wrapper.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -514,8 +498,6 @@ pub mod wrapper_tx {
                     keypair.ref_to(),
                     Epoch(0),
                     Default::default(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
                     None,
                 ))));
 
