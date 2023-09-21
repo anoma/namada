@@ -2,6 +2,8 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::types::ethereum_events::EthereumEvent;
+
 /// A result of a wasm call to host functions that may fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostEnvResult {
@@ -99,3 +101,30 @@ mod tx_queue {
 
 #[cfg(feature = "ferveo-tpke")]
 pub use tx_queue::{TxInQueue, TxQueue};
+
+/// Expired transaction kinds.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub enum ExpiredTx {
+    /// Broadcast the given Ethereum event.
+    EthereumEvent(EthereumEvent),
+}
+
+/// Queue of expired transactions that need to be retransmitted.
+#[derive(Default, Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct ExpiredTxsQueue {
+    inner: Vec<ExpiredTx>,
+}
+
+impl ExpiredTxsQueue {
+    /// Push a new transaction to the back of the queue.
+    #[inline]
+    pub fn push(&mut self, tx: ExpiredTx) {
+        self.inner.push(tx);
+    }
+
+    /// Consume all the transactions in the queue.
+    #[inline]
+    pub fn drain(&mut self) -> impl Iterator<Item = ExpiredTx> + '_ {
+        self.inner.drain(..)
+    }
+}

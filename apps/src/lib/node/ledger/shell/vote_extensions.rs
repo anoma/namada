@@ -104,8 +104,19 @@ where
     }
 
     /// Extend PreCommit votes with [`ethereum_events::Vext`] instances.
+    #[inline]
     pub fn extend_vote_with_ethereum_events(
         &mut self,
+    ) -> Option<Signed<ethereum_events::Vext>> {
+        let events = self.new_ethereum_events();
+        self.sign_ethereum_events(events)
+    }
+
+    /// Sign the given Ethereum events, and return the associated
+    /// vote extension protocol transaction.
+    pub fn sign_ethereum_events(
+        &mut self,
+        ethereum_events: Vec<EthereumEvent>,
     ) -> Option<Signed<ethereum_events::Vext>> {
         if !self.wl_storage.ethbridge_queries().is_bridge_active() {
             return None;
@@ -124,7 +135,7 @@ where
                 .get_current_decision_height(),
             #[cfg(not(feature = "abcipp"))]
             block_height: self.wl_storage.storage.get_last_block_height(),
-            ethereum_events: self.new_ethereum_events(),
+            ethereum_events,
             validator_addr,
         };
         if !ext.ethereum_events.is_empty() {
