@@ -670,6 +670,9 @@ impl<IO: Io> CliApi<IO> {
                 Utils::FetchWasms(FetchWasms(args)) => {
                     utils::fetch_wasms(global_args, args).await
                 }
+                Utils::ValidateWasm(ValidateWasm(args)) => {
+                    utils::validate_wasm(args)
+                }
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
                 }
