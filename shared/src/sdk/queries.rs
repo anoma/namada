@@ -16,7 +16,8 @@ use crate::tendermint::block::Height;
 /// type-safe methods from a root [`crate::ledger::queries::Router`], generated
 /// via `router!` macro.
 #[cfg(any(test, feature = "async-client"))]
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait Client {
     /// `std::io::Error` can happen in decoding with
     /// `BorshDeserialize::try_from_slice`
@@ -228,7 +229,8 @@ pub trait Client {
         R: tendermint_rpc::SimpleRequest;
 }
 
-#[async_trait::async_trait(?Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
     type Error = Error;
 
