@@ -38,10 +38,10 @@ where
     Ok(())
 }
 
-/// Delete a tally from storage, and return the associated payload of
+/// Delete a tally from storage, and return the associated value of
 /// type `T` being voted on, in case it has accumulated more than 1/3
 /// of fractional voting power behind it.
-#[must_use = "The optional payload returned by this function must be used"]
+#[must_use = "The storage value returned by this function must be used"]
 pub fn delete<D, H, T>(
     wl_storage: &mut WlStorage<D, H>,
     keys: &vote_tallies::Keys<T>,
