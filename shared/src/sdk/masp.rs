@@ -35,8 +35,8 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
-    ConvertDescription, I128Sum, I32Sum, OutputDescription, SpendDescription,
-    TxOut, U64Sum,
+    ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
+    U64Sum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
@@ -989,7 +989,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             Address,
             MaspDenom,
             _,
-            I32Sum,
+            I128Sum,
             MerklePath<Node>,
         ) = rpc::query_conversion(client, asset_type).await?;
         self.asset_types

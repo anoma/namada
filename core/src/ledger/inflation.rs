@@ -2,8 +2,9 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use namada_core::types::dec::Dec;
-
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types::address::Address;
+use crate::types::dec::Dec;
 use crate::types::token;
 
 /// The domains of inflation
@@ -47,6 +48,32 @@ pub struct RewardsController {
 }
 
 impl RewardsController {
+    /// Initialize a new PD controller
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        locked_tokens: token::Amount,
+        total_tokens: token::Amount,
+        locked_ratio_target: Dec,
+        locked_ratio_last: Dec,
+        max_reward_rate: Dec,
+        last_inflation_amount: token::Amount,
+        p_gain_nom: Dec,
+        d_gain_nom: Dec,
+        epochs_per_year: u64,
+    ) -> Self {
+        Self {
+            locked_tokens,
+            total_tokens,
+            locked_ratio_target,
+            locked_ratio_last,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+        }
+    }
+
     /// Calculate a new rewards rate
     pub fn run(self) -> ValsToUpdate {
         let Self {
@@ -110,13 +137,40 @@ impl RewardsController {
     }
 }
 
+/// Function that allows the protocol to mint some number of tokens of a desired
+/// type to a destination address TODO: think of error cases that must be
+/// handled.
+pub fn mint_tokens<S>(
+    storage: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    let dest_key = token::balance_key(token, target);
+    let mut dest_bal: token::Amount =
+        storage.read(&dest_key)?.unwrap_or_default();
+    dest_bal.receive(&amount);
+    storage.write(&dest_key, dest_bal)?;
+
+    // Update the total supply of the tokens in storage
+    let mut total_tokens: token::Amount = storage
+        .read(&token::minted_balance_key(token))?
+        .unwrap_or_default();
+    total_tokens.receive(&amount);
+    storage.write(&token::minted_balance_key(token), total_tokens)?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
 
-    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
-
     use super::*;
+    use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
     #[test]
     fn test_inflation_calc_up() {

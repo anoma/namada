@@ -2126,7 +2126,7 @@ pub async fn query_conversions<
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
     for ((addr, _), epoch, conv, _) in conv_state.assets.values() {
-        let amt: masp_primitives::transaction::components::I32Sum =
+        let amt: masp_primitives::transaction::components::I128Sum =
             conv.clone().into();
         // If the user has specified any targets, then meet them
         // If we have a sentinel conversion, then skip printing
@@ -2181,7 +2181,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     Address,
     MaspDenom,
     Epoch,
-    masp_primitives::transaction::components::I32Sum,
+    masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 )> {
     namada::sdk::rpc::query_conversion(client, asset_type).await

@@ -15,7 +15,7 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
-use namada::types::uint::Uint;
+use namada::types::uint::I256;
 use namada::types::{storage, token};
 
 /// Genesis configuration file format
@@ -38,6 +38,7 @@ pub mod genesis_config {
     use namada::types::key::*;
     use namada::types::time::Rfc3339String;
     use namada::types::token::Denomination;
+    use namada::types::uint::I256;
     use namada::types::{storage, token};
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
@@ -213,6 +214,9 @@ pub mod genesis_config {
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
         pub balances: Option<HashMap<String, token::Amount>>,
+        // Token parameters
+        // XXX: u64 doesn't work with toml-rs!
+        pub parameters: Option<token::parameters::Parameters>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -404,6 +408,9 @@ pub mod genesis_config {
         implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
         TokenAccount {
+            last_locked_ratio: Dec::zero(),
+            last_inflation: I256::zero(),
+            parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
             balances: config
@@ -818,6 +825,13 @@ pub struct TokenAccount {
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
+    // please put the last inflation amount here.
+    /// Token parameters
+    pub parameters: token::parameters::Parameters,
+    /// Token inflation from the last epoch (read + write for every epoch)
+    pub last_inflation: I256,
+    /// Token shielded ratio from the last epoch (read + write for every epoch)
+    pub last_locked_ratio: Dec,
 }
 
 #[derive(
@@ -903,11 +917,10 @@ pub fn genesis(num_validators: u64) -> Genesis {
     use namada::ledger::eth_bridge::{
         Contracts, Erc20WhitelistEntry, UpgradeableContract,
     };
-    use namada::types::address::{
-        self, apfel, btc, dot, eth, kartoffel, nam, schnitzel, wnam,
-    };
+    use namada::types::address::{self, nam, wnam};
     use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada::types::ethereum_events::EthAddress;
+    use namada::types::uint::Uint;
 
     use crate::wallet;
 
@@ -1074,21 +1087,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         balances.insert((&validator.account_key).into(), default_key_tokens);
     }
 
-    /// Deprecated function, soon to be deleted. Generates default tokens
-    fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
-        vec![
-            (nam(), ("NAM", 6.into())),
-            (btc(), ("BTC", 8.into())),
-            (eth(), ("ETH", 18.into())),
-            (dot(), ("DOT", 10.into())),
-            (schnitzel(), ("Schnitzel", 6.into())),
-            (apfel(), ("Apfel", 6.into())),
-            (kartoffel(), ("Kartoffel", 6.into())),
-        ]
-        .into_iter()
-        .collect()
-    }
-    let token_accounts = tokens()
+    let token_accounts = address::tokens()
         .into_iter()
         .map(|(address, (_, denom))| TokenAccount {
             address,
@@ -1098,6 +1097,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .into_iter()
                 .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
                 .collect(),
+            parameters: token::parameters::Parameters::default(),
+            last_inflation: I256::zero(),
+            last_locked_ratio: Dec::zero(),
         })
         .collect();
     Genesis {

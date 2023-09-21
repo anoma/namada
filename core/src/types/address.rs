@@ -15,10 +15,15 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::ibc::Signer;
+use crate::ledger::parameters;
+use crate::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
+use crate::ledger::storage_api::StorageWrite;
+use crate::types::dec::Dec;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::key;
 use crate::types::key::PublicKeyHash;
 use crate::types::token::Denomination;
+use crate::types::uint::I256;
+use crate::types::{key, token};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
@@ -68,7 +73,7 @@ pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
 #[rustfmt::skip]
 mod internal {
-    pub const POS: &str = 
+    pub const POS: &str =
         "ano::Proof of Stake                          ";
     pub const POS_SLASH_POOL: &str =
         "ano::Proof of Stake Slash Pool               ";
@@ -696,6 +701,58 @@ pub fn masp_rewards() -> HashMap<Address, (u32, u32)> {
     ]
     .into_iter()
     .collect()
+}
+
+/// init_token_storage is useful when the initialization of the network is not
+/// properly made. This properly sets up the storage such that inflation
+/// calculations can be ran on the token addresses. We assume a total supply
+/// that may not be real
+pub fn init_token_storage<D, H>(
+    wl_storage: &mut WlStorage<D, H>,
+    epochs_per_year: u64,
+) where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    let masp_rewards = masp_rewards();
+    let masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
+
+    wl_storage
+        .write(
+            &parameters::storage::get_epochs_per_year_key(),
+            epochs_per_year,
+        )
+        .unwrap();
+    for address in masp_reward_keys {
+        wl_storage
+            .write(
+                &token::minted_balance_key(address),
+                token::Amount::native_whole(5), // arbitrary amount
+            )
+            .unwrap();
+        let default_gain = Dec::from_str("0.1").unwrap();
+        wl_storage
+            .write(&token::last_inflation(address), I256::zero())
+            .expect("inflation ought to be written");
+        wl_storage
+            .write(&token::last_locked_ratio(address), Dec::zero())
+            .expect("last locked set default");
+        wl_storage
+            .write(
+                &token::parameters::max_reward_rate(address),
+                Dec::from_str("0.1").unwrap(),
+            )
+            .expect("max reward rate write");
+        wl_storage
+            .write(&token::parameters::kp_sp_gain(address), default_gain)
+            .expect("kp sp gain write");
+        wl_storage
+            .write(&token::parameters::kd_sp_gain(address), default_gain)
+            .expect("kd sp gain write");
+        wl_storage
+            .write(&token::parameters::locked_token_ratio(address), Dec::zero())
+            .expect("Write locked ratio");
+    }
 }
 
 #[cfg(test)]

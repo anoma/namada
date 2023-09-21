@@ -59,6 +59,7 @@ mod tests {
         types, update_allowed_conversions, WlStorage,
     };
     use namada::ledger::storage_api::{self, StorageWrite};
+    use namada::types::address::init_token_storage;
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
@@ -144,6 +145,7 @@ mod tests {
         storage.block.pred_epochs.new_epoch(BlockHeight(100), 1000);
         // make wl_storage to update conversion for a new epoch
         let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
+        init_token_storage(&mut wl_storage, 60);
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");

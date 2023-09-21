@@ -1,4 +1,5 @@
 //! A basic fungible token
+pub mod parameters;
 
 use std::fmt::Display;
 use std::iter::Sum;
@@ -11,6 +12,7 @@ use ethabi::ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use self::parameters::key_of_token;
 use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::applications::transfer::Amount as IbcAmount;
 use crate::ledger::storage_api::token::read_denom;
@@ -619,6 +621,20 @@ impl Mul<(u32, u32)> for Amount {
     }
 }
 
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b).
+impl Mul<(I256, I256)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (I256, I256)) -> Self::Output {
+        let amt = Amount {
+            raw: (self.raw / rhs.1.0) * rhs.0.0,
+        };
+        self.raw %= rhs.1.0;
+        (amt, self)
+    }
+}
+
 impl Div<u64> for Amount {
     type Output = Self;
 
@@ -810,6 +826,10 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+/// Last calculated inflation value handed out
+pub const LAST_INFLATION: &str = "last_inflation";
+/// The last locked ratio
+pub const LAST_LOCKED_RATIO: &str = "last_locked_ratio";
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -820,11 +840,11 @@ pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
 
 /// Obtain a storage key prefix for all users' balances.
 pub fn balance_prefix(token_addr: &Address) -> Key {
-    Key::from(Address::Internal(InternalAddress::Multitoken).to_db_key())
-        .push(&token_addr.to_db_key())
-        .expect("Cannot obtain a storage key")
-        .push(&BALANCE_STORAGE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
+    key_of_token(
+        token_addr,
+        BALANCE_STORAGE_KEY,
+        "cannot obtain a storage key",
+    )
 }
 
 /// Obtain a storage key for the multitoken minter.
@@ -908,6 +928,24 @@ pub fn is_masp_key(key: &Key) -> bool {
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)))
+}
+
+/// The last locked ratio of a token
+pub fn last_locked_ratio(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        LAST_LOCKED_RATIO,
+        "cannot obtain storage key for the last locked ratio",
+    )
+}
+
+/// The last inflation of a token
+pub fn last_inflation(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        LAST_INFLATION,
+        "cannot obtain storage key for the last inflation rate",
+    )
 }
 
 /// Check if the given storage key is for a minter of a unspecified token.

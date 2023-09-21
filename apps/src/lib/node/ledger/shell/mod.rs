@@ -1482,6 +1482,7 @@ mod test_utils {
     use namada::proto::{Code, Data};
     use namada::tendermint_proto::abci::VoteInfo;
     use namada::types::address;
+    use namada::types::address::init_token_storage;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
     use namada::types::hash::Hash;
@@ -1971,6 +1972,7 @@ mod test_utils {
             .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
+        init_token_storage(&mut shell.wl_storage, 60);
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let mut wrapper =

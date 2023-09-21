@@ -3812,7 +3812,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "0.2.0"
-source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
+source = "git+https://github.com/juped/masp?rev=1a68887b118781f31960dc983d779c2bc6cce971#1a68887b118781f31960dc983d779c2bc6cce971"
 dependencies = [
  "borsh 0.9.4",
  "chacha20 0.9.1",
@@ -3825,7 +3825,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
+source = "git+https://github.com/juped/masp?rev=1a68887b118781f31960dc983d779c2bc6cce971#1a68887b118781f31960dc983d779c2bc6cce971"
 dependencies = [
  "aes 0.7.5",
  "bip0039",
@@ -3856,7 +3856,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "0.9.0"
-source = "git+https://github.com/anoma/masp?rev=50acc5028fbcd52a05970fe7991c7850ab04358e#50acc5028fbcd52a05970fe7991c7850ab04358e"
+source = "git+https://github.com/juped/masp?rev=1a68887b118781f31960dc983d779c2bc6cce971#1a68887b118781f31960dc983d779c2bc6cce971"
 dependencies = [
  "bellman",
  "blake2b_simd",

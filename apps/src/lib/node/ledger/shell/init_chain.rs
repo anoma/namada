@@ -326,14 +326,36 @@ where
             address,
             denom,
             balances,
+            parameters,
+            last_inflation,
+            last_locked_ratio,
         } in accounts
         {
+            // Init token parameters and last inflation and caching rates
+            parameters.init_storage(&address, &mut self.wl_storage);
+            self.wl_storage
+                .write(&token::last_inflation(&address), last_inflation)
+                .unwrap();
+            self.wl_storage
+                .write(&token::last_locked_ratio(&address), last_locked_ratio)
+                .unwrap();
+
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, &address, denom).unwrap();
+
+            let mut total_balance_for_token = token::Amount::default();
             for (owner, amount) in balances {
+                total_balance_for_token += amount;
                 credit_tokens(&mut self.wl_storage, &address, &owner, amount)
                     .unwrap();
             }
+            // Write the total amount of tokens for the ratio
+            self.wl_storage
+                .write(
+                    &token::minted_balance_key(&address),
+                    total_balance_for_token,
+                )
+                .unwrap();
         }
     }
 
