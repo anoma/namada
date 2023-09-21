@@ -86,11 +86,6 @@ pub enum Error {
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-enum WasmPayload<'fetch> {
-    Hash(&'fetch Hash),
-    Code(&'fetch [u8]),
-}
-
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
@@ -112,19 +107,10 @@ where
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingCode)?;
-    let (tx_hash, code) = match tx_code.code {
-        Commitment::Hash(code_hash) => (code_hash, None),
-        Commitment::Id(tx_code) => (Hash::sha256(&tx_code), Some(tx_code)),
-    };
-
-    let code_or_hash = match code {
-        Some(ref code) => WasmPayload::Code(code),
-        None => WasmPayload::Hash(&tx_hash),
-    };
 
     let (module, store) = fetch_or_compile(
         tx_wasm_cache,
-        code_or_hash,
+        &tx_code.code,
         write_log,
         storage,
         gas_meter,
@@ -195,7 +181,7 @@ where
 /// that triggered the execution.
 #[allow(clippy::too_many_arguments)]
 pub fn vp<DB, H, CA>(
-    vp_code_hash: &Hash,
+    vp_code_hash: Hash,
     tx: &Tx,
     tx_index: &TxIndex,
     address: &Address,
@@ -214,7 +200,7 @@ where
     // Compile the wasm module
     let (module, store) = fetch_or_compile(
         &mut vp_wasm_cache,
-        WasmPayload::Hash(vp_code_hash),
+        &Commitment::Hash(vp_code_hash),
         write_log,
         storage,
         gas_meter,
@@ -251,7 +237,7 @@ where
     run_vp(
         module,
         imports,
-        vp_code_hash,
+        &vp_code_hash,
         tx,
         address,
         keys_changed,
@@ -396,7 +382,7 @@ where
         // Compile the wasm module
         let (module, store) = fetch_or_compile(
             vp_wasm_cache,
-            WasmPayload::Hash(&vp_code_hash),
+            &Commitment::Hash(vp_code_hash),
             write_log,
             storage,
             gas_meter,
@@ -452,7 +438,7 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
 // loading and code compilation gas costs.
 fn fetch_or_compile<DB, H, CN, CA>(
     wasm_cache: &mut Cache<CN, CA>,
-    code_or_hash: WasmPayload,
+    code_or_hash: &Commitment,
     write_log: &WriteLog,
     storage: &Storage<DB, H>,
     gas_meter: &mut dyn GasMetering,
@@ -464,7 +450,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     match code_or_hash {
-        WasmPayload::Hash(code_hash) => {
+        Commitment::Hash(code_hash) => {
             let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
                 Some((module, store)) => {
                     // Gas accounting even if the compiled module is in cache
@@ -538,7 +524,7 @@ where
             gas_meter.add_compiling_gas(tx_len)?;
             Ok((module, store))
         }
-        WasmPayload::Code(code) => {
+        Commitment::Id(code) => {
             gas_meter.add_compiling_gas(
                 u64::try_from(code.len())
                     .map_err(|e| Error::ConversionError(e.to_string()))?,
@@ -749,7 +735,7 @@ mod tests {
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
         let passed = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -781,7 +767,7 @@ mod tests {
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
         let passed = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -833,7 +819,7 @@ mod tests {
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -853,7 +839,7 @@ mod tests {
         outer_tx.header.chain_id = storage.chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         let error = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -965,7 +951,7 @@ mod tests {
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -1091,7 +1077,7 @@ mod tests {
         outer_tx.set_code(Code::new(vec![]));
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -1168,7 +1154,7 @@ mod tests {
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let passed = vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,
@@ -1300,7 +1286,7 @@ mod tests {
         storage.write(&len_key, code_len).unwrap();
 
         vp(
-            &code_hash,
+            code_hash,
             &outer_tx,
             &tx_index,
             &addr,

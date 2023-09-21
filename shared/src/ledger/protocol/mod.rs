@@ -812,7 +812,7 @@ where
                     //    the first signature verification (if any) is accounted
                     // twice
                     wasm::run::vp(
-                        &vp_code_hash,
+                        vp_code_hash,
                         tx,
                         tx_index,
                         addr,
