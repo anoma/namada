@@ -12,6 +12,7 @@ use num_traits::ops::checked::CheckedAdd;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::types::token::Amount;
 use crate::types::uint::Uint;
 
 /// Namada voting power, normalized to the range `0 - 2^32`.
@@ -167,6 +168,24 @@ impl Mul<&FractionalVotingPower> for FractionalVotingPower {
 
     fn mul(self, rhs: &FractionalVotingPower) -> Self::Output {
         Self(self.0 * rhs.0)
+    }
+}
+
+impl Mul<Amount> for FractionalVotingPower {
+    type Output = Amount;
+
+    fn mul(self, rhs: Amount) -> Self::Output {
+        self * &rhs
+    }
+}
+
+impl Mul<&Amount> for FractionalVotingPower {
+    type Output = Amount;
+
+    fn mul(self, &rhs: &Amount) -> Self::Output {
+        let whole: Uint = rhs.into();
+        let fraction = (self.0 * whole).to_integer();
+        Amount::from_uint(fraction, 0u8).unwrap()
     }
 }
 

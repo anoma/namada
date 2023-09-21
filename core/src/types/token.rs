@@ -190,9 +190,13 @@ impl Amount {
         denom: impl Into<u8>,
     ) -> Result<Self, AmountParseError> {
         let denom = denom.into();
+        let uint = uint.into();
+        if denom == 0 {
+            return Ok(Self { raw: uint });
+        }
         match Uint::from(10)
             .checked_pow(Uint::from(denom))
-            .and_then(|scaling| scaling.checked_mul(uint.into()))
+            .and_then(|scaling| scaling.checked_mul(uint))
         {
             Some(amount) => Ok(Self { raw: amount }),
             None => Err(AmountParseError::ConvertToDecimal),

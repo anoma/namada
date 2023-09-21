@@ -5,7 +5,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
-use namada_core::hints;
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::{BlockHeight, Epoch};
@@ -27,31 +26,48 @@ pub(super) mod update;
 pub type Votes = BTreeMap<Address, BlockHeight>;
 
 /// The voting power behind a tally aggregated over multiple epochs.
-pub type EpochedVotingPower = BTreeMap<Epoch, FractionalVotingPower>;
+pub type EpochedVotingPower = BTreeMap<Epoch, token::Amount>;
 
 /// Extension methods for [`EpochedVotingPower`] instances.
 pub trait EpochedVotingPowerExt {
-    /// Get the total voting power staked across all epochs
-    /// in this [`EpochedVotingPower`].
-    fn get_epoch_voting_powers<D, H>(
+    /// Query the stake of the most secure [`Epoch`] referenced by an
+    /// [`EpochedVotingPower`]. This translates to the [`Epoch`] with
+    /// the most staked tokens.
+    fn epoch_max_voting_power<D, H>(
         &self,
         wl_storage: &WlStorage<D, H>,
-    ) -> HashMap<Epoch, token::Amount>
+    ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync;
 
-    /// Get the weighted average of some tally's voting powers pertaining to all
-    /// epochs it was held in.
-    fn average_voting_power<D, H>(
+    /// Fetch the sum of the stake tallied on an
+    /// [`EpochedVotingPower`].
+    fn tallied_stake(&self) -> token::Amount;
+
+    /// Fetch the sum of the stake tallied on an
+    /// [`EpochedVotingPower`], as a fraction over
+    /// the maximum stake seen in the epochs voted on.
+    #[inline]
+    fn fractional_stake<D, H>(
         &self,
         wl_storage: &WlStorage<D, H>,
     ) -> FractionalVotingPower
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync;
+        H: 'static + StorageHasher + Sync,
+    {
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+            return FractionalVotingPower::NULL;
+        };
+        FractionalVotingPower::new(
+            self.tallied_stake().into(),
+            max_voting_power.into(),
+        )
+        .unwrap()
+    }
 
-    /// Check if the [`Tally`] associated with this [`EpochedVotingPower`]
+    /// Check if the [`Tally`] associated with an [`EpochedVotingPower`]
     /// can be considered `seen`.
     #[inline]
     fn has_majority_quorum<D, H>(&self, wl_storage: &WlStorage<D, H>) -> bool
@@ -59,16 +75,29 @@ pub trait EpochedVotingPowerExt {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        self.average_voting_power(wl_storage)
-            > FractionalVotingPower::TWO_THIRDS
+        let Some(max_voting_power) = self.epoch_max_voting_power(wl_storage) else {
+            return false;
+        };
+        // NB: Preserve the safety property of the Tendermint protocol across
+        // all the epochs we vote on.
+        //
+        // PROOF: We calculate the maximum amount of tokens S_max staked on
+        // one of the epochs the tally occurred in. At most F = 1/3 * S_max
+        // of the combined stake can be Byzantine, for the protocol to uphold
+        // its linearizability property whilst remaining "secure" against
+        // arbitrarily faulty nodes. Therefore, we can consider a tally secure
+        // if has accumulated an amount of stake greater than the threshold
+        // stake of S_max - F = 2/3 S_max.
+        let threshold = FractionalVotingPower::TWO_THIRDS * max_voting_power;
+        self.tallied_stake() > threshold
     }
 }
 
 impl EpochedVotingPowerExt for EpochedVotingPower {
-    fn get_epoch_voting_powers<D, H>(
+    fn epoch_max_voting_power<D, H>(
         &self,
         wl_storage: &WlStorage<D, H>,
-    ) -> HashMap<Epoch, token::Amount>
+    ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -76,57 +105,13 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
         self.keys()
             .copied()
             .map(|epoch| {
-                (
-                    epoch,
-                    wl_storage
-                        .pos_queries()
-                        .get_total_voting_power(Some(epoch)),
-                )
+                wl_storage.pos_queries().get_total_voting_power(Some(epoch))
             })
-            .collect()
+            .max()
     }
 
-    fn average_voting_power<D, H>(
-        &self,
-        wl_storage: &WlStorage<D, H>,
-    ) -> FractionalVotingPower
-    where
-        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync,
-    {
-        // if we only voted across a single epoch, we can avoid doing
-        // expensive I/O operations
-        if hints::likely(self.len() == 1) {
-            // TODO: switch to [`BTreeMap::first_entry`] when we start
-            // using Rust >= 1.66
-            let Some(&power) = self.values().next() else {
-                hints::cold();
-                unreachable!("The map has one value");
-            };
-            return power;
-        }
-
-        let epoch_voting_powers = self.get_epoch_voting_powers(wl_storage);
-        let total_voting_power = epoch_voting_powers
-            .values()
-            .fold(token::Amount::from(0u64), |accum, &stake| accum + stake);
-
-        self.iter().map(|(&epoch, &power)| (epoch, power)).fold(
-            FractionalVotingPower::NULL,
-            |average, (epoch, aggregated_voting_power)| {
-                let epoch_voting_power = epoch_voting_powers
-                    .get(&epoch)
-                    .copied()
-                    .expect("This value should be in the map");
-                debug_assert!(epoch_voting_power > 0.into());
-                let weight = FractionalVotingPower::new(
-                    epoch_voting_power.into(),
-                    total_voting_power.into(),
-                )
-                .unwrap();
-                average + weight * aggregated_voting_power
-            },
-        )
+    fn tallied_stake(&self) -> token::Amount {
+        self.values().copied().sum::<token::Amount>()
     }
 }
 
@@ -153,7 +138,7 @@ pub struct Tally {
 pub fn calculate_new<D, H>(
     wl_storage: &WlStorage<D, H>,
     seen_by: Votes,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), token::Amount>,
 ) -> Result<Tally>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -164,14 +149,14 @@ where
         match voting_powers
             .get(&(validator.to_owned(), block_height.to_owned()))
         {
-            Some(voting_power) => {
+            Some(&voting_power) => {
                 let epoch = wl_storage
                     .pos_queries()
                     .get_epoch(*block_height)
                     .expect("The queried epoch should be known");
                 let aggregated = seen_by_voting_power
                     .entry(epoch)
-                    .or_insert(FractionalVotingPower::NULL);
+                    .or_insert_with(token::Amount::zero);
                 *aggregated += voting_power;
             }
             None => {
@@ -202,15 +187,10 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::types::dec::Dec;
-    use namada_core::types::key::RefTo;
     use namada_core::types::storage::BlockHeight;
     use namada_core::types::{address, token};
     use namada_proof_of_stake::parameters::PosParams;
-    use namada_proof_of_stake::{
-        become_validator, bond_tokens, write_pos_params, BecomeValidator,
-    };
+    use namada_proof_of_stake::write_pos_params;
 
     use super::*;
     use crate::test_utils;
@@ -305,18 +285,21 @@ mod tests {
     /// fast path of the algorithm.
     #[test]
     fn test_tally_vote_single_epoch() {
-        let dummy_storage = TestWlStorage::default();
+        let (_, dummy_validator_stake) = test_utils::default_validator();
+        let (dummy_storage, _) = test_utils::setup_default_storage();
 
-        let aggregated =
-            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        let aggregated = EpochedVotingPower::from([(
+            0.into(),
+            FractionalVotingPower::HALF * dummy_validator_stake,
+        )]);
         assert_eq!(
-            aggregated.average_voting_power(&dummy_storage),
+            aggregated.fractional_stake(&dummy_storage),
             FractionalVotingPower::HALF
         );
     }
 
     /// Test that voting on a tally across epoch boundaries accounts
-    /// for the average voting power attained along those epochs.
+    /// for the maximum voting power attained along those epochs.
     #[test]
     fn test_voting_across_epoch_boundaries() {
         // the validators that will vote in the tally
@@ -329,6 +312,9 @@ mod tests {
         let validator_3 = address::testing::established_address_3();
         let validator_3_stake = token::Amount::native_whole(100);
 
+        let total_stake =
+            validator_1_stake + validator_2_stake + validator_3_stake;
+
         // start epoch 0 with validator 1
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from([(validator_1.clone(), validator_1_stake)]),
@@ -339,32 +325,16 @@ mod tests {
             pipeline_len: 1,
             ..Default::default()
         };
-        write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
+        write_pos_params(&mut wl_storage, params).expect("Test failed");
 
         // insert validators 2 and 3 at epoch 1
-        for (validator, stake) in [
-            (&validator_2, validator_2_stake),
-            (&validator_3, validator_3_stake),
-        ] {
-            let keys = test_utils::TestValidatorKeys::generate();
-            let consensus_key = &keys.consensus.ref_to();
-            let eth_cold_key = &keys.eth_gov.ref_to();
-            let eth_hot_key = &keys.eth_bridge.ref_to();
-            become_validator(BecomeValidator {
-                storage: &mut wl_storage,
-                params: &params,
-                address: validator,
-                consensus_key,
-                eth_cold_key,
-                eth_hot_key,
-                current_epoch: 0.into(),
-                commission_rate: Dec::new(5, 2).unwrap(),
-                max_commission_rate_change: Dec::new(1, 2).unwrap(),
-            })
-            .expect("Test failed");
-            bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
-                .expect("Test failed");
-        }
+        test_utils::append_validators_to_storage(
+            &mut wl_storage,
+            HashMap::from([
+                (validator_2.clone(), validator_2_stake),
+                (validator_3.clone(), validator_3_stake),
+            ]),
+        );
 
         // query validators to make sure they were inserted correctly
         let query_validators = |epoch: u64| {
@@ -382,6 +352,12 @@ mod tests {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(0.into())),
+            validator_1_stake,
+        );
+        assert_eq!(
             epoch_1_validators,
             HashMap::from([
                 (validator_1, validator_1_stake),
@@ -389,15 +365,21 @@ mod tests {
                 (validator_3, validator_3_stake),
             ])
         );
+        assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(1.into())),
+            total_stake,
+        );
 
         // check that voting works as expected
         let aggregated = EpochedVotingPower::from([
-            (0.into(), FractionalVotingPower::ONE_THIRD),
-            (1.into(), FractionalVotingPower::ONE_THIRD),
+            (0.into(), FractionalVotingPower::ONE_THIRD * total_stake),
+            (1.into(), FractionalVotingPower::ONE_THIRD * total_stake),
         ]);
         assert_eq!(
-            aggregated.average_voting_power(&wl_storage),
-            FractionalVotingPower::ONE_THIRD
+            aggregated.fractional_stake(&wl_storage),
+            FractionalVotingPower::TWO_THIRDS
         );
     }
 }

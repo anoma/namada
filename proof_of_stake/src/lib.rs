@@ -4000,7 +4000,9 @@ where
     }
 }
 
-fn get_total_consensus_stake<S>(
+/// Find the total amount of tokens staked at the given `epoch`,
+/// belonging to the set of consensus validators.
+pub fn get_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
     params: &PosParams,

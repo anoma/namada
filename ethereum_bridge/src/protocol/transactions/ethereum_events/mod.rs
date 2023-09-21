@@ -13,9 +13,9 @@ use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
@@ -86,7 +86,7 @@ where
 pub(super) fn apply_updates<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     updates: HashSet<EthMsgUpdate>,
-    voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -133,7 +133,7 @@ where
 fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     update: EthMsgUpdate,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<(ChangedKeys, bool)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -284,7 +284,8 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::{balance_key, minted_balance_key, Amount};
+    use namada_core::types::token::{balance_key, minted_balance_key};
+    use namada_core::types::voting_power::FractionalVotingPower;
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
@@ -305,7 +306,7 @@ mod tests {
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
     fn test_apply_single_transfer() -> Result<()> {
-        let sole_validator = address::testing::gen_established_address();
+        let (sole_validator, validator_stake) = test_utils::default_validator();
         let receiver = address::testing::established_address_2();
 
         let amount = arbitrary_amount();
@@ -326,10 +327,9 @@ mod tests {
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
             (sole_validator.clone(), BlockHeight(100)),
-            FractionalVotingPower::WHOLE,
+            validator_stake,
         )]);
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
         test_utils::whitelist_tokens(
             &mut wl_storage,
             [(
@@ -377,7 +377,7 @@ mod tests {
         let voting_power = wl_storage
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
         let epoch_bytes =
@@ -414,7 +414,6 @@ mod tests {
             test_utils::setup_storage_with_validators(HashMap::from_iter(
                 vec![(sole_validator.clone(), Amount::native_whole(100))],
             ));
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         test_utils::whitelist_tokens(
             &mut wl_storage,
             [(
@@ -488,7 +487,6 @@ mod tests {
                 (validator_b, Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -590,7 +588,7 @@ mod tests {
         let voting_power = wl_storage
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::HALF);
 
         Ok(())
@@ -664,7 +662,6 @@ mod tests {
                 (validator_b, Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
@@ -793,7 +790,6 @@ mod tests {
                 (validator_b.clone(), Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
 
         let receiver = address::testing::established_address_1();
         let event = EthereumEvent::TransfersToNamada {
@@ -821,7 +817,7 @@ mod tests {
             (KeyKind::VotingPower, Some(power)) => {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
-                    .average_voting_power(&wl_storage);
+                    .fractional_stake(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
@@ -851,7 +847,7 @@ mod tests {
             (KeyKind::VotingPower, Some(power)) => {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
-                    .average_voting_power(&wl_storage);
+                    .fractional_stake(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
