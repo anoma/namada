@@ -822,9 +822,18 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
     pub safe_mode: bool,
 }
 
-/// Consensus validator set arguments.
+/// Bridge validator set arguments.
 #[derive(Debug, Clone)]
-pub struct ConsensusValidatorSet<C: NamadaTypes = SdkTypes> {
+pub struct BridgeValidatorSet<C: NamadaTypes = SdkTypes> {
+    /// The query parameters.
+    pub query: Query<C>,
+    /// The epoch to query.
+    pub epoch: Option<Epoch>,
+}
+
+/// Governance validator set arguments.
+#[derive(Debug, Clone)]
+pub struct GovernanceValidatorSet<C: NamadaTypes = SdkTypes> {
     /// The query parameters.
     pub query: Query<C>,
     /// The epoch to query.

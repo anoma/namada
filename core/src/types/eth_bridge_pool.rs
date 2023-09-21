@@ -210,12 +210,12 @@ impl PendingTransfer {
 
 impl From<&PendingTransfer> for ethbridge_structs::Erc20Transfer {
     fn from(pending: &PendingTransfer) -> Self {
-        let HashDigest(namada_data_digest) = pending.appendix().checksum();
+        let HashDigest(data_digest) = pending.appendix().checksum();
         Self {
             from: pending.transfer.asset.0.into(),
             to: pending.transfer.recipient.0.into(),
             amount: pending.transfer.amount.into(),
-            namada_data_digest,
+            data_digest,
         }
     }
 }

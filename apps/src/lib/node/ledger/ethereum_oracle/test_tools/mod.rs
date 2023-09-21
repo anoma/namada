@@ -6,9 +6,8 @@ pub mod event_log {
     // p.s.: https://medium.com/mycrypto/understanding-event-logs-on-the-ethereum-blockchain-f4ae7ba50378
 
     use ethbridge_bridge_events::{
-        TransferToErcFilter, TransferToNamadaFilter,
+        TransferToChainFilter, TransferToErcFilter, ValidatorSetUpdateFilter,
     };
-    use ethbridge_governance_events::ValidatorSetUpdateFilter;
     use namada::eth_bridge::ethers::abi::AbiEncode;
     use namada::eth_bridge::ethers::contract::EthEvent;
 
@@ -18,7 +17,7 @@ pub mod event_log {
         fn get_log(self) -> ethabi::RawLog;
     }
 
-    impl GetLog for TransferToNamadaFilter {
+    impl GetLog for TransferToChainFilter {
         fn get_log(self) -> ethabi::RawLog {
             ethabi::RawLog {
                 topics: vec![Self::signature()],
@@ -35,8 +34,7 @@ pub mod event_log {
                     self.nonce.to_big_endian(&mut buf);
                     ethabi::ethereum_types::H256(buf)
                 }],
-                data: (self.transfers, self.valid_map, self.relayer_address)
-                    .encode(),
+                data: (self.transfers, self.relayer_address).encode(),
             }
         }
     }

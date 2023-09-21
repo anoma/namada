@@ -192,24 +192,11 @@ where
     /// thus the inclusion of its container Ethereum events vote
     /// extension.
     ///
-    /// Additionally, the length of the transfers array and their
-    /// respective validity map must match, for the event to be
-    /// considered valid.
-    ///
     /// ## Transfers to Namada
     ///
     /// For a transfers to Namada event to be considered valid,
     /// the nonce of this kind of event must not be lower than
     /// the one stored in Namada.
-    ///
-    /// In this case, the length of the transfers array and their
-    /// respective validity map must also match.
-    ///
-    /// ## Whitelist updates
-    ///
-    /// For any of these events to be considered valid, the
-    /// whitelist update nonce in storage must be greater
-    /// than or equal to the nonce in the event.
     fn validate_eth_event(
         &self,
         event: &EthereumEvent,
@@ -222,20 +209,8 @@ where
         // out such events, which will time out in storage
         match event {
             EthereumEvent::TransfersToEthereum {
-                nonce: ext_nonce,
-                transfers,
-                valid_transfers_map,
-                ..
+                nonce: ext_nonce, ..
             } => {
-                if transfers.len() != valid_transfers_map.len() {
-                    tracing::debug!(
-                        transfers_len = transfers.len(),
-                        valid_transfers_map_len = valid_transfers_map.len(),
-                        "{}",
-                        VoteExtensionError::TransfersLenMismatch
-                    );
-                    return Err(VoteExtensionError::TransfersLenMismatch);
-                }
                 let current_bp_nonce =
                     self.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
                 if &current_bp_nonce != ext_nonce {
@@ -249,20 +224,8 @@ where
                 }
             }
             EthereumEvent::TransfersToNamada {
-                nonce: ext_nonce,
-                transfers,
-                valid_transfers_map,
-                ..
+                nonce: ext_nonce, ..
             } => {
-                if transfers.len() != valid_transfers_map.len() {
-                    tracing::debug!(
-                        transfers_len = transfers.len(),
-                        valid_transfers_map_len = valid_transfers_map.len(),
-                        "{}",
-                        VoteExtensionError::TransfersLenMismatch
-                    );
-                    return Err(VoteExtensionError::TransfersLenMismatch);
-                }
                 let next_nam_transfers_nonce = self
                     .wl_storage
                     .ethbridge_queries()
@@ -514,7 +477,6 @@ mod test_vote_extensions {
             .validate_eth_event(&EthereumEvent::TransfersToEthereum {
                 nonce,
                 transfers: vec![],
-                valid_transfers_map: vec![],
                 relayer: gen_established_address(),
             })
             .expect("Test failed");
@@ -524,7 +486,6 @@ mod test_vote_extensions {
             .validate_eth_event(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce + 1,
                 transfers: vec![],
-                valid_transfers_map: vec![],
                 relayer: gen_established_address(),
             })
             .expect_err("Test failed");
@@ -532,7 +493,6 @@ mod test_vote_extensions {
             .validate_eth_event(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce - 1,
                 transfers: vec![],
-                valid_transfers_map: vec![],
                 relayer: gen_established_address(),
             })
             .expect_err("Test failed");
@@ -542,14 +502,12 @@ mod test_vote_extensions {
             .validate_eth_event(&EthereumEvent::TransfersToNamada {
                 nonce,
                 transfers: vec![],
-                valid_transfers_map: vec![],
             })
             .expect("Test failed");
         shell
             .validate_eth_event(&EthereumEvent::TransfersToNamada {
                 nonce: nonce + 5,
                 transfers: vec![],
-                valid_transfers_map: vec![],
             })
             .expect("Test failed");
 
@@ -558,32 +516,12 @@ mod test_vote_extensions {
             .validate_eth_event(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 1,
                 transfers: vec![],
-                valid_transfers_map: vec![],
             })
             .expect_err("Test failed");
         shell
             .validate_eth_event(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 2,
                 transfers: vec![],
-                valid_transfers_map: vec![],
-            })
-            .expect_err("Test failed");
-
-        // either kind of transfer with different validity map and transfer
-        // array length are invalid
-        shell
-            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
-                nonce,
-                transfers: vec![],
-                valid_transfers_map: vec![true, true],
-                relayer: gen_established_address(),
-            })
-            .expect_err("Test failed");
-        shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
-                nonce,
-                transfers: vec![],
-                valid_transfers_map: vec![true, true],
             })
             .expect_err("Test failed");
     }
@@ -605,7 +543,6 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 checksum: Hash::default(),
             }],
-            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::TransfersToEthereum {
@@ -616,34 +553,41 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 checksum: Hash::default(),
             }],
-            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
-        let event_3 = EthereumEvent::NewContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let event_3 = EthereumEvent::TransfersToNamada {
+            nonce: 0.into(),
+            transfers: vec![],
         };
 
         tokio_test::block_on(oracle.send(event_1.clone()))
             .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
             .expect("Test failed");
-        let [event_first, event_second]: [EthereumEvent; 2] =
-            shell.new_ethereum_events().try_into().expect("Test failed");
 
-        assert_eq!(event_first, event_1);
-        assert_eq!(event_second, event_3);
+        let got_events: [EthereumEvent; 2] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        let expected_events: Vec<_> = std::collections::BTreeSet::from([
+            event_1.clone(),
+            event_3.clone(),
+        ])
+        .into_iter()
+        .collect();
+        assert_eq!(expected_events, got_events);
+
         // check that we queue and de-duplicate events
         tokio_test::block_on(oracle.send(event_2.clone()))
             .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
             .expect("Test failed");
-        let [event_first, event_second, event_third]: [EthereumEvent; 3] =
-            shell.new_ethereum_events().try_into().expect("Test failed");
 
-        assert_eq!(event_first, event_1);
-        assert_eq!(event_second, event_2);
-        assert_eq!(event_third, event_3);
+        let got_events: [EthereumEvent; 3] =
+            shell.new_ethereum_events().try_into().expect("Test failed");
+        let expected_events: Vec<_> =
+            std::collections::BTreeSet::from([event_1, event_2, event_3])
+                .into_iter()
+                .collect();
+        assert_eq!(expected_events, got_events);
     }
 
     /// Test that ethereum events are added to vote extensions.
@@ -665,7 +609,6 @@ mod test_vote_extensions {
                 receiver: EthAddress([2; 20]),
                 checksum: Hash::default(),
             }],
-            valid_transfers_map: vec![true],
             relayer: gen_established_address(),
         };
         let event_2 = EthereumEvent::NewContract {
@@ -725,7 +668,6 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     checksum: Hash::default(),
                 }],
-                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell
@@ -817,7 +759,6 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     checksum: Hash::default(),
                 }],
-                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: signed_height,
@@ -922,7 +863,6 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     checksum: Hash::default(),
                 }],
-                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell.wl_storage.storage.get_last_block_height(),
@@ -1002,7 +942,6 @@ mod test_vote_extensions {
                     receiver: EthAddress([2; 20]),
                     checksum: Hash::default(),
                 }],
-                valid_transfers_map: vec![true],
                 relayer: gen_established_address(),
             }],
             block_height: shell.wl_storage.storage.get_last_block_height(),

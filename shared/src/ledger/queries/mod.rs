@@ -12,6 +12,7 @@ use vp::{Vp, VP};
 
 pub use self::shell::eth_bridge::{
     Erc20FlowControl, GenBridgePoolProofReq, GenBridgePoolProofRsp,
+    TransferToErcArgs,
 };
 use super::storage::traits::StorageHasher;
 use super::storage::{DBIter, DB};

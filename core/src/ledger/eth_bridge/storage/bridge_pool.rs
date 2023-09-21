@@ -15,6 +15,14 @@ use crate::types::hash::Hash;
 use crate::types::keccak::{keccak_hash, KeccakHash};
 use crate::types::storage::{BlockHeight, DbKeySeg, Key, KeySeg};
 
+/// Prefix to be used in Bridge pool tree root computations.
+/// This value corresponds to leaf nodes.
+const POOL_ROOT_PREFIX_LEAF: u8 = 0x00;
+
+/// Prefix to be used in Bridge pool tree root computations.
+/// This value corresponds to non-leaf nodes.
+const POOL_ROOT_PREFIX_NON_LEAF: u8 = 0xff;
+
 /// The main address of the Ethereum bridge pool
 pub const BRIDGE_POOL_ADDRESS: Address =
     Address::Internal(InternalAddress::EthBridgePool);
@@ -156,14 +164,16 @@ impl BridgePoolTree {
     /// Compute the root of the merkle tree
     fn compute_root(&self) -> KeccakHash {
         let mut hashes: Vec<KeccakHash> = self.leaves.keys().cloned().collect();
+        let mut prefix = POOL_ROOT_PREFIX_LEAF;
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
             for pair in hashes.chunks(2) {
                 let left = pair[0].clone();
                 let right = pair.get(1).cloned().unwrap_or_default();
-                next_hashes.push(hash_pair(left, right));
+                next_hashes.push(hash_pair(left, right, prefix));
             }
             hashes = next_hashes;
+            prefix = POOL_ROOT_PREFIX_NON_LEAF;
         }
 
         if hashes.is_empty() {
@@ -215,6 +225,8 @@ impl BridgePoolTree {
             })
             .collect();
 
+        let mut prefix = POOL_ROOT_PREFIX_LEAF;
+
         while hashes.len() > 1 {
             let mut next_hashes = vec![];
 
@@ -224,30 +236,41 @@ impl BridgePoolTree {
                 match (left, right) {
                     (Node::OnPath(left), Node::OnPath(right)) => {
                         flags.push(true);
-                        next_hashes
-                            .push(Node::OnPath(hash_pair(left.clone(), right)));
+                        next_hashes.push(Node::OnPath(hash_pair(
+                            left.clone(),
+                            right,
+                            prefix,
+                        )));
                     }
                     (Node::OnPath(hash), Node::OffPath(sib)) => {
                         flags.push(false);
                         proof_hashes.push(sib.clone());
-                        next_hashes
-                            .push(Node::OnPath(hash_pair(hash.clone(), sib)));
+                        next_hashes.push(Node::OnPath(hash_pair(
+                            hash.clone(),
+                            sib,
+                            prefix,
+                        )));
                     }
                     (Node::OffPath(sib), Node::OnPath(hash)) => {
                         flags.push(false);
                         proof_hashes.push(sib.clone());
-                        next_hashes
-                            .push(Node::OnPath(hash_pair(hash, sib.clone())));
+                        next_hashes.push(Node::OnPath(hash_pair(
+                            hash,
+                            sib.clone(),
+                            prefix,
+                        )));
                     }
                     (Node::OffPath(left), Node::OffPath(right)) => {
                         next_hashes.push(Node::OffPath(hash_pair(
                             left.clone(),
                             right,
+                            prefix,
                         )));
                     }
                 }
             }
             hashes = next_hashes;
+            prefix = POOL_ROOT_PREFIX_NON_LEAF;
         }
         // add the root to the proof
         if flags.is_empty() && proof_hashes.is_empty() && leaves.is_empty() {
@@ -285,14 +308,21 @@ impl BridgePoolTree {
     }
 }
 
-/// Concatenate two keccak hashes and hash the result
+/// Concatenate a byte prefix and two keccak hashes,
+/// then compute the keccak hash of the resulting
+/// byte array.
 #[inline]
-fn hash_pair(left: KeccakHash, right: KeccakHash) -> KeccakHash {
+fn hash_pair(left: KeccakHash, right: KeccakHash, prefix: u8) -> KeccakHash {
+    let mut buf = [0u8; 32 + 32 + 1];
+    buf[0] = prefix;
     if left.0 < right.0 {
-        keccak_hash([left.0, right.0].concat().as_slice())
+        buf[1..33].copy_from_slice(&left.0);
+        buf[33..].copy_from_slice(&right.0);
     } else {
-        keccak_hash([right.0, left.0].concat().as_slice())
+        buf[1..33].copy_from_slice(&right.0);
+        buf[33..].copy_from_slice(&left.0);
     }
+    keccak_hash(buf)
 }
 
 /// Keeps track if a node is on a path from the
@@ -348,14 +378,14 @@ impl BridgePoolProof {
         let mut proof_pos = 0usize;
 
         for i in 0..total_hashes {
-            let left = if leaf_pos < leaf_len {
+            let (left, prefix) = if leaf_pos < leaf_len {
                 let next = self.leaves[leaf_pos].keccak256();
                 leaf_pos += 1;
-                next
+                (next, POOL_ROOT_PREFIX_LEAF)
             } else {
                 let next = hashes[hash_pos].clone();
                 hash_pos += 1;
-                next
+                (next, POOL_ROOT_PREFIX_NON_LEAF)
             };
             let right = if self.flags[i] {
                 if leaf_pos < leaf_len {
@@ -372,7 +402,7 @@ impl BridgePoolProof {
                 proof_pos += 1;
                 next
             };
-            hashes[i] = hash_pair(left, right);
+            hashes[i] = hash_pair(left, right, prefix);
         }
 
         if let Some(computed) = hashes.last() {
@@ -479,8 +509,11 @@ mod test_bridge_pool_tree {
             transfers.push(transfer);
             let _ = tree.insert_key(&key, BlockHeight(1)).expect("Test failed");
         }
-        let expected =
-            hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
+        let expected = hash_pair(
+            transfers[0].keccak256(),
+            transfers[1].keccak256(),
+            POOL_ROOT_PREFIX_LEAF,
+        );
         assert_eq!(tree.root(), expected);
     }
 
@@ -516,11 +549,18 @@ mod test_bridge_pool_tree {
             tree.leaves.keys().cloned().collect::<BTreeSet<_>>()
         );
 
-        let left_hash =
-            hash_pair(transfers[0].keccak256(), transfers[1].keccak256());
-        let right_hash =
-            hash_pair(transfers[2].keccak256(), Default::default());
-        let expected = hash_pair(left_hash, right_hash);
+        let left_hash = hash_pair(
+            transfers[0].keccak256(),
+            transfers[1].keccak256(),
+            POOL_ROOT_PREFIX_LEAF,
+        );
+        let right_hash = hash_pair(
+            transfers[2].keccak256(),
+            Default::default(),
+            POOL_ROOT_PREFIX_LEAF,
+        );
+        let expected =
+            hash_pair(left_hash, right_hash, POOL_ROOT_PREFIX_NON_LEAF);
         assert_eq!(tree.root(), expected);
     }
 
@@ -581,8 +621,11 @@ mod test_bridge_pool_tree {
         let deleted_key = Key::from(&transfers[1]);
         tree.delete_key(&deleted_key).expect("Test failed");
 
-        let expected =
-            hash_pair(transfers[0].keccak256(), transfers[2].keccak256());
+        let expected = hash_pair(
+            transfers[0].keccak256(),
+            transfers[2].keccak256(),
+            POOL_ROOT_PREFIX_LEAF,
+        );
         assert_eq!(tree.root(), expected);
         assert_matches!(tree.get(&deleted_key), Err(_));
     }

@@ -1490,7 +1490,6 @@ mod tests {
         let mut queue = EthEventsQueue::default();
         queue.transfers_to_namada.next_nonce_to_process = 2u64.into();
         let new_event = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
@@ -1510,7 +1509,6 @@ mod tests {
         let mut queue = EthEventsQueue::default();
         queue.transfers_to_namada.next_nonce_to_process = 3u64.into();
         let new_event = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
@@ -1525,27 +1523,22 @@ mod tests {
         queue.transfers_to_namada.next_nonce_to_process = 1u64.into();
 
         let new_event_1 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 1u64.into(),
         };
         let new_event_2 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
         let new_event_3 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 3u64.into(),
         };
         let new_event_4 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 4u64.into(),
         };
         let new_event_7 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 7u64.into(),
         };

@@ -236,10 +236,6 @@ mod tests {
                     address: EthAddress([42; 20]),
                     version: Default::default(),
                 },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
-                    version: Default::default(),
-                },
             },
         };
         config.init_storage(&mut wl_storage);

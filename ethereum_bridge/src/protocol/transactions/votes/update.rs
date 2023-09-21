@@ -236,7 +236,6 @@ mod tests {
             EthereumEvent::TransfersToNamada {
                 nonce: 0.into(),
                 transfers: vec![],
-                valid_transfers_map: vec![],
             }
         }
 

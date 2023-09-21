@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::task::Poll;
 
 use data_encoding::HEXLOWER;
-use ethbridge_governance_contract::Governance;
+use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::{self, FutureExt};
 use namada_core::hints;
@@ -17,7 +17,7 @@ use namada_core::types::storage::Epoch;
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::core::types::TransactionReceipt;
-use crate::eth_bridge::structs::{Signature, ValidatorSetArgs};
+use crate::eth_bridge::structs::Signature;
 use crate::ledger::queries::RPC;
 use crate::sdk::args;
 use crate::sdk::queries::Client;
@@ -25,7 +25,9 @@ use crate::types::control_flow::time::{self, Duration, Instant};
 use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
+use crate::types::ethereum_events::EthAddress;
 use crate::types::io::{DefaultIo, Io};
+use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 use crate::{display_line, edisplay_line};
 
 /// Relayer related errors.
@@ -142,7 +144,7 @@ impl GetStatus for RelayResult {
     fn is_successful(&self) -> bool {
         use RelayResult::*;
         match self {
-            GovernanceCallError(_) | NonceError { .. } | NoReceipt => false,
+            BridgeCallError(_) | NonceError { .. } | NoReceipt => false,
             Receipt { receipt } => receipt.is_successful(),
         }
     }
@@ -154,7 +156,7 @@ enum CheckNonce {}
 /// Do not check the nonce of a relay.
 enum DoNotCheckNonce {}
 
-/// Determine if the nonce in the Governance smart contract prompts
+/// Determine if the nonce in the Bridge smart contract prompts
 /// a relay operation or not.
 trait ShouldRelay {
     /// The result of a relay operation.
@@ -164,7 +166,7 @@ trait ShouldRelay {
     type Future<'gov>: Future<Output = Result<(), Self::RelayResult>> + 'gov;
 
     /// Returns [`Ok`] if the relay should happen.
-    fn should_relay<E>(_: Epoch, _: &Governance<E>) -> Self::Future<'_>
+    fn should_relay<E>(_: Epoch, _: &Bridge<E>) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display;
@@ -178,7 +180,7 @@ impl ShouldRelay for DoNotCheckNonce {
     type RelayResult = Option<TransactionReceipt>;
 
     #[inline]
-    fn should_relay<E>(_: Epoch, _: &Governance<E>) -> Self::Future<'_>
+    fn should_relay<E>(_: Epoch, _: &Bridge<E>) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
@@ -197,26 +199,23 @@ impl ShouldRelay for CheckNonce {
         Pin<Box<dyn Future<Output = Result<(), Self::RelayResult>> + 'gov>>;
     type RelayResult = RelayResult;
 
-    fn should_relay<E>(
-        epoch: Epoch,
-        governance: &Governance<E>,
-    ) -> Self::Future<'_>
+    fn should_relay<E>(epoch: Epoch, bridge: &Bridge<E>) -> Self::Future<'_>
     where
         E: Middleware,
         E::Error: std::fmt::Display,
     {
         Box::pin(async move {
-            let governance_epoch_prep_call = governance.validator_set_nonce();
-            let governance_epoch_fut =
-                governance_epoch_prep_call.call().map(|result| {
+            let bridge_epoch_prep_call = bridge.validator_set_nonce();
+            let bridge_epoch_fut =
+                bridge_epoch_prep_call.call().map(|result| {
                     result
                         .map_err(|err| {
-                            RelayResult::GovernanceCallError(err.to_string())
+                            RelayResult::BridgeCallError(err.to_string())
                         })
                         .map(|e| Epoch(e.as_u64()))
                 });
 
-            let gov_current_epoch = governance_epoch_fut.await?;
+            let gov_current_epoch = bridge_epoch_fut.await?;
             if epoch == gov_current_epoch + 1u64 {
                 Ok(())
             } else {
@@ -236,15 +235,15 @@ impl ShouldRelay for CheckNonce {
 
 /// Relay result for [`CheckNonce`].
 enum RelayResult {
-    /// The call to Governance failed.
-    GovernanceCallError(String),
+    /// The call to Bridge failed.
+    BridgeCallError(String),
     /// Some nonce related error occurred.
     ///
     /// The following comparison must hold: `contract + 1 = argument`.
     NonceError {
         /// The value of the [`Epoch`] argument passed via CLI.
         argument: Epoch,
-        /// The value of the [`Epoch`] in the Governance contract.
+        /// The value of the [`Epoch`] in the bridge contract.
         contract: Epoch,
     },
     /// No receipt was returned from the relay operation.
@@ -291,11 +290,12 @@ pub async fn query_validator_set_update_proof<C, IO: Io>(
     display_line!(IO, "0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
 }
 
-/// Query an ABI encoding of the validator set at a given epoch.
-pub async fn query_validator_set_args<C, IO: Io>(
+/// Query an ABI encoding of the Bridge validator set at a given epoch.
+pub async fn query_bridge_validator_set<C, IO: Io>(
     client: &C,
-    args: args::ConsensusValidatorSet,
-) where
+    args: args::BridgeValidatorSet,
+) -> Halt<()>
+where
     C: Client + Sync,
 {
     let epoch = if let Some(epoch) = args.epoch {
@@ -304,17 +304,78 @@ pub async fn query_validator_set_args<C, IO: Io>(
         RPC.shell().epoch(client).await.unwrap()
     };
 
-    let encoded_validator_set_args = RPC
+    let args = RPC
         .shell()
         .eth_bridge()
-        .read_consensus_valset(client, &epoch)
+        .read_bridge_valset(client, &epoch)
         .await
-        .unwrap();
+        .try_halt(|err| {
+            tracing::error!(%err, "Failed to fetch Bridge validator set");
+        })?;
+
+    display_validator_set::<IO>(args);
+    control_flow::proceed(())
+}
+
+/// Query an ABI encoding of the Governance validator set at a given epoch.
+pub async fn query_governnace_validator_set<C, IO: Io>(
+    client: &C,
+    args: args::GovernanceValidatorSet,
+) -> Halt<()>
+where
+    C: Client + Sync,
+{
+    let epoch = if let Some(epoch) = args.epoch {
+        epoch
+    } else {
+        RPC.shell().epoch(client).await.unwrap()
+    };
+
+    let args = RPC
+        .shell()
+        .eth_bridge()
+        .read_governance_valset(client, &epoch)
+        .await
+        .try_halt(|err| {
+            tracing::error!(%err, "Failed to fetch Governance validator set");
+        })?;
+
+    display_validator_set::<IO>(args);
+    control_flow::proceed(())
+}
+
+/// Display the given [`ValidatorSetArgs`].
+fn display_validator_set<IO: Io>(args: ValidatorSetArgs) {
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Validator {
+        addr: EthAddress,
+        voting_power: u128,
+    }
+
+    #[derive(Serialize)]
+    struct ValidatorSet {
+        set: Vec<Validator>,
+    }
+
+    let ValidatorSetArgs {
+        validators,
+        voting_powers,
+        ..
+    } = args;
+    let validator_set = ValidatorSet {
+        set: validators
+            .into_iter()
+            .zip(voting_powers.into_iter().map(u128::from))
+            .map(|(addr, voting_power)| Validator { addr, voting_power })
+            .collect(),
+    };
 
     display_line!(
         IO,
-        "0x{}",
-        HEXLOWER.encode(encoded_validator_set_args.as_ref())
+        "{}",
+        serde_json::to_string_pretty(&validator_set).unwrap()
     );
 }
 
@@ -358,10 +419,10 @@ where
             eth_client,
             nam_client,
             |relay_result| match relay_result {
-                RelayResult::GovernanceCallError(reason) => {
+                RelayResult::BridgeCallError(reason) => {
                     edisplay_line!(
                         IO,
-                        "Calling Governance failed due to: {reason}"
+                        "Calling Bridge failed due to: {reason}"
                     );
                 }
                 RelayResult::NonceError { argument, contract } => {
@@ -462,27 +523,25 @@ where
         }
 
         // we could be racing against governance updates,
-        // so it is best to always fetch the latest governance
+        // so it is best to always fetch the latest Bridge
         // contract address
-        let governance =
-            get_governance_contract(nam_client, Arc::clone(&eth_client))
-                .await
-                .try_halt(|err| {
-                    // only care about displaying errors,
-                    // exit on all circumstances
-                    _ = err.handle();
-                })?;
-        let governance_epoch_prep_call = governance.validator_set_nonce();
-        let governance_epoch_fut =
-            governance_epoch_prep_call.call().map(|result| {
-                result
-                    .map_err(|err| {
-                        tracing::error!(
-                            "Failed to fetch latest validator set nonce: {err}"
-                        );
-                    })
-                    .map(|e| e.as_u64() as i128)
-            });
+        let bridge = get_bridge_contract(nam_client, Arc::clone(&eth_client))
+            .await
+            .try_halt(|err| {
+                // only care about displaying errors,
+                // exit on all circumstances
+                _ = err.handle();
+            })?;
+        let bridge_epoch_prep_call = bridge.validator_set_nonce();
+        let bridge_epoch_fut = bridge_epoch_prep_call.call().map(|result| {
+            result
+                .map_err(|err| {
+                    tracing::error!(
+                        "Failed to fetch latest validator set nonce: {err}"
+                    );
+                })
+                .map(|e| e.as_u64() as i128)
+        });
 
         let shell = RPC.shell();
         let nam_current_epoch_fut = shell.epoch(nam_client).map(|result| {
@@ -496,7 +555,7 @@ where
         });
 
         let (nam_current_epoch, gov_current_epoch) =
-            futures::try_join!(nam_current_epoch_fut, governance_epoch_fut)
+            futures::try_join!(nam_current_epoch_fut, bridge_epoch_fut)
                 .try_halt(|()| ())?;
 
         tracing::debug!(
@@ -507,11 +566,11 @@ where
 
         let new_epoch = match nam_current_epoch - gov_current_epoch {
             // NB: a namada epoch should always be one behind the nonce
-            // in the governance contract, for the latter to be considered
+            // in the bridge contract, for the latter to be considered
             // up to date
             -1 => {
                 tracing::debug!(
-                    "Nothing to do, since the validator set in the Governance \
+                    "Nothing to do, since the validator set in the Bridge \
                      contract is up to date",
                 );
                 last_call_succeeded = false;
@@ -525,7 +584,7 @@ where
             // NB: if the nonce difference is lower than 0, somehow the state
             // of namada managed to fall behind the state of the smart contract
             _ => {
-                tracing::error!("The Governance contract is ahead of Namada!");
+                tracing::error!("The Bridge contract is ahead of Namada!");
                 last_call_succeeded = false;
                 continue;
             }
@@ -562,21 +621,21 @@ where
     }
 }
 
-async fn get_governance_contract<C, E>(
+async fn get_bridge_contract<C, E>(
     nam_client: &C,
     eth_client: Arc<E>,
-) -> Result<Governance<E>, Error>
+) -> Result<Bridge<E>, Error>
 where
     C: Client + Sync,
     E: Middleware,
 {
-    let governance_contract = RPC
+    let bridge_contract = RPC
         .shell()
         .eth_bridge()
-        .read_governance_contract(nam_client)
+        .read_bridge_contract(nam_client)
         .await
         .map_err(|err| Error::critical(err.to_string()))?;
-    Ok(Governance::new(governance_contract.address, eth_client))
+    Ok(Bridge::new(bridge_contract.address, eth_client))
 }
 
 async fn relay_validator_set_update_once<R, F, C, E>(
@@ -614,17 +673,17 @@ where
 
     let bridge_current_epoch = epoch_to_relay - 1;
     let shell = RPC.shell().eth_bridge();
-    let encoded_validator_set_args_fut =
-        shell.read_consensus_valset(nam_client, &bridge_current_epoch);
+    let validator_set_args_fut =
+        shell.read_bridge_valset(nam_client, &bridge_current_epoch);
 
     let shell = RPC.shell().eth_bridge();
-    let governance_address_fut = shell.read_governance_contract(nam_client);
+    let bridge_address_fut = shell.read_bridge_contract(nam_client);
 
-    let (encoded_proof, encoded_validator_set_args, governance_contract) =
+    let (encoded_proof, validator_set_args, bridge_contract) =
         futures::try_join!(
             encoded_proof_fut,
-            encoded_validator_set_args_fut,
-            governance_address_fut
+            validator_set_args_fut,
+            bridge_address_fut
         )
         .map_err(|err| R::try_recover(err.to_string()))?;
 
@@ -633,22 +692,19 @@ where
         [u8; 32],
         Vec<Signature>,
     ) = abi_decode_struct(encoded_proof);
-    let consensus_set: ValidatorSetArgs =
-        abi_decode_struct(encoded_validator_set_args);
 
-    let governance = Governance::new(governance_contract.address, eth_client);
+    let bridge = Bridge::new(bridge_contract.address, eth_client);
 
-    if let Err(result) = R::should_relay(epoch_to_relay, &governance).await {
+    if let Err(result) = R::should_relay(epoch_to_relay, &bridge).await {
         action(result);
         return Err(Error::NoContext);
     }
 
-    let mut relay_op = governance.update_validators_set(
-        consensus_set,
+    let mut relay_op = bridge.update_validator_set(
+        validator_set_args.into(),
         bridge_hash,
         gov_hash,
         signatures,
-        epoch_to_relay.0.into(),
     );
     if let Some(gas) = args.gas {
         relay_op.tx.set_gas(gas);
@@ -709,7 +765,7 @@ mod tests {
             })
             .is_successful()
         );
-        assert!(!RelayResult::GovernanceCallError("".into()).is_successful());
+        assert!(!RelayResult::BridgeCallError("".into()).is_successful());
         assert!(
             !RelayResult::NonceError {
                 contract: 0.into(),

@@ -137,8 +137,6 @@ pub struct Contracts {
     pub native_erc20: EthAddress,
     /// The Ethereum address of the bridge contract.
     pub bridge: UpgradeableContract,
-    /// The Ethereum address of the governance contract.
-    pub governance: UpgradeableContract,
 }
 
 /// Represents chain parameters for the Ethereum bridge.
@@ -183,14 +181,12 @@ impl EthereumBridgeConfig {
                 Contracts {
                     native_erc20,
                     bridge,
-                    governance,
                 },
         } = self;
         let active_key = bridge_storage::active_key();
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
-        let governance_contract_key = bridge_storage::governance_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
         wl_storage
             .write_bytes(
@@ -206,9 +202,6 @@ impl EthereumBridgeConfig {
             .unwrap();
         wl_storage
             .write_bytes(&bridge_contract_key, encode(bridge))
-            .unwrap();
-        wl_storage
-            .write_bytes(&governance_contract_key, encode(governance))
             .unwrap();
         wl_storage
             .write_bytes(&eth_start_height_key, encode(eth_start_height))
@@ -309,7 +302,6 @@ impl EthereumOracleConfig {
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         let native_erc20_key = bridge_storage::native_erc20_key();
         let bridge_contract_key = bridge_storage::bridge_contract_key();
-        let governance_contract_key = bridge_storage::governance_contract_key();
         let eth_start_height_key = bridge_storage::eth_start_height_key();
 
         // These reads must succeed otherwise the storage is corrupt or a
@@ -318,8 +310,6 @@ impl EthereumOracleConfig {
             must_read_key(wl_storage, &min_confirmations_key);
         let native_erc20 = must_read_key(wl_storage, &native_erc20_key);
         let bridge_contract = must_read_key(wl_storage, &bridge_contract_key);
-        let governance_contract =
-            must_read_key(wl_storage, &governance_contract_key);
         let eth_start_height = must_read_key(wl_storage, &eth_start_height_key);
 
         Some(Self {
@@ -328,7 +318,6 @@ impl EthereumOracleConfig {
             contracts: Contracts {
                 native_erc20,
                 bridge: bridge_contract,
-                governance: governance_contract,
             },
         })
     }
@@ -403,10 +392,6 @@ mod tests {
                     address: EthAddress([23; 20]),
                     version: ContractVersion::default(),
                 },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
-                    version: ContractVersion::default(),
-                },
             },
         };
         let serialized = toml::to_string(&config)?;
@@ -427,10 +412,6 @@ mod tests {
                 native_erc20: EthAddress([42; 20]),
                 bridge: UpgradeableContract {
                     address: EthAddress([23; 20]),
-                    version: ContractVersion::default(),
-                },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
                     version: ContractVersion::default(),
                 },
             },
@@ -463,10 +444,6 @@ mod tests {
                 native_erc20: EthAddress([42; 20]),
                 bridge: UpgradeableContract {
                     address: EthAddress([23; 20]),
-                    version: ContractVersion::default(),
-                },
-                governance: UpgradeableContract {
-                    address: EthAddress([18; 20]),
                     version: ContractVersion::default(),
                 },
             },

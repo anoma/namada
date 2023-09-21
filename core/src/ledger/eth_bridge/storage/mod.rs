@@ -63,11 +63,6 @@ pub fn bridge_contract_key() -> Key {
     get_bridge_contract_address_key_at_addr(PARAM_ADDRESS)
 }
 
-/// Storage key for the Ethereum address of the governance contract.
-pub fn governance_contract_key() -> Key {
-    get_governance_contract_address_key_at_addr(PARAM_ADDRESS)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;

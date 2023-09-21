@@ -1126,10 +1126,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
                     address: EthAddress([0; 20]),
                     version: Default::default(),
                 },
-                governance: UpgradeableContract {
-                    address: EthAddress([1; 20]),
-                    version: Default::default(),
-                },
             },
         }),
         native_token: address::nam(),
