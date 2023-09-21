@@ -169,20 +169,9 @@ where
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
         TxType::Wrapper(ref wrapper) => {
-            let masp_transaction =
-                wrapper.unshield_section_hash.and_then(|ref hash| {
-                    tx.get_section(hash).and_then(|section| {
-                        if let Section::MaspTx(transaction) = section.as_ref() {
-                            Some(transaction.to_owned())
-                        } else {
-                            None
-                        }
-                    })
-                });
-
             let changed_keys = apply_wrapper_tx(
                 wrapper,
-                masp_transaction,
+                get_fee_unshielding_transaction(&tx, wrapper),
                 tx_bytes,
                 ShellParams {
                     tx_gas_meter,
@@ -278,6 +267,24 @@ where
     changed_keys.insert(inner_hash_key);
 
     Ok(changed_keys)
+}
+
+/// Retrieve the Masp `Transaction` for fee unshielding from the provided
+/// transaction, if present
+pub fn get_fee_unshielding_transaction(
+    tx: &Tx,
+    wrapper: &WrapperTx,
+) -> Option<Transaction> {
+    wrapper
+        .unshield_section_hash
+        .and_then(|ref hash| tx.get_section(hash))
+        .and_then(|section| {
+            if let Section::MaspTx(transaction) = section.as_ref() {
+                Some(transaction.to_owned())
+            } else {
+                None
+            }
+        })
 }
 
 /// Charge fee for the provided wrapper transaction. In ABCI returns an error if

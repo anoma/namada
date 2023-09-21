@@ -5,9 +5,10 @@ use namada::core::ledger::gas::TxGasMeter;
 #[cfg(feature = "abcipp")]
 use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
+use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::{DBIter, StorageHasher, TempWlStorage, DB};
 use namada::proof_of_stake::find_validator_by_raw_hash;
-use namada::proto::{Section, Tx};
+use namada::proto::Tx;
 use namada::types::address::Address;
 use namada::types::internal::TxInQueue;
 use namada::types::key::tm_raw_hash_to_string;
@@ -249,20 +250,9 @@ where
                 .map_err(|_| ())?;
 
             // Check fees
-            let fee_unshield =
-                wrapper.unshield_section_hash.and_then(|ref hash| {
-                    tx.get_section(hash).and_then(|section| {
-                        if let Section::MaspTx(transaction) = section.as_ref() {
-                            Some(transaction.to_owned())
-                        } else {
-                            None
-                        }
-                    })
-                });
-
             match self.wrapper_fee_check(
                 &wrapper,
-                fee_unshield,
+                get_fee_unshielding_transaction(&tx, &wrapper),
                 temp_wl_storage,
                 vp_wasm_cache,
                 tx_wasm_cache,
