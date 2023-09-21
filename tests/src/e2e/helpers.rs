@@ -167,14 +167,9 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     };
     let config =
         Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
-    let ip = convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
-        .ip()
-        .to_string();
-    let port =
-        convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
-            .port()
-            .to_string();
-    format!("{}:{}", ip, port)
+    let socket_addr =
+        convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr);
+    format!("{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
 /// Get the public key of the validator

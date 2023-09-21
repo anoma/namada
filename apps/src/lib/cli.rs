@@ -2457,7 +2457,6 @@ pub mod args {
     use std::collections::HashMap;
     use std::convert::TryFrom;
     use std::env;
-    use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
@@ -2621,7 +2620,7 @@ pub mod args {
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
-    pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    pub const NET_ADDRESS: Arg<String> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NUT: ArgFlag = flag("nut");
@@ -5577,7 +5576,7 @@ pub mod args {
         pub alias: String,
         pub commission_rate: Dec,
         pub max_commission_rate_change: Dec,
-        pub net_address: SocketAddr,
+        pub net_address: String,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
     }
