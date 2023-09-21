@@ -1358,7 +1358,7 @@ where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // Check that fee token is an allowed one
-        let gas_cost = namada::ledger::parameters::read_gas_cost(
+        let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
             &self.wl_storage,
             &wrapper.fee.token,
         )
@@ -1368,12 +1368,14 @@ where
             wrapper.fee.token
         ))))?;
 
-        if wrapper.fee.amount_per_gas_unit < gas_cost {
+        if wrapper.fee.amount_per_gas_unit < minimum_gas_price {
             // The fees do not match the minimum required
             return Err(Error::TxApply(protocol::Error::FeeError(format!(
                 "Fee amount {:?} do not match the minimum required amount \
                  {:?} for token {}",
-                wrapper.fee.amount_per_gas_unit, gas_cost, wrapper.fee.token
+                wrapper.fee.amount_per_gas_unit,
+                minimum_gas_price,
+                wrapper.fee.token
             ))));
         }
 
