@@ -1170,9 +1170,9 @@ impl Epochs {
         self.first_block_heights.push(block_height);
     }
 
-    /// Look up the epoch of a given block height.
-    /// TODO: handle passing of a future block height? (only valid for current
-    /// or past)
+    /// Look up the epoch of a given block height. If the given height is
+    /// greater than the current height, the current epoch will be returned even
+    /// though an epoch for a future block cannot be determined.
     pub fn get_epoch(&self, block_height: BlockHeight) -> Option<Epoch> {
         if let Some((_first_known_epoch_height, rest)) =
             self.first_block_heights.split_first()
