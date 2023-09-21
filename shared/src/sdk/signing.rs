@@ -291,10 +291,11 @@ pub async fn aux_signing_data<
     };
 
     if fee_payer == masp_tx_key().to_public() {
-        panic!(
+        other_err(
             "The gas payer cannot be the MASP, please provide a different gas \
              payer."
-        );
+                .to_string(),
+        )?;
     }
 
     Ok(SigningTxData {
@@ -333,7 +334,7 @@ pub async fn wrap_tx<
     tx_source_balance: Option<TxSourcePostBalance>,
     epoch: Epoch,
     fee_payer: common::PublicKey,
-) -> Option<Epoch> {
+) -> Result<Option<Epoch>, Error> {
     let fee_payer_address = Address::from(&fee_payer);
     // Validate fee amount and token
     let gas_cost_key = parameter_storage::get_gas_cost_key();
@@ -345,17 +346,17 @@ pub async fn wrap_tx<
     .and_then(|map| {
         map.get(&args.fee_token)
             .map(ToOwned::to_owned)
-            .ok_or_else(|| Error::Other("no fee found".to_string()))
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "Could not retrieve from storage the gas cost for token {}",
+                    args.fee_token
+                ))
+            })
     }) {
         Ok(amount) => amount,
-        Err(_e) => {
-            edisplay_line!(
-                IO,
-                "Could not retrieve the gas cost for token {}",
-                args.fee_token
-            );
+        Err(e) => {
             if !args.force {
-                panic!();
+                return Err(e);
             } else {
                 token::Amount::default()
             }
@@ -481,30 +482,35 @@ pub async fn wrap_tx<
                             > descriptions_limit
                             && !args.force
                         {
-                            panic!(
-                                "Fee unshielding descriptions exceed the limit"
-                            );
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(format!(
+                                    "Descriptions exceed the limit: found \
+                                     {descriptions}, limit \
+                                     {descriptions_limit}"
+                                )),
+                            ));
                         }
 
                         updated_balance += total_fee;
                         (Some(transaction), Some(unshielding_epoch))
                     }
                     Ok(None) => {
-                        edisplay_line!(IO, "Missing unshielding transaction");
                         if !args.force {
-                            panic!();
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(
+                                    "Missing unshielding transaction"
+                                        .to_string(),
+                                ),
+                            ));
                         }
 
                         (None, None)
                     }
                     Err(e) => {
-                        edisplay_line!(
-                            IO,
-                            "Error in fee unshielding generation: {}",
-                            e
-                        );
                         if !args.force {
-                            panic!();
+                            return Err(Error::from(
+                                TxError::FeeUnshieldingError(e.to_string()),
+                            ));
                         }
 
                         (None, None)
@@ -512,25 +518,26 @@ pub async fn wrap_tx<
                 }
             } else {
                 let token_addr = args.fee_token.clone();
-                let err_msg = format!(
-                    "The wrapper transaction source doesn't have enough \
-                     balance to pay fee {}, balance: {}.",
-                    format_denominated_amount::<_, IO>(
-                        client,
-                        &token_addr,
-                        total_fee
-                    )
-                    .await,
-                    format_denominated_amount::<_, IO>(
-                        client,
-                        &token_addr,
-                        updated_balance
-                    )
-                    .await,
-                );
-                edisplay_line!(IO, "{}", err_msg);
                 if !args.force {
-                    panic!("{}", err_msg);
+                    let fee_amount = format_denominated_amount::<_, IO>(
+                        client,
+                        &token_addr,
+                        total_fee,
+                    )
+                    .await;
+
+                    let balance = format_denominated_amount::<_, IO>(
+                        client,
+                        &token_addr,
+                        updated_balance,
+                    )
+                    .await;
+                    return Err(Error::from(TxError::BalanceTooLowForFees(
+                        fee_payer_address,
+                        token_addr,
+                        fee_amount,
+                        balance,
+                    )));
                 }
 
                 (None, None)
@@ -568,7 +575,7 @@ pub async fn wrap_tx<
         unshield_section_hash,
     );
 
-    unshielding_epoch
+    Ok(unshielding_epoch)
 }
 
 #[allow(clippy::result_large_err)]

@@ -164,7 +164,7 @@ pub async fn prepare_tx<
     if !args.dry_run {
         let epoch = rpc::query_epoch(client).await?;
 
-        Ok(signing::wrap_tx::<_, _, IO>(
+        signing::wrap_tx::<_, _, IO>(
             client,
             shielded,
             tx,
@@ -173,7 +173,7 @@ pub async fn prepare_tx<
             epoch,
             fee_payer,
         )
-        .await)
+        .await
     } else {
         Ok(None)
     }
