@@ -338,7 +338,7 @@ fn ibc(c: &mut Criterion) {
         .unwrap(),
         counterparty: Counterparty::new(
             ClientId::from_str("01-tendermint-1").unwrap(),
-            Some(ConnectionId::new(1)),
+            None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
         version: Some(Version::default()),
