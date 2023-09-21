@@ -28,6 +28,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
+use namada::core::hints;
 use namada::core::ledger::eth_bridge;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada::ledger::events::log::EventLog;
@@ -902,6 +903,11 @@ where
             events.sort();
             events
         };
+        if hints::likely(eth_events.is_empty()) {
+            // more often than not, there won't by any expired
+            // Ethereum events to retransmit
+            return;
+        }
         if let Some(vote_extension) = self.sign_ethereum_events(eth_events) {
             let protocol_key = self
                 .mode
