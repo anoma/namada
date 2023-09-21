@@ -8,8 +8,8 @@ use namada_core::ledger::eth_bridge::ADDRESS;
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::{EthereumEvent, Uint};
 use namada_core::types::hash::Hash;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{DbKeySeg, Epoch, Key};
+use namada_core::types::keccak::{keccak_hash, KeccakHash};
+use namada_core::types::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_core::types::vote_extensions::validator_set_update::VotingPowersMap;
 use namada_macros::StorageKeys;
 
@@ -189,7 +189,7 @@ impl From<&Hash> for Keys<EthereumEvent> {
 
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool roots and nonces.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BridgePoolRoot(pub BridgePoolRootProof);
 
 impl BorshSerialize for BridgePoolRoot {
@@ -207,25 +207,27 @@ impl BorshDeserialize for BridgePoolRoot {
     }
 }
 
-impl<'a> From<&'a BridgePoolRoot> for Keys<BridgePoolRoot> {
-    fn from(bp_root: &BridgePoolRoot) -> Self {
-        let hash = [bp_root.0.data.0.to_string(), bp_root.0.data.1.to_string()]
-            .concat();
+impl From<(&BridgePoolRoot, BlockHeight)> for Keys<BridgePoolRoot> {
+    fn from(
+        (BridgePoolRoot(bp_root), root_height): (&BridgePoolRoot, BlockHeight),
+    ) -> Self {
+        let hash = {
+            let (KeccakHash(root), nonce) = &bp_root.data;
+
+            let mut to_hash = [0u8; 64];
+            to_hash[..32].copy_from_slice(root);
+            to_hash[32..].copy_from_slice(&nonce.to_bytes());
+
+            keccak_hash(to_hash).to_string()
+        };
         let prefix = super::prefix()
-            .push(&BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT.to_owned())
-            .expect("should always be able to construct this key")
-            .push(&hash)
-            .expect("should always be able to construct this key");
+            .with_segment(BRIDGE_POOL_ROOT_PREFIX_KEY_SEGMENT.to_owned())
+            .with_segment(root_height)
+            .with_segment(hash);
         Keys {
             prefix,
             _phantom: std::marker::PhantomData,
         }
-    }
-}
-
-impl From<BridgePoolRoot> for Keys<BridgePoolRoot> {
-    fn from(bp_root: BridgePoolRoot) -> Self {
-        Self::from(&bp_root)
     }
 }
 
