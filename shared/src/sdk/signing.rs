@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use zeroize::Zeroizing;
 
+use crate::display_line;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ledger::parameters::storage as parameter_storage;
@@ -54,7 +55,6 @@ use crate::types::transaction::governance::{
 };
 use crate::types::transaction::pos::InitValidator;
 use crate::types::transaction::Fee;
-use crate::{display_line, edisplay_line};
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
