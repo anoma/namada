@@ -198,7 +198,7 @@ pub struct VpGasMeter {
     Clone, Debug, Default, BorshSerialize, BorshDeserialize, BorshSchema,
 )]
 pub struct VpsGas {
-    max: Option<Gas>,
+    max: Gas,
     rest: Vec<Gas>,
 }
 
@@ -310,40 +310,39 @@ impl VpGasMeter {
 }
 
 impl VpsGas {
-    /// Set the gas cost from a single VP run. It consumes the [`VpGasMeter`]
+    /// Set the gas cost from a VP run. It consumes the [`VpGasMeter`]
     /// instance which shouldn't be accessed passed this point.
     pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
-        debug_assert_eq!(self.max, None);
-        debug_assert!(self.rest.is_empty());
-        self.max = Some(vp_gas_meter.current_gas);
+        if vp_gas_meter.current_gas > self.max {
+            self.rest.push(self.max);
+            self.max = vp_gas_meter.current_gas;
+        } else {
+            self.rest.push(vp_gas_meter.current_gas);
+        }
+
         self.check_limit(&vp_gas_meter)
     }
 
-    /// Merge validity predicates gas meters from parallelized runs.
+    /// Merge validity predicates gas meters from parallelized runs. Consumes
+    /// the other `VpsGas` instance which shouldn't be used passed this point.
     pub fn merge(
         &mut self,
-        other: &mut VpsGas,
+        mut other: VpsGas,
         tx_gas_meter: &TxGasMeter,
     ) -> Result<()> {
-        match (self.max, other.max) {
-            (None, Some(_)) => {
-                self.max = other.max;
-            }
-            (Some(this_max), Some(other_max)) => {
-                if this_max < other_max {
-                    self.rest.push(this_max);
-                    self.max = other.max;
-                } else {
-                    self.rest.push(other_max);
-                }
-            }
-            _ => {}
+        if self.max < other.max {
+            self.rest.push(self.max);
+            self.max = other.max;
+        } else {
+            self.rest.push(other.max);
         }
         self.rest.append(&mut other.rest);
 
         self.check_limit(tx_gas_meter)
     }
 
+    /// Check if the vp went out of gas. Starts from the gas consumed by the
+    /// transaction.
     fn check_limit(&self, gas_meter: &impl GasMetering) -> Result<()> {
         let total = gas_meter
             .get_tx_consumed_gas()
@@ -361,10 +360,7 @@ impl VpsGas {
             self.rest.iter().try_fold(Gas::default(), |acc, gas| {
                 acc.checked_add(*gas).ok_or(Error::GasOverflow)
             })? / PARALLEL_GAS_DIVIDER;
-        self.max
-            .unwrap_or_default()
-            .checked_add(parallel_gas)
-            .ok_or(Error::GasOverflow)
+        self.max.checked_add(parallel_gas).ok_or(Error::GasOverflow)
     }
 }
 
