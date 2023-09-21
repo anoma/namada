@@ -42,6 +42,10 @@ wasm-runtime = [
 async-client = [
   "async-trait",
 ]
+
+# Requires async traits to be safe to send across threads
+async-send = []
+
 # tendermint-rpc support
 tendermint-rpc = [
   "async-client",
