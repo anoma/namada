@@ -1221,9 +1221,13 @@ pub async fn build_vote_proposal<
     let is_validator = rpc::is_validator(client, &voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
-        return Err(Error::from(TxError::InvalidProposalVotingPeriod(
-            proposal_id,
-        )));
+        if tx.force {
+            eprintln!("Invalid proposal {} vote period.", proposal_id);
+        } else {
+            return Err(Error::from(TxError::InvalidProposalVotingPeriod(
+                proposal_id,
+            )));
+        }
     }
 
     let delegations = rpc::get_delegators_delegation_at(
@@ -1803,7 +1807,7 @@ pub async fn build_transfer<
             // inner tx will fail, so abort tx creation
             if fee_unshield_epoch != transfer_unshield_epoch && !args.tx.force {
                 return Err(Error::Other(
-                    "Fee unshilding masp tx and inner tx masp transaction \
+                    "Fee unshielding masp tx and inner tx masp transaction \
                      were crafted on an epoch boundary"
                         .to_string(),
                 ));
