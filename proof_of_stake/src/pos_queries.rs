@@ -279,7 +279,11 @@ where
     /// been purged from Namada, or if it is not available yet.
     #[inline]
     pub fn get_height(self, epoch: Epoch) -> Option<BlockHeight> {
-        self.wl_storage.storage.block.pred_epochs.get_height(epoch)
+        self.wl_storage
+            .storage
+            .block
+            .pred_epochs
+            .get_start_height_of_epoch(epoch)
     }
 
     /// Retrieves the [`BlockHeight`] that is currently being decided.

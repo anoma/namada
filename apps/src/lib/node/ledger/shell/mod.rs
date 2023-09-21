@@ -2045,7 +2045,7 @@ mod test_utils {
             .storage
             .block
             .pred_epochs
-            .new_epoch(BlockHeight(1), 1000);
+            .new_epoch(BlockHeight(1));
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");
