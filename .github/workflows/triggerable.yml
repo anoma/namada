@@ -20,7 +20,8 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
-  CHAIN_BUCKET: anoma-iac-files-master
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
 
 jobs:
   pos:
@@ -35,25 +36,17 @@ jobs:
           - name: Run PoS state-machine tests
             command: make test-pos-sm
             timeout: 360
-            cache_key: namada
-            cache_version: v2
+            cache_key: pos-test
+            cache_version: v1
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
+      SCCACHE_REDIS: ${{ secrets.REDIS_CONN_STRING }}
 
     steps:
       - uses: actions/checkout@4v3
         with:
           ref: ${{ inputs.branch }}
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:

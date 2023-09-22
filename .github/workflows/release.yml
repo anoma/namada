@@ -12,6 +12,8 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
+  RUST_BACKTRACE: full
+  CARGO_INCREMENTAL: 0
 
 jobs:
   build:
@@ -26,10 +28,8 @@ jobs:
             command: package
 
     env:
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
+      SCCACHE_REDIS: ${{ secrets.REDIS_CONN_STRING }}
 
     steps:
       - name: Checkout repo
@@ -37,32 +37,12 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.5.4
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -80,8 +60,7 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Install cargo-about
-        run: |
-          cargo install --version 0.5.2 cargo-about
+        run: curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7! | bash
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package

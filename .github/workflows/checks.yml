@@ -19,6 +19,8 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
 
 jobs:
   clippy-fmt:
@@ -31,16 +33,8 @@ jobs:
         make:
           - name: Clippy
             command: clippy
-            cache_subkey: clippy
-            cache_version: v1
           - name: Format
             command: check && make fmt-check
-            cache_subkey: fmt
-            cache_version: v1
-
-    env:
-      CARGO_INCREMENTAL: 0
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@4v3
@@ -70,23 +64,6 @@ jobs:
       - name: Show rust toolchain info
         run: rustup show
       - name: Cache cargo
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-            ./target
-            ./wasm/tx_template/target
-            ./wasm/vp_template/target
-            ./wasm_for_tests/wasm_source/target
-          key: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_subkey }}-${{ matrix.make.cache_version }}-cargo-
+        uses: Swatinem/rust-cache@v2
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
-      - name: Clean cache folder
-        run: |
-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache || true
-          cargo-cache
