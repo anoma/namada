@@ -4,12 +4,10 @@ on:
   push:
     branches:
       - main
-      - "!eth-bridge-integration"
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
     branches:
       - main
-      - "!eth-bridge-integration"
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -38,7 +36,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
 
     steps:
       - name: Checkout repo
@@ -82,7 +80,7 @@ jobs:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
 
     steps:
       - name: Checkout repo
@@ -149,14 +147,14 @@ jobs:
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 80
+    timeout-minutes: 25
     needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
         make:
           - name: ABCI
             suffix: ''
@@ -181,12 +179,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -196,23 +188,8 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -278,7 +255,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
         make:
           - name: ABCI Release build
             suffix: ''
@@ -302,12 +279,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -317,23 +288,8 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -401,19 +357,19 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 2
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
       CARGO_INCREMENTAL: 0
@@ -432,12 +388,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -447,23 +397,8 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:

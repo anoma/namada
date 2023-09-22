@@ -24,14 +24,14 @@ jobs:
         make:
           - name: Audit
             command: audit
-            version: rustsec/rustsec@cargo-audit/v0.17.0
+            version: rustsec/rustsec@cargo-audit/v0.17.6
             cache_subkey: audit
-            cache_version: v1
+            cache_version: v2
           - name: Unused dependencies
             command: udeps
-            version: est31/cargo-udeps@v0.1.30
+            version: est31/cargo-udeps@v0.1.42
             cache_subkey: udeps
-            cache_version: v1
+            cache_version: v2
 
     env:
       CARGO_INCREMENTAL: 0
