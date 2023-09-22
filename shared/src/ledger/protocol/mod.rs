@@ -18,10 +18,10 @@ use thiserror::Error;
 
 use crate::ledger::gas::{self, GasMetering, VpGasMeter};
 use crate::ledger::governance::GovernanceVp;
-use crate::ledger::ibc::vp::Ibc;
 use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
 use crate::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
 use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
+use crate::ledger::native_vp::ibc::Ibc;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
 use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
@@ -66,7 +66,7 @@ pub enum Error {
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(crate::ledger::ibc::vp::Error),
+    IbcNativeVpError(crate::ledger::native_vp::ibc::Error),
     #[error("PoS native VP: {0}")]
     PosNativeVpError(pos::vp::Error),
     #[error("PoS native VP panicked")]

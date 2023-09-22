@@ -296,7 +296,8 @@ mod tests {
     use prost::Message;
     use sha2::Digest;
 
-    use super::super::storage::{
+    use super::*;
+    use crate::core::ledger::ibc::storage::{
         ack_key, calc_hash, channel_counter_key, channel_key,
         client_connections_key, client_counter_key, client_state_key,
         client_update_height_key, client_update_timestamp_key, commitment_key,
@@ -304,7 +305,6 @@ mod tests {
         ibc_denom_key, next_sequence_ack_key, next_sequence_recv_key,
         next_sequence_send_key, receipt_key,
     };
-    use super::{get_dummy_header, *};
     use crate::core::ledger::storage::testing::TestWlStorage;
     use crate::core::types::address::testing::{
         established_address_1, established_address_2,

@@ -2,6 +2,7 @@
 //! as the PoS and IBC modules.
 
 pub mod ethereum_bridge;
+pub mod ibc;
 pub mod multitoken;
 pub mod parameters;
 pub mod replay_protection;

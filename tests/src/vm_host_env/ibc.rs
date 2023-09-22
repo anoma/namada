@@ -56,7 +56,7 @@ pub use namada::ledger::ibc::storage::{
     consensus_state_key, ibc_token, next_sequence_ack_key,
     next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
-use namada::ledger::ibc::vp::{
+use namada::ledger::native_vp::ibc::{
     get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
 };
 use namada::ledger::native_vp::multitoken::{
@@ -101,7 +101,7 @@ impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
         tx_data: &Tx,
-    ) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
+    ) -> std::result::Result<bool, namada::ledger::native_vp::ibc::Error> {
         self.ibc.validate_tx(
             tx_data,
             self.ibc.ctx.keys_changed,
@@ -132,7 +132,7 @@ impl<'a> TestMultitokenVp<'a> {
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
-) -> std::result::Result<bool, namada::ledger::ibc::vp::Error> {
+) -> std::result::Result<bool, namada::ledger::native_vp::ibc::Error> {
     let (verifiers, keys_changed) = tx_env
         .wl_storage
         .write_log
