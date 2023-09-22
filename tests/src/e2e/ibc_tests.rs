@@ -1447,6 +1447,7 @@ fn check_shielded_balances(
         AB_VIEWING_KEY,
         "--token",
         &ibc_token,
+        "--no-conversions",
         "--node",
         &rpc_b,
     ];
