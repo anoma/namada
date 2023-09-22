@@ -596,7 +596,7 @@ pub fn is_delegator<S>(
     epoch: Option<namada_core::types::storage::Epoch>,
 ) -> storage_api::Result<bool>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
     let prefix = bonds_for_source_prefix(address);
     match epoch {
