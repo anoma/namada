@@ -70,6 +70,8 @@ use crate::{display_line, edisplay_line, vm};
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 /// Initialize validator transaction WASM path
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+/// Unjail validator transaction WASM path
+pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 /// Initialize proposal transaction WASM path
 pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 /// Vote transaction WASM path
@@ -738,13 +740,8 @@ pub async fn build_unjail_validator<
 
     let validator_state_at_pipeline =
         rpc::get_validator_state(client, &validator, Some(pipeline_epoch))
-            .await?
-            .ok_or_else(|| {
-                Error::from(TxError::Other(
-                    "Validator state should be defined.".to_string(),
-                ))
-            })?;
-    if validator_state_at_pipeline != ValidatorState::Jailed {
+            .await?;
+    if validator_state_at_pipeline != Some(ValidatorState::Jailed) {
         edisplay_line!(
             IO,
             "The given validator address {} is not jailed at the pipeline \
