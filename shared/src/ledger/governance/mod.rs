@@ -628,7 +628,7 @@ where
         address: &Address,
         delegation_address: &Address,
     ) -> Result<bool> {
-        let bond_handle = pos::namada_proof_of_stake::bond_handle(
+        let bond_handle = pos::namada_proof_of_stake::storage::bond_handle(
             address,
             delegation_address,
         );

@@ -20,8 +20,8 @@ mod tests {
     use std::cmp;
 
     use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::storage::validator_commission_rate_handle;
     use namada::proof_of_stake::types::GenesisValidator;
-    use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
     use namada_tests::log::test;

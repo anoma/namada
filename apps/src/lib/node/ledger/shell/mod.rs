@@ -1548,7 +1548,7 @@ mod test_utils {
     };
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::validator_consensus_key_handle;
+    use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
     use namada::tendermint_proto::abci::VoteInfo;
     use namada::types::address;

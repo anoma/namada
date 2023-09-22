@@ -6,20 +6,22 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api::collections::lazy_map;
 use namada_core::ledger::storage_api::OptionExt;
 use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::storage::{
+    bond_handle, unbond_handle, validator_commission_rate_handle,
+    validator_incoming_redelegations_handle, validator_slashes_handle,
+    validator_state_handle,
+};
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
     Slash, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{
-    self, bond_amount, bond_handle, find_all_enqueued_slashes,
-    find_all_slashes, find_delegation_validators, find_delegations,
-    read_all_validator_addresses,
+    self, bond_amount, find_all_enqueued_slashes, find_all_slashes,
+    find_delegation_validators, find_delegations, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_max_commission_rate_change,
-    read_validator_stake, unbond_handle, validator_commission_rate_handle,
-    validator_incoming_redelegations_handle, validator_slashes_handle,
-    validator_state_handle,
+    read_validator_stake,
 };
 
 use crate::ledger::queries::types::RequestCtx;

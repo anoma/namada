@@ -25,10 +25,11 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada::ledger::pos::{PosParams, PosVP};
+    use namada::proof_of_stake::storage::{bond_handle, unbond_handle};
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
     use namada::proof_of_stake::{
-        bond_handle, read_consensus_validator_set_addresses_with_stake,
-        read_total_stake, read_validator_stake, unbond_handle,
+        read_consensus_validator_set_addresses_with_stake, read_total_stake,
+        read_validator_stake,
     };
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;

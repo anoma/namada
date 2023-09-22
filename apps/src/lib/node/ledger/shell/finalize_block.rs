@@ -12,11 +12,13 @@ use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
 use namada::ledger::{inflation, protocol, replay_protection};
-use namada::proof_of_stake::{
-    delegator_rewards_products_handle, find_validator_by_raw_hash,
-    read_last_block_proposer_address, read_pos_params, read_total_stake,
-    read_validator_stake, rewards_accumulator_handle,
+use namada::proof_of_stake::storage::{
+    delegator_rewards_products_handle, rewards_accumulator_handle,
     validator_commission_rate_handle, validator_rewards_products_handle,
+};
+use namada::proof_of_stake::{
+    find_validator_by_raw_hash, read_last_block_proposer_address,
+    read_pos_params, read_total_stake, read_validator_stake,
     write_last_block_proposer_address,
 };
 use namada::types::address::Address;
@@ -1083,6 +1085,11 @@ mod test_finalize_block {
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
+    use namada::proof_of_stake::storage::{
+        enqueued_slashes_handle, rewards_accumulator_handle,
+        validator_consensus_key_handle, validator_rewards_products_handle,
+        validator_slashes_handle, validator_state_handle,
+    };
     use namada::proof_of_stake::storage_key::{
         is_validator_slashes_key, slashes_prefix,
     };
@@ -1090,11 +1097,9 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{
-        enqueued_slashes_handle, get_num_consensus_validators,
-        read_consensus_validator_set_addresses_with_stake,
-        rewards_accumulator_handle, unjail_validator,
-        validator_consensus_key_handle, validator_rewards_products_handle,
-        validator_slashes_handle, validator_state_handle, write_pos_params,
+        get_num_consensus_validators,
+        read_consensus_validator_set_addresses_with_stake, unjail_validator,
+        write_pos_params,
     };
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
@@ -1946,11 +1951,10 @@ mod test_finalize_block {
         let validator = shell.mode.get_validator_address().unwrap();
         let pos_params =
             namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
-        let consensus_key =
-            namada_proof_of_stake::validator_consensus_key_handle(validator)
-                .get(&shell.wl_storage, Epoch::default(), &pos_params)
-                .unwrap()
-                .unwrap();
+        let consensus_key = validator_consensus_key_handle(validator)
+            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .unwrap()
+            .unwrap();
         let proposer_address = HEXUPPER
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
@@ -2602,11 +2606,10 @@ mod test_finalize_block {
         let validator = shell.mode.get_validator_address().unwrap().to_owned();
         let pos_params =
             namada_proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
-        let consensus_key =
-            namada_proof_of_stake::validator_consensus_key_handle(&validator)
-                .get(&shell.wl_storage, Epoch::default(), &pos_params)
-                .unwrap()
-                .unwrap();
+        let consensus_key = validator_consensus_key_handle(&validator)
+            .get(&shell.wl_storage, Epoch::default(), &pos_params)
+            .unwrap()
+            .unwrap();
         let proposer_address = HEXUPPER
             .decode(consensus_key.tm_raw_hash().as_bytes())
             .unwrap();
@@ -3369,7 +3372,7 @@ mod test_finalize_block {
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
         assert!(
-            namada_proof_of_stake::validator_slashes_handle(&val1.address)
+            validator_slashes_handle(&val1.address)
                 .is_empty(&shell.wl_storage)
                 .unwrap()
         );
@@ -3446,7 +3449,7 @@ mod test_finalize_block {
             .unwrap()
         );
         assert!(
-            namada_proof_of_stake::validator_slashes_handle(&val1.address)
+            validator_slashes_handle(&val1.address)
                 .is_empty(&shell.wl_storage)
                 .unwrap()
         );
@@ -3528,8 +3531,7 @@ mod test_finalize_block {
 
         // There should be 2 slashes processed for the validator, each with rate
         // equal to the cubic slashing rate
-        let val_slashes =
-            namada_proof_of_stake::validator_slashes_handle(&val1.address);
+        let val_slashes = validator_slashes_handle(&val1.address);
         assert_eq!(val_slashes.len(&shell.wl_storage).unwrap(), 2u64);
         let is_rate_good = val_slashes
             .iter(&shell.wl_storage)

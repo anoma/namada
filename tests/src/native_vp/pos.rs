@@ -572,10 +572,10 @@ pub mod testing {
     use namada::proof_of_stake::epoched::DynEpochOffset;
     use namada::proof_of_stake::parameters::testing::arb_rate;
     use namada::proof_of_stake::parameters::PosParams;
+    use namada::proof_of_stake::storage::unbond_handle;
     use namada::proof_of_stake::types::{BondId, ValidatorState};
     use namada::proof_of_stake::{
-        get_num_consensus_validators, read_pos_params, unbond_handle,
-        ADDRESS as POS_ADDRESS,
+        get_num_consensus_validators, read_pos_params, ADDRESS as POS_ADDRESS,
     };
     use namada::types::key::common::PublicKey;
     use namada::types::key::RefTo;

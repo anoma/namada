@@ -14,11 +14,9 @@ use namada::ledger::storage::{
     LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::proof_of_stake::pos_queries::PosQueries;
+use namada::proof_of_stake::read_consensus_validator_set_addresses_with_stake;
+use namada::proof_of_stake::storage::validator_consensus_key_handle;
 use namada::proof_of_stake::types::WeightedValidator;
-use namada::proof_of_stake::{
-    read_consensus_validator_set_addresses_with_stake,
-    validator_consensus_key_handle,
-};
 use namada::tendermint_proto::abci::VoteInfo;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;

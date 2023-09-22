@@ -313,9 +313,9 @@ mod test_vote_extensions {
     };
     use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::storage::consensus_validator_set_handle;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
-        consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake, Epoch,
     };
     #[cfg(feature = "abcipp")]

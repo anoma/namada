@@ -22,7 +22,7 @@ use namada_core::types::voting_power::{
     EthBridgeVotingPower, FractionalVotingPower,
 };
 use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
-use namada_proof_of_stake::{
+use namada_proof_of_stake::storage::{
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
 };
 
