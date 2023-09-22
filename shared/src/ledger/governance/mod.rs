@@ -628,15 +628,12 @@ where
         address: &Address,
         delegation_address: &Address,
     ) -> Result<bool> {
-        let bond_handle = pos::namada_proof_of_stake::storage::bond_handle(
-            address,
+        let is_delegator = pos::namada_proof_of_stake::is_delegator(
+            &self.ctx.pre(),
             delegation_address,
-        );
-        let params =
-            pos::namada_proof_of_stake::read_pos_params(&self.ctx.pre())?;
-        let bond = bond_handle.get_sum(&self.ctx.pre(), epoch, &params)?;
-
-        if bond.is_some() && verifiers.contains(address) {
+            Some(epoch),
+        )?;
+        if is_delegator && verifiers.contains(address) {
             Ok(true)
         } else {
             Ok(false)
