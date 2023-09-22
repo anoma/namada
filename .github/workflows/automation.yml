@@ -54,7 +54,7 @@ jobs:
       - uses: xt0rted/pull-request-comment-branch@v1
         if: steps.check.outputs.triggered == 'true'
         id: comment-branch
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@4v3
         if: steps.check.outputs.triggered == 'true'
         with:
           ref: ${{ steps.comment-branch.outputs.head_ref }}

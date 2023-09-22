@@ -43,10 +43,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:

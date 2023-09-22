@@ -42,7 +42,6 @@ jobs:
             command: cargo run --bin namada_encoding_spec && cd documentation/dev && mdbook build
             cache_subkey: dev
             cache_version: v1
-            distribution_id: E6XPP5KFWXJFQ
 
     env:
       CARGO_INCREMENTAL: 0
@@ -52,10 +51,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
@@ -126,10 +125,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
@@ -163,7 +162,38 @@ jobs:
         run: make build-doc
       - name: Print sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: v0.9.1
+      - name: Login to private registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ secrets.REGISTRY_URL }}/namada-rust-docs
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+      - name: ${{ matrix.make.name }}
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: docker/docs/Dockerfile
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

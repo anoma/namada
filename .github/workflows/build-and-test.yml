@@ -40,10 +40,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # From https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target:
         # "This event runs in the context of the base of the pull request, 
@@ -84,10 +84,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -171,10 +171,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
@@ -271,10 +271,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
@@ -380,10 +380,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@4v3
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
