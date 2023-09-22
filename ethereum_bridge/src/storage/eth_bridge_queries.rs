@@ -22,8 +22,8 @@ use namada_core::types::voting_power::{
     EthBridgeVotingPower, FractionalVotingPower,
 };
 use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
-use namada_proof_of_stake::storage::{
-    validator_eth_cold_key_handle, validator_eth_hot_key_handle,
+use namada_proof_of_stake::{
+    read_validator_eth_cold_key, read_validator_eth_hot_key,
 };
 
 use crate::storage::proof::BridgePoolRootProof;
@@ -293,9 +293,7 @@ where
     ) -> Option<EthAddress> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.wl_storage.pos_queries().get_pos_params();
-        validator_eth_hot_key_handle(validator)
-            .get(self.wl_storage, epoch, &params)
+        read_validator_eth_hot_key(self.wl_storage, validator, epoch)
             .expect("Should be able to read eth hot key from storage")
             .and_then(|ref pk| pk.try_into().ok())
     }
@@ -310,9 +308,7 @@ where
     ) -> Option<EthAddress> {
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
-        let params = self.wl_storage.pos_queries().get_pos_params();
-        validator_eth_cold_key_handle(validator)
-            .get(self.wl_storage, epoch, &params)
+        read_validator_eth_cold_key(self.wl_storage, validator, epoch)
             .expect("Should be able to read eth cold key from storage")
             .and_then(|ref pk| pk.try_into().ok())
     }

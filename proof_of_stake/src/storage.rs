@@ -2,9 +2,11 @@
 //! associated with given `storage_key`s.
 
 use namada_core::ledger::storage_api::collections::LazyCollection;
+use namada_core::ledger::storage_api::{Result, StorageRead};
 use namada_core::types::address::Address;
+use namada_core::types::key::common;
+use namada_core::types::storage::Epoch;
 
-use crate::storage_key;
 use crate::types::{
     BelowCapacityValidatorSets, BondId, Bonds, CommissionRates,
     ConsensusValidatorSets, DelegatorRedelegatedBonded,
@@ -16,6 +18,7 @@ use crate::types::{
     ValidatorEthHotKeys, ValidatorSetPositions, ValidatorStates,
     ValidatorTotalUnbonded,
 };
+use crate::{read_pos_params, storage_key};
 
 // ---- Storage handles ----
 
@@ -217,4 +220,34 @@ pub fn delegator_redelegated_unbonds_handle(
 ) -> DelegatorRedelegatedUnbonded {
     let key = storage_key::delegator_redelegated_unbonds_key(delegator);
     DelegatorRedelegatedUnbonded::open(key)
+}
+
+// ---- Storage read/write ----
+
+/// Try to read the validator ETH cold key in the given epoch or the last epoch
+/// that has a value set, if any.
+pub fn read_validator_eth_cold_key<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: Epoch,
+) -> Result<Option<common::PublicKey>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_eth_cold_key_handle(validator).get(storage, epoch, &params)
+}
+
+/// Try to read the validator ETH hot key in the given epoch or the last epoch
+/// that has a value set, if any.
+pub fn read_validator_eth_hot_key<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: Epoch,
+) -> Result<Option<common::PublicKey>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_eth_hot_key_handle(validator).get(storage, epoch, &params)
 }

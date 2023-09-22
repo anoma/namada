@@ -81,6 +81,9 @@ use crate::storage::{
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle,
 };
+pub use crate::storage::{
+    read_validator_eth_cold_key, read_validator_eth_hot_key,
+};
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
