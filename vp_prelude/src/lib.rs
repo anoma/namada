@@ -32,7 +32,7 @@ use namada_core::types::storage::{
 };
 pub use namada_core::types::*;
 pub use namada_macros::validity_predicate;
-pub use namada_proof_of_stake::storage as proof_of_stake;
+pub use namada_proof_of_stake::storage_key as proof_of_stake;
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};

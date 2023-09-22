@@ -1083,7 +1083,7 @@ mod test_finalize_block {
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api;
     use namada::ledger::storage_api::StorageWrite;
-    use namada::proof_of_stake::storage::{
+    use namada::proof_of_stake::storage_key::{
         is_validator_slashes_key, slashes_prefix,
     };
     use namada::proof_of_stake::types::{

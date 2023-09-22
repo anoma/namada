@@ -13,7 +13,7 @@ pub use namada_core::types::token;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::pos_queries::*;
-pub use namada_proof_of_stake::storage::*;
+pub use namada_proof_of_stake::storage_key::*;
 pub use namada_proof_of_stake::{staking_token_address, types};
 pub use vp::PosVP;
 
