@@ -66,8 +66,7 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check --workspace --exclude namada_benchmarks && \
-	$(cargo) +$(nightly) check --benches && \
+	$(cargo) check --workspace && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
