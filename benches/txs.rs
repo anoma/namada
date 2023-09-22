@@ -724,6 +724,7 @@ criterion_group!(
     bond,
     unbond,
     withdraw,
+    redelegate,
     reveal_pk,
     update_vp,
     init_account,
