@@ -59,4 +59,4 @@ tempfile.workspace = true
 tracing-subscriber = { workspace = true, features = ["std"]}
 
 [dev-dependencies]
-criterion = { version = "0.4", features = ["html_reports"] }
+criterion = { version = "0.5", features = ["html_reports"] }
