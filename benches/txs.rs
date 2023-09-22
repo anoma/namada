@@ -20,23 +20,23 @@ use namada::types::storage::Key;
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada::types::transaction::pos::{Bond, CommissionChange, Withdraw};
+use namada::types::transaction::pos::{
+    Bond, CommissionChange, Redelegation, Withdraw,
+};
 use namada::types::transaction::EllipticCurve;
 use namada_apps::wallet::defaults;
 use namada_benches::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_PROPOSAL_WASM,
+    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM, TX_REDELEGATE_WASM,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
+    VP_VALIDATOR_WASM,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use sha2::Digest;
-
-const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
-const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
-const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
 // TODO: need to benchmark tx_bridge_pool.wasm
 fn transfer(c: &mut Criterion) {
@@ -282,6 +282,43 @@ fn withdraw(c: &mut Criterion) {
             )
         });
     }
+
+    group.finish();
+}
+
+fn redelegate(c: &mut Criterion) {
+    let mut group = c.benchmark_group("redelegate");
+
+    let redelegation = |dest_validator| {
+        generate_tx(
+            TX_REDELEGATE_WASM,
+            Redelegation {
+                src_validator: defaults::validator_address(),
+                dest_validator,
+                owner: defaults::albert_address(),
+                amount: Amount::from(1),
+            },
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        )
+    };
+
+    group.bench_function("redelegate", |b| {
+        b.iter_batched_ref(
+            || {
+                let shell = BenchShell::default();
+                // Find the other genesis validator
+                let current_epoch = shell.wl_storage.get_block_epoch().unwrap();
+                let validators = namada::proof_of_stake::read_consensus_validator_set_addresses(&shell.inner.wl_storage, current_epoch).unwrap();
+                let validator_2 = validators.into_iter().find(|addr| addr != &defaults::validator_address()).expect("There must be another validator to redelegate to");
+                // Prepare the redelegation tx
+                (shell, redelegation(validator_2))
+            },
+            |(shell, tx)| shell.execute_tx(tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
 
     group.finish();
 }

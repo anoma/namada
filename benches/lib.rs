@@ -108,12 +108,17 @@ pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 pub const TX_VOTE_PROPOSAL_WASM: &str = "tx_vote_proposal.wasm";
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
+pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
 pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
 pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
+pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+
 pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
