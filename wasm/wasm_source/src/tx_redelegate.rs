@@ -3,8 +3,7 @@
 
 use namada_tx_prelude::*;
 
-// TODO: add to benches and find the new value
-#[transaction(gas = 430000)]
+#[transaction(gas = 460000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
