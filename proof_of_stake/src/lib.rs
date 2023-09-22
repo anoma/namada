@@ -1776,11 +1776,6 @@ where
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
 
-    if tracing::level_enabled!(tracing::Level::DEBUG) {
-        let bonds = find_bonds(storage, source, validator)?;
-        tracing::debug!("\nBonds before decrementing: {bonds:#?}");
-    }
-
     // Make sure there are enough tokens left in the bond at the pipeline offset
     let remaining_at_pipeline = bonds_handle
         .get_sum(storage, pipeline_epoch, &params)?
@@ -1794,16 +1789,23 @@ where
         .into());
     }
 
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, source, validator)?;
+        tracing::debug!("\nBonds before decrementing: {bonds:#?}");
+    }
+
     let unbonds = unbond_handle(source, validator);
     let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
 
     let redelegated_bonds =
         delegator_redelegated_bonds_handle(source).at(validator);
+
     #[cfg(debug_assertions)]
     let redel_bonds_pre = redelegated_bonds.collect_map(storage)?;
 
     // `resultUnbonding`
-    // Find the bonds to fully unbond and one to partially unbond, if necessary
+    // Find the bonds to fully unbond (remove) and one to partially unbond, if
+    // necessary
     let bonds_to_unbond = find_bonds_to_remove(
         storage,
         &bonds_handle.get_data_handler(),
@@ -1817,13 +1819,13 @@ where
     let modified_redelegation = match bonds_to_unbond.new_entry {
         Some((bond_epoch, new_bond_amount)) => {
             tracing::debug!(
-                "New redel entry for epoch {bond_epoch} -> amount \
+                "New bond entry for epoch {bond_epoch} -> amount \
                  {new_bond_amount}",
             );
-            let cur_bond_amount = bonds_handle
-                .get_delta_val(storage, bond_epoch)?
-                .unwrap_or_default();
             if redelegated_bonds.contains(storage, &bond_epoch)? {
+                let cur_bond_amount = bonds_handle
+                    .get_delta_val(storage, bond_epoch)?
+                    .unwrap_or_default();
                 compute_modified_redelegation(
                     storage,
                     &redelegated_bonds.at(&bond_epoch),
@@ -1839,7 +1841,7 @@ where
 
     // Compute the new unbonds eagerly
     // `keysUnbonds`
-    // Get a set of epochs from which we're unbonding (fully or partially).
+    // Get a set of epochs from which we're unbonding (fully and partially).
     let bond_epochs_to_unbond =
         if let Some((start_epoch, _)) = bonds_to_unbond.new_entry {
             let mut to_remove = bonds_to_unbond.epochs.clone();
@@ -1904,12 +1906,6 @@ where
     }
 
     // `newRedelegatedUnbonds`
-    // tracing::debug!("\nDEBUGGING REDELEGATED UNBONDS\n");
-    // dbg!(
-    //     &redelegated_bonds.collect_map(storage)?,
-    //     &bonds_to_unbond.epochs,
-    //     &modified_redelegation
-    // );
     // This is what the delegator's redelegated unbonds would look like if this
     // was the only unbond in the PoS system. We need to add these redelegated
     // unbonds to the existing redelegated unbonds
@@ -1919,7 +1915,6 @@ where
         &bonds_to_unbond.epochs,
         &modified_redelegation,
     )?;
-    // dbg!(&new_redelegated_unbonds);
 
     // `updatedRedelegatedBonded`
     // NOTE: for now put this here after redelegated unbonds calc bc that one
@@ -1933,14 +1928,9 @@ where
         if modified_redelegation.validators_to_remove.is_empty() {
             redelegated_bonds.remove_all(storage, &epoch)?;
         } else {
-            // dbg!(&modified_redelegation);
             // Then update the redelegated bonds at this epoch
             let rbonds = redelegated_bonds.at(&epoch);
-            // let pre = rbonds.collect_map(storage)?;
-            // dbg!(&pre);
             update_redelegated_bonds(storage, &rbonds, &modified_redelegation)?;
-            // let post = rbonds.collect_map(storage)?;
-            // dbg!(&post);
         }
     }
 
