@@ -347,13 +347,14 @@ jobs:
   namada-e2e:
     runs-on: 
       group: gians-runners
+    needs: [build-wasm, namada-release]
     # timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.7.0]
+        mold_version: [2.1.0]
         comet_bft: [0.37.2]
         hermes: [1.6.0-namada-beta1]
         make:
@@ -362,19 +363,16 @@ jobs:
             index: 0
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 1
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
           - name: e2e
             suffix: ''
             index: 2
             cache_key: namada
             cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
       RUSTC_WRAPPER: sccache
@@ -427,28 +425,12 @@ jobs:
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
-      - name: Build 
-        run: make build
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Build test
-        run: make build-test
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Download MASP parameters
         run: |
           mkdir -p /home/runner/.masp-params
           curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
           curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
           curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
-      - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@v1.2.0
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          check-name: ${{ matrix.make.wait_for }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 42
-          allowed-conclusions: success
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -500,7 +482,7 @@ jobs:
           retention-days: 5
       - name: Print sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
