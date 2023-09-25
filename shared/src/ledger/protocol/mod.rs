@@ -1004,7 +1004,7 @@ fn merge_vp_results(
     errors.append(&mut b.errors);
     let mut gas_used = a.gas_used;
 
-    gas_used.merge(&mut b.gas_used, tx_gas_meter)?;
+    gas_used.merge(b.gas_used, tx_gas_meter)?;
 
     Ok(VpsResult {
         accepted_vps,
