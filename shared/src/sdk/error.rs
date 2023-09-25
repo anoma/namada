@@ -189,6 +189,12 @@ pub enum TxError {
          to be transferred. Amount to transfer is {2} and the balance is {3}."
     )]
     BalanceTooLow(Address, Address, String, String),
+    /// Balance is too low for fee payment
+    #[error(
+        "The balance of the source {0} of token {1} is lower than the amount \
+         required for fees. Amount of the fees is {2} and the balance is {3}."
+    )]
+    BalanceTooLowForFees(Address, Address, String, String),
     /// Token Address does not exist on chain
     #[error("The token address {0} doesn't exist on chain.")]
     TokenDoesNotExist(Address),
@@ -213,6 +219,9 @@ pub enum TxError {
     /// No Balance found for token
     #[error("{0}")]
     MaspError(String),
+    /// Error in the fee unshielding transaction
+    #[error("Error in fee unshielding: {0}")]
+    FeeUnshieldingError(String),
     /// Wasm validation failed
     #[error("Validity predicate code validation failed with {0}")]
     WasmValidationFailure(WasmValidationError),
