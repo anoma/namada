@@ -110,6 +110,7 @@ pub const TX_UPDATE_STEWARD_COMMISSION: &str =
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 
 /// Capture the result of running a transaction
+#[derive(Debug)]
 pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the blockchain
     Applied(TxResponse),
@@ -1581,7 +1582,7 @@ async fn used_asset_types<'a, P, R, K, N>(
 /// Submit an ordinary transfer
 pub async fn build_transfer<'a, N: Namada<'a>>(
     context: &mut N,
-    mut args: args::TxTransfer,
+    args: &mut args::TxTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.effective_address());
     let signing_data = signing::aux_signing_data(
@@ -1642,7 +1643,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     };
 
     // Construct the shielded part of the transaction, if any
-    let stx_result = ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(context, &args).await;
+    let stx_result = ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(context, args).await;
 
     let shielded_parts = match stx_result {
         Ok(stx) => Ok(stx),

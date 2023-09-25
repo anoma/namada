@@ -23,6 +23,7 @@ use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::types::masp::{TransferSource, TransferTarget};
 use crate::types::address::Address;
 use crate::sdk::args::{self, InputAmount};
+use crate::sdk::args::SdkTypes;
 use crate::sdk::tx::{
     TX_TRANSFER_WASM, TX_REVEAL_PK, TX_BOND_WASM, TX_UNBOND_WASM, TX_IBC_WASM,
     TX_INIT_PROPOSAL, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, VP_USER_WASM,
@@ -68,6 +69,11 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
     type ShieldedUtils: 'a + ShieldedUtils;
+
+    /// Return the native token
+    fn native_token(&mut self) -> Address {
+        self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone()
+    }
     
     /// Make a tx builder using no arguments
     fn tx_builder(&mut self) -> args::Tx {
@@ -83,7 +89,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
             wallet_alias_force: false,
             fee_amount: None,
             wrapper_fee_payer: None,
-            fee_token: self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone(),
+            fee_token: self.native_token(),
             fee_unshield: None,
             gas_limit: GasLimit::from(20_000),
             expiration: None,
@@ -112,7 +118,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
             amount,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
-            native_token: self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone(),
+            native_token: self.native_token(),
         }
     }
 
@@ -138,7 +144,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
             amount,
             source: None,
             tx: self.tx_builder(),
-            native_token: self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone(),
+            native_token: self.native_token(),
             tx_code_path: PathBuf::from(TX_BOND_WASM),
         }
     }
@@ -189,7 +195,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
     ) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            native_token: self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone(),
+            native_token: self.native_token(),
             is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
@@ -310,7 +316,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
                 denom: NATIVE_MAX_DECIMAL_PLACES.into(),
             }),
             fee_payer: None,
-            fee_token: self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone(),
+            fee_token: self.native_token(),
             nut: false,
             code_path: PathBuf::from(TX_BRIDGE_POOL_WASM),
             tx: self.tx_builder(),
@@ -376,10 +382,14 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
 }
 
 /// Provides convenience methods for common Namada interactions
-pub struct NamadaImpl<'a, C, U, V>(NamadaStruct<'a, C, U, V>) where
+pub struct NamadaImpl<'a, C, U, V> where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
-    V: ShieldedUtils;
+    V: ShieldedUtils,
+{
+    namada: NamadaStruct<'a, C, U, V>,
+    prototype: args::Tx,
+}
 
 impl<'a, C, U, V> NamadaImpl<'a, C, U, V> where
     C: crate::ledger::queries::Client + Sync,
@@ -392,7 +402,37 @@ impl<'a, C, U, V> NamadaImpl<'a, C, U, V> where
         wallet: &'a mut Wallet<U>,
         shielded: &'a mut ShieldedContext<V>,
     ) -> Self {
-        Self(NamadaStruct { client, wallet, shielded })
+        let fee_token = wallet
+            .find_address(args::NAM)
+            .expect("NAM not in wallet")
+            .clone();
+        Self {
+            namada: NamadaStruct { client, wallet, shielded },
+            prototype: args::Tx {
+                dry_run: false,
+                dry_run_wrapper: false,
+                dump_tx: false,
+                output_folder: None,
+                force: false,
+                broadcast_only: false,
+                ledger_address: (),
+                initialized_account_alias: None,
+                wallet_alias_force: false,
+                fee_amount: None,
+                wrapper_fee_payer: None,
+                fee_token,
+                fee_unshield: None,
+                gas_limit: GasLimit::from(20_000),
+                expiration: None,
+                disposable_signing_key: false,
+                chain_id: None,
+                signing_keys: vec![],
+                signatures: vec![],
+                tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
+                verification_key: None,
+                password: None,
+            },
+        }
     }
 }
 
@@ -404,7 +444,7 @@ impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V> where
     type Target = NamadaStruct<'a, C, U, V>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.namada
     }
 }
 
@@ -414,7 +454,7 @@ impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V> where
     V: ShieldedUtils,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.namada
     }
 }
 
@@ -426,4 +466,22 @@ impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V> where
     type Client = C;
     type WalletUtils = U;
     type ShieldedUtils = V;
+
+    /// Obtain the prototypical Tx builder
+    fn tx_builder(&mut self) -> args::Tx {
+        self.prototype.clone()
+    }
+}
+
+/// Allow the prototypical Tx builder to be modified
+impl<'a, C, U, V> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V> where
+    C: crate::ledger::queries::Client + Sync,
+    U: WalletUtils,
+    V: ShieldedUtils,
+{
+    fn tx<F>(self, func: F) -> Self where
+        F: FnOnce(args::Tx<SdkTypes>) -> args::Tx<SdkTypes>,
+    {
+        Self { prototype: func(self.prototype), ..self }
+    }
 }
