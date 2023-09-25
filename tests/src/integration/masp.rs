@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use namada::types::io::DefaultIo;
 use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::utils::Bin;
@@ -29,7 +30,7 @@ fn masp_incentives() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -765,7 +766,7 @@ fn masp_pinned_txs() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
 
     let mut node = setup::setup()?;
     // Wait till epoch boundary
@@ -928,7 +929,7 @@ fn masp_txs_and_queries() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
 
     enum Response {
         Ok(&'static str),
@@ -1235,7 +1236,7 @@ fn wrapper_fee_unshielding() {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

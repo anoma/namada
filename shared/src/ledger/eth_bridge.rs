@@ -17,6 +17,8 @@ use crate::types::control_flow::time::{
     Constant, Duration, Error as TimeoutError, Instant, LinearBackoff, Sleep,
 };
 use crate::types::control_flow::{self, Halt, TryHalt};
+use crate::types::io::Io;
+use crate::{display_line, edisplay_line};
 
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
@@ -98,7 +100,10 @@ pub struct BlockOnEthSync {
 }
 
 /// Block until Ethereum finishes synchronizing.
-pub async fn block_on_eth_sync<C>(client: &C, args: BlockOnEthSync) -> Halt<()>
+pub async fn block_on_eth_sync<C, IO: Io>(
+    client: &C,
+    args: BlockOnEthSync,
+) -> Halt<()>
 where
     C: Middleware,
 {
@@ -106,7 +111,7 @@ where
         deadline,
         delta_sleep,
     } = args;
-    tracing::info!("Attempting to synchronize with the Ethereum network");
+    display_line!(IO, "Attempting to synchronize with the Ethereum network");
     Sleep {
         strategy: LinearBackoff { delta: delta_sleep },
     }
@@ -122,15 +127,18 @@ where
     })
     .await
     .try_halt(|_| {
-        tracing::error!("Timed out while waiting for Ethereum to synchronize");
+        edisplay_line!(
+            IO,
+            "Timed out while waiting for Ethereum to synchronize"
+        );
     })?;
-    tracing::info!("The Ethereum node is up to date");
+    display_line!(IO, "The Ethereum node is up to date");
     control_flow::proceed(())
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, perform `action`.
-pub async fn eth_sync_or<C, F, T>(
+pub async fn eth_sync_or<C, F, T, IO: Io>(
     client: &C,
     mut action: F,
 ) -> Halt<Either<T, ()>>
@@ -142,7 +150,8 @@ where
         .await
         .map(|status| status.is_synchronized())
         .try_halt(|err| {
-            tracing::error!(
+            edisplay_line!(
+                IO,
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"
             );
@@ -156,11 +165,11 @@ where
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit<C>(client: &C) -> Halt<()>
+pub async fn eth_sync_or_exit<C, IO: Io>(client: &C) -> Halt<()>
 where
     C: Middleware,
 {
-    eth_sync_or(client, || {
+    eth_sync_or::<_, _, _, IO>(client, || {
         tracing::error!("The Ethereum node has not finished synchronizing");
     })
     .await?

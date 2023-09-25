@@ -78,6 +78,7 @@ use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
+use namada::types::io::DefaultIo;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
@@ -662,12 +663,13 @@ impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
 
-        let mut ctx = Context::new(namada_apps::cli::args::Global {
-            chain_id: None,
-            base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
-            wasm_dir: Some(WASM_DIR.into()),
-        })
-        .unwrap();
+        let mut ctx =
+            Context::new::<DefaultIo>(namada_apps::cli::args::Global {
+                chain_id: None,
+                base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
+                wasm_dir: Some(WASM_DIR.into()),
+            })
+            .unwrap();
 
         // Generate spending key for Albert and Bertha
         ctx.wallet.gen_spending_key(
@@ -784,7 +786,10 @@ impl BenchShieldedCtx {
             ))
             .unwrap();
         let shielded = async_runtime
-            .block_on(self.shielded.gen_shielded_transfer(&self.shell, args))
+            .block_on(
+                self.shielded
+                    .gen_shielded_transfer::<_, DefaultIo>(&self.shell, args),
+            )
             .unwrap()
             .map(
                 |ShieldedTransfer {

@@ -15,10 +15,12 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
+use namada::types::io::DefaultIo;
 use utils::*;
 pub use utils::{dispatch_prompt, safe_exit, Cmd, TESTIN};
 
 pub use self::context::Context;
+use crate::cli::api::CliIo;
 
 include!("../../version.rs");
 
@@ -2585,6 +2587,14 @@ pub mod args {
         arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
+    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
+    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
+        "fee-amount",
+        DefaultFn(|| token::DenominatedAmount {
+            amount: token::Amount::default(),
+            denom: NATIVE_MAX_DECIMAL_PLACES.into(),
+        }),
+    );
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
         arg("genesis-validator").opt();
@@ -4233,14 +4243,6 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
-            QueryPgf::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
-            }
-        }
-    }
-
     impl Args for QueryPgf<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
@@ -4250,6 +4252,14 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
+        }
+    }
+
+    impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
+            QueryPgf::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+            }
         }
     }
 
@@ -5653,7 +5663,7 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
             let global_args = args::Global::parse(&matches);
             match cmd {
                 cmds::NamadaClient::WithContext(sub_cmd) => {
-                    let context = Context::new(global_args)?;
+                    let context = Context::new::<CliIo>(global_args)?;
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
@@ -5689,7 +5699,7 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
                 cmds::EthBridgePool::WithContext(sub_cmd),
             ) => {
                 let global_args = args::Global::parse(&matches);
-                let context = Context::new(global_args)?;
+                let context = Context::new::<DefaultIo>(global_args)?;
                 Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
                     sub_cmd, context,
                 ))))

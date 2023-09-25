@@ -69,6 +69,7 @@ use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
+use crate::types::io::Io;
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
@@ -76,6 +77,7 @@ use crate::types::token::{
     Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
+use crate::{display_line, edisplay_line};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1023,7 +1025,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// context and express that value in terms of the currently timestamped
     /// asset types. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_exchanged_balance<C: Client + Sync>(
+    pub async fn compute_exchanged_balance<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         vk: &ViewingKey,
@@ -1033,7 +1035,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(balance) = self.compute_shielded_balance(client, vk).await?
         {
             let exchanged_amount = self
-                .compute_exchanged_amount(
+                .compute_exchanged_amount::<_, IO>(
                     client,
                     balance,
                     target_epoch,
@@ -1056,7 +1058,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     #[allow(clippy::too_many_arguments)]
-    async fn apply_conversion<C: Client + Sync>(
+    async fn apply_conversion<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         conv: AllowedConversion,
@@ -1077,7 +1079,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             make_asset_type(Some(asset_type.0), &asset_type.1, asset_type.2)?;
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
-            eprintln!(
+            edisplay_line!(
+                IO,
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
                 masp_asset
@@ -1107,7 +1110,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount<C: Client + Sync>(
+    pub async fn compute_exchanged_amount<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         mut input: MaspAmount,
@@ -1145,14 +1148,15 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 if let (Some((conv, _wit, usage)), false) =
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
-                    println!(
+                    display_line!(
+                        IO,
                         "converting current asset type to latest asset type..."
                     );
                     // Not at the target asset type, not at the latest asset
                     // type. Apply conversion to get from
                     // current asset type to the latest
                     // asset type.
-                    self.apply_conversion(
+                    self.apply_conversion::<_, IO>(
                         client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
@@ -1166,14 +1170,15 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     conversions.get_mut(&target_asset_type),
                     at_target_asset_type,
                 ) {
-                    println!(
+                    display_line!(
+                        IO,
                         "converting latest asset type to target asset type..."
                     );
                     // Not at the target asset type, yet at the latest asset
                     // type. Apply inverse conversion to get
                     // from latest asset type to the target
                     // asset type.
-                    self.apply_conversion(
+                    self.apply_conversion::<_, IO>(
                         client,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
@@ -1208,7 +1213,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes<C: Client + Sync>(
+    pub async fn collect_unspent_notes<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         vk: &ViewingKey,
@@ -1254,7 +1259,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         })?;
                 let input = self.decode_all_amounts(client, pre_contr).await;
                 let (contr, proposed_convs) = self
-                    .compute_exchanged_amount(
+                    .compute_exchanged_amount::<_, IO>(
                         client,
                         input,
                         target_epoch,
@@ -1284,7 +1289,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         .path()
                         .ok_or_else(|| {
                             Error::Other(format!(
-                                "Un able to get path: {}",
+                                "Unable to get path: {}",
                                 line!()
                             ))
                         })?;
@@ -1393,7 +1398,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the epoch of the transaction or even before, so exchange all these
     /// amounts to the epoch of the transaction in order to get the value that
     /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance<C: Client + Sync>(
+    pub async fn compute_exchanged_pinned_balance<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         owner: PaymentAddress,
@@ -1402,16 +1407,21 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
             Self::compute_pinned_balance(client, owner, viewing_key).await?;
-        println!("Pinned balance: {:?}", amt);
+        display_line!(IO, "Pinned balance: {:?}", amt);
         // Establish connection with which to do exchange rate queries
         let amount = self.decode_all_amounts(client, amt).await;
-        println!("Decoded pinned balance: {:?}", amount);
+        display_line!(IO, "Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount(client, amount, ep, BTreeMap::new())
+            .compute_exchanged_amount::<_, IO>(
+                client,
+                amount,
+                ep,
+                BTreeMap::new(),
+            )
             .await?
             .0;
-        println!("Exchanged amount: {:?}", computed_amount);
+        display_line!(IO, "Exchanged amount: {:?}", computed_amount);
         Ok((self.decode_all_amounts(client, computed_amount).await, ep))
     }
 
@@ -1473,7 +1483,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
     #[cfg(feature = "masp-tx-gen")]
-    pub async fn gen_shielded_transfer<C: Client + Sync>(
+    pub async fn gen_shielded_transfer<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         args: args::TxTransfer,
@@ -1543,7 +1553,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = self
-                .collect_unspent_notes(
+                .collect_unspent_notes::<_, IO>(
                     client,
                     &to_viewing_key(&sk).vk,
                     I128Sum::from_sum(amount),
