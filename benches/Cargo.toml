@@ -47,8 +47,8 @@ borsh.workspace = true
 ferveo-common.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
-namada = { path = "../shared" }
-namada_apps = { path = "../apps" }
+namada = { path = "../shared", features = ["testing"] }
+namada_apps = { path = "../apps", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
 prost.workspace = true
 rand.workspace = true
