@@ -142,11 +142,12 @@ jobs:
         with:
           name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./wasm
-      - name: Update WASM
-        run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+      - name: Upload WASM
+        run: aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
         env:
-          BUCKET_NAME: namada-wasm-master
-          AWS_REGION: eu-west-1
+          BUCKET_NAME: namada-wasm
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: https://minio.heliax.click
 
   unit-and-integration-tests:
     runs-on: 
@@ -265,7 +266,7 @@ jobs:
         make:
           - name: ABCI Release build
             suffix: ''
-            cache_key: namada-e2e-release
+            cache_key: namada-release
             cache_version: "v2"
 
     env:
@@ -316,10 +317,10 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Build
-        run: make build-release${{ matrix.make.suffix }}
+        run: make build-r§elease${{ matrix.make.suffix }}
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Upload target binaries
+      - name: Upload target binaries (github)
         uses: actions/upload-artifact@v3
         with:
           name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -329,6 +330,15 @@ jobs:
             target/release/namadaw
             target/release/namadan
             target/release/namadar
+      - name: Upload namada binaries (minio)
+        run: |
+          zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
+        env:
+          BUCKET_NAME: namada-binaries
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: https://minio.heliax.click
+          ZIP_FILENAME: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
       - name: Upload build timing report
         if: success() || failure()
         uses: actions/upload-artifact@v3
