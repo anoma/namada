@@ -180,6 +180,14 @@ pub enum InputAmount {
     Unvalidated(token::DenominatedAmount),
 }
 
+impl std::str::FromStr for InputAmount {
+    type Err = <token::DenominatedAmount as std::str::FromStr>::Err;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        token::DenominatedAmount::from_str(s).map(InputAmount::Unvalidated)
+    }
+}
+
 /// Transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
@@ -234,7 +242,7 @@ impl<C: NamadaTypes> TxTransfer<C> {
 
 impl TxTransfer {
     /// Build a transaction from this builder
-    pub async fn build<'a>(self, context: &mut impl Namada<'a>) ->
+    pub async fn build<'a>(&mut self, context: &mut impl Namada<'a>) ->
         crate::types::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
     {
         tx::build_transfer(context, self).await
