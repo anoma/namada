@@ -24,6 +24,7 @@ The section should either be one of the following choices:
 - `features`
 - `improvements`
 - `testing`
+- `SDK`
 
 To add a change log entry using `unclog`, you can fill in the following command (prefer to use the issue number, for which the `--pull-request` argument may be omitted):
 
@@ -47,6 +48,13 @@ If none of the sections fit, new sections may be added. To find the existing sec
 for i in $(ls -d .changelog/*/*/); do basename "$i"; done | sort | uniq
 ```
 
+#### SDK Changelog
+
+The Namada SDK is exposed to any developer building upon Namada. Thus, any change made to a public facing function is a breaking change, and therefore should be documented in the Changelog under the `SDK` section.
+
+The message should outline the exact API change, along with a small section describing *how* and *why* the componenet was change. This should give motivation and context to any developer building upon Namada on how they can update their code to the next version.
+
 ## Development priorities
+
 
 If you’d like to follow the development or contribute with new or unimplemented features, we recommend to check [the issues](https://github.com/anoma/namada/issues) that are in current focus of the ledger team.
