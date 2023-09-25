@@ -30,19 +30,28 @@ use crate::types::uint::Uint;
     Hash,
     Debug,
 )]
-pub struct EthBridgeVotingPower(u64);
+pub struct EthBridgeVotingPower(u128);
 
 impl EthBridgeVotingPower {
     /// Maximum value that can be represented for the voting power
     /// stored in an Ethereum bridge smart contract.
-    pub const MAX: Self = Self(1 << 32);
+    ///
+    /// The smart contract uses 12-byte integers.
+    pub const MAX: Self = Self((1 << 96) - 1);
 }
 
-impl TryFrom<u64> for EthBridgeVotingPower {
+impl From<u64> for EthBridgeVotingPower {
+    #[inline]
+    fn from(val: u64) -> Self {
+        Self(val as u128)
+    }
+}
+
+impl TryFrom<u128> for EthBridgeVotingPower {
     type Error = ();
 
     #[inline]
-    fn try_from(val: u64) -> Result<Self, ()> {
+    fn try_from(val: u128) -> Result<Self, ()> {
         if val <= Self::MAX.0 {
             Ok(Self(val))
         } else {
@@ -52,14 +61,11 @@ impl TryFrom<u64> for EthBridgeVotingPower {
 }
 
 impl From<&FractionalVotingPower> for EthBridgeVotingPower {
-    fn from(ratio: &FractionalVotingPower) -> Self {
-        // normalize the voting power
-        // https://github.com/anoma/ethereum-bridge/blob/fe93d2e95ddb193a759811a79c8464ad4d709c12/test/utils/utilities.js#L29
-        const NORMALIZED_VOTING_POWER: Uint =
-            Uint::from_u64(EthBridgeVotingPower::MAX.0);
+    fn from(FractionalVotingPower(ratio): &FractionalVotingPower) -> Self {
+        let max_bridge_voting_power = Uint::from(EthBridgeVotingPower::MAX.0);
 
-        let voting_power = ratio.0 * NORMALIZED_VOTING_POWER;
-        let voting_power = voting_power.round().to_integer().low_u64();
+        let voting_power = ratio * max_bridge_voting_power;
+        let voting_power = voting_power.round().to_integer().low_u128();
 
         Self(voting_power)
     }
@@ -79,9 +85,9 @@ impl From<EthBridgeVotingPower> for ethereum::U256 {
     }
 }
 
-impl From<EthBridgeVotingPower> for u64 {
+impl From<EthBridgeVotingPower> for u128 {
     #[inline]
-    fn from(EthBridgeVotingPower(voting_power): EthBridgeVotingPower) -> u64 {
+    fn from(EthBridgeVotingPower(voting_power): EthBridgeVotingPower) -> u128 {
         voting_power
     }
 }

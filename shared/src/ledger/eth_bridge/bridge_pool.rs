@@ -16,9 +16,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
-use crate::eth_bridge::structs::RelayProof;
 use crate::ledger::queries::{
-    Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
+    Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
+    RPC,
 };
 use crate::proto::Tx;
 use crate::sdk::args;
@@ -288,7 +288,7 @@ struct BridgePoolProofResponse {
     hashes: Vec<KeccakHash>,
     relayer_address: Address,
     total_fees: HashMap<Address, Amount>,
-    abi_encoded_proof: Vec<u8>,
+    abi_encoded_args: Vec<u8>,
 }
 
 /// Construct a merkle proof of a batch of transfers in
@@ -302,7 +302,7 @@ where
     C: Client + Sync,
 {
     let GenBridgePoolProofRsp {
-        abi_encoded_proof: bp_proof_bytes,
+        abi_encoded_args,
         appendices,
     } = construct_bridge_pool_proof::<_, IO>(
         client,
@@ -332,7 +332,7 @@ where
                 )
             })
             .unwrap_or_default(),
-        abi_encoded_proof: bp_proof_bytes,
+        abi_encoded_args,
     };
     display_line!(IO, "{}", serde_json::to_string(&resp).unwrap());
     control_flow::proceed(())
@@ -365,8 +365,7 @@ where
     }
 
     let GenBridgePoolProofRsp {
-        abi_encoded_proof: bp_proof,
-        ..
+        abi_encoded_args, ..
     } = construct_bridge_pool_proof::<_, IO>(
         nam_client,
         GenBridgePoolProofReq {
@@ -398,8 +397,8 @@ where
         }
     };
 
-    let bp_proof: RelayProof =
-        AbiDecode::decode(&bp_proof).try_halt(|error| {
+    let (validator_set, signatures, bp_proof): TransferToErcArgs =
+        AbiDecode::decode(&abi_encoded_args).try_halt(|error| {
             display_line!(
                 IO,
                 "Unable to decode the generated proof: {:?}",
@@ -442,7 +441,8 @@ where
         }
     }
 
-    let mut relay_op = bridge.transfer_to_erc(bp_proof);
+    let mut relay_op =
+        bridge.transfer_to_erc(validator_set, signatures, bp_proof);
     if let Some(gas) = args.gas {
         relay_op.tx.set_gas(gas);
     }

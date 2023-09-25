@@ -89,7 +89,6 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-bridge-events.workspace = true
 ethbridge-events.workspace = true
-ethbridge-governance-events.workspace = true
 eyre.workspace = true
 fd-lock.workspace = true
 ferveo-common.workspace = true

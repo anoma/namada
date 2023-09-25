@@ -101,7 +101,6 @@ data-encoding.workspace = true
 derivation-path.workspace = true
 derivative.workspace = true
 ethbridge-bridge-contract.workspace = true
-ethbridge-governance-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 futures.workspace = true

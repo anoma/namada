@@ -1079,7 +1079,6 @@ mod tests {
                 asset: DAI_ERC20_ETH_ADDRESS,
                 receiver: address::testing::established_address_4(),
             }],
-            valid_transfers_map: vec![true],
         };
         let vext = EthereumEventsVext {
             block_height: BlockHeight(100),

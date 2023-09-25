@@ -117,10 +117,6 @@ pub fn bootstrap_ethereum_bridge(
                 address: EthAddress([2; 20]),
                 version: ContractVersion::default(),
             },
-            governance: UpgradeableContract {
-                address: EthAddress([3; 20]),
-                version: ContractVersion::default(),
-            },
         },
     };
     config.init_storage(wl_storage);

@@ -1497,9 +1497,9 @@ mod test_finalize_block {
             .clone();
 
         // ---- the ledger receives a new Ethereum event
-        let event = EthereumEvent::NewContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
         };
         tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
         let [queued_event]: [EthereumEvent; 1] =
@@ -1575,9 +1575,9 @@ mod test_finalize_block {
             .clone();
 
         // ---- the ledger receives a new Ethereum event
-        let event = EthereumEvent::NewContract {
-            name: "Test".to_string(),
-            address: EthAddress([0; 20]),
+        let event = EthereumEvent::TransfersToNamada {
+            nonce: 0u64.into(),
+            transfers: vec![],
         };
         tokio_test::block_on(oracle.send(event.clone())).expect("Test failed");
         let [queued_event]: [EthereumEvent; 1] =
@@ -1695,17 +1695,8 @@ mod test_finalize_block {
 
     #[test]
     /// Test that adding a new erc20 transfer to the bridge pool
-    /// increments the pool's nonce, whether only invalid transfers
-    /// were relayed or not.
+    /// increments the pool's nonce.
     fn test_bp_nonce_is_incremented() {
-        test_bp_nonce_is_incremented_aux(false);
-        test_bp_nonce_is_incremented_aux(true);
-    }
-
-    /// Helper function to [`test_bp_nonce_is_incremented`].
-    ///
-    /// Sets the validity of the transfer on Ethereum's side.
-    fn test_bp_nonce_is_incremented_aux(valid_transfer: bool) {
         use crate::node::ledger::shell::address::nam;
         test_bp(|shell: &mut TestShell| {
             let asset = EthAddress([0xff; 20]);
@@ -1771,7 +1762,6 @@ mod test_finalize_block {
             let ethereum_event = EthereumEvent::TransfersToEthereum {
                 nonce: 0u64.into(),
                 transfers: vec![transfer],
-                valid_transfers_map: vec![valid_transfer],
                 relayer: bertha,
             };
             let (protocol_key, _, _) =

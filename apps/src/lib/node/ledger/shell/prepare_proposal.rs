@@ -786,7 +786,6 @@ mod test_prepare_proposal {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
             transfers: vec![],
-            valid_transfers_map: vec![],
         };
         let signed_vote_extension = {
             let ev = ethereum_event;
@@ -987,7 +986,6 @@ mod test_prepare_proposal {
         let ethereum_event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
             transfers: vec![],
-            valid_transfers_map: vec![],
         };
         let signed_eth_ev_vote_extension = {
             let ext = ethereum_events::Vext {

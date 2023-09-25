@@ -2319,10 +2319,12 @@ pub mod cmds {
     /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
     #[derive(Clone, Debug)]
     pub enum ValidatorSet {
-        /// Query an Ethereum ABI encoding of the consensus validator
-        /// set in Namada, at the given epoch, or the latest
-        /// one, if none is provided.
-        ConsensusValidatorSet(ConsensusValidatorSet),
+        /// Query the Bridge validator set in Namada, at the given epoch,
+        /// or the latest one, if none is provided.
+        BridgeValidatorSet(BridgeValidatorSet),
+        /// Query the Governance validator set in Namada, at the given epoch,
+        /// or the latest one, if none is provided.
+        GovernanceValidatorSet(GovernanceValidatorSet),
         /// Query an Ethereum ABI encoding of a proof of the consensus
         /// validator set in Namada, at the given epoch, or the next
         /// one, if none is provided.
@@ -2337,14 +2339,19 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                let consensus_validator_set =
-                    ConsensusValidatorSet::parse(matches)
-                        .map(Self::ConsensusValidatorSet);
+                let bridge_validator_set = BridgeValidatorSet::parse(matches)
+                    .map(Self::BridgeValidatorSet);
+                let governance_validator_set =
+                    GovernanceValidatorSet::parse(matches)
+                        .map(Self::GovernanceValidatorSet);
                 let validator_set_proof = ValidatorSetProof::parse(matches)
                     .map(Self::ValidatorSetProof);
                 let relay = ValidatorSetUpdateRelay::parse(matches)
                     .map(Self::ValidatorSetUpdateRelay);
-                consensus_validator_set.or(validator_set_proof).or(relay)
+                bridge_validator_set
+                    .or(governance_validator_set)
+                    .or(validator_set_proof)
+                    .or(relay)
             })
         }
 
@@ -2356,34 +2363,56 @@ pub mod cmds {
                      contracts.",
                 )
                 .subcommand_required(true)
-                .subcommand(ConsensusValidatorSet::def().display_order(1))
+                .subcommand(BridgeValidatorSet::def().display_order(1))
+                .subcommand(GovernanceValidatorSet::def().display_order(1))
                 .subcommand(ValidatorSetProof::def().display_order(1))
                 .subcommand(ValidatorSetUpdateRelay::def().display_order(1))
         }
     }
 
     #[derive(Clone, Debug)]
-    pub struct ConsensusValidatorSet(
-        pub args::ConsensusValidatorSet<args::CliTypes>,
+    pub struct BridgeValidatorSet(pub args::BridgeValidatorSet<args::CliTypes>);
+
+    impl SubCmd for BridgeValidatorSet {
+        const CMD: &'static str = "bridge";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::BridgeValidatorSet::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the Bridge validator set in Namada, at the given \
+                     epoch, or the latest one, if none is provided.",
+                )
+                .add_args::<args::BridgeValidatorSet<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GovernanceValidatorSet(
+        pub args::GovernanceValidatorSet<args::CliTypes>,
     );
 
-    impl SubCmd for ConsensusValidatorSet {
-        const CMD: &'static str = "consensus";
+    impl SubCmd for GovernanceValidatorSet {
+        const CMD: &'static str = "governance";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                Self(args::ConsensusValidatorSet::parse(matches))
+                Self(args::GovernanceValidatorSet::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Query an Ethereum ABI encoding of the consensus \
-                     validator set in Namada, at the requested epoch, or the \
-                     current one, if no epoch is provided.",
+                    "Query the Governance validator set in Namada, at the \
+                     given epoch, or the latest one, if none is provided.",
                 )
-                .add_args::<args::ConsensusValidatorSet<args::CliTypes>>()
+                .add_args::<args::GovernanceValidatorSet<args::CliTypes>>()
         }
     }
 
@@ -3220,18 +3249,18 @@ pub mod args {
         }
     }
 
-    impl CliToSdkCtxless<ConsensusValidatorSet<SdkTypes>>
-        for ConsensusValidatorSet<CliTypes>
+    impl CliToSdkCtxless<BridgeValidatorSet<SdkTypes>>
+        for BridgeValidatorSet<CliTypes>
     {
-        fn to_sdk_ctxless(self) -> ConsensusValidatorSet<SdkTypes> {
-            ConsensusValidatorSet::<SdkTypes> {
+        fn to_sdk_ctxless(self) -> BridgeValidatorSet<SdkTypes> {
+            BridgeValidatorSet::<SdkTypes> {
                 query: self.query.to_sdk_ctxless(),
                 epoch: self.epoch,
             }
         }
     }
 
-    impl Args for ConsensusValidatorSet<CliTypes> {
+    impl Args for BridgeValidatorSet<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let epoch = EPOCH.parse(matches);
@@ -3241,9 +3270,34 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>().arg(
                 EPOCH.def().help(
-                    "The epoch of the consensus set of validators to query.",
+                    "The epoch of the Bridge set of validators to query.",
                 ),
             )
+        }
+    }
+
+    impl CliToSdkCtxless<GovernanceValidatorSet<SdkTypes>>
+        for GovernanceValidatorSet<CliTypes>
+    {
+        fn to_sdk_ctxless(self) -> GovernanceValidatorSet<SdkTypes> {
+            GovernanceValidatorSet::<SdkTypes> {
+                query: self.query.to_sdk_ctxless(),
+                epoch: self.epoch,
+            }
+        }
+    }
+
+    impl Args for GovernanceValidatorSet<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let epoch = EPOCH.parse(matches);
+            Self { query, epoch }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(EPOCH.def().help(
+                "The epoch of the Governance set of validators to query.",
+            ))
         }
     }
 

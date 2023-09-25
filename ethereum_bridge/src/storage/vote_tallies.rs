@@ -263,9 +263,8 @@ mod test {
                 EthereumEvent::TransfersToNamada {
                     nonce: 0.into(),
                     transfers: vec![],
-                    valid_transfers_map: vec![],
                 },
-                "9E1736C43D19118E6CE4302118AF337109491ECC52757DFB949BAD6A7940B0C2"
+                "AB24A95F44CECA5D2AED4B6D056ADDDD8539F44C6CD6CA506534E830C82EA8A8"
                     .to_owned(),
             )
         }

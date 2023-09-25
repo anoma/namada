@@ -329,7 +329,6 @@ mod tests {
         let asset = arbitrary_eth_address();
         let body = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount,
                 asset,
@@ -444,7 +443,6 @@ mod tests {
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -507,7 +505,6 @@ mod tests {
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -559,7 +556,6 @@ mod tests {
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -682,7 +678,6 @@ mod tests {
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -713,7 +708,6 @@ mod tests {
 
         let new_event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -810,7 +804,6 @@ mod tests {
         let receiver = address::testing::established_address_1();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
