@@ -41,7 +41,7 @@ fn process_tx(c: &mut Criterion) {
             },
             defaults::albert_keypair().ref_to(),
             0.into(),
-            1000.into(),
+            1_000_000.into(),
             None,
         ),
     )));

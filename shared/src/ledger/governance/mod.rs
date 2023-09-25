@@ -78,11 +78,12 @@ where
         let (is_valid_keys_set, set_count) =
             self.is_valid_key_set(keys_changed)?;
         if !is_valid_keys_set {
+            tracing::info!("Invalid changed governance key set");
             return Ok(false);
         };
         let native_token = self.ctx.pre().get_native_token()?;
 
-        let result = keys_changed.iter().all(|key| {
+        Ok(keys_changed.iter().all(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key(key, &native_token);
 
@@ -124,10 +125,15 @@ where
                 (KeyType::UNKNOWN, _) => Ok(true),
                 _ => Ok(false),
             };
-
+            match &result {
+                Err(err) => tracing::info!(
+                    "Key {key_type:?} rejected with error: {err:#?}."
+                ),
+                Ok(false) => tracing::info!("Key {key_type:?} rejected"),
+                Ok(true) => {}
+            }
             result.unwrap_or(false)
-        });
-        Ok(result)
+        }))
     }
 }
 
@@ -209,6 +215,10 @@ where
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
+            tracing::info!(
+                "Invalid proposal ID. Expected {pre_counter} or lower, got \
+                 {proposal_id}."
+            );
             return Ok(false);
         }
 
@@ -221,6 +231,10 @@ where
             pre_voting_end_epoch,
             false,
         ) {
+            tracing::info!(
+                "Voted outside voting window. Current epoch: {current_epoch}, \
+                 start: {pre_voting_start_epoch}, end: {pre_voting_end_epoch}."
+            );
             return Ok(false);
         }
 
@@ -274,7 +288,14 @@ where
         let post_content =
             self.ctx.read_bytes_post(&content_key)?.unwrap_or_default();
 
-        Ok(post_content.len() < max_content_length)
+        let is_valid = post_content.len() <= max_content_length;
+        if !is_valid {
+            tracing::info!(
+                "Max content length {max_content_length}, got {}.",
+                post_content.len()
+            );
+        }
+        Ok(is_valid)
     }
 
     /// Validate the proposal type
@@ -382,15 +403,32 @@ where
         );
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
+        if !has_post_committing_epoch {
+            tracing::info!("Committing proposal key is missing present");
+        }
 
         let is_valid_grace_epoch = end_epoch < grace_epoch
             && (grace_epoch - end_epoch).0 >= min_grace_epoch;
-        let is_valid_max_proposal_perido = start_epoch < grace_epoch
+        if !is_valid_grace_epoch {
+            tracing::info!(
+                "Expected min duration between the end and grace epoch \
+                 {min_grace_epoch}, but got {}",
+                grace_epoch - end_epoch
+            );
+        }
+        let is_valid_max_proposal_period = start_epoch < grace_epoch
             && grace_epoch.0 - start_epoch.0 <= max_proposal_period;
+        if !is_valid_max_proposal_period {
+            tracing::info!(
+                "Expected max duration between the start and grace epoch \
+                 {max_proposal_period}, but got {}",
+                grace_epoch - start_epoch
+            );
+        }
 
         Ok(has_post_committing_epoch
             && is_valid_grace_epoch
-            && is_valid_max_proposal_perido)
+            && is_valid_max_proposal_period)
     }
 
     /// Validate a start_epoch key
@@ -454,6 +492,11 @@ where
             self.force_read(&max_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
+            tracing::info!(
+                "Proposal end ({end_epoch}) must be after start \
+                 ({start_epoch}) and start before current epoch \
+                 ({current_epoch})."
+            );
             return Ok(false);
         }
         Ok((end_epoch - start_epoch) % min_period == 0
@@ -645,7 +688,7 @@ where
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum KeyType {
     #[allow(non_camel_case_types)]
     COUNTER,

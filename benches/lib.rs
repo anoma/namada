@@ -18,6 +18,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::sync::Once;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
@@ -67,6 +68,7 @@ use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::sdk::args::InputAmount;
@@ -82,7 +84,7 @@ use namada::types::io::DefaultIo;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
-use namada::types::storage::{BlockHeight, KeySeg, TxIndex};
+use namada::types::storage::{BlockHeight, Epoch, KeySeg, TxIndex};
 use namada::types::time::DateTimeUtc;
 use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::InitProposalData;
@@ -125,6 +127,10 @@ const BERTHA_SPENDING_KEY: &str = "bertha_spending";
 const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
 
+/// For `tracing_subscriber`, which fails if called more than once in the same
+/// process
+static SHELL_INIT: Once = Once::new();
+
 pub struct BenchShell {
     pub inner: Shell,
     /// NOTE: Temporary directory should be dropped last since Shell need to
@@ -148,6 +154,14 @@ impl DerefMut for BenchShell {
 
 impl Default for BenchShell {
     fn default() -> Self {
+        SHELL_INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env(),
+                )
+                .init();
+        });
+
         let (sender, _) = tokio::sync::mpsc::unbounded_channel();
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().canonicalize().unwrap();
@@ -203,6 +217,7 @@ impl Default for BenchShell {
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(vec![]));
+        let voting_start_epoch = Epoch(25);
         let signed_tx = generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
@@ -210,9 +225,9 @@ impl Default for BenchShell {
                 content: content_section.get_hash(),
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
-                voting_start_epoch: 12.into(),
-                voting_end_epoch: 15.into(),
-                grace_epoch: 18.into(),
+                voting_start_epoch,
+                voting_end_epoch: 28.into(),
+                grace_epoch: 34.into(),
             },
             None,
             Some(vec![content_section]),
@@ -227,6 +242,11 @@ impl Default for BenchShell {
         for _ in 0..=(params.pipeline_len + params.unbonding_len) {
             bench_shell.advance_epoch();
         }
+        // Must start after current epoch
+        debug_assert_eq!(
+            bench_shell.wl_storage.get_block_epoch().unwrap().next(),
+            voting_start_epoch
+        );
 
         bench_shell
     }
