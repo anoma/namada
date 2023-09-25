@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -122,17 +121,17 @@ where
     let validator_0 = genesis.validator.get_mut("validator-0").unwrap();
     // Clone the first validator before modifying it
     let other_validators = validator_0.clone();
-    let net_address_0 =
-        SocketAddr::from_str(validator_0.net_address.as_ref().unwrap())
-            .unwrap();
-    let net_address_port_0 = net_address_0.port();
+    let validator_0_target = validator_0.net_address.clone().unwrap();
+    let split: Vec<&str> = validator_0_target.split(':').collect();
+    let (net_target_0, net_address_port_0) =
+        (split[0], split[1].parse::<u16>().unwrap());
     for ix in 0..num {
         let mut validator = other_validators.clone();
-        let mut net_address = net_address_0;
+        let mut net_target = net_target_0.to_string();
         // 6 ports for each validator
         let first_port = net_address_port_0 + port_offset(ix);
-        net_address.set_port(first_port);
-        validator.net_address = Some(net_address.to_string());
+        net_target = format!("{}:{}", net_target, first_port);
+        validator.net_address = Some(net_target.to_string());
         let name = format!("validator-{}", ix);
         genesis.validator.insert(name, validator);
     }
