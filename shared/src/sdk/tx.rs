@@ -393,8 +393,7 @@ where
     );
 
     let parsed = {
-        let wrapper_query =
-            rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
+        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
         let event =
             rpc::query_tx_status::<_, IO>(client, wrapper_query, deadline)
                 .await

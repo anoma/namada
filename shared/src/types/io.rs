@@ -42,18 +42,41 @@ pub trait Io {
         eprintln!("{}", output.as_ref());
     }
 
-    async fn read() -> tokio::io::Result<String> {
-        read_aux(tokio::io::stdin()).await
+    async fn read() -> std::io::Result<String> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            read_aux(tokio::io::stdin()).await
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            unreachable!("Wasm should not perform general IO")
+        }
     }
 
     async fn prompt(question: impl AsRef<str>) -> String {
-        prompt_aux(tokio::io::stdin(), tokio::io::stdout(), question.as_ref())
+        #[cfg(not(target_family = "wasm"))]
+        {
+            prompt_aux(
+                tokio::io::stdin(),
+                tokio::io::stdout(),
+                question.as_ref(),
+            )
             .await
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            unreachable!(
+                "Wasm should not perform general IO; received call for input \
+                 with question\n: {}",
+                question.as_ref()
+            )
+        }
     }
 }
 
 /// A generic function for displaying a prompt to users and reading
 /// in their response.
+#[cfg(not(target_family = "wasm"))]
 pub async fn prompt_aux<R, W>(
     mut reader: R,
     mut writer: W,
@@ -74,6 +97,7 @@ where
 }
 
 /// A generic function for reading input from users
+#[cfg(not(target_family = "wasm"))]
 pub async fn read_aux<R>(mut reader: R) -> tokio::io::Result<String>
 where
     R: tokio::io::AsyncReadExt + Unpin,
@@ -120,4 +144,13 @@ macro_rules! edisplay_line {
     ($io:ty,$($args:tt)*) => {
         <$io>::eprintln(format_args!($($args)*).to_string())
     };
+}
+
+#[macro_export]
+/// A convenience macro for formatting the user prompt before
+/// forwarding it to the [`Io::prompt`] method.
+macro_rules! prompt {
+    ($io:ty,$($arg:tt)*) => {{
+        <$io>::prompt(format!("{}", format_args!($($arg)*)))
+    }}
 }

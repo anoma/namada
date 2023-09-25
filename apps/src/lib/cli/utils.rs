@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
-use lazy_static::lazy_static;
 
 use super::args;
 use super::context::{Context, FromContext};
@@ -362,54 +361,4 @@ pub fn safe_exit(_: i32) -> ! {
     let _ = std::io::stderr().lock().flush();
 
     panic!("Test failed because the client exited unexpectedly.")
-}
-
-lazy_static! {
-    /// A replacement for stdin in testing.
-    pub static ref TESTIN: std::sync::Arc<std::sync::Mutex<Vec<u8>>> =
-    std::sync::Arc::new(std::sync::Mutex::new(vec![]));
-}
-
-/// A generic function for displaying a prompt to users and reading
-/// in their response.
-fn prompt_aux<R, W>(mut reader: R, mut writer: W, question: &str) -> String
-where
-    R: std::io::Read,
-    W: Write,
-{
-    write!(&mut writer, "{}", question).expect("Unable to write");
-    writer.flush().unwrap();
-    let mut s = String::new();
-    reader.read_to_string(&mut s).expect("Unable to read");
-    s
-}
-
-/// A function that chooses how to dispatch prompts
-/// to users. There is a hierarchy of feature flags
-/// that determines this. If no flags are set,
-/// the question is printed to stdout and response
-/// read from stdin.
-pub fn dispatch_prompt(question: impl AsRef<str>) -> String {
-    if cfg!(feature = "testing") {
-        prompt_aux(
-            TESTIN.lock().unwrap().as_slice(),
-            std::io::stdout(),
-            question.as_ref(),
-        )
-    } else {
-        prompt_aux(
-            std::io::stdin().lock(),
-            std::io::stdout(),
-            question.as_ref(),
-        )
-    }
-}
-
-#[macro_export]
-/// A convenience macro for formatting the user prompt before
-/// forwarding it to the `[dispatch_prompt]` method.
-macro_rules! prompt {
-    ($($arg:tt)*) => {{
-        $crate::cli::dispatch_prompt(format!("{}", format_args!($($arg)*)))
-    }}
 }
