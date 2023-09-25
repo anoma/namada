@@ -277,7 +277,7 @@ pub mod genesis_config {
         pub fee_unshielding_descriptions_limit: u64,
         /// Map of the cost per gas unit for every token allowed for fee
         /// payment
-        pub gas_cost: BTreeMap<Address, token::Amount>,
+        pub minimum_gas_price: BTreeMap<Address, token::Amount>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -616,7 +616,7 @@ pub mod genesis_config {
             pos_gain_d: parameters.pos_gain_d,
             staked_ratio: Dec::zero(),
             pos_inflation_amount: token::Amount::zero(),
-            gas_cost: parameters.gas_cost,
+            minimum_gas_price: parameters.minimum_gas_price,
             fee_unshielding_gas_limit: parameters.fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit: parameters
                 .fee_unshielding_descriptions_limit,
@@ -885,7 +885,7 @@ pub struct Parameters {
     /// Fee unshielding descriptions limit
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
-    pub gas_cost: BTreeMap<Address, token::Amount>,
+    pub minimum_gas_price: BTreeMap<Address, token::Amount>,
 }
 
 #[cfg(not(any(test, feature = "dev")))]
@@ -1007,7 +1007,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
         pos_inflation_amount: token::Amount::zero(),
-        gas_cost: [(nam(), token::Amount::from(1))].into_iter().collect(),
+        minimum_gas_price: [(nam(), token::Amount::from(1))]
+            .into_iter()
+            .collect(),
         fee_unshielding_gas_limit: 20_000,
         fee_unshielding_descriptions_limit: 15,
     };

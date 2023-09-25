@@ -66,7 +66,7 @@ pub struct Parameters {
     /// Fee unshielding descriptions limit
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
-    pub gas_cost: BTreeMap<Address, token::Amount>,
+    pub minimum_gas_price: BTreeMap<Address, token::Amount>,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -130,7 +130,7 @@ impl Parameters {
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
-            gas_cost,
+            minimum_gas_price,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         } = self;
@@ -214,7 +214,7 @@ impl Parameters {
         storage.write(&pos_inflation_key, pos_inflation_amount)?;
 
         let gas_cost_key = storage::get_gas_cost_key();
-        storage.write(&gas_cost_key, gas_cost)?;
+        storage.write(&gas_cost_key, minimum_gas_price)?;
 
         Ok(())
     }
@@ -538,7 +538,7 @@ where
     // read gas cost
     let gas_cost_key = storage::get_gas_cost_key();
     let value = storage.read(&gas_cost_key)?;
-    let gas_cost: BTreeMap<Address, token::Amount> = value
+    let minimum_gas_price: BTreeMap<Address, token::Amount> = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
@@ -556,7 +556,7 @@ where
         pos_gain_d,
         staked_ratio,
         pos_inflation_amount,
-        gas_cost,
+        minimum_gas_price,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,
     })

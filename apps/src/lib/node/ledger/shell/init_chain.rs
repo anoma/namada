@@ -94,7 +94,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
-            gas_cost,
+            minimum_gas_price,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         } = genesis.parameters;
@@ -181,7 +181,7 @@ where
             pos_gain_d,
             staked_ratio,
             pos_inflation_amount,
-            gas_cost,
+            minimum_gas_price,
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         };
