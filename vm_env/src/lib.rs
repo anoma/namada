@@ -110,6 +110,10 @@ pub mod tx {
 
         /// Charge the provided amount of gas for the current tx
         pub fn namada_tx_charge_gas(used_gas: u64);
+
+        /// Execute IBC tx.
+        // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+        pub fn namada_tx_ibc_execute();
     }
 }
 

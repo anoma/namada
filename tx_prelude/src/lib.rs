@@ -351,3 +351,9 @@ impl TxEnv for Ctx {
         }
     }
 }
+
+/// Execute IBC tx.
+// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+pub fn tx_ibc_execute() {
+    unsafe { namada_tx_ibc_execute() }
+}
