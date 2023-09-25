@@ -53,7 +53,7 @@ mod tests {
     fn test_value() -> Result<()> {
         let key = storage::Key::parse("some arbitrary key")
             .expect("could not set up test");
-        let value = 21u64;
+        let value = 21i32;
         let mut wl_storage = TestWlStorage::default();
         let serialized = value.serialize_to_vec();
         wl_storage
