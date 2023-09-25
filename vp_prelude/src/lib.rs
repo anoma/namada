@@ -94,6 +94,7 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();
     let public_keys_map = public_keys_index_map.try_to_vec().unwrap();
     let targets = targets.try_to_vec().unwrap();
+    let signer = owner.try_to_vec().unwrap();
 
     let valid = unsafe {
         namada_vp_verify_tx_section_signature(
@@ -101,6 +102,8 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
             targets.len() as _,
             public_keys_map.as_ptr() as _,
             public_keys_map.len() as _,
+            signer.as_ptr() as _,
+            signer.len() as _,
             threshold,
             max_signatures.as_ptr() as _,
             max_signatures.len() as _,

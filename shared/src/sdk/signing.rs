@@ -66,6 +66,8 @@ const ENV_VAR_TX_LOG_PATH: &str = "NAMADA_TX_LOG_PATH";
 /// A struture holding the signing data to craft a transaction
 #[derive(Clone)]
 pub struct SigningTxData {
+    /// The address owning the transaction
+    pub owner: Option<Address>,
     /// The public keys associated to an account
     pub public_keys: Vec<common::PublicKey>,
     /// The threshold associated to an account
@@ -225,7 +227,11 @@ pub fn sign_tx<U: WalletUtils>(
                 }
             })
             .collect::<Vec<common::SecretKey>>();
-        tx.sign_raw(signing_tx_keypairs, account_public_keys_map);
+        tx.sign_raw(
+            signing_tx_keypairs,
+            account_public_keys_map,
+            signing_data.owner,
+        );
     }
 
     let fee_payer_keypair =
@@ -244,7 +250,7 @@ pub async fn aux_signing_data<
     client: &C,
     wallet: &mut Wallet<U>,
     args: &args::Tx,
-    owner: &Option<Address>,
+    owner: Option<Address>,
     default_signer: Option<Address>,
 ) -> Result<SigningTxData, Error> {
     let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
@@ -254,7 +260,7 @@ pub async fn aux_signing_data<
         vec![]
     };
 
-    let (account_public_keys_map, threshold) = match owner {
+    let (account_public_keys_map, threshold) = match &owner {
         Some(owner @ Address::Established(_)) => {
             let account = rpc::get_account_info::<C>(client, owner).await?;
             if let Some(account) = account {
@@ -292,6 +298,7 @@ pub async fn aux_signing_data<
     }
 
     Ok(SigningTxData {
+        owner,
         public_keys,
         threshold,
         account_public_keys_map,

@@ -261,7 +261,7 @@ impl<IO: Io> CliApi<IO> {
                             &client,
                             &mut ctx.wallet,
                             &args.tx,
-                            &Some(args.sender.clone()),
+                            Some(args.sender.clone()),
                             default_signer,
                         )
                         .await?;

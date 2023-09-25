@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -388,38 +388,25 @@ impl Code {
     PartialEq,
 )]
 pub struct SignatureIndex {
+    pub pubkey: common::PublicKey,
+    pub index: Option<(Address, u8)>,
     pub signature: common::Signature,
-    pub index: u8,
 }
 
 impl SignatureIndex {
-    pub fn from_single_signature(signature: common::Signature) -> Self {
+    pub fn from_single_signature(
+        pubkey: common::PublicKey,
+        signature: common::Signature,
+    ) -> Self {
         Self {
+            pubkey,
             signature,
-            index: 0,
+            index: None,
         }
     }
 
     pub fn to_vec(&self) -> Vec<Self> {
         vec![self.clone()]
-    }
-
-    pub fn verify(
-        &self,
-        public_key_index_map: &AccountPublicKeysMap,
-        data: &impl SignableBytes,
-    ) -> std::result::Result<(), VerifySigError> {
-        let public_key =
-            public_key_index_map.get_public_key_from_index(self.index);
-        if let Some(public_key) = public_key {
-            common::SigScheme::verify_signature(
-                &public_key,
-                data,
-                &self.signature,
-            )
-        } else {
-            Err(VerifySigError::MissingData)
-        }
     }
 
     pub fn serialize(&self) -> String {
@@ -443,7 +430,7 @@ impl SignatureIndex {
 
 impl Ord for SignatureIndex {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.index.cmp(&other.index)
+        self.pubkey.cmp(&other.pubkey)
     }
 }
 
@@ -451,6 +438,23 @@ impl PartialOrd for SignatureIndex {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
+}
+
+/// Indicates the list of public keys against which signatures will be verified
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub enum Signer {
+    /// The address of a multisignature account
+    Address(Address),
+    /// The public keys that constitute a signer
+    PubKeys(Vec<common::PublicKey>),
 }
 
 /// A section representing a multisig over another section
@@ -463,45 +467,54 @@ impl PartialOrd for SignatureIndex {
     Serialize,
     Deserialize,
 )]
-pub struct MultiSignature {
+pub struct Signature {
     /// The hash of the section being signed
     pub targets: Vec<crate::types::hash::Hash>,
+    /// The public keys against which the signatures should be verified
+    pub signer: Signer,
     /// The signature over the above hash
-    pub signatures: BTreeSet<SignatureIndex>,
+    pub signatures: BTreeMap<u8, common::Signature>,
 }
 
-impl MultiSignature {
+impl Signature {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
         targets: Vec<crate::types::hash::Hash>,
-        secret_keys: &[common::SecretKey],
-        public_keys_index_map: &AccountPublicKeysMap,
+        secret_keys: BTreeMap<u8, common::SecretKey>,
+        signer: Option<Address>,
     ) -> Self {
-        let target = Self {
-            targets: targets.clone(),
-            signatures: BTreeSet::new(),
-        }
-        .get_hash();
+        // If no signer address is given, then derive the signer's public keys
+        // from the given secret keys.
+        let signer = if let Some(addr) = signer {
+            Signer::Address(addr)
+        } else {
+            // Make sure the corresponding public keys can be represented by a
+            // vector instead of a map
+            assert!(
+                secret_keys.keys().cloned().eq(0..(secret_keys.len() as u8)),
+                "secret keys must be enumerateed when signer address is absent"
+            );
+            Signer::PubKeys(secret_keys.values().map(RefTo::ref_to).collect())
+        };
 
-        let signatures_public_keys_map =
-            secret_keys.iter().map(|secret_key: &common::SecretKey| {
-                let signature = common::SigScheme::sign(secret_key, target);
-                let public_key = secret_key.ref_to();
-                (public_key, signature)
-            });
-
-        let signatures = signatures_public_keys_map
-            .filter_map(|(public_key, signature)| {
-                let public_key_index = public_keys_index_map
-                    .get_index_from_public_key(&public_key);
-                public_key_index
-                    .map(|index| SignatureIndex { signature, index })
-            })
-            .collect::<BTreeSet<SignatureIndex>>();
-
-        Self {
+        // Commit to the given targets
+        let partial = Self {
             targets,
+            signer,
+            signatures: BTreeMap::new(),
+        };
+        let target = partial.get_raw_hash();
+        // Turn the map of secret keys into a map of signatures over the
+        // commitment made above
+        let signatures = secret_keys
+            .iter()
+            .map(|(index, secret_key)| {
+                (*index, common::SigScheme::sign(secret_key, target))
+            })
+            .collect();
+        Self {
             signatures,
+            ..partial
         }
     }
 
@@ -527,14 +540,66 @@ impl MultiSignature {
 
     pub fn get_raw_hash(&self) -> crate::types::hash::Hash {
         Self {
-            signatures: BTreeSet::new(),
+            signer: Signer::PubKeys(vec![]),
+            signatures: BTreeMap::new(),
             ..self.clone()
         }
         .get_hash()
     }
+
+    /// Verify that the signature contained in this section is valid
+    pub fn verify_signature(
+        &self,
+        verified_pks: &mut HashSet<u8>,
+        public_keys_index_map: &AccountPublicKeysMap,
+        signer: &Option<Address>,
+    ) -> std::result::Result<u8, VerifySigError> {
+        // Records whether there are any successful verifications
+        let mut verifications = 0;
+        match &self.signer {
+            // Verify the signatures against the given public keys if the
+            // account addresses match
+            Signer::Address(addr) if Some(addr) == signer.as_ref() => {
+                for (idx, sig) in &self.signatures {
+                    if let Some(pk) =
+                        public_keys_index_map.get_public_key_from_index(*idx)
+                    {
+                        common::SigScheme::verify_signature(
+                            &pk,
+                            &self.get_raw_hash(),
+                            sig,
+                        )?;
+                        verified_pks.insert(*idx);
+                        verifications += 1;
+                    }
+                }
+            }
+            // If the account addresses do not match, then there is no efficient
+            // way to map signatures to the given public keys
+            Signer::Address(_) => {}
+            // Verify the signatures against the subset of this section's public
+            // keys that are also in the given map
+            Signer::PubKeys(pks) => {
+                for (idx, pk) in pks.iter().enumerate() {
+                    if let Some(map_idx) =
+                        public_keys_index_map.get_index_from_public_key(pk)
+                    {
+                        common::SigScheme::verify_signature(
+                            pk,
+                            &self.get_raw_hash(),
+                            &self.signatures[&(idx as u8)],
+                        )?;
+                        verified_pks.insert(map_idx);
+                        verifications += 1;
+                    }
+                }
+            }
+        }
+        Ok(verifications)
+    }
 }
 
-/// A section representing the signature over another section
+/// A section representing a multisig over another section
 #[derive(
     Clone,
     Debug,
@@ -544,58 +609,34 @@ impl MultiSignature {
     Serialize,
     Deserialize,
 )]
-pub struct Signature {
+pub struct CompressedSignature {
     /// The hash of the section being signed
-    targets: Vec<crate::types::hash::Hash>,
-    /// The signature over the above hashes
-    pub signature: Option<common::Signature>,
+    pub targets: Vec<u8>,
+    /// The public keys against which the signatures should be verified
+    pub signer: Signer,
+    /// The signature over the above hash
+    pub signatures: BTreeMap<u8, common::Signature>,
 }
 
-impl Signature {
-    pub fn new(
-        targets: Vec<crate::types::hash::Hash>,
-        sec_key: &common::SecretKey,
-    ) -> Self {
-        let mut sec = Self {
-            targets,
-            signature: None,
-        };
-        sec.signature = Some(common::SigScheme::sign(sec_key, sec.get_hash()));
-        sec
-    }
-
-    /// Hash this signature section
-    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(
-            self.try_to_vec()
-                .expect("unable to serialize signature section"),
-        );
-        hasher
-    }
-
-    /// Get the hash of this section
-    pub fn get_hash(&self) -> crate::types::hash::Hash {
-        crate::types::hash::Hash(
-            self.hash(&mut Sha256::new()).finalize_reset().into(),
-        )
-    }
-
-    /// Verify that the signature contained in this section is valid
-    pub fn verify_signature(
-        &self,
-        public_key: &common::PublicKey,
-    ) -> std::result::Result<(), VerifySigError> {
-        let signature =
-            self.signature.as_ref().ok_or(VerifySigError::MissingData)?;
-        common::SigScheme::verify_signature(
-            public_key,
-            &Self {
-                signature: None,
-                ..self.clone()
+impl CompressedSignature {
+    /// Decompress this signature object with respect to the given transaction
+    /// by looking up the necessary section hashes. Used by constrained hardware
+    /// wallets.
+    pub fn expand(self, tx: &Tx) -> Signature {
+        let mut targets = Vec::new();
+        for idx in self.targets {
+            if idx == 0 {
+                // The "zeroth" section is the header
+                targets.push(tx.header_hash());
+            } else {
+                targets.push(tx.sections[idx as usize - 1].get_hash());
             }
-            .get_hash(),
-            signature,
-        )
+        }
+        Signature {
+            targets,
+            signer: self.signer,
+            signatures: self.signatures,
+        }
     }
 }
 
@@ -899,8 +940,6 @@ pub enum Section {
     ExtraData(Code),
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
-    /// A transaction signature. Often produced by hardware wallets
-    SectionSignature(MultiSignature),
     /// A transaction header/protocol signature
     Signature(Signature),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
@@ -932,7 +971,6 @@ impl Section {
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
             Self::Signature(signature) => signature.hash(hasher),
-            Self::SectionSignature(signatures) => signatures.hash(hasher),
             Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
@@ -998,15 +1036,6 @@ impl Section {
     /// Extract the signature from this section if possible
     pub fn signature(&self) -> Option<Signature> {
         if let Self::Signature(data) = self {
-            Some(data.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Extract the section signature from this section if possible
-    pub fn section_signature(&self) -> Option<MultiSignature> {
-        if let Self::SectionSignature(data) = self {
             Some(data.clone())
         } else {
             None
@@ -1345,68 +1374,73 @@ impl Tx {
 
     /// Verify that the section with the given hash has been signed by the given
     /// public key
-    pub fn verify_section_signatures(
+    pub fn verify_signatures(
         &self,
         hashes: &[crate::types::hash::Hash],
         public_keys_index_map: AccountPublicKeysMap,
+        signer: &Option<Address>,
         threshold: u8,
         max_signatures: Option<u8>,
-        gas_meter: &mut VpGasMeter,
-    ) -> std::result::Result<(), Error> {
+        mut gas_meter: Option<&mut VpGasMeter>,
+    ) -> std::result::Result<Vec<&Signature>, Error> {
         let max_signatures = max_signatures.unwrap_or(u8::MAX);
-        let mut valid_signatures = 0;
+        // Records the public key indices used in successful signatures
+        let mut verified_pks = HashSet::new();
+        // Records the sections instrumental in verifying signatures
+        let mut witnesses = Vec::new();
 
         for section in &self.sections {
-            if let Section::SectionSignature(signatures) = section {
-                if !hashes.iter().all(|x| {
+            if let Section::Signature(signatures) = section {
+                // Check that the hashes being checked are a subset of those in
+                // this section. Also ensure that all the sections the signature
+                // signs over are present.
+                if hashes.iter().all(|x| {
                     signatures.targets.contains(x) || section.get_hash() == *x
-                }) {
-                    return Err(Error::InvalidSectionSignature(
-                        "missing target hash.".to_string(),
-                    ));
-                }
-
-                for target in &signatures.targets {
-                    if self.get_section(target).is_none() {
+                }) && signatures
+                    .targets
+                    .iter()
+                    .all(|x| self.get_section(x).is_some())
+                {
+                    if signatures.total_signatures() > max_signatures {
                         return Err(Error::InvalidSectionSignature(
-                            "Missing target section.".to_string(),
+                            "too many signatures.".to_string(),
                         ));
                     }
-                }
 
-                if signatures.total_signatures() > max_signatures {
-                    return Err(Error::InvalidSectionSignature(
-                        "too many signatures.".to_string(),
-                    ));
-                }
-
-                if signatures.total_signatures() < threshold {
-                    return Err(Error::InvalidSectionSignature(
-                        "too few signatures.".to_string(),
-                    ));
-                }
-
-                for signature_index in &signatures.signatures {
-                    let is_valid_signature = signature_index
-                        .verify(
+                    // Finally verify that the signature itself is valid
+                    let prev_verifieds = verified_pks.len();
+                    let amt_verifieds = signatures
+                        .verify_signature(
+                            &mut verified_pks,
                             &public_keys_index_map,
-                            &signatures.get_raw_hash(),
+                            signer,
                         )
-                        .is_ok();
-                    gas_meter
-                        .consume(VERIFY_TX_SIG_GAS_COST)
-                        .map_err(|_| Error::OutOfGas)?;
-                    if is_valid_signature {
-                        valid_signatures += 1;
+                        .map_err(|_| {
+                            Error::InvalidSectionSignature(
+                                "found invalid signature.".to_string(),
+                            )
+                        });
+                    // Compute the cost of the signature verifications
+                    if let Some(x) = gas_meter.as_mut() {
+                        let amt_verified = usize::from(amt_verifieds.is_err())
+                            + verified_pks.len()
+                            - prev_verifieds;
+                        x.consume(VERIFY_TX_SIG_GAS_COST * amt_verified as u64)
+                            .map_err(|_| Error::OutOfGas)?;
                     }
-                    if valid_signatures >= threshold {
-                        return Ok(());
+                    // Record the section witnessing these signatures
+                    if amt_verifieds? > 0 {
+                        witnesses.push(signatures);
+                    }
+                    // Short-circuit these checks if the threshold is exceeded
+                    if verified_pks.len() >= threshold.into() {
+                        return Ok(witnesses);
                     }
                 }
             }
         }
         Err(Error::InvalidSectionSignature(
-            "invalid signatures.".to_string(),
+            "signature threshold not met.".to_string(),
         ))
     }
 
@@ -1418,31 +1452,16 @@ impl Tx {
         public_key: &common::PublicKey,
         hashes: &[crate::types::hash::Hash],
     ) -> Result<&Signature> {
-        for section in &self.sections {
-            if let Section::Signature(signature) = section {
-                // Check that the hashes being
-                // checked are a subset of those in this section
-                if hashes.iter().all(|x| {
-                    signature.targets.contains(x) || section.get_hash() == *x
-                }) {
-                    // Ensure that all the sections the signature signs over are
-                    // present
-                    for target in &signature.targets {
-                        if self.get_section(target).is_none() {
-                            return Err(Error::InvalidSectionSignature(
-                                "Target section is missing.".to_string(),
-                            ));
-                        }
-                    }
-                    // Finally verify that the signature itself is valid
-                    return signature
-                        .verify_signature(public_key)
-                        .map(|_| signature)
-                        .map_err(|_| Error::InvalidWrapperSignature);
-                }
-            }
-        }
-        Err(Error::InvalidWrapperSignature)
+        self.verify_signatures(
+            hashes,
+            AccountPublicKeysMap::from_iter([public_key.clone()].into_iter()),
+            &None,
+            1,
+            None,
+            None,
+        )
+        .map(|x| *x.first().unwrap())
+        .map_err(|_| Error::InvalidWrapperSignature)
     }
 
     /// Validate any and all ciphertexts stored in this transaction
@@ -1465,10 +1484,38 @@ impl Tx {
         &self,
         secret_keys: &[common::SecretKey],
         public_keys_index_map: &AccountPublicKeysMap,
-    ) -> BTreeSet<SignatureIndex> {
+        signer: Option<Address>,
+    ) -> Vec<SignatureIndex> {
         let targets = self.inner_section_targets();
-        MultiSignature::new(targets, secret_keys, public_keys_index_map)
-            .signatures
+        let mut signatures = Vec::new();
+        let section = Signature::new(
+            targets,
+            public_keys_index_map.index_secret_keys(secret_keys.to_vec()),
+            signer,
+        );
+        match section.signer {
+            Signer::Address(addr) => {
+                for (idx, signature) in section.signatures {
+                    signatures.push(SignatureIndex {
+                        pubkey: public_keys_index_map
+                            .get_public_key_from_index(idx)
+                            .unwrap(),
+                        index: Some((addr.clone(), idx)),
+                        signature,
+                    });
+                }
+            }
+            Signer::PubKeys(pub_keys) => {
+                for (idx, signature) in section.signatures {
+                    signatures.push(SignatureIndex {
+                        pubkey: pub_keys[idx as usize].clone(),
+                        index: None,
+                        signature,
+                    });
+                }
+            }
+        }
+        signatures
     }
 
     /// Decrypt any and all ciphertexts stored in this transaction use the
@@ -1712,7 +1759,8 @@ impl Tx {
         self.protocol_filter();
         self.add_section(Section::Signature(Signature::new(
             self.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         self
     }
@@ -1722,27 +1770,53 @@ impl Tx {
         &mut self,
         keypairs: Vec<common::SecretKey>,
         account_public_keys_map: AccountPublicKeysMap,
+        signer: Option<Address>,
     ) -> &mut Self {
         self.protocol_filter();
         let hashes = self.inner_section_targets();
-        self.add_section(Section::SectionSignature(MultiSignature::new(
+        self.add_section(Section::Signature(Signature::new(
             hashes,
-            &keypairs,
-            &account_public_keys_map,
+            account_public_keys_map.index_secret_keys(keypairs),
+            signer,
         )));
         self
     }
 
-    /// Add signature
+    /// Add signatures
     pub fn add_signatures(
         &mut self,
-        signatures: BTreeSet<SignatureIndex>,
+        signatures: Vec<SignatureIndex>,
     ) -> &mut Self {
         self.protocol_filter();
-        self.add_section(Section::SectionSignature(MultiSignature {
+        let mut pk_section = Signature {
             targets: self.inner_section_targets(),
-            signatures,
-        }));
+            signatures: BTreeMap::new(),
+            signer: Signer::PubKeys(vec![]),
+        };
+        let mut sections = HashMap::new();
+        // Put the supplied signatures into the correct sections
+        for signature in signatures {
+            if let Some((addr, idx)) = &signature.index {
+                // Add the signature under the given multisig address
+                let section =
+                    sections.entry(addr.clone()).or_insert_with(|| Signature {
+                        targets: self.inner_section_targets(),
+                        signatures: BTreeMap::new(),
+                        signer: Signer::Address(addr.clone()),
+                    });
+                section.signatures.insert(*idx, signature.signature);
+            } else if let Signer::PubKeys(pks) = &mut pk_section.signer {
+                // Add the signature under its corresponding public key
+                pk_section
+                    .signatures
+                    .insert(pks.len() as u8, signature.signature);
+                pks.push(signature.pubkey);
+            }
+        }
+        for section in std::iter::once(pk_section).chain(sections.into_values())
+        {
+            self.add_section(Section::Signature(section));
+        }
         self
     }
 }

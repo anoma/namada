@@ -366,6 +366,8 @@ mod native_vp_host_env {
             hash_list_len: u64,
             public_keys_map_ptr: u64,
             public_keys_map_len: u64,
+            signer_ptr: u64,
+            signer_len: u64,
             threshold: u8,
             max_signatures_ptr: u64,
             max_signatures_len: u64,)

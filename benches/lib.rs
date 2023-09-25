@@ -433,7 +433,8 @@ pub fn generate_tx(
     if let Some(signer) = signer {
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),
-            signer,
+            [(0, signer.clone())].into_iter().collect(),
+            None,
         )));
     }
 
@@ -473,7 +474,11 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         .try_to_vec()
         .unwrap(),
     ));
-    tx.add_section(Section::Signature(Signature::new(tx.sechashes(), signer)));
+    tx.add_section(Section::Signature(Signature::new(
+        tx.sechashes(),
+        [(0, signer.clone())].into_iter().collect(),
+        None,
+    )));
 
     tx
 }

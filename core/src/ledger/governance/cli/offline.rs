@@ -315,18 +315,13 @@ fn compute_signatures_index(
     account_public_keys_map: &AccountPublicKeysMap,
     hashed_data: &Hash,
 ) -> BTreeSet<SignatureIndex> {
-    keys.iter()
-        .filter_map(|signing_key| {
+    account_public_keys_map
+        .index_secret_keys(keys.to_vec())
+        .values()
+        .map(|signing_key| {
             let public_key = signing_key.ref_to();
-            let public_key_index =
-                account_public_keys_map.get_index_from_public_key(&public_key);
-            if public_key_index.is_some() {
-                let signature =
-                    common::SigScheme::sign(signing_key, hashed_data);
-                Some(SignatureIndex::from_single_signature(signature))
-            } else {
-                None
-            }
+            let signature = common::SigScheme::sign(signing_key, hashed_data);
+            SignatureIndex::from_single_signature(public_key, signature)
         })
         .collect::<BTreeSet<SignatureIndex>>()
 }
@@ -338,11 +333,12 @@ fn compute_total_valid_signatures(
     hashed_data: &Hash,
 ) -> u8 {
     signatures.iter().fold(0_u8, |acc, signature_index| {
-        let public_key = account_public_keys_map
-            .get_public_key_from_index(signature_index.index);
-        if let Some(pk) = public_key {
+        if account_public_keys_map
+            .get_index_from_public_key(&signature_index.pubkey)
+            .is_some()
+        {
             let sig_check = common::SigScheme::verify_signature(
-                &pk,
+                &signature_index.pubkey,
                 hashed_data,
                 &signature_index.signature,
             );

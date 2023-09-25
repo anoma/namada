@@ -1,9 +1,11 @@
+use std::collections::HashSet;
+
 use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
 use namada::core::types::token::{Amount, Transfer};
-use namada::proto::{Data, MultiSignature, Section};
+use namada::proto::{Data, Section, Signature};
 use namada_apps::wallet::defaults;
 
 /// Benchmarks the validation of a single signature on a single `Section` of a
@@ -24,17 +26,16 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         defaults::albert_keypair().to_public()
     ]);
 
-    let multisig = MultiSignature::new(
+    let multisig = Signature::new(
         vec![section_hash],
-        &[defaults::albert_keypair()],
-        &pkim,
+        pkim.index_secret_keys(vec![defaults::albert_keypair()]),
+        None,
     );
-    let signature_index = multisig.signatures.first().unwrap().clone();
 
     c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
-            signature_index
-                .verify(&pkim, &multisig.get_raw_hash())
+            multisig
+                .verify_signature(&mut HashSet::new(), &pkim, &None)
                 .unwrap()
         })
     });

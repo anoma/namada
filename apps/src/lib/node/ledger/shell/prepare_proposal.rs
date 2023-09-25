@@ -1125,7 +1125,8 @@ mod test_prepare_proposal {
             ));
             tx.add_section(Section::Signature(Signature::new(
                 tx.sechashes(),
-                &keypair,
+                [(0, keypair.clone())].into_iter().collect(),
+                None,
             )));
 
             let gas = Gas::from(
@@ -1193,7 +1194,8 @@ mod test_prepare_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         // Write wrapper hash to storage
@@ -1245,7 +1247,8 @@ mod test_prepare_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1285,7 +1288,8 @@ mod test_prepare_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
         let inner_unsigned_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
@@ -1341,7 +1345,8 @@ mod test_prepare_proposal {
         let mut new_wrapper = wrapper.clone();
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1356,7 +1361,8 @@ mod test_prepare_proposal {
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
-            &keypair_2,
+            [(0, keypair_2)].into_iter().collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1396,7 +1402,8 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let time = DateTimeUtc::now();
@@ -1444,7 +1451,8 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1483,7 +1491,8 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1521,7 +1530,10 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1558,7 +1570,10 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1594,7 +1609,10 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {
@@ -1630,7 +1648,10 @@ mod test_prepare_proposal {
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
-            &crate::wallet::defaults::albert_keypair(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
         )));
 
         let req = RequestPrepareProposal {

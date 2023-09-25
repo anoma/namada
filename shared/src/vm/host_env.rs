@@ -1784,6 +1784,8 @@ pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
     hash_list_len: u64,
     public_keys_map_ptr: u64,
     public_keys_map_len: u64,
+    signer_ptr: u64,
+    signer_len: u64,
     threshold: u8,
     max_signatures_ptr: u64,
     max_signatures_len: u64,
@@ -1816,6 +1818,14 @@ where
         )
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
+    let (signer, gas) = env
+        .memory
+        .read_bytes(signer_ptr, signer_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let signer = Address::try_from_slice(&signer)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
     let (max_signatures, gas) = env
         .memory
         .read_bytes(max_signatures_ptr, max_signatures_len as _)
@@ -1827,12 +1837,13 @@ where
     let tx = unsafe { env.ctx.tx.get() };
 
     Ok(HostEnvResult::from(
-        tx.verify_section_signatures(
+        tx.verify_signatures(
             &hashes,
             public_keys_map,
+            &Some(signer),
             threshold,
             max_signatures,
-            gas_meter,
+            Some(gas_meter),
         )
         .is_ok(),
     )
