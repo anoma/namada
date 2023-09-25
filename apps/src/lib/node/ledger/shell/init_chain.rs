@@ -16,6 +16,7 @@ use namada::types::dec::Dec;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
+use namada::vm::validate_untrusted_wasm;
 
 use super::*;
 use crate::facade::tendermint_proto::google::protobuf;
@@ -121,6 +122,9 @@ where
                 || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
                 || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
             {
+                validate_untrusted_wasm(&code)
+                    .map_err(|e| Error::LoadingWasm(e.to_string()))?;
+
                 #[cfg(not(test))]
                 if name.starts_with("tx_") {
                     self.tx_wasm_cache.pre_compile(&code);

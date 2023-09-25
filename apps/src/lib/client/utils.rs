@@ -14,6 +14,7 @@ use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
+use namada::vm::validate_untrusted_wasm;
 use prost::bytes::Bytes;
 use rand::prelude::ThreadRng;
 use rand::thread_rng;
@@ -360,6 +361,17 @@ pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
         path
     };
     wasm_loader::pre_fetch_wasm(&wasm_dir).await;
+}
+
+pub fn validate_wasm(args::ValidateWasm { code_path }: args::ValidateWasm) {
+    let code = std::fs::read(code_path).unwrap();
+    match validate_untrusted_wasm(code) {
+        Ok(()) => println!("Wasm code is valid"),
+        Err(e) => {
+            eprintln!("Wasm code is invalid: {e}");
+            cli::safe_exit(1)
+        }
+    }
 }
 
 /// Length of a Tendermint Node ID in bytes
