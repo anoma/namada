@@ -141,7 +141,7 @@ mod tests {
             .write(&key, value_bytes.clone())
             .expect("write failed");
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(100), 1000);
+        storage.block.pred_epochs.new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
         let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
         update_allowed_conversions(&mut wl_storage)
@@ -420,10 +420,7 @@ mod tests {
                 if storage.block.height.0 % 5 == 0 {
                     // new epoch every 5 heights
                     storage.block.epoch = storage.block.epoch.next();
-                    storage
-                        .block
-                        .pred_epochs
-                        .new_epoch(storage.block.height, 1000);
+                    storage.block.pred_epochs.new_epoch(storage.block.height);
                 }
                 storage.commit_block(batch)?;
                 let hash = BlockHash::default();
@@ -512,7 +509,7 @@ mod tests {
             .expect("write failed");
 
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(1), 1000);
+        storage.block.pred_epochs.new_epoch(BlockHeight(1));
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
@@ -527,7 +524,7 @@ mod tests {
             .expect("write failed");
 
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(6), 1000);
+        storage.block.pred_epochs.new_epoch(BlockHeight(6));
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
@@ -538,7 +535,7 @@ mod tests {
             .begin_block(BlockHash::default(), BlockHeight(11))
             .expect("begin_block failed");
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(11), 1000);
+        storage.block.pred_epochs.new_epoch(BlockHeight(11));
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
