@@ -28,7 +28,7 @@ use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
 use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
-use namada::types::storage::TxIndex;
+use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -97,32 +97,46 @@ fn governance(c: &mut Criterion) {
             "foreign_key_write" => {
                 generate_foreign_key_tx(&defaults::albert_keypair())
             }
-            "delegator_vote" => generate_tx(
-                TX_VOTE_PROPOSAL_WASM,
-                VoteProposalData {
-                    id: 0,
-                    vote: StorageProposalVote::Yay(VoteType::Default),
-                    voter: defaults::albert_address(),
-                    delegations: vec![defaults::validator_address()],
-                },
-                None,
-                None,
-                Some(&defaults::albert_keypair()),
-            ),
-            "validator_vote" => generate_tx(
-                TX_VOTE_PROPOSAL_WASM,
-                VoteProposalData {
-                    id: 0,
-                    vote: StorageProposalVote::Nay,
-                    voter: defaults::validator_address(),
-                    delegations: vec![],
-                },
-                None,
-                None,
-                Some(&defaults::validator_keypair()),
-            ),
+            "delegator_vote" => {
+                // Advance to the proposal voting period
+                shell.advance_epoch();
+                generate_tx(
+                    TX_VOTE_PROPOSAL_WASM,
+                    VoteProposalData {
+                        id: 0,
+                        vote: StorageProposalVote::Yay(VoteType::Default),
+                        voter: defaults::albert_address(),
+                        delegations: vec![defaults::validator_address()],
+                    },
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                )
+            }
+            "validator_vote" => {
+                // Advance to the proposal voting period
+                shell.advance_epoch();
+                generate_tx(
+                    TX_VOTE_PROPOSAL_WASM,
+                    VoteProposalData {
+                        id: 0,
+                        vote: StorageProposalVote::Nay,
+                        voter: defaults::validator_address(),
+                        delegations: vec![],
+                    },
+                    None,
+                    None,
+                    Some(&defaults::validator_keypair()),
+                )
+            }
             "minimal_proposal" => {
                 let content_section = Section::ExtraData(Code::new(vec![]));
+                let voting_start_epoch = Epoch(25);
+                // Must start after current epoch
+                debug_assert_eq!(
+                    shell.wl_storage.get_block_epoch().unwrap().next(),
+                    voting_start_epoch
+                );
                 generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
@@ -130,9 +144,9 @@ fn governance(c: &mut Criterion) {
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(None),
-                        voting_start_epoch: 12.into(),
-                        voting_end_epoch: 15.into(),
-                        grace_epoch: 18.into(),
+                        voting_start_epoch,
+                        voting_end_epoch: 28.into(),
+                        grace_epoch: 34.into(),
                     },
                     None,
                     Some(vec![content_section]),
@@ -164,6 +178,12 @@ fn governance(c: &mut Criterion) {
                 let wasm_code_section =
                     Section::ExtraData(Code::new(vec![0; max_code_size as _]));
 
+                let voting_start_epoch = Epoch(25);
+                // Must start after current epoch
+                debug_assert_eq!(
+                    shell.wl_storage.get_block_epoch().unwrap().next(),
+                    voting_start_epoch
+                );
                 generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
@@ -173,9 +193,9 @@ fn governance(c: &mut Criterion) {
                         r#type: ProposalType::Default(Some(
                             wasm_code_section.get_hash(),
                         )),
-                        voting_start_epoch: 12.into(),
-                        voting_end_epoch: 15.into(),
-                        grace_epoch: 18.into(),
+                        voting_start_epoch,
+                        voting_end_epoch: 28.into(),
+                        grace_epoch: 34.into(),
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
@@ -318,7 +338,7 @@ fn ibc(c: &mut Criterion) {
         .unwrap(),
         counterparty: Counterparty::new(
             ClientId::from_str("01-tendermint-1").unwrap(),
-            Some(ConnectionId::new(1)),
+            None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
         version: Some(Version::default()),

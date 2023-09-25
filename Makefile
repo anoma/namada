@@ -119,7 +119,7 @@ reset-ledger:
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
-test: test-unit test-e2e test-wasm
+test: test-unit test-e2e test-wasm test-benches
 
 test-coverage:
 	# Run integration tests with pre-built MASP proofs
@@ -205,6 +205,10 @@ test-debug:
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time
+
+# Test that the benchmarks run successfully without performing measurement
+test-benches:
+	$(cargo) +$(nightly) test --package namada_benchmarks --benches
 
 # Run PoS state machine tests
 test-pos-sm:

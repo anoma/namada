@@ -162,7 +162,8 @@ fn vp_user(c: &mut Criterion) {
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
                     )
-                    .unwrap()
+                    .unwrap(),
+                    "VP \"{bench_name}\" bench call failed"
                 );
             })
         });
