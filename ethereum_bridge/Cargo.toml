@@ -45,6 +45,8 @@ tendermint-proto = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev 
 tracing = "0.1.30"
 
 [dev-dependencies]
+# Added "testing" feature.
+namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign", "ferveo-tpke", "ethers-derive", "testing"]}
 assert_matches.workspace = true
 data-encoding.workspace = true
 ethabi.workspace = true
