@@ -174,6 +174,7 @@ package() {
     git checkout --ours -- wasm/checksums.json
     rm -f nohup.out || true
 
+    # difference 1
     mkdir -p "$BASE_DIR"
 
     CHAIN_DIR='.hack/chains'
@@ -184,8 +185,8 @@ package() {
     $NAMADA_BIN_DIR/namadac --base-dir "$BASE_DIR" utils init-genesis-validator \
         --alias $ALIAS \
         --net-address 127.0.0.1:26656 \
-        --commission-rate 0.01 \
-        --max-commission-rate-change 0.05 \
+        --commission-rate 0.05 \
+        --max-commission-rate-change 0.1 \
         --unsafe-dont-encrypt
 
     # get the directory of this script
@@ -205,14 +206,11 @@ package() {
 
     basename *.tar.gz .tar.gz >${CHAIN_DIR}/chain-id
     NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
-
-    # We now need the keys of the faucet
-    cp "$BASE_DIR/${NAMADA_CHAIN_ID}/setup/other/wallet.toml" "$BASE_DIR/wallet-temp.toml"
-
-    rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}/*"
-    mv "$BASE_DIR/wallet-temp.toml" "$BASE_DIR/${NAMADA_CHAIN_ID}/wallet-genesis.toml"
-    mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
     rm -rf "$SCRIPT_DIR/utils/network-config.toml"
+    cp "$BASE_DIR/${NAMADA_CHAIN_ID}/setup/other/wallet.toml" "$BASE_DIR/wallet-genesis.toml"
+    rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}"
+    mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
+    
     
     # clean up the http server when the script exits
     trap cleanup EXIT
