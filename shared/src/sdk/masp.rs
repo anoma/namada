@@ -7,7 +7,6 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 // use async_std::io::prelude::WriteExt;
 // use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -388,7 +387,8 @@ impl<P1, R1, N1>
 
 /// Abstracts platform specific details away from the logic of shielded pool
 /// operations.
-#[async_trait(? Send)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait ShieldedUtils:
     Sized + BorshDeserialize + BorshSerialize + Default + Clone
 {

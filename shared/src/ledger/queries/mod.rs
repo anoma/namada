@@ -173,7 +173,8 @@ mod testing {
         }
     }
 
-    #[async_trait::async_trait(?Send)]
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
     impl<RPC> Client for TestClient<RPC>
     where
         RPC: Router + Sync,
