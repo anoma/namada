@@ -116,16 +116,16 @@ where
 mod tests {
     use std::collections::BTreeMap;
 
-    use namada_core::ledger::storage::testing::TestWlStorage;
-    use namada_core::types::address;
     use namada_core::types::ethereum_events::EthereumEvent;
-    use namada_core::types::voting_power::FractionalVotingPower;
 
     use super::*;
+    use crate::test_utils;
 
     #[test]
     fn test_write_tally() {
-        let mut wl_storage = TestWlStorage::default();
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (validator, validator_voting_power) =
+            test_utils::default_validator();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
             transfers: vec![],
@@ -135,12 +135,9 @@ mod tests {
         let tally = Tally {
             voting_power: EpochedVotingPower::from([(
                 0.into(),
-                FractionalVotingPower::ONE_THIRD,
+                validator_voting_power,
             )]),
-            seen_by: BTreeMap::from([(
-                address::testing::established_address_1(),
-                10.into(),
-            )]),
+            seen_by: BTreeMap::from([(validator, 10.into())]),
             seen: false,
         };
 
@@ -175,7 +172,9 @@ mod tests {
 
     #[test]
     fn test_read_tally() {
-        let mut wl_storage = TestWlStorage::default();
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let (validator, validator_voting_power) =
+            test_utils::default_validator();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
             transfers: vec![],
@@ -185,12 +184,9 @@ mod tests {
         let tally = Tally {
             voting_power: EpochedVotingPower::from([(
                 0.into(),
-                FractionalVotingPower::ONE_THIRD,
+                validator_voting_power,
             )]),
-            seen_by: BTreeMap::from([(
-                address::testing::established_address_1(),
-                10.into(),
-            )]),
+            seen_by: BTreeMap::from([(validator, 10.into())]),
             seen: false,
         };
         wl_storage

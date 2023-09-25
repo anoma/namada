@@ -1063,10 +1063,13 @@ mod tests {
     fn test_apply_protocol_tx_duplicate_eth_events_vext() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
+        let validator_a_stake = Amount::native_whole(100);
+        let validator_b_stake = Amount::native_whole(100);
+        let total_stake = validator_a_stake + validator_b_stake;
         let (mut wl_storage, _) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), Amount::native_whole(100)),
-                (validator_b, Amount::native_whole(100)),
+                (validator_a.clone(), validator_a_stake),
+                (validator_b, validator_b_stake),
             ]),
         );
         let event = EthereumEvent::TransfersToNamada {
@@ -1101,8 +1104,10 @@ mod tests {
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
             wl_storage.read(&eth_msg_keys.voting_power())?.unwrap();
-        let expected =
-            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        let expected = EpochedVotingPower::from([(
+            0.into(),
+            FractionalVotingPower::HALF * total_stake,
+        )]);
         assert_eq!(voting_power, expected);
 
         Ok(())
@@ -1115,10 +1120,13 @@ mod tests {
     fn test_apply_protocol_tx_duplicate_bp_roots_vext() -> Result<()> {
         let validator_a = address::testing::established_address_2();
         let validator_b = address::testing::established_address_3();
+        let validator_a_stake = Amount::native_whole(100);
+        let validator_b_stake = Amount::native_whole(100);
+        let total_stake = validator_a_stake + validator_b_stake;
         let (mut wl_storage, keys) = test_utils::setup_storage_with_validators(
             HashMap::from_iter(vec![
-                (validator_a.clone(), Amount::native_whole(100)),
-                (validator_b, Amount::native_whole(100)),
+                (validator_a.clone(), validator_a_stake),
+                (validator_b, validator_b_stake),
             ]),
         );
         bridge_pool_vp::init_storage(&mut wl_storage);
@@ -1157,8 +1165,10 @@ mod tests {
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
             wl_storage.read(&bp_root_keys.voting_power())?.unwrap();
-        let expected =
-            EpochedVotingPower::from([(0.into(), FractionalVotingPower::HALF)]);
+        let expected = EpochedVotingPower::from([(
+            0.into(),
+            FractionalVotingPower::HALF * total_stake,
+        )]);
         assert_eq!(voting_power, expected);
 
         Ok(())

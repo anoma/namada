@@ -18,7 +18,7 @@ use thiserror::Error;
 use crate::types::WeightedValidator;
 use crate::{
     consensus_validator_set_handle, find_validator_by_raw_hash,
-    read_pos_params, validator_eth_cold_key_handle,
+    get_total_consensus_stake, read_pos_params, validator_eth_cold_key_handle,
     validator_eth_hot_key_handle, ConsensusValidatorSet, PosParams,
 };
 
@@ -131,10 +131,14 @@ where
     /// Lookup the total voting power for an epoch (defaulting to the
     /// epoch of the current yet-to-be-committed block).
     pub fn get_total_voting_power(self, epoch: Option<Epoch>) -> token::Amount {
-        self.get_consensus_validators(epoch)
-            .iter()
-            .map(|validator| validator.bonded_stake)
-            .sum::<token::Amount>()
+        let epoch = epoch
+            .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
+        let pos_params = self.get_pos_params();
+        get_total_consensus_stake(self.wl_storage, epoch, &pos_params)
+            // NB: the only reason this call should fail is if we request
+            // an epoch that hasn't been reached yet. let's "fail" by
+            // returning a total stake of 0 NAM
+            .unwrap_or_default()
     }
 
     /// Return evidence parameters.

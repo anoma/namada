@@ -7,9 +7,9 @@ use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
-use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use crate::protocol::transactions::utils::GetVoters;
@@ -140,7 +140,7 @@ fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     mut update: BridgePoolRoot,
     seen_by: Votes,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<(ChangedKeys, bool)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -196,17 +196,13 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::ledger::storage_api::StorageRead;
     use namada_core::proto::{SignableEthMessage, Signed};
     use namada_core::types::address;
-    use namada_core::types::dec::Dec;
     use namada_core::types::ethereum_events::Uint;
     use namada_core::types::keccak::{keccak_hash, KeccakHash};
-    use namada_core::types::key::RefTo;
     use namada_core::types::storage::Key;
-    use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots;
+    use namada_core::types::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::PosParams;
-    use namada_proof_of_stake::{
-        become_validator, bond_tokens, write_pos_params, BecomeValidator,
-    };
+    use namada_proof_of_stake::write_pos_params;
 
     use super::*;
     use crate::protocol::transactions::votes::{
@@ -435,7 +431,7 @@ mod test_apply_bp_roots_to_storage {
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(
             voting_power,
             FractionalVotingPower::new_u64(5, 12).unwrap()
@@ -454,7 +450,7 @@ mod test_apply_bp_roots_to_storage {
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::new_u64(5, 6).unwrap());
     }
 
@@ -720,32 +716,16 @@ mod test_apply_bp_roots_to_storage {
             pipeline_len: 1,
             ..Default::default()
         };
-        write_pos_params(&mut wl_storage, params.clone()).expect("Test failed");
+        write_pos_params(&mut wl_storage, params).expect("Test failed");
 
         // insert validators 2 and 3 at epoch 1
-        for (validator, stake) in [
-            (&validator_2, validator_2_stake),
-            (&validator_3, validator_3_stake),
-        ] {
-            let keys = test_utils::TestValidatorKeys::generate();
-            let consensus_key = &keys.consensus.ref_to();
-            let eth_cold_key = &keys.eth_gov.ref_to();
-            let eth_hot_key = &keys.eth_bridge.ref_to();
-            become_validator(BecomeValidator {
-                storage: &mut wl_storage,
-                params: &params,
-                address: validator,
-                consensus_key,
-                eth_cold_key,
-                eth_hot_key,
-                current_epoch: 0.into(),
-                commission_rate: Dec::new(5, 2).unwrap(),
-                max_commission_rate_change: Dec::new(1, 2).unwrap(),
-            })
-            .expect("Test failed");
-            bond_tokens(&mut wl_storage, None, validator, stake, 0.into())
-                .expect("Test failed");
-        }
+        test_utils::append_validators_to_storage(
+            &mut wl_storage,
+            HashMap::from([
+                (validator_2.clone(), validator_2_stake),
+                (validator_3.clone(), validator_3_stake),
+            ]),
+        );
 
         // query validators to make sure they were inserted correctly
         macro_rules! query_validators {
@@ -771,12 +751,24 @@ mod test_apply_bp_roots_to_storage {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(0.into())),
+            validator_1_stake,
+        );
+        assert_eq!(
             epoch_1_validators,
             HashMap::from([
                 (validator_1.clone(), validator_1_stake),
                 (validator_2, validator_2_stake),
                 (validator_3, validator_3_stake),
             ])
+        );
+        assert_eq!(
+            wl_storage
+                .pos_queries()
+                .get_total_voting_power(Some(1.into())),
+            validator_1_stake + validator_2_stake + validator_3_stake,
         );
 
         // set up the bridge pool's storage

@@ -5,7 +5,7 @@ use eyre::{eyre, Result};
 use namada_core::ledger::storage::{DBIter, StorageHasher, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::storage::BlockHeight;
-use namada_core::types::voting_power::FractionalVotingPower;
+use namada_core::types::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
@@ -14,34 +14,33 @@ use crate::storage::vote_tallies;
 /// Wraps all the information about new votes to be applied to some existing
 /// tally in storage.
 pub(in super::super) struct NewVotes {
-    inner: HashMap<Address, (BlockHeight, FractionalVotingPower)>,
+    inner: HashMap<Address, (BlockHeight, token::Amount)>,
 }
 
 impl NewVotes {
     /// Constructs a new [`NewVotes`].
     ///
-    /// For all `votes` provided, a corresponding [`FractionalVotingPower`] must
+    /// For all `votes` provided, a corresponding [`token::Amount`] must
     /// be provided in `voting_powers` also, otherwise an error will be
     /// returned.
     pub fn new(
         votes: Votes,
-        voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+        voting_powers: &HashMap<(Address, BlockHeight), token::Amount>,
     ) -> Result<Self> {
         let mut inner = HashMap::default();
         for vote in votes {
-            let fract_voting_power = match voting_powers.get(&vote) {
-                Some(fract_voting_power) => fract_voting_power,
+            let voting_power = match voting_powers.get(&vote) {
+                Some(voting_power) => voting_power,
                 None => {
                     let (address, block_height) = vote;
                     return Err(eyre!(
-                        "No fractional voting power provided for vote by \
-                         validator {address} at block height {block_height}"
+                        "No voting power provided for vote by validator \
+                         {address} at block height {block_height}"
                     ));
                 }
             };
             let (address, block_height) = vote;
-            _ = inner
-                .insert(address, (block_height, fract_voting_power.to_owned()));
+            _ = inner.insert(address, (block_height, voting_power.to_owned()));
         }
         Ok(Self { inner })
     }
@@ -71,14 +70,14 @@ impl NewVotes {
 
 impl IntoIterator for NewVotes {
     type IntoIter = std::collections::hash_set::IntoIter<Self::Item>;
-    type Item = (Address, BlockHeight, FractionalVotingPower);
+    type Item = (Address, BlockHeight, token::Amount);
 
     fn into_iter(self) -> Self::IntoIter {
         let items: HashSet<_> = self
             .inner
             .into_iter()
-            .map(|(address, (block_height, fract_voting_power))| {
-                (address, block_height, fract_voting_power)
+            .map(|(address, (block_height, stake))| {
+                (address, block_height, stake)
             })
             .collect();
         items.into_iter()
@@ -174,7 +173,7 @@ where
             .expect("The queried epoch should be known");
         let aggregated = voting_power_post
             .entry(epoch)
-            .or_insert(FractionalVotingPower::NULL);
+            .or_insert_with(token::Amount::zero);
         *aggregated += voting_power;
     }
 
@@ -213,19 +212,27 @@ mod tests {
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::types::address;
     use namada_core::types::ethereum_events::EthereumEvent;
+    use namada_core::types::voting_power::FractionalVotingPower;
 
+    use self::helpers::{default_event, default_total_stake, TallyParams};
     use super::*;
-    use crate::protocol::transactions::votes::update::tests::helpers::{
-        arbitrary_event, setup_tally,
-    };
     use crate::protocol::transactions::votes::{self, EpochedVotingPower};
+    use crate::test_utils;
 
     mod helpers {
+        use namada_proof_of_stake::total_consensus_stake_key_handle;
+
         use super::*;
+
+        /// Default amount of staked NAM to be used in tests.
+        pub(super) fn default_total_stake() -> token::Amount {
+            // 1000 NAM
+            token::Amount::native_whole(1_000)
+        }
 
         /// Returns an arbitrary piece of data that can have votes tallied
         /// against it.
-        pub(super) fn arbitrary_event() -> EthereumEvent {
+        pub(super) fn default_event() -> EthereumEvent {
             EthereumEvent::TransfersToNamada {
                 nonce: 0.into(),
                 transfers: vec![],
@@ -233,22 +240,53 @@ mod tests {
             }
         }
 
-        /// Writes an initial [`Tally`] to storage, based on the passed `votes`.
-        pub(super) fn setup_tally(
-            wl_storage: &mut TestWlStorage,
-            event: &EthereumEvent,
-            keys: &vote_tallies::Keys<EthereumEvent>,
-            votes: HashSet<(Address, BlockHeight, FractionalVotingPower)>,
-        ) -> Result<Tally> {
-            let voting_power: FractionalVotingPower =
-                votes.iter().cloned().map(|(_, _, v)| v).sum();
-            let tally = Tally {
-                voting_power: get_epoched_voting_power(voting_power.to_owned()),
-                seen_by: votes.into_iter().map(|(a, h, _)| (a, h)).collect(),
-                seen: voting_power > FractionalVotingPower::TWO_THIRDS,
-            };
-            votes::storage::write(wl_storage, keys, event, &tally, false)?;
-            Ok(tally)
+        /// Parameters to construct a test [`Tally`].
+        pub(super) struct TallyParams<'a> {
+            /// Handle to storage.
+            pub wl_storage: &'a mut TestWlStorage,
+            /// The event to be voted on.
+            pub event: &'a EthereumEvent,
+            /// Votes from the given validators at the given block height.
+            ///
+            /// The voting power of each validator is expressed as a fraction
+            /// of the provided `total_stake` parameter.
+            pub votes: HashSet<(Address, BlockHeight, token::Amount)>,
+            /// The [`token::Amount`] staked at epoch 0.
+            pub total_stake: token::Amount,
+        }
+
+        impl TallyParams<'_> {
+            /// Write an initial [`Tally`] to storage.
+            pub(super) fn setup(self) -> Result<Tally> {
+                let Self {
+                    wl_storage,
+                    event,
+                    votes,
+                    total_stake,
+                } = self;
+                let keys = vote_tallies::Keys::from(event);
+                let seen_voting_power: token::Amount = votes
+                    .iter()
+                    .map(|(_, _, voting_power)| *voting_power)
+                    .sum();
+                let tally = Tally {
+                    voting_power: get_epoched_voting_power(seen_voting_power),
+                    seen_by: votes
+                        .into_iter()
+                        .map(|(addr, height, _)| (addr, height))
+                        .collect(),
+                    seen: seen_voting_power
+                        > FractionalVotingPower::TWO_THIRDS * total_stake,
+                };
+                votes::storage::write(wl_storage, &keys, event, &tally, false)?;
+                total_consensus_stake_key_handle().set(
+                    wl_storage,
+                    total_stake,
+                    0u64.into(),
+                    0,
+                )?;
+                Ok(tally)
+            }
         }
     }
 
@@ -267,7 +305,8 @@ mod tests {
     fn test_vote_info_new_single_voter() -> Result<()> {
         let validator = address::testing::established_address_1();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let voting_power =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -278,7 +317,7 @@ mod tests {
         let votes: BTreeSet<_> = vote_info.into_iter().collect();
         assert_eq!(
             votes,
-            BTreeSet::from([(validator, vote_height, voting_power,)]),
+            BTreeSet::from([(validator, vote_height, voting_power)]),
         );
         Ok(())
     }
@@ -301,7 +340,8 @@ mod tests {
     fn test_vote_info_without_voters() -> Result<()> {
         let validator = address::testing::established_address_1();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let voting_power =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -319,7 +359,8 @@ mod tests {
         let validator = address::testing::established_address_1();
         let new_validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let voting_power =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
         let vote = (validator.clone(), vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -340,23 +381,23 @@ mod tests {
         let validator = address::testing::established_address_1();
         let already_voted_height = BlockHeight(100);
 
-        let event = arbitrary_event();
-        let keys = vote_tallies::Keys::from(&event);
-        let tally_pre = setup_tally(
-            &mut wl_storage,
-            &event,
-            &keys,
-            HashSet::from([(
+        let event = default_event();
+        let tally_pre = TallyParams {
+            total_stake: default_total_stake(),
+            wl_storage: &mut wl_storage,
+            event: &event,
+            votes: HashSet::from([(
                 validator.clone(),
                 already_voted_height,
-                FractionalVotingPower::ONE_THIRD,
+                FractionalVotingPower::ONE_THIRD * default_total_stake(),
             )]),
-        )?;
+        }
+        .setup()?;
 
         let votes = Votes::from([(validator.clone(), BlockHeight(1000))]);
         let voting_powers = HashMap::from([(
             (validator, BlockHeight(1000)),
-            FractionalVotingPower::ONE_THIRD,
+            FractionalVotingPower::ONE_THIRD * default_total_stake(),
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
@@ -371,22 +412,25 @@ mod tests {
     #[test]
     fn test_calculate_already_seen() -> Result<()> {
         let mut wl_storage = TestWlStorage::default();
-        let event = arbitrary_event();
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
-        let tally_pre = setup_tally(
-            &mut wl_storage,
-            &event,
-            &keys,
-            HashSet::from([(
+        let tally_pre = TallyParams {
+            total_stake: default_total_stake(),
+            wl_storage: &mut wl_storage,
+            event: &event,
+            votes: HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::new_u64(3, 4)?, // this is > 2/3
+                // this is > 2/3
+                FractionalVotingPower::new_u64(3, 4)? * default_total_stake(),
             )]),
-        )?;
+        }
+        .setup()?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let voting_power =
+            FractionalVotingPower::new_u64(1, 4)? * default_total_stake();
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote, voting_power)]);
@@ -403,19 +447,20 @@ mod tests {
     /// Tests that an unchanged tally is returned if no votes are passed.
     #[test]
     fn test_calculate_empty() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
-        let event = arbitrary_event();
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
-        let tally_pre = setup_tally(
-            &mut wl_storage,
-            &event,
-            &keys,
-            HashSet::from([(
+        let tally_pre = TallyParams {
+            total_stake: default_total_stake(),
+            wl_storage: &mut wl_storage,
+            event: &event,
+            votes: HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::ONE_THIRD,
+                FractionalVotingPower::ONE_THIRD * default_total_stake(),
             )]),
-        )?;
+        }
+        .setup()?;
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
@@ -430,24 +475,26 @@ mod tests {
     /// not yet seen.
     #[test]
     fn test_calculate_one_vote_not_seen() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
 
-        let event = arbitrary_event();
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
-        let _tally_pre = setup_tally(
-            &mut wl_storage,
-            &event,
-            &keys,
-            HashSet::from([(
+        let _tally_pre = TallyParams {
+            total_stake: default_total_stake(),
+            wl_storage: &mut wl_storage,
+            event: &event,
+            votes: HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::ONE_THIRD,
+                FractionalVotingPower::ONE_THIRD * default_total_stake(),
             )]),
-        )?;
+        }
+        .setup()?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::ONE_THIRD;
+        let voting_power =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
         let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
@@ -460,7 +507,7 @@ mod tests {
             tally_post,
             Tally {
                 voting_power: get_epoched_voting_power(
-                    FractionalVotingPower::TWO_THIRDS,
+                    FractionalVotingPower::TWO_THIRDS * default_total_stake(),
                 ),
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
@@ -480,27 +527,33 @@ mod tests {
     /// seen.
     #[test]
     fn test_calculate_one_vote_seen() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
 
-        let event = arbitrary_event();
+        let first_vote_stake =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
+        let second_vote_stake =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
+        let total_stake = first_vote_stake + second_vote_stake;
+
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
-        let _tally_pre = setup_tally(
-            &mut wl_storage,
-            &event,
-            &keys,
-            HashSet::from([(
+        let _tally_pre = TallyParams {
+            total_stake,
+            wl_storage: &mut wl_storage,
+            event: &event,
+            votes: HashSet::from([(
                 address::testing::established_address_1(),
                 BlockHeight(10),
-                FractionalVotingPower::ONE_THIRD,
+                first_vote_stake,
             )]),
-        )?;
+        }
+        .setup()?;
 
         let validator = address::testing::established_address_2();
         let vote_height = BlockHeight(100);
-        let voting_power = FractionalVotingPower::TWO_THIRDS;
         let vote = (validator, vote_height);
         let votes = Votes::from([vote.clone()]);
-        let voting_powers = HashMap::from([(vote.clone(), voting_power)]);
+        let voting_powers = HashMap::from([(vote.clone(), second_vote_stake)]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
@@ -509,9 +562,7 @@ mod tests {
         assert_eq!(
             tally_post,
             Tally {
-                voting_power: get_epoched_voting_power(
-                    FractionalVotingPower::WHOLE
-                ),
+                voting_power: get_epoched_voting_power(total_stake),
                 seen_by: BTreeMap::from([
                     (address::testing::established_address_1(), 10.into()),
                     vote,
@@ -528,8 +579,10 @@ mod tests {
 
     #[test]
     fn test_keys_changed_all() -> Result<()> {
-        let voting_power_a = FractionalVotingPower::ONE_THIRD;
-        let voting_power_b = FractionalVotingPower::TWO_THIRDS;
+        let voting_power_a =
+            FractionalVotingPower::ONE_THIRD * default_total_stake();
+        let voting_power_b =
+            FractionalVotingPower::TWO_THIRDS * default_total_stake();
 
         let seen_a = false;
         let seen_b = true;
@@ -543,7 +596,7 @@ mod tests {
             BlockHeight(20),
         )]);
 
-        let event = arbitrary_event();
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let pre = Tally {
             voting_power: get_epoched_voting_power(voting_power_a),
@@ -572,11 +625,11 @@ mod tests {
             BlockHeight(10),
         )]);
 
-        let event = arbitrary_event();
+        let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let pre = Tally {
             voting_power: get_epoched_voting_power(
-                FractionalVotingPower::ONE_THIRD,
+                FractionalVotingPower::ONE_THIRD * default_total_stake(),
             ),
             seen,
             seen_by,
@@ -589,9 +642,7 @@ mod tests {
         Ok(())
     }
 
-    fn get_epoched_voting_power(
-        fraction: FractionalVotingPower,
-    ) -> EpochedVotingPower {
-        EpochedVotingPower::from([(0.into(), fraction)])
+    fn get_epoched_voting_power(thus_far: token::Amount) -> EpochedVotingPower {
+        EpochedVotingPower::from([(0.into(), thus_far)])
     }
 }
