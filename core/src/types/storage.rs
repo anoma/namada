@@ -497,6 +497,14 @@ impl Key {
         Ok(Key { segments })
     }
 
+    /// Takes ownership of the key, appends a new segment to it,
+    /// and returns the modified key.
+    #[must_use]
+    pub fn with_segment<T: KeySeg>(mut self, other: T) -> Self {
+        self.segments.push(other.to_db_key());
+        self
+    }
+
     /// Returns a new key with segments of `Self` and the given key
     pub fn join(&self, other: &Key) -> Self {
         let mut segments = self.segments.clone();

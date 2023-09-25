@@ -1152,9 +1152,10 @@ mod tests {
         apply_eth_tx(tx.clone(), &mut wl_storage)?;
         apply_eth_tx(tx, &mut wl_storage)?;
 
-        let bp_root_keys = vote_tallies::Keys::from(
-            vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
-        );
+        let bp_root_keys = vote_tallies::Keys::from((
+            &vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
+            100.into(),
+        ));
         let root_seen_by_bytes =
             wl_storage.read_bytes(&bp_root_keys.seen_by())?;
         assert_eq!(
