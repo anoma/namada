@@ -33,6 +33,7 @@ audit-ignores += RUSTSEC-2021-0076
 crates := namada_core
 crates += namada
 crates += namada_apps
+crates += namada_benchmarks
 crates += namada_encoding_spec
 crates += namada_macros
 crates += namada_proof_of_stake
@@ -65,8 +66,7 @@ package: build-release
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
 check:
-	$(cargo) check --workspace --exclude namada_benchmarks && \
-	$(cargo) +$(nightly) check --benches && \
+	$(cargo) check --workspace && \
 	make -C $(wasms) check && \
 	make -C $(wasms_for_tests) check && \
 	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
