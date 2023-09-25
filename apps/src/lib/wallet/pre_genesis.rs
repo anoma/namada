@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 use ark_serialize::{Read, Write};
 use fd_lock::RwLock;
-use namada::ledger::wallet::pre_genesis::{
+use namada::sdk::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
-use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
+use namada::sdk::wallet::{gen_key_to_store, WalletUtils};
 use namada::types::key::SchemeType;
 use zeroize::Zeroizing;
 

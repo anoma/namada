@@ -2460,7 +2460,7 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    pub use namada::ledger::args::*;
+    pub use namada::sdk::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;

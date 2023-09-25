@@ -9,12 +9,12 @@ use std::str::FromStr;
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
-pub use namada::ledger::wallet::alias::Alias;
-use namada::ledger::wallet::{
+pub use namada::sdk::wallet::alias::Alias;
+use namada::sdk::wallet::{
     AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
     Wallet, WalletUtils,
 };
-pub use namada::ledger::wallet::{ValidatorData, ValidatorKeys};
+pub use namada::sdk::wallet::{ValidatorData, ValidatorKeys};
 use namada::types::address::Address;
 use namada::types::key::*;
 use rand_core::OsRng;
@@ -309,7 +309,7 @@ pub fn read_and_confirm_encryption_password(
 #[cfg(test)]
 mod tests {
     use namada::bip39::MnemonicType;
-    use namada::ledger::wallet::WalletUtils;
+    use namada::sdk::wallet::WalletUtils;
     use rand_core;
 
     use super::CliWalletUtils;

@@ -30,7 +30,8 @@ pub mod client_only_methods {
     use borsh::BorshDeserialize;
 
     use super::Token;
-    use crate::ledger::queries::{Client, RPC};
+    use crate::ledger::queries::RPC;
+    use crate::sdk::queries::Client;
     use crate::types::address::Address;
     use crate::types::token;
 
