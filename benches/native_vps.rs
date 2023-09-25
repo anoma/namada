@@ -21,7 +21,7 @@ use namada::ibc::core::ics24_host::identifier::{
 };
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
-use namada::ledger::ibc::vp::Ibc;
+use namada::ledger::native_vp::ibc::Ibc;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};

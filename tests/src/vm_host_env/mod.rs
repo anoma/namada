@@ -24,7 +24,7 @@ mod tests {
     use itertools::Itertools;
     use namada::ibc::core::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
-    use namada::ledger::ibc::vp::{
+    use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
