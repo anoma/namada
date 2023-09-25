@@ -1546,7 +1546,6 @@ impl Tx {
     /// signatures over it
     #[cfg(feature = "ferveo-tpke")]
     pub fn encrypt(&mut self, pubkey: &EncryptionKey) -> &mut Self {
-        use crate::types::hash::Hash;
         let header_hash = self.header_hash();
         let mut plaintexts = vec![];
         // Iterate backwrds to sidestep the effects of deletion on indexing
@@ -1554,7 +1553,7 @@ impl Tx {
             match &self.sections[i] {
                 Section::Signature(sig)
                     if sig.targets.contains(&header_hash) => {}
-                Section::MaspTx(_) => {
+                masp_section @ Section::MaspTx(_) => {
                     // Do NOT encrypt the fee unshielding transaction
                     if let Some(unshield_section_hash) = self
                         .header()
@@ -1562,14 +1561,7 @@ impl Tx {
                         .expect("Tried to encrypt a non-wrapper tx")
                         .unshield_section_hash
                     {
-                        if unshield_section_hash
-                            == Hash(
-                                self.sections[i]
-                                    .hash(&mut Sha256::new())
-                                    .finalize_reset()
-                                    .into(),
-                            )
-                        {
+                        if unshield_section_hash == masp_section.get_hash() {
                             continue;
                         }
                     }

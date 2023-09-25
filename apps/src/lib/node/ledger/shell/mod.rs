@@ -38,7 +38,8 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
 use namada::ledger::protocol::{
-    apply_wasm_tx, get_transfer_hash_from_storage, ShellParams,
+    apply_wasm_tx, get_fee_unshielding_transaction,
+    get_transfer_hash_from_storage, ShellParams,
 };
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
@@ -1262,21 +1263,10 @@ where
                     return response;
                 }
 
-                let fee_unshield = wrapper
-                    .unshield_section_hash
-                    .and_then(|ref hash| tx.get_section(hash))
-                    .and_then(|section| {
-                        if let Section::MaspTx(transaction) = section.as_ref() {
-                            Some(transaction.to_owned())
-                        } else {
-                            None
-                        }
-                    });
-
                 // Validate wrapper fees
                 if let Err(e) = self.wrapper_fee_check(
                     &wrapper,
-                    fee_unshield,
+                    get_fee_unshielding_transaction(&tx, &wrapper),
                     &mut TempWlStorage::new(&self.wl_storage.storage),
                     &mut self.vp_wasm_cache.clone(),
                     &mut self.tx_wasm_cache.clone(),
