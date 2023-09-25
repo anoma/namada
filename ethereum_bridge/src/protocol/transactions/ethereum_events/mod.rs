@@ -12,6 +12,7 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::internal::ExpiredTx;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
@@ -199,7 +200,22 @@ where
             %keys.prefix,
             "Ethereum event timed out",
         );
-        votes::storage::delete(wl_storage, &keys)?;
+        if let Some(event) = votes::storage::delete(wl_storage, &keys)? {
+            tracing::debug!(
+                %keys.prefix,
+                "Queueing Ethereum event for retransmission",
+            );
+            // NOTE: if we error out in the `ethereum_bridge` crate,
+            // currently there is no way to reset the expired txs queue
+            // to its previous state. this shouldn't be a big deal, as
+            // replaying ethereum events has no effect on the ledger.
+            // however, we may need to revisit this code if we ever
+            // implement slashing on double voting of ethereum events.
+            wl_storage
+                .storage
+                .expired_txs_queue
+                .push(ExpiredTx::EthereumEvent(event));
+        }
         changed.extend(keys.clone().into_iter());
     }
 
