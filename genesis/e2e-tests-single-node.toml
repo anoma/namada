@@ -4,8 +4,6 @@
 
 genesis_time = "2021-09-30T10:00:00Z"
 native_token = "NAM"
-faucet_pow_difficulty = 0
-faucet_withdrawal_limit = "1000"
 
 [validator.validator-0]
 # Validator's staked NAM at genesis.
@@ -37,8 +35,6 @@ Christel = "1000000"
 "Christel.public_key" = "100"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
-"faucet.public_key" = "100"
 "validator-0.public_key" = "100"
 
 [token.BTC]
@@ -50,7 +46,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 
 [token.ETH]
 address = "atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p"
@@ -61,7 +56,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 
 [token.DOT]
 address = "atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn"
@@ -72,7 +66,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 
 [token.Schnitzel]
 address = "atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt"
@@ -83,7 +76,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 
 [token.Apfel]
 address = "atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9"
@@ -94,7 +86,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
 
 [token.Kartoffel]
 address = "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
@@ -106,11 +97,6 @@ Bertha = "1000000"
 Christel = "1000000"
 Daewon = "1000000"
 Ester = "1000000"
-faucet = "9223372036854"
-
-# Some established accounts present at genesis.
-[established.faucet]
-vp = "vp_testnet_faucet"
 
 [established.Albert]
 vp = "vp_user"
@@ -143,10 +129,6 @@ filename = "vp_user.wasm"
 [wasm.vp_validator]
 # filename (relative to wasm path used by the node)
 filename = "vp_validator.wasm"
-
-# Faucet VP
-[wasm.vp_testnet_faucet]
-filename = "vp_testnet_faucet.wasm"
 
 # MASP VP
 [wasm.vp_masp]

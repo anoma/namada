@@ -160,7 +160,6 @@ pub async fn prepare_tx<
     tx: &mut Tx,
     fee_payer: common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Option<Epoch>> {
     if !args.dry_run {
         let epoch = rpc::query_epoch(client).await?;
@@ -173,8 +172,6 @@ pub async fn prepare_tx<
             tx_source_balance,
             epoch,
             fee_payer,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
         )
         .await)
     } else {
@@ -301,7 +298,7 @@ pub async fn build_reveal_pk<
 }
 
 /// Broadcast a transaction to be included in the blockchain and checks that
-/// the tx has been successfully included into the mempool of a validator
+/// the tx has been successfully included into the mempool of a node
 ///
 /// In the case of errors in any of those stages, an error message is returned
 pub async fn broadcast_tx<C: crate::ledger::queries::Client + Sync, IO: Io>(
@@ -1487,8 +1484,6 @@ pub async fn build_ibc_transfer<
         &mut tx,
         fee_payer,
         tx_source_balance,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
 
@@ -1525,8 +1520,6 @@ where
         on_tx,
         gas_payer,
         tx_source_balance,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await
 }
@@ -1549,7 +1542,6 @@ async fn build_pow_flag<
     on_tx: F,
     gas_payer: &common::PublicKey,
     tx_source_balance: Option<TxSourcePostBalance>,
-    #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<(Tx, Option<Epoch>)>
 where
     F: FnOnce(&mut Tx, &mut D) -> Result<()>,
@@ -1578,8 +1570,6 @@ where
         &mut tx_builder,
         gas_payer.clone(),
         tx_source_balance,
-        #[cfg(not(feature = "mainnet"))]
-        requires_pow,
     )
     .await?;
     Ok((tx_builder, epoch))
@@ -1723,11 +1713,6 @@ pub async fn build_transfer<
         _ => None,
     };
 
-    #[cfg(not(feature = "mainnet"))]
-    let is_source_faucet = rpc::is_faucet_account(client, &source).await;
-    #[cfg(feature = "mainnet")]
-    let is_source_faucet = false;
-
     // Construct the shielded part of the transaction, if any
     let stx_result = shielded
         .gen_shielded_transfer::<_, IO>(client, args.clone())
@@ -1809,8 +1794,6 @@ pub async fn build_transfer<
         add_shielded,
         &fee_payer,
         tx_source_balance,
-        #[cfg(not(feature = "mainnet"))]
-        is_source_faucet,
     )
     .await?;
     // Manage the two masp epochs
@@ -2009,8 +1992,6 @@ pub async fn build_custom<
         &mut tx,
         fee_payer.clone(),
         None,
-        #[cfg(not(feature = "mainnet"))]
-        false,
     )
     .await?;
 

@@ -132,8 +132,6 @@ where
                     &mut ctx.tx_wasm_cache,
                 ),
                 None,
-                #[cfg(not(feature = "mainnet"))]
-                false,
             )
             .into_storage_result()?;
 
@@ -144,12 +142,7 @@ where
             // hardcoded, dummy one
             let _privkey =
             <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-            tx.update_header(TxType::Decrypted(
-                DecryptedTx::Decrypted { #[cfg(not(feature = "mainnet"))]
-                    // To be able to dry-run testnet faucet withdrawal, pretend 
-                    // that we got a valid PoW
-                has_valid_pow: true },
-            ));
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
         }
         TxType::Protocol(_) | TxType::Decrypted(_) => {
@@ -163,10 +156,7 @@ where
         }
         TxType::Raw => {
             // Cast tx to a decrypted for execution
-            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: true,
-            }));
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
             // If dry run only the inner tx, use the max block gas as the gas
             // limit
@@ -187,8 +177,6 @@ where
             &mut ctx.vp_wasm_cache,
             &mut ctx.tx_wasm_cache,
         ),
-        #[cfg(not(feature = "mainnet"))]
-        true,
     )
     .into_storage_result()?;
     cumulated_gas = cumulated_gas
@@ -631,12 +619,7 @@ mod test {
 
         // Request dry run tx
         let mut outer_tx =
-            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }));
+            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash));
         outer_tx.set_data(Data::new(vec![]));

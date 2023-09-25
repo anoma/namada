@@ -259,6 +259,7 @@ where
                         }
                     })
                 });
+
             match self.wrapper_fee_check(
                 &wrapper,
                 fee_unshield,
@@ -300,17 +301,12 @@ where
                 |TxInQueue {
                      tx,
                      gas: _,
-                     #[cfg(not(feature = "mainnet"))]
-                     has_valid_pow,
                 }| {
                     let mut tx = tx.clone();
                     match tx.decrypt(privkey).ok()
                     {
                         Some(_) => {
-                            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow: *has_valid_pow,
-                            }));
+                            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
                             tx
                         },
                         // An absent or undecryptable inner_tx are both
@@ -644,9 +640,7 @@ mod test_prepare_proposal {
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-            has_valid_pow: true,
-        }));
+        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes()],
@@ -672,8 +666,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1124,8 +1116,6 @@ mod test_prepare_proposal {
                     keypair.ref_to(),
                     Epoch(0),
                     GAS_LIMIT_MULTIPLIER.into(),
-                    #[cfg(not(feature = "mainnet"))]
-                    None,
                     None,
                 ))));
             tx.header.chain_id = shell.chain_id.clone();
@@ -1146,10 +1136,7 @@ mod test_prepare_proposal {
             shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
             req.txs.push(tx.to_bytes());
-            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-                #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: false,
-            }));
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             expected_decrypted.push(tx.clone());
         }
         // we extract the inner data from the txs for testing
@@ -1199,8 +1186,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1253,8 +1238,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1295,8 +1278,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1350,8 +1331,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1373,8 +1352,6 @@ mod test_prepare_proposal {
             keypair_2.ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
@@ -1410,8 +1387,6 @@ mod test_prepare_proposal {
                 keypair.ref_to(),
                 Epoch(0),
                 Default::default(),
-                #[cfg(not(feature = "mainnet"))]
-                None,
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1460,8 +1435,6 @@ mod test_prepare_proposal {
             keypair.ref_to(),
             Epoch(0),
             (block_gas_limit + 1).into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1500,8 +1473,6 @@ mod test_prepare_proposal {
             keypair.ref_to(),
             Epoch(0),
             0.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
 
@@ -1540,8 +1511,6 @@ mod test_prepare_proposal {
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
 
@@ -1580,8 +1549,6 @@ mod test_prepare_proposal {
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1618,8 +1585,6 @@ mod test_prepare_proposal {
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1656,8 +1621,6 @@ mod test_prepare_proposal {
             crate::wallet::defaults::albert_keypair().ref_to(),
             Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));

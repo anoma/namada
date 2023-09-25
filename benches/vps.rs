@@ -161,8 +161,6 @@ fn vp_user(c: &mut Criterion) {
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
                     )
                     .unwrap()
                 );
@@ -308,8 +306,6 @@ fn vp_implicit(c: &mut Criterion) {
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
                     )
                     .unwrap()
                 )
@@ -459,8 +455,6 @@ fn vp_validator(c: &mut Criterion) {
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
                     )
                     .unwrap()
                 );
@@ -550,8 +544,6 @@ fn vp_masp(c: &mut Criterion) {
                         &keys_changed,
                         &verifiers,
                         shielded_ctx.shell.vp_wasm_cache.clone(),
-                        #[cfg(not(feature = "mainnet"))]
-                        false,
                     )
                     .unwrap()
                 );

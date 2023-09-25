@@ -25,7 +25,6 @@ use thiserror::Error;
 use super::generated::types;
 use crate::ledger::gas::{GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::ledger::testnet_pow;
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
 use crate::types::account::AccountPublicKeysMap;
@@ -1696,9 +1695,6 @@ impl Tx {
         fee_payer: common::PublicKey,
         epoch: Epoch,
         gas_limit: GasLimit,
-        #[cfg(not(feature = "mainnet"))] requires_pow: Option<
-            testnet_pow::Solution,
-        >,
         fee_unshield_hash: Option<crate::types::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1706,8 +1702,6 @@ impl Tx {
             fee_payer,
             epoch,
             gas_limit,
-            #[cfg(not(feature = "mainnet"))]
-            requires_pow,
             fee_unshield_hash,
         )));
         self

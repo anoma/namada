@@ -34,7 +34,7 @@ use namada_core::ledger::governance::cli::onchain::{
     PgfFunding, PgfFundingTarget, StewardsUpdate,
 };
 use namada_test_utils::TestWasms;
-use namada_vp_prelude::{testnet_pow, BTreeSet};
+use namada_vp_prelude::BTreeSet;
 use serde_json::json;
 use setup::constants::*;
 use setup::Test;
@@ -410,22 +410,7 @@ fn stop_ledger_at_height() -> Result<()> {
 /// 8. Query the raw bytes of a storage key
 #[test]
 fn ledger_txs_and_queries() -> Result<()> {
-    let test = setup::network(
-        |genesis| {
-            #[cfg(not(feature = "mainnet"))]
-            {
-                GenesisConfig {
-                    faucet_pow_difficulty: testnet_pow::Difficulty::try_new(1),
-                    ..genesis
-                }
-            }
-            #[cfg(feature = "mainnet")]
-            {
-                genesis
-            }
-        },
-        None,
-    )?;
+    let test = setup::network(|genesis| genesis, None)?;
 
     set_ethereum_bridge_mode(
         &test,
@@ -570,42 +555,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ],
-        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-        //    solution)
-        vec![
-            "transfer",
-            "--source",
-            "faucet",
-            "--target",
-            ALBERT,
-            "--token",
-            NAM,
-            "--amount",
-            "10.1",
-            // Faucet withdrawal requires an explicit signer
-            "--signing-keys",
-            ALBERT_KEY,
-            "--node",
-            &validator_one_rpc,
-        ],
-        // 6. Submit a tx to withdraw from faucet account (requires PoW challenge
-        //    solution)
-            vec![
-                "transfer",
-                "--source",
-                "faucet",
-                "--target",
-                ALBERT,
-                "--token",
-                NAM,
-                "--amount",
-                "10.1",
-                // Faucet withdrawal requires an explicit signer
-            "--signing-keys",
-            ALBERT_KEY,
-                "--node",
-                &validator_one_rpc,
-            ],
     ];
 
     for tx_args in &txs_args {
@@ -883,7 +832,7 @@ fn masp_txs_and_queries() -> Result<()> {
 /// 1. Test that a tx requesting a disposable signer with a correct unshielding
 /// operation is succesful
 /// 2. Test that a tx requesting a disposable signer
-/// providing an insufficient unshielding goes through the PoW
+/// providing an insufficient unshielding fails
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -969,9 +918,10 @@ fn wrapper_disposable_signer() -> Result<()> {
                 "--disposable-gas-payer",
                 "--ledger-address",
                 &validator_one_rpc,
+                "--force",
             ],
             // Not enough funds for fee payment, will use PoW
-            "Looking for a solution with difficulty",
+            "Error while processing transaction's fees",
         ),
     ];
 

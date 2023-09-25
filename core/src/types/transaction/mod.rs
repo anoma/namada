@@ -263,8 +263,6 @@ mod test_process_tx {
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -300,8 +298,6 @@ mod test_process_tx {
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
-            #[cfg(not(feature = "mainnet"))]
-            None,
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -316,10 +312,7 @@ mod test_process_tx {
 #[test]
 fn test_process_tx_decrypted_unsigned() {
     use crate::proto::{Code, Data, Tx};
-    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: false,
-    }));
+    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     let code_sec = tx
         .set_code(Code::new("transaction data".as_bytes().to_owned()))
         .clone();
@@ -328,10 +321,7 @@ fn test_process_tx_decrypted_unsigned() {
         .clone();
     tx.validate_tx().expect("Test failed");
     match tx.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: _,
-        }) => {
+        TxType::Decrypted(DecryptedTx::Decrypted) => {
             assert_eq!(tx.header().code_hash, code_sec.get_hash(),);
             assert_eq!(tx.header().data_hash, data_sec.get_hash(),);
         }
@@ -357,10 +347,7 @@ fn test_process_tx_decrypted_signed() {
 
     use crate::types::key::Signature as S;
     let mut decrypted =
-        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
-        }));
+        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     // Invalid signed data
     let ed_sig =
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
@@ -377,10 +364,7 @@ fn test_process_tx_decrypted_signed() {
         .clone();
     decrypted.validate_tx().expect("Test failed");
     match decrypted.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: _,
-        }) => {
+        TxType::Decrypted(DecryptedTx::Decrypted) => {
             assert_eq!(decrypted.header.code_hash, code_sec.get_hash());
             assert_eq!(decrypted.header.data_hash, data_sec.get_hash());
         }
