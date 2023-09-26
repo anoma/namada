@@ -1,9 +1,7 @@
-use std::ops::ControlFlow;
-
 use clap::Command as App;
 use eyre::Report;
-use namada::types::control_flow::Halt;
 use namada::types::io::Io;
+use namada_sdk::error::Error as SdkError;
 use tendermint_config::net::Address as TendermintAddress;
 
 use super::node::MockNode;
@@ -98,7 +96,10 @@ impl<'a> CliClient for &'a MockNode {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 
-    async fn wait_until_node_is_synced(&self, _io: &impl Io) -> Halt<()> {
-        ControlFlow::Continue(())
+    async fn wait_until_node_is_synced(
+        &self,
+        _io: &impl Io,
+    ) -> Result<(), SdkError> {
+        Ok(())
     }
 }

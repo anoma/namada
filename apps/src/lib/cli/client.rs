@@ -1,5 +1,4 @@
-use color_eyre::eyre::{eyre, Report, Result};
-use namada::types::control_flow::ProceedOrElse;
+use color_eyre::eyre::Result;
 use namada::types::io::Io;
 use namada_sdk::tx::dump_tx;
 use namada_sdk::{signing, Namada, NamadaImpl};
@@ -9,10 +8,6 @@ use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::CliToSdk;
 use crate::cli::cmds::*;
 use crate::client::{rpc, tx, utils};
-
-fn error() -> Report {
-    eyre!("Fatal error")
-}
 
 impl CliApi {
     pub async fn handle_client_command<C, IO: Io>(
@@ -35,10 +30,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         let dry_run =
@@ -63,10 +55,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_transfer(&namada, args).await?;
@@ -77,10 +66,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_ibc_transfer(&namada, args).await?;
@@ -91,10 +77,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_update_account(&namada, args).await?;
@@ -105,10 +88,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         let dry_run =
@@ -133,10 +113,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = NamadaImpl::native_new(
                             &client,
@@ -158,10 +135,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_init_proposal(&namada, args).await?;
@@ -172,10 +146,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_vote_proposal(&namada, args).await?;
@@ -186,10 +157,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_reveal_pk(&namada, args).await?;
@@ -200,10 +168,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_bond(&namada, args).await?;
@@ -214,10 +179,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_unbond(&namada, args).await?;
@@ -228,10 +190,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_withdraw(&namada, args).await?;
@@ -244,10 +203,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_validator_commission_change(&namada, args)
@@ -261,10 +217,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         let tx_args = args.tx.clone();
@@ -296,10 +249,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_unjail_validator(&namada, args).await?;
@@ -312,10 +262,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_update_steward_commission(&namada, args)
@@ -327,10 +274,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_resign_steward(&namada, args).await?;
@@ -340,10 +284,7 @@ impl CliApi {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_and_print_epoch(&namada).await;
                     }
@@ -353,10 +294,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_and_print_validator_state(&namada, args)
@@ -368,10 +306,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_transfers(&namada, args).await;
@@ -382,10 +317,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_conversions(&namada, args).await;
@@ -394,10 +326,7 @@ impl CliApi {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_block(&namada).await;
                     }
@@ -407,10 +336,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_balance(&namada, args).await;
@@ -421,10 +347,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_bonds(&namada, args)
@@ -437,10 +360,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_bonded_stake(&namada, args).await;
@@ -451,10 +371,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_and_print_commission_rate(&namada, args)
@@ -466,10 +383,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_slashes(&namada, args).await;
@@ -480,10 +394,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_delegations(&namada, args).await;
@@ -494,10 +405,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_find_validator(&namada, args).await;
@@ -508,10 +416,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_result(&namada, args).await;
@@ -522,10 +427,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_raw_bytes(&namada, args).await;
@@ -536,10 +438,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_proposal(&namada, args).await;
@@ -550,10 +449,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_proposal_result(&namada, args).await;
@@ -566,10 +462,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_protocol_parameters(&namada, args).await;
@@ -580,10 +473,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_pgf(&namada, args).await;
@@ -594,10 +484,7 @@ impl CliApi {
                                 &mut args.query.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_account(&namada, args).await;
@@ -608,10 +495,7 @@ impl CliApi {
                                 &mut args.tx.ledger_address,
                             )
                         });
-                        client
-                            .wait_until_node_is_synced(io)
-                            .await
-                            .proceed_or_else(error)?;
+                        client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
                         tx::sign_tx(&namada, args).await?;
@@ -647,10 +531,7 @@ impl CliApi {
                     let mut ledger_address = args.ledger_address.clone();
                     let client =
                         C::from_tendermint_address(&mut ledger_address);
-                    client
-                        .wait_until_node_is_synced(io)
-                        .await
-                        .proceed_or_else(error)?;
+                    client.wait_until_node_is_synced(io).await?;
                     let args = args.to_sdk(&mut ctx);
                     let namada = ctx.to_sdk(&client, io);
                     rpc::epoch_sleep(&namada, args).await;

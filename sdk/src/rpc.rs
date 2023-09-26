@@ -30,8 +30,8 @@ use namada_proof_of_stake::types::{
 use serde::Serialize;
 
 use crate::args::InputAmount;
-use crate::control_flow::{time, Halt, TryHalt};
-use crate::error::{EncodingError, Error, QueryError};
+use crate::control_flow::time;
+use crate::error::{EncodingError, Error, QueryError, TxError};
 use crate::events::Event;
 use crate::io::Io;
 use crate::proto::Tx;
@@ -52,7 +52,7 @@ pub async fn query_tx_status<'a>(
     context: &impl Namada<'a>,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
-) -> Halt<Event> {
+) -> Result<Event, Error> {
     time::Sleep {
         strategy: time::LinearBackoff {
             delta: time::Duration::from_secs(1),
@@ -86,11 +86,15 @@ pub async fn query_tx_status<'a>(
         }
     })
     .await
-    .try_halt(|_| {
+    .map_err(|_| {
         edisplay_line!(
             context.io(),
             "Transaction status query deadline of {deadline:?} exceeded"
         );
+        match status {
+            TxEventQuery::Accepted(_) => Error::Tx(TxError::AcceptTimeout),
+            TxEventQuery::Applied(_) => Error::Tx(TxError::AppliedTimeout),
+        }
     })
 }
 
@@ -978,7 +982,7 @@ pub async fn validate_amount<'a, N: Namada<'a>>(
 pub async fn wait_until_node_is_synched<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
-) -> Halt<()> {
+) -> Result<(), Error> {
     let height_one = Height::try_from(1_u64).unwrap();
     let try_count = Cell::new(1_u64);
     const MAX_TRIES: usize = 5;
@@ -1014,25 +1018,22 @@ pub async fn wait_until_node_is_synched<'a>(
                 ControlFlow::Continue(())
             }
             Err(e) => {
-                edisplay_line!(
-                    io,
-                    "Failed to query node status with error: {}",
-                    e
-                );
-                ControlFlow::Break(Err(()))
+                let msg =
+                    format!("Failed to query node status with error: {e}");
+                edisplay_line!(io, "{msg}");
+                ControlFlow::Break(Err(Error::Query(QueryError::General(msg))))
             }
         }
     })
     .await
     // maybe time out
-    .try_halt(|_| {
+    .map_err(|_| {
         display_line!(
             io,
             "Node is still catching up, wait for it to finish synching."
         );
+        Error::Query(QueryError::CatchingUp)
     })?
-    // error querying rpc
-    .try_halt(|_| ())
 }
 
 /// Look up the denomination of a token in order to make a correctly denominated

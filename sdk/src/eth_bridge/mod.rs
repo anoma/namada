@@ -17,9 +17,9 @@ pub use namada_ethereum_bridge::*;
 use num256::Uint256;
 
 use crate::control_flow::time::{
-    Constant, Duration, Error as TimeoutError, Instant, LinearBackoff, Sleep,
+    Constant, Duration, Instant, LinearBackoff, Sleep,
 };
-use crate::control_flow::{self, Halt, TryHalt};
+use crate::error::{Error, EthereumBridgeError};
 use crate::io::Io;
 use crate::{display_line, edisplay_line};
 
@@ -43,9 +43,7 @@ impl SyncStatus {
 
 /// Fetch the sync status of an Ethereum node.
 #[inline]
-pub async fn eth_syncing_status<C>(
-    client: &C,
-) -> Result<SyncStatus, TimeoutError>
+pub async fn eth_syncing_status<C>(client: &C) -> Result<SyncStatus, Error>
 where
     C: Middleware,
 {
@@ -66,7 +64,7 @@ pub async fn eth_syncing_status_timeout<C>(
     client: &C,
     backoff_duration: Duration,
     deadline: Instant,
-) -> Result<SyncStatus, TimeoutError>
+) -> Result<SyncStatus, Error>
 where
     C: Middleware,
 {
@@ -92,6 +90,7 @@ where
         })
     })
     .await
+    .map_err(|_| Error::EthereumBridge(EthereumBridgeError::NodeTimeout))
 }
 
 /// Arguments to [`block_on_eth_sync`].
@@ -107,7 +106,7 @@ pub async fn block_on_eth_sync<C, IO: Io>(
     client: &C,
     io: &IO,
     args: BlockOnEthSync,
-) -> Halt<()>
+) -> Result<(), Error>
 where
     C: Middleware,
 {
@@ -130,14 +129,15 @@ where
         }
     })
     .await
-    .try_halt(|_| {
+    .map_err(|_| {
         edisplay_line!(
             io,
             "Timed out while waiting for Ethereum to synchronize"
         );
+        Error::EthereumBridge(EthereumBridgeError::NodeTimeout)
     })?;
     display_line!(io, "The Ethereum node is up to date");
-    control_flow::proceed(())
+    Ok(())
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
@@ -146,7 +146,7 @@ pub async fn eth_sync_or<C, F, T, IO: Io>(
     client: &C,
     io: &IO,
     mut action: F,
-) -> Halt<Either<T, ()>>
+) -> Result<Either<T, ()>, Error>
 where
     C: Middleware,
     F: FnMut() -> T,
@@ -154,29 +154,33 @@ where
     let is_synchronized = eth_syncing_status(client)
         .await
         .map(|status| status.is_synchronized())
-        .try_halt(|err| {
+        .map_err(|err| {
             edisplay_line!(
                 io,
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"
             );
+            err
         })?;
     if is_synchronized {
-        control_flow::proceed(Either::Right(()))
+        Ok(Either::Right(()))
     } else {
-        control_flow::proceed(Either::Left(action()))
+        Ok(Either::Left(action()))
     }
 }
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit<C, IO: Io>(client: &C, io: &IO) -> Halt<()>
+pub async fn eth_sync_or_exit<C, IO: Io>(
+    client: &C,
+    io: &IO,
+) -> Result<(), Error>
 where
     C: Middleware,
 {
     eth_sync_or(client, io, || {
-        tracing::error!("The Ethereum node has not finished synchronizing");
+        edisplay_line!(io, "The Ethereum node has not finished synchronizing");
     })
-    .await?
-    .try_halt(|_| ())
+    .await?;
+    Ok(())
 }
