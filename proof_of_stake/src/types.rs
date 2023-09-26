@@ -14,7 +14,6 @@ use namada_core::ledger::storage_api::collections::lazy_map::NestedMap;
 use namada_core::ledger::storage_api::collections::{
     LazyMap, LazySet, LazyVec,
 };
-use namada_core::ledger::storage_api::{self, StorageRead};
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common;
@@ -25,14 +24,6 @@ pub use rev_order::ReverseOrdTokenAmount;
 
 use crate::parameters::PosParams;
 
-// TODO: replace `POS_MAX_DECIMAL_PLACES` with
-// core::types::token::NATIVE_MAX_DECIMAL_PLACES??
-const U64_MAX: u64 = u64::MAX;
-
-/// Number of epochs below the current epoch for which validator deltas and
-/// slashes are stored
-const VALIDATOR_DELTAS_SLASHES_LEN: u64 = 23;
-
 // TODO: add this to the spec
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
@@ -40,44 +31,6 @@ pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
     crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
-
-impl ValidatorSetPositions {
-    /// TODO
-    pub fn get_position<S>(
-        &self,
-        storage: &S,
-        epoch: &Epoch,
-        address: &Address,
-        params: &PosParams,
-    ) -> storage_api::Result<Option<Position>>
-    where
-        S: StorageRead,
-    {
-        let last_update = self.get_last_update(storage)?;
-        // dbg!(&last_update);
-        if last_update.is_none() {
-            return Ok(None);
-        }
-        let last_update = last_update.unwrap();
-        let future_most_epoch: Epoch = last_update + params.pipeline_len;
-        // dbg!(future_most_epoch);
-        let mut epoch = std::cmp::min(*epoch, future_most_epoch);
-        loop {
-            // dbg!(epoch);
-            match self.at(&epoch).get(storage, address)? {
-                Some(val) => return Ok(Some(val)),
-                None => {
-                    if epoch.0 > 0 && epoch > Self::sub_past_epochs(last_update)
-                    {
-                        epoch = Epoch(epoch.0 - 1);
-                    } else {
-                        return Ok(None);
-                    }
-                }
-            }
-        }
-    }
-}
 
 // TODO: check the offsets for each epoched type!!
 

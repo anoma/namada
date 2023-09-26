@@ -344,7 +344,7 @@ where
             .unwrap()
     }
 
-    /// TODO
+    /// Get the epoch of the most recent update
     pub fn get_last_update<S>(
         &self,
         storage: &S,
@@ -356,7 +356,7 @@ where
         storage.read(&key)
     }
 
-    /// TODO
+    /// Set the epoch of the most recent update
     pub fn set_last_update<S>(
         &self,
         storage: &mut S,
@@ -368,32 +368,7 @@ where
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)
     }
-
-    /// TODO
-    pub fn sub_past_epochs(epoch: Epoch) -> Epoch {
-        Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
-    }
-
-    // pub fn get_inner_by_epoch(&self) -> storage_api::Result<Data> {}
-
-    // TODO: we may need an update_data() method, figure out when it should be
-    // called (in at()?)
 }
-
-// impl<K, V, SON, FutureEpochs, const NUM_PAST_EPOCHS: u64>
-//     Epoched<
-//         LazyMap<K, V, SON>,
-//         FutureEpochs,
-//         NUM_PAST_EPOCHS,
-//         collections::Nested,
-//     >
-// where
-//     FutureEpochs: EpochOffset,
-// {
-//     pub fn get_inner_by_epoch(&self, epoch: &Epoch) -> LazyMap<K, V, SON> {
-//         self.at()
-//     }
-// }
 
 impl<Data, FutureEpochs, PastEpochs>
     EpochedDelta<Data, FutureEpochs, PastEpochs>
@@ -691,7 +666,7 @@ where
 )]
 pub struct OffsetZero;
 impl EpochOffset for OffsetZero {
-    fn value(_paras: &PosParams) -> u64 {
+    fn value(_params: &PosParams) -> u64 {
         0
     }
 
@@ -1158,89 +1133,4 @@ mod test {
 
         Ok(())
     }
-
-    // use namada_core::ledger::storage::testing::TestStorage;
-    // use namada_core::types::address::{self, Address};
-    // use namada_core::types::storage::Key;
-    //
-    // use super::{
-    // storage, storage_api, Epoch, LazyMap, NestedEpoched, NestedMap,
-    // OffsetPipelineLen,
-    // };
-    //
-    // #[test]
-    // fn testing_epoched_new() -> storage_api::Result<()> {
-    // let mut storage = TestStorage::default();
-    //
-    // let key1 = storage::Key::parse("test_nested1").unwrap();
-    // let nested1 =
-    // NestedEpoched::<LazyMap<Address, u64>, OffsetPipelineLen>::open(
-    // key1,
-    // );
-    // nested1.init(&mut storage, Epoch(0))?;
-    //
-    // let key2 = storage::Key::parse("test_nested2").unwrap();
-    // let nested2 = NestedEpoched::<
-    // NestedMap<u64, LazyMap<u64, Address>>,
-    // OffsetPipelineLen,
-    // >::open(key2);
-    // nested2.init(&mut storage, Epoch(0))?;
-    //
-    // dbg!(&nested1.get_last_update_storage_key());
-    // dbg!(&nested1.get_last_update(&storage));
-    //
-    // nested1.at(&Epoch(0)).insert(
-    // &mut storage,
-    // address::testing::established_address_1(),
-    // 1432,
-    // )?;
-    // dbg!(&nested1.at(&Epoch(0)).iter(&mut storage)?.next());
-    // dbg!(&nested1.at(&Epoch(1)).iter(&mut storage)?.next());
-    //
-    // nested2.at(&Epoch(0)).at(&100).insert(
-    // &mut storage,
-    // 1,
-    // address::testing::established_address_2(),
-    // )?;
-    // dbg!(&nested2.at(&Epoch(0)).iter(&mut storage)?.next());
-    // dbg!(&nested2.at(&Epoch(1)).iter(&mut storage)?.next());
-    //
-    // dbg!(&nested_epoched.get_epoch_key(&Epoch::from(0)));
-    //
-    // let epoch = Epoch::from(0);
-    // let addr = address::testing::established_address_1();
-    // let amount: u64 = 234235;
-    //
-    // nested_epoched
-    //     .at(&epoch)
-    //     .insert(&mut storage, addr.clone(), amount)?;
-    //
-    // let epoch = epoch + 3_u64;
-    // nested_epoched.at(&epoch).insert(
-    //     &mut storage,
-    //     addr.clone(),
-    //     999_u64,
-    // )?;
-    //
-    // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(0))?);
-    // dbg!(
-    //     nested_epoched
-    //         .get_data_handler()
-    //         .get_data_key(&Epoch::from(3))
-    // );
-    // dbg!(nested_epoched.contains_epoch(&storage, &Epoch::from(3))?);
-    // dbg!(
-    //     nested_epoched
-    //         .at(&Epoch::from(0))
-    //         .get(&storage, &addr.clone())?
-    // );
-    // dbg!(
-    //     nested_epoched
-    //         .at(&Epoch::from(3))
-    //         .get(&storage, &addr.clone())?
-    // );
-    // dbg!(nested_epoched.at(&Epoch::from(3)).get_data_key(&addr));
-    //
-    // Ok(())
-    // }
 }
