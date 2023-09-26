@@ -16,6 +16,7 @@ use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::{self, Epoch};
 
 use crate::parameters::PosParams;
+use crate::read_pos_params;
 
 /// Sub-key holding a lazy map in storage
 pub const LAZY_MAP_SUB_KEY: &str = "lazy_map";
@@ -28,57 +29,48 @@ pub const OLDEST_EPOCH_SUB_KEY: &str = "oldest_epoch";
 const DEFAULT_NUM_PAST_EPOCHS: u64 = 2;
 
 /// Discrete epoched data handle
-pub struct Epoched<
-    Data,
-    FutureEpochs,
-    const NUM_PAST_EPOCHS: u64 = DEFAULT_NUM_PAST_EPOCHS,
-    SON = collections::Simple,
-> {
+pub struct Epoched<Data, FutureEpochs, PastEpochs, SON = collections::Simple> {
     storage_prefix: storage::Key,
     future_epochs: PhantomData<FutureEpochs>,
+    past_epochs: PhantomData<PastEpochs>,
     data: PhantomData<Data>,
     phantom_son: PhantomData<SON>,
 }
 
 /// Discrete epoched data handle with nested lazy structure
-pub type NestedEpoched<
-    Data,
-    FutureEpochs,
-    const NUM_PAST_EPOCHS: u64 = DEFAULT_NUM_PAST_EPOCHS,
-> = Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>;
+pub type NestedEpoched<Data, FutureEpochs, PastEpochs> =
+    Epoched<Data, FutureEpochs, PastEpochs, collections::Nested>;
 
 /// Delta epoched data handle
-pub struct EpochedDelta<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64> {
+pub struct EpochedDelta<Data, FutureEpochs, PastEpochs> {
     storage_prefix: storage::Key,
     future_epochs: PhantomData<FutureEpochs>,
+    past_epochs: PhantomData<PastEpochs>,
     data: PhantomData<Data>,
 }
 
-impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64, SON>
-    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, SON>
+impl<Data, FutureEpochs, PastEpochs, SON>
+    Epoched<Data, FutureEpochs, PastEpochs, SON>
 where
     FutureEpochs: EpochOffset,
+    PastEpochs: EpochOffset,
 {
     /// Open the handle
     pub fn open(key: storage::Key) -> Self {
         Self {
             storage_prefix: key,
             future_epochs: PhantomData,
+            past_epochs: PhantomData,
             data: PhantomData,
             phantom_son: PhantomData,
         }
     }
-
-    /// Return the number of past epochs to keep data for
-    pub fn get_num_past_epochs() -> u64 {
-        NUM_PAST_EPOCHS
-    }
 }
 
-impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
-    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS>
+impl<Data, FutureEpochs, PastEpochs> Epoched<Data, FutureEpochs, PastEpochs>
 where
     FutureEpochs: EpochOffset,
+    PastEpochs: EpochOffset,
     Data: BorshSerialize + BorshDeserialize + 'static + Debug,
 {
     /// Initialize new epoched data. Sets the head to the given value.
@@ -125,7 +117,8 @@ where
                         Some(_) => return Ok(res),
                         None => {
                             if epoch.0 > 0
-                                && epoch > Self::sub_past_epochs(last_update)
+                                && epoch
+                                    > Self::sub_past_epochs(params, last_update)
                             {
                                 epoch = Epoch(epoch.0 - 1);
                             } else {
@@ -149,7 +142,8 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        self.update_data(storage, current_epoch)?;
+        let params = read_pos_params(storage)?;
+        self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
 
@@ -177,6 +171,7 @@ where
     fn update_data<S>(
         &self,
         storage: &mut S,
+        params: &PosParams,
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
@@ -189,7 +184,7 @@ where
         {
             let oldest_to_keep = current_epoch
                 .0
-                .checked_sub(NUM_PAST_EPOCHS)
+                .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
             if oldest_epoch.0 < oldest_to_keep {
                 let diff = oldest_to_keep - oldest_epoch.0;
@@ -211,7 +206,8 @@ where
                     }
                 }
                 if let Some(latest_value) = latest_value {
-                    let new_oldest_epoch = Self::sub_past_epochs(current_epoch);
+                    let new_oldest_epoch =
+                        Self::sub_past_epochs(params, current_epoch);
                     // TODO we can add `contains_key` to LazyMap
                     if data_handler.get(storage, &new_oldest_epoch)?.is_none() {
                         tracing::debug!(
@@ -269,8 +265,13 @@ where
         LazyMap::open(key)
     }
 
-    fn sub_past_epochs(epoch: Epoch) -> Epoch {
-        Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
+        Epoch(
+            epoch
+                .0
+                .checked_sub(PastEpochs::value(params))
+                .unwrap_or_default(),
+        )
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
@@ -303,10 +304,11 @@ where
     }
 }
 
-impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
-    Epoched<Data, FutureEpochs, NUM_PAST_EPOCHS, collections::Nested>
+impl<Data, FutureEpochs, PastEpochs>
+    Epoched<Data, FutureEpochs, PastEpochs, collections::Nested>
 where
     FutureEpochs: EpochOffset,
+    PastEpochs: EpochOffset,
     Data: LazyCollection + Debug,
 {
     /// Get the inner LazyCollection value by the outer key
@@ -393,10 +395,11 @@ where
 //     }
 // }
 
-impl<Data, FutureEpochs, const NUM_PAST_EPOCHS: u64>
-    EpochedDelta<Data, FutureEpochs, NUM_PAST_EPOCHS>
+impl<Data, FutureEpochs, PastEpochs>
+    EpochedDelta<Data, FutureEpochs, PastEpochs>
 where
     FutureEpochs: EpochOffset,
+    PastEpochs: EpochOffset,
     Data: BorshSerialize
         + BorshDeserialize
         + ops::Add<Output = Data>
@@ -409,6 +412,7 @@ where
         Self {
             storage_prefix: key,
             future_epochs: PhantomData,
+            past_epochs: PhantomData,
             data: PhantomData,
         }
     }
@@ -457,7 +461,7 @@ where
             None => Ok(None),
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
-                let start_epoch = Self::sub_past_epochs(last_update);
+                let start_epoch = Self::sub_past_epochs(params, last_update);
                 let future_most_epoch =
                     last_update + FutureEpochs::value(params);
 
@@ -493,7 +497,8 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        self.update_data(storage, current_epoch)?;
+        let params = read_pos_params(storage)?;
+        self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
 
@@ -519,6 +524,7 @@ where
     fn update_data<S>(
         &self,
         storage: &mut S,
+        params: &PosParams,
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
@@ -531,7 +537,7 @@ where
         {
             let oldest_to_keep = current_epoch
                 .0
-                .checked_sub(NUM_PAST_EPOCHS)
+                .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
             if oldest_epoch.0 < oldest_to_keep {
                 let diff = oldest_to_keep - oldest_epoch.0;
@@ -557,7 +563,8 @@ where
                     }
                 }
                 if let Some(sum) = sum {
-                    let new_oldest_epoch = Self::sub_past_epochs(current_epoch);
+                    let new_oldest_epoch =
+                        Self::sub_past_epochs(params, current_epoch);
                     let new_oldest_epoch_data =
                         match data_handler.get(storage, &new_oldest_epoch)? {
                             Some(oldest_epoch_data) => oldest_epoch_data + sum,
@@ -631,8 +638,13 @@ where
         handle.iter(storage)?.collect()
     }
 
-    fn sub_past_epochs(epoch: Epoch) -> Epoch {
-        Epoch(epoch.0.checked_sub(NUM_PAST_EPOCHS).unwrap_or_default())
+    fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
+        Epoch(
+            epoch
+                .0
+                .checked_sub(PastEpochs::value(params))
+                .unwrap_or_default(),
+        )
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
@@ -685,6 +697,29 @@ impl EpochOffset for OffsetZero {
 
     fn dyn_offset() -> DynEpochOffset {
         DynEpochOffset::Zero
+    }
+}
+
+/// Default offset
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetDefaultNumPastEpochs;
+impl EpochOffset for OffsetDefaultNumPastEpochs {
+    fn value(_params: &PosParams) -> u64 {
+        DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::DefaultNumPastEpoch
     }
 }
 
@@ -757,11 +792,59 @@ impl EpochOffset for OffsetPipelinePlusUnbondingLen {
     }
 }
 
+/// Offset at the slash processing delay.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetSlashProcessingLen;
+impl EpochOffset for OffsetSlashProcessingLen {
+    fn value(params: &PosParams) -> u64 {
+        params.slash_processing_epoch_offset()
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::SlashProcessingLen
+    }
+}
+
+/// Maximum offset.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxU64;
+impl EpochOffset for OffsetMaxU64 {
+    fn value(_params: &PosParams) -> u64 {
+        u64::MAX
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxU64
+    }
+}
+
 /// Offset length dynamic choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DynEpochOffset {
     /// Zero offset
     Zero,
+    /// Offset at the const default num past epochs (above)
+    DefaultNumPastEpoch,
     /// Offset at pipeline length - 1
     PipelineLenMinusOne,
     /// Offset at pipeline length.
@@ -770,6 +853,11 @@ pub enum DynEpochOffset {
     UnbondingLen,
     /// Offset at pipeline + unbonding length.
     PipelinePlusUnbondingLen,
+    /// Offset at slash processing delay (unbonding +
+    /// cubic_slashing_window + 1).
+    SlashProcessingLen,
+    /// Offset of the max u64 value
+    MaxU64,
 }
 
 /// Which offset should be used to set data. The value is read from
@@ -794,11 +882,9 @@ mod test {
     fn test_epoched_data_trimming() -> storage_api::Result<()> {
         let mut s = TestWlStorage::default();
 
-        const NUM_PAST_EPOCHS: u64 = 2;
         let key_prefix = storage::Key::parse("test").unwrap();
-        let epoched = Epoched::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
-            key_prefix,
-        );
+        let epoched =
+            Epoched::<u64, OffsetPipelineLen, OffsetMaxU64>::open(key_prefix);
         let data_handler = epoched.get_data_handler();
         assert!(epoched.get_last_update(&s)?.is_none());
         assert!(epoched.get_oldest_epoch(&s)?.is_none());
@@ -865,11 +951,9 @@ mod test {
     fn test_epoched_without_data_trimming() -> storage_api::Result<()> {
         let mut s = TestWlStorage::default();
 
-        const NUM_PAST_EPOCHS: u64 = u64::MAX;
         let key_prefix = storage::Key::parse("test").unwrap();
-        let epoched = Epoched::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
-            key_prefix,
-        );
+        let epoched =
+            Epoched::<u64, OffsetPipelineLen, OffsetMaxU64>::open(key_prefix);
         let data_handler = epoched.get_data_handler();
         assert!(epoched.get_last_update(&s)?.is_none());
         assert!(epoched.get_oldest_epoch(&s)?.is_none());
@@ -935,10 +1019,9 @@ mod test {
     fn test_epoched_delta_data_trimming() -> storage_api::Result<()> {
         let mut s = TestWlStorage::default();
 
-        const NUM_PAST_EPOCHS: u64 = 2;
         let key_prefix = storage::Key::parse("test").unwrap();
         let epoched =
-            EpochedDelta::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+            EpochedDelta::<u64, OffsetPipelineLen, OffsetMaxU64>::open(
                 key_prefix,
             );
         let data_handler = epoched.get_data_handler();
@@ -1010,10 +1093,9 @@ mod test {
         let mut s = TestWlStorage::default();
 
         // Nothing should ever get trimmed
-        const NUM_PAST_EPOCHS: u64 = u64::MAX;
         let key_prefix = storage::Key::parse("test").unwrap();
         let epoched =
-            EpochedDelta::<u64, OffsetPipelineLen, NUM_PAST_EPOCHS>::open(
+            EpochedDelta::<u64, OffsetPipelineLen, OffsetMaxU64>::open(
                 key_prefix,
             );
         let data_handler = epoched.get_data_handler();

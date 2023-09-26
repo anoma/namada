@@ -38,6 +38,7 @@ const VALIDATOR_DELTAS_SLASHES_LEN: u64 = 23;
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
     LazyMap<Address, Position>,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 impl ValidatorSetPositions {
@@ -84,23 +85,29 @@ impl ValidatorSetPositions {
 pub type ValidatorConsensusKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Epoched validator's eth hot key.
 pub type ValidatorEthHotKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Epoched validator's eth cold key.
 pub type ValidatorEthColdKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Epoched validator's state.
-pub type ValidatorStates =
-    crate::epoched::Epoched<ValidatorState, crate::epoched::OffsetPipelineLen>;
+pub type ValidatorStates = crate::epoched::Epoched<
+    ValidatorState,
+    crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
+>;
 
 /// A map from a position to an address in a Validator Set
 pub type ValidatorPositionAddresses = LazyMap<Position, Address>;
@@ -117,41 +124,49 @@ pub type BelowCapacityValidatorSet =
 pub type ConsensusValidatorSets = crate::epoched::NestedEpoched<
     ConsensusValidatorSet,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Epoched below-capacity validator sets.
 pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
     BelowCapacityValidatorSet,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Epoched total consensus validator stake
-pub type TotalConsensusStakes =
-    crate::epoched::Epoched<Amount, crate::epoched::OffsetZero, U64_MAX>;
+pub type TotalConsensusStakes = crate::epoched::Epoched<
+    Amount,
+    crate::epoched::OffsetZero,
+    crate::epoched::OffsetMaxU64,
+>;
 
 /// Epoched validator's deltas.
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    VALIDATOR_DELTAS_SLASHES_LEN,
+    crate::epoched::OffsetSlashProcessingLen,
 >;
 
 /// Epoched total deltas.
 pub type TotalDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    VALIDATOR_DELTAS_SLASHES_LEN,
+    crate::epoched::OffsetSlashProcessingLen,
 >;
 
 /// Epoched validator commission rate
-pub type CommissionRates =
-    crate::epoched::Epoched<Dec, crate::epoched::OffsetPipelineLen>;
+pub type CommissionRates = crate::epoched::Epoched<
+    Dec,
+    crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
+>;
 
 /// Epoched validator's bonds
 pub type Bonds = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetPipelineLen,
-    U64_MAX,
+    crate::epoched::OffsetMaxU64,
 >;
 
 /// An epoched lazy set of all known active validator addresses (consensus,
@@ -159,6 +174,7 @@ pub type Bonds = crate::epoched::EpochedDelta<
 pub type ValidatorAddresses = crate::epoched::NestedEpoched<
     LazySet<Address>,
     crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
 /// Slashes indexed by validator address and then block height (for easier
@@ -172,7 +188,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
     crate::epoched::OffsetUnbondingLen,
-    VALIDATOR_DELTAS_SLASHES_LEN,
+    crate::epoched::OffsetSlashProcessingLen,
 >;
 
 /// Epoched validator's unbonds
