@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::ledger::eth_bridge::{bridge_pool, validator_set};
+use namada::sdk::eth_bridge::{bridge_pool, validator_set};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::io::Io;
 

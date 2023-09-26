@@ -12,7 +12,7 @@ use namada::core::types::ethereum_structs;
 use namada::eth_bridge::ethers;
 use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
 use namada::eth_bridge::oracle::config::Config;
-use namada::ledger::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
+use namada::sdk::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
 use namada::types::control_flow::time::{Constant, Duration, Instant, Sleep};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;

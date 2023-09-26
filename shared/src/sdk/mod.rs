@@ -2,6 +2,7 @@
 pub mod rpc;
 
 pub mod args;
+pub mod eth_bridge;
 pub mod masp;
 pub mod signing;
 #[allow(clippy::result_large_err)]

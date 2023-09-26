@@ -1,4 +1,4 @@
-//! Ethereum bridge utilities shared between `wasm` and the `cli`.
+//! Ethereum Bridge SDK utilities.
 
 pub mod bridge_pool;
 pub mod validator_set;
@@ -7,10 +7,6 @@ use std::ops::ControlFlow;
 
 use ethers::providers::Middleware;
 use itertools::Either;
-pub use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
-pub use namada_ethereum_bridge::parameters::*;
-pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 use num256::Uint256;
 
 use crate::types::control_flow::time::{
