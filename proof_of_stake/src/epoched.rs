@@ -15,8 +15,8 @@ use namada_core::ledger::storage_api::collections::{self, LazyCollection};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada_core::types::storage::{self, Epoch};
 
-use crate::parameters::PosParams;
-use crate::read_pos_params;
+use crate::parameters::{PosAndGovParams, PosParams};
+use crate::read_pos_and_gov_params;
 
 /// Sub-key holding a lazy map in storage
 pub const LAZY_MAP_SUB_KEY: &str = "lazy_map";
@@ -95,7 +95,7 @@ where
         &self,
         storage: &S,
         epoch: Epoch,
-        params: &PosParams,
+        params: &PosAndGovParams,
     ) -> storage_api::Result<Option<Data>>
     where
         S: StorageRead,
@@ -142,7 +142,7 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        let params = read_pos_params(storage)?;
+        let params = read_pos_and_gov_params(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
@@ -171,7 +171,7 @@ where
     fn update_data<S>(
         &self,
         storage: &mut S,
-        params: &PosParams,
+        params: &PosAndGovParams,
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
@@ -265,7 +265,7 @@ where
         LazyMap::open(key)
     }
 
-    fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
+    fn sub_past_epochs(params: &PosAndGovParams, epoch: Epoch) -> Epoch {
         Epoch(
             epoch
                 .0
@@ -426,7 +426,7 @@ where
         &self,
         storage: &S,
         epoch: Epoch,
-        params: &PosParams,
+        params: &PosAndGovParams,
     ) -> storage_api::Result<Option<Data>>
     where
         S: StorageRead,
@@ -472,7 +472,7 @@ where
     where
         S: StorageWrite + StorageRead,
     {
-        let params = read_pos_params(storage)?;
+        let params = read_pos_and_gov_params(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
@@ -499,7 +499,7 @@ where
     fn update_data<S>(
         &self,
         storage: &mut S,
-        params: &PosParams,
+        params: &PosAndGovParams,
         current_epoch: Epoch,
     ) -> storage_api::Result<()>
     where
@@ -613,7 +613,7 @@ where
         handle.iter(storage)?.collect()
     }
 
-    fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
+    fn sub_past_epochs(params: &PosAndGovParams, epoch: Epoch) -> Epoch {
         Epoch(
             epoch
                 .0
@@ -666,7 +666,7 @@ where
 )]
 pub struct OffsetZero;
 impl EpochOffset for OffsetZero {
-    fn value(_params: &PosParams) -> u64 {
+    fn value(_params: &PosAndGovParams) -> u64 {
         0
     }
 
@@ -689,7 +689,7 @@ impl EpochOffset for OffsetZero {
 )]
 pub struct OffsetDefaultNumPastEpochs;
 impl EpochOffset for OffsetDefaultNumPastEpochs {
-    fn value(_params: &PosParams) -> u64 {
+    fn value(_params: &PosAndGovParams) -> u64 {
         DEFAULT_NUM_PAST_EPOCHS
     }
 
@@ -712,8 +712,8 @@ impl EpochOffset for OffsetDefaultNumPastEpochs {
 )]
 pub struct OffsetPipelineLen;
 impl EpochOffset for OffsetPipelineLen {
-    fn value(params: &PosParams) -> u64 {
-        params.pipeline_len
+    fn value(params: &PosAndGovParams) -> u64 {
+        params.pos_params.pipeline_len
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -735,8 +735,8 @@ impl EpochOffset for OffsetPipelineLen {
 )]
 pub struct OffsetUnbondingLen;
 impl EpochOffset for OffsetUnbondingLen {
-    fn value(params: &PosParams) -> u64 {
-        params.unbonding_len
+    fn value(params: &PosAndGovParams) -> u64 {
+        params.pos_params.unbonding_len
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -758,8 +758,8 @@ impl EpochOffset for OffsetUnbondingLen {
 )]
 pub struct OffsetPipelinePlusUnbondingLen;
 impl EpochOffset for OffsetPipelinePlusUnbondingLen {
-    fn value(params: &PosParams) -> u64 {
-        params.pipeline_len + params.unbonding_len
+    fn value(params: &PosAndGovParams) -> u64 {
+        params.pos_params.pipeline_len + params.pos_params.unbonding_len
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -781,8 +781,8 @@ impl EpochOffset for OffsetPipelinePlusUnbondingLen {
 )]
 pub struct OffsetSlashProcessingLen;
 impl EpochOffset for OffsetSlashProcessingLen {
-    fn value(params: &PosParams) -> u64 {
-        params.slash_processing_epoch_offset()
+    fn value(params: &PosAndGovParams) -> u64 {
+        params.pos_params.slash_processing_epoch_offset()
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -804,7 +804,7 @@ impl EpochOffset for OffsetSlashProcessingLen {
 )]
 pub struct OffsetMaxU64;
 impl EpochOffset for OffsetMaxU64 {
-    fn value(_params: &PosParams) -> u64 {
+    fn value(_params: &PosAndGovParams) -> u64 {
         u64::MAX
     }
 
@@ -831,6 +831,10 @@ pub enum DynEpochOffset {
     /// Offset at slash processing delay (unbonding +
     /// cubic_slashing_window + 1).
     SlashProcessingLen,
+    /// Offset at the max proposal period
+    MaxProposalPeriod,
+    /// Offset at the larger of max proposal period or slash processing delay
+    MaxProposalPeriodOrSlashProcessingLen,
     /// Offset of the max u64 value
     MaxU64,
 }
@@ -840,8 +844,8 @@ pub enum DynEpochOffset {
 pub trait EpochOffset:
     Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema
 {
-    /// Find the value of a given offset from PoS parameters.
-    fn value(params: &PosParams) -> u64;
+    /// Find the value of a given offset from PoS and Gov parameters.
+    fn value(params: &PosAndGovParams) -> u64;
     /// Convert to [`DynEpochOffset`]
     fn dyn_offset() -> DynEpochOffset;
 }

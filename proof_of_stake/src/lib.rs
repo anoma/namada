@@ -36,7 +36,7 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, ResultExt, StorageRead, StorageWrite,
+    self, governance, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
@@ -46,7 +46,7 @@ use namada_core::types::key::{
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token;
 use once_cell::unsync::Lazy;
-use parameters::PosParams;
+use parameters::{PosAndGovParams, PosParams};
 use rewards::PosRewardsCalculator;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
@@ -510,6 +510,21 @@ where
     tracing::debug!("Genesis initialized");
 
     Ok(())
+}
+
+/// Read PoS and Governance parameters
+pub fn read_pos_and_gov_params<S>(
+    storage: &S,
+) -> storage_api::Result<PosAndGovParams>
+where
+    S: StorageRead,
+{
+    let gov_params = governance::get_parameters(storage)?;
+    let pos_params = read_pos_params(storage)?;
+    Ok(PosAndGovParams {
+        pos_params,
+        gov_params,
+    })
 }
 
 /// Read PoS parameters

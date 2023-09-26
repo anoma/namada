@@ -1,6 +1,7 @@
 //! Proof-of-Stake system parameters
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::types::dec::Dec;
 use namada_core::types::storage::Epoch;
 use namada_core::types::token;
@@ -72,6 +73,15 @@ impl Default for PosParams {
             validator_stake_threshold: token::Amount::native_whole(1_u64),
         }
     }
+}
+
+/// A struct to hold both PoS and governance parameters
+#[derive(Debug, Clone)]
+pub struct PosAndGovParams {
+    /// Pos parameters
+    pub pos_params: PosParams,
+    /// Governance parameters
+    pub gov_params: GovernanceParameters,
 }
 
 #[allow(missing_docs)]
