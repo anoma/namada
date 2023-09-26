@@ -38,6 +38,9 @@ pub enum Error {
     /// Errors that handle querying from storage
     #[error("Querying error: {0}")]
     Query(#[from] QueryError),
+    /// Ethereum bridge related errors
+    #[error("{0}")]
+    EthereumBridge(#[from] EthereumBridgeError),
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
@@ -88,6 +91,10 @@ pub enum QueryError {
     /// Wasm querying failure
     #[error("Wasm code path {0} does not exist on chain")]
     Wasm(String),
+    /// The queried node is outdated, and is in the process of
+    /// synchronizing with the network.
+    #[error("Node is still catching up with the network")]
+    CatchingUp,
 }
 
 /// Errors that deal with Decoding, Encoding, or Conversions
@@ -277,6 +284,46 @@ pub enum TxError {
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),
+}
+
+/// Ethereum bridge related errors.
+#[derive(Error, Debug, Clone)]
+pub enum EthereumBridgeError {
+    /// Error invoking smart contract function.
+    #[error("Smart contract call failed: {0}")]
+    ContractCall(String),
+    /// Ethereum RPC error.
+    #[error("RPC error: {0}")]
+    Rpc(String),
+    /// Error reading the signed Bridge pool.
+    #[error("Failed to read signed Bridge pool: {0}")]
+    ReadSignedBridgePool(String),
+    /// Error reading the Bridge pool.
+    #[error("Failed to read Bridge pool: {0}")]
+    ReadBridgePool(String),
+    /// Error querying transfer to Ethereum progress.
+    #[error("Failed to query transfer to Ethereum progress: {0}")]
+    TransferToEthProgress(String),
+    /// Error querying Ethereum voting powers.
+    #[error("Failed to query Ethereum voting powers: {0}")]
+    QueryVotingPowers(String),
+    /// Ethereum node timeout error.
+    #[error(
+        "Timed out while attempting to communicate with the Ethereum node"
+    )]
+    NodeTimeout,
+    /// Error generating Bridge pool proof.
+    #[error("Failed to generate Bridge pool proof: {0}")]
+    GenBridgePoolProof(String),
+    /// Error retrieving contract address.
+    #[error("Failed to retrieve contract address: {0}")]
+    RetrieveContract(String),
+    /// Error calculating relay cost.
+    #[error("Failed to calculate relay cost: {0}")]
+    RelayCost(String),
+    /// Invalid Bridge pool nonce error.
+    #[error("The Bridge pool nonce is invalid")]
+    InvalidBpNonce,
 }
 
 /// Checks if the given error is an invalid viewing key
