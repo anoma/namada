@@ -39,7 +39,7 @@ use crate::ledger::tx::{
 };
 pub use crate::ledger::wallet::store::AddressVpType;
 use crate::ledger::wallet::{Wallet, WalletUtils};
-use crate::ledger::{args, rpc};
+use crate::ledger::{args, rpc, Namada, SdkTypes};
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::types::error::{EncodingError, Error, TxError};
 use crate::types::key::*;
@@ -52,8 +52,6 @@ use crate::types::transaction::governance::{
 };
 use crate::types::transaction::pos::InitValidator;
 use crate::types::transaction::{Fee, TxType};
-use crate::ledger::Namada;
-use crate::ledger::SdkTypes;
 
 #[cfg(feature = "std")]
 /// Env. var specifying where to store signing test vectors
@@ -171,8 +169,13 @@ pub async fn tx_signers<'a>(
         Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
 
         Some(signer) => Ok(vec![
-            find_pk(context.client, context.wallet, &signer, args.password.clone())
-                .await?,
+            find_pk(
+                context.client,
+                context.wallet,
+                &signer,
+                args.password.clone(),
+            )
+            .await?,
         ]),
         None => other_err(
             "All transactions must be signed; please either specify the key \
@@ -309,8 +312,10 @@ pub async fn solve_pow_challenge<'a>(
         let err_msg = format!(
             "The wrapper transaction source doesn't have enough balance to \
              pay fee {}, got {}.",
-            format_denominated_amount(context.client, &token_addr, total_fee).await,
-            format_denominated_amount(context.client, &token_addr, balance).await,
+            format_denominated_amount(context.client, &token_addr, total_fee)
+                .await,
+            format_denominated_amount(context.client, &token_addr, balance)
+                .await,
         );
         if !args.force && cfg!(feature = "mainnet") {
             panic!("{}", err_msg);
@@ -322,7 +327,8 @@ pub async fn solve_pow_challenge<'a>(
     if (requires_pow || !is_bal_sufficient) && !args.dump_tx {
         println!("The transaction requires the completion of a PoW challenge.");
         // Obtain a PoW challenge for faucet withdrawal
-        let challenge = rpc::get_testnet_pow_challenge(context.client, source).await;
+        let challenge =
+            rpc::get_testnet_pow_challenge(context.client, source).await;
 
         // Solve the solution, this blocks until a solution is found
         let solution = challenge.solve();
@@ -367,10 +373,14 @@ pub async fn update_pow_challenge<'a>(
     };
     let fee_amount = match args.fee_amount {
         Some(amount) => {
-            let validated_fee_amount =
-                validate_amount(context.client, amount, &args.fee_token, args.force)
-                    .await
-                    .expect("Expected to be able to validate fee");
+            let validated_fee_amount = validate_amount(
+                context.client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
 
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
@@ -395,10 +405,12 @@ pub async fn update_pow_challenge<'a>(
     let total_fee = fee_amount * u64::from(args.gas_limit);
 
     let balance_key = token::balance_key(&args.fee_token, &source);
-    let balance =
-        rpc::query_storage_value::<_, token::Amount>(context.client, &balance_key)
-            .await
-            .unwrap_or_default();
+    let balance = rpc::query_storage_value::<_, token::Amount>(
+        context.client,
+        &balance_key,
+    )
+    .await
+    .unwrap_or_default();
 
     if let TxType::Wrapper(wrapper) = &mut tx.header.tx_type {
         let pow_solution = solve_pow_challenge(
@@ -470,10 +482,14 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
     };
     let fee_amount = match args.fee_amount {
         Some(amount) => {
-            let validated_fee_amount =
-                validate_amount(context.client, amount, &args.fee_token, args.force)
-                    .await
-                    .expect("Expected to be able to validate fee");
+            let validated_fee_amount = validate_amount(
+                context.client,
+                amount,
+                &args.fee_token,
+                args.force,
+            )
+            .await
+            .expect("Expected to be able to validate fee");
 
             let amount =
                 Amount::from_uint(validated_fee_amount.amount, 0).unwrap();
@@ -506,9 +522,12 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
             let balance_key =
                 token::balance_key(&args.fee_token, &fee_payer_address);
 
-            rpc::query_storage_value::<_, token::Amount>(context.client, &balance_key)
-                .await
-                .unwrap_or_default()
+            rpc::query_storage_value::<_, token::Amount>(
+                context.client,
+                &balance_key,
+            )
+            .await
+            .unwrap_or_default()
         }
     };
 
@@ -613,8 +632,12 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                 let err_msg = format!(
                     "The wrapper transaction source doesn't have enough \
                      balance to pay fee {}, balance: {}.",
-                    format_denominated_amount(context.client, &token_addr, total_fee)
-                        .await,
+                    format_denominated_amount(
+                        context.client,
+                        &token_addr,
+                        total_fee
+                    )
+                    .await,
                     format_denominated_amount(
                         context.client,
                         &token_addr,
@@ -949,20 +972,25 @@ pub async fn to_ledger_vector<'a>(
         query_wasm_code_hash(context.client, TX_INIT_PROPOSAL).await?;
     let vote_proposal_hash =
         query_wasm_code_hash(context.client, TX_VOTE_PROPOSAL).await?;
-    let reveal_pk_hash = query_wasm_code_hash(context.client, TX_REVEAL_PK).await?;
+    let reveal_pk_hash =
+        query_wasm_code_hash(context.client, TX_REVEAL_PK).await?;
     let update_account_hash =
         query_wasm_code_hash(context.client, TX_UPDATE_ACCOUNT_WASM).await?;
-    let transfer_hash = query_wasm_code_hash(context.client, TX_TRANSFER_WASM).await?;
+    let transfer_hash =
+        query_wasm_code_hash(context.client, TX_TRANSFER_WASM).await?;
     let ibc_hash = query_wasm_code_hash(context.client, TX_IBC_WASM).await?;
     let bond_hash = query_wasm_code_hash(context.client, TX_BOND_WASM).await?;
-    let unbond_hash = query_wasm_code_hash(context.client, TX_UNBOND_WASM).await?;
-    let withdraw_hash = query_wasm_code_hash(context.client, TX_WITHDRAW_WASM).await?;
+    let unbond_hash =
+        query_wasm_code_hash(context.client, TX_UNBOND_WASM).await?;
+    let withdraw_hash =
+        query_wasm_code_hash(context.client, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
         query_wasm_code_hash(context.client, TX_CHANGE_COMMISSION_WASM).await?;
     let user_hash = query_wasm_code_hash(context.client, VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
-    let tokens: HashMap<Address, String> = context.wallet
+    let tokens: HashMap<Address, String> = context
+        .wallet
         .get_addresses_with_vp_type(AddressVpType::Token)
         .into_iter()
         .map(|addr| {

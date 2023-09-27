@@ -17,12 +17,13 @@ use serde::{Deserialize, Serialize};
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::eth_bridge::structs::RelayProof;
-use crate::ledger::args;
 use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC,
 };
 use crate::ledger::rpc::{query_wasm_code_hash, validate_amount};
+use crate::ledger::signing::aux_signing_data;
 use crate::ledger::tx::prepare_tx;
+use crate::ledger::{args, Namada, SigningTxData};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
@@ -37,9 +38,6 @@ use crate::types::eth_bridge_pool::{
 use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
-use crate::ledger::Namada;
-use crate::ledger::signing::aux_signing_data;
-use crate::ledger::SigningTxData;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<'a>(
@@ -64,7 +62,7 @@ pub async fn build_bridge_pool_tx<'a>(
         Some(sender.clone()),
         default_signer,
     )
-        .await?;
+    .await?;
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } = validate_amount(
         context.client,

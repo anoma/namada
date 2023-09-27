@@ -19,10 +19,10 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::ledger::masp::fs::FsShieldedUtils;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::{
     GenesisConfig, ParametersConfig, PgfParametersConfig, PosParamsConfig,
@@ -738,7 +738,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -886,7 +886,7 @@ fn masp_txs_and_queries() -> Result<()> {
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = FsShieldedUtils::new(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.

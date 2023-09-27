@@ -21,39 +21,40 @@ pub mod tx;
 pub mod vp_host_fns;
 pub mod wallet;
 
+use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use masp::{ShieldedContext, ShieldedUtils};
 pub use namada_core::ledger::{
     gas, parameters, replay_protection, storage_api, tx_env, vp_env,
 };
-
-use wallet::{Wallet, WalletUtils};
-use masp::{ShieldedContext, ShieldedUtils};
-use crate::types::masp::{TransferSource, TransferTarget};
-use crate::types::address::Address;
-use crate::ledger::args::InputAmount;
-use crate::ledger::tx::{
-    TX_TRANSFER_WASM, TX_REVEAL_PK, TX_BOND_WASM, TX_UNBOND_WASM, TX_IBC_WASM,
-    TX_INIT_PROPOSAL, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, VP_USER_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_INIT_VALIDATOR_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_WITHDRAW_WASM, TX_BRIDGE_POOL_WASM, TX_RESIGN_STEWARD,
-    TX_UPDATE_STEWARD_COMMISSION,
-};
-use std::path::PathBuf;
-use crate::types::transaction::GasLimit;
-use crate::ledger::args::SdkTypes;
-use crate::ledger::signing::SigningTxData;
-use crate::proto::Tx;
-use crate::types::key::*;
-use crate::types::token;
-use crate::ledger::tx::ProcessTxResponse;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
-use std::str::FromStr;
-use std::ops::{Deref, DerefMut};
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
+use wallet::{Wallet, WalletUtils};
+
+use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+use crate::ledger::args::{InputAmount, SdkTypes};
+use crate::ledger::signing::SigningTxData;
+use crate::ledger::tx::{
+    ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
+    TX_INIT_VALIDATOR_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
+};
+use crate::proto::Tx;
+use crate::types::address::Address;
+use crate::types::key::*;
+use crate::types::masp::{TransferSource, TransferTarget};
+use crate::types::token;
+use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use crate::types::transaction::GasLimit;
 
 /// Encapsulates a Namada session to enable splitting borrows of its parts
-pub struct NamadaStruct<'a, C, U, V> where
+pub struct NamadaStruct<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -68,7 +69,16 @@ pub struct NamadaStruct<'a, C, U, V> where
 
 #[async_trait::async_trait(?Send)]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::WalletUtils, Self::ShieldedUtils>> {
+pub trait Namada<'a>:
+    DerefMut<
+    Target = NamadaStruct<
+        'a,
+        Self::Client,
+        Self::WalletUtils,
+        Self::ShieldedUtils,
+    >,
+>
+{
     /// A client with async request dispatcher method
     type Client: 'a + crate::ledger::queries::Client + Sync;
     /// Captures the interactive parts of the wallet's functioning
@@ -79,9 +89,12 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
 
     /// Return the native token
     fn native_token(&mut self) -> Address {
-        self.wallet.find_address(args::NAM).expect("NAM not in wallet").clone()
+        self.wallet
+            .find_address(args::NAM)
+            .expect("NAM not in wallet")
+            .clone()
     }
-    
+
     /// Make a tx builder using no arguments
     fn tx_builder(&mut self) -> args::Tx {
         args::Tx {
@@ -212,10 +225,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
     }
 
     /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(
-        &mut self,
-        addr: Address,
-    ) -> args::TxUpdateAccount {
+    fn new_update_account(&mut self, addr: Address) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
             vp_code_path: None,
@@ -243,7 +253,8 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
         }
     }
 
-    /// Make a CommissionRateChange builder from the given minimum set of arguments
+    /// Make a CommissionRateChange builder from the given minimum set of
+    /// arguments
     fn new_change_commission_rate(
         &mut self,
         rate: Dec,
@@ -293,10 +304,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
     }
 
     /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_withdraw(
-        &mut self,
-        validator: Address,
-    ) -> args::Withdraw {
+    fn new_withdraw(&mut self, validator: Address) -> args::Withdraw {
         args::Withdraw {
             validator,
             source: None,
@@ -355,10 +363,7 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(
-        &mut self,
-        owner: Address,
-    ) -> args::TxCustom {
+    fn new_custom(&mut self, owner: Address) -> args::TxCustom {
         args::TxCustom {
             owner,
             tx: self.tx_builder(),
@@ -389,7 +394,8 @@ pub trait Namada<'a> : DerefMut<Target = NamadaStruct<'a, Self::Client, Self::Wa
 }
 
 /// Provides convenience methods for common Namada interactions
-pub struct NamadaImpl<'a, C, U, V> where
+pub struct NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -398,7 +404,8 @@ pub struct NamadaImpl<'a, C, U, V> where
     prototype: args::Tx,
 }
 
-impl<'a, C, U, V> NamadaImpl<'a, C, U, V> where
+impl<'a, C, U, V> NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -414,7 +421,11 @@ impl<'a, C, U, V> NamadaImpl<'a, C, U, V> where
             .expect("NAM not in wallet")
             .clone();
         Self {
-            namada: NamadaStruct { client, wallet, shielded },
+            namada: NamadaStruct {
+                client,
+                wallet,
+                shielded,
+            },
             prototype: args::Tx {
                 dry_run: false,
                 dry_run_wrapper: false,
@@ -443,7 +454,8 @@ impl<'a, C, U, V> NamadaImpl<'a, C, U, V> where
     }
 }
 
-impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V> where
+impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -455,7 +467,8 @@ impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V> where
     }
 }
 
-impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V> where
+impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
@@ -465,14 +478,15 @@ impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V> where
     }
 }
 
-impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V> where
+impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 {
     type Client = C;
-    type WalletUtils = U;
     type ShieldedUtils = V;
+    type WalletUtils = U;
 
     /// Obtain the prototypical Tx builder
     fn tx_builder(&mut self) -> args::Tx {
@@ -481,14 +495,19 @@ impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V> where
 }
 
 /// Allow the prototypical Tx builder to be modified
-impl<'a, C, U, V> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V> where
+impl<'a, C, U, V> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V>
+where
     C: crate::ledger::queries::Client + Sync,
     U: WalletUtils,
     V: ShieldedUtils,
 {
-    fn tx<F>(self, func: F) -> Self where
+    fn tx<F>(self, func: F) -> Self
+    where
         F: FnOnce(args::Tx<SdkTypes>) -> args::Tx<SdkTypes>,
     {
-        Self { prototype: func(self.prototype), ..self }
+        Self {
+            prototype: func(self.prototype),
+            ..self
+        }
     }
 }
