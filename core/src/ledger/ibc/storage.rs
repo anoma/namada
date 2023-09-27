@@ -367,10 +367,26 @@ pub fn port_id(key: &Key) -> Result<PortId> {
     }
 }
 
-/// The storage key to get the denom name from the hashed token
-pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
-    let path = format!("{}/{}", DENOM, token_hash.as_ref());
-    ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
+/// The storage key prefix to get the denom name with the hashed IBC denom
+pub fn ibc_denom_key_prefix(owner: Option<&Address>) -> Key {
+    let prefix = Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&DENOM.to_string().to_db_key())
+        .expect("Cannot obtain a storage key");
+
+    if let Some(owner) = owner {
+        prefix
+            .push(&owner.to_db_key())
+            .expect("Cannot obtain a storage key")
+    } else {
+        prefix
+    }
+}
+
+/// The storage key to get the denom name with the hashed IBC denom
+pub fn ibc_denom_key(owner: &Address, token_hash: impl AsRef<str>) -> Key {
+    ibc_denom_key_prefix(Some(owner))
+        .push(&token_hash.as_ref().to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Hash the denom
@@ -392,20 +408,19 @@ pub fn is_ibc_key(key: &Key) -> bool {
              DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
 }
 
-/// Returns the token hash if the given key is the denom key
-pub fn is_ibc_denom_key(key: &Key) -> Option<String> {
+/// Returns the owner and the token hash if the given key is the denom key
+pub fn is_ibc_denom_key(key: &Key) -> Option<(Address, String)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
-            DbKeySeg::AddressSeg(Address::Internal(InternalAddress::IbcToken(
-                hash,
-            ))),
+            DbKeySeg::AddressSeg(owner),
+            DbKeySeg::StringSeg(hash),
         ] => {
             if addr == &Address::Internal(InternalAddress::Ibc)
                 && prefix == DENOM
             {
-                Some(hash.clone())
+                Some((owner.clone(), hash.clone()))
             } else {
                 None
             }

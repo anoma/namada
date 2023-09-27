@@ -23,7 +23,7 @@ use namada_core::ledger::governance::cli::onchain::{
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::pgf::cli::steward::Commission;
-use namada_core::types::address::{masp, Address, InternalAddress};
+use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::token::MaspDenom;
@@ -36,12 +36,12 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::packet::PacketData;
-use crate::ibc::applications::transfer::PrefixedCoin;
+use crate::ibc::applications::transfer::{PrefixedCoin, PrefixedDenom};
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
-use crate::ledger::ibc::storage::ibc_denom_key;
+use crate::ledger::ibc::storage::ibc_token;
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
 use crate::sdk::error::{EncodingError, Error, QueryError, Result, TxError};
@@ -1414,17 +1414,16 @@ pub async fn build_ibc_transfer<
     .await
     .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
-    let ibc_denom = match &args.token {
-        Address::Internal(InternalAddress::IbcToken(hash)) => {
-            let ibc_denom_key = ibc_denom_key(hash);
-            rpc::query_storage_value::<C, String>(client, &ibc_denom_key)
-                .await
-                .map_err(|_e| TxError::TokenDoesNotExist(args.token.clone()))?
-        }
-        _ => args.token.to_string(),
+    let ibc_denom = PrefixedDenom {
+        trace_path: args.trace_path.unwrap_or_default(),
+        base_denom: args
+            .token
+            .to_string()
+            .parse()
+            .expect("Conversion from the token shouldn't fail"),
     };
     let token = PrefixedCoin {
-        denom: ibc_denom.parse().expect("Invalid IBC denom"),
+        denom: ibc_denom,
         // Set the IBC amount as an integer
         amount: validated_amount.into(),
     };
@@ -1667,7 +1666,11 @@ pub async fn build_transfer<
 ) -> Result<(Tx, Option<Epoch>)> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
-    let token = args.token.clone();
+    let token = if let Some(trace_path) = &args.trace_path {
+        ibc_token(format!("{}/{}", trace_path.clone(), args.token))
+    } else {
+        args.token.clone()
+    };
 
     // Check that the source address exists on chain
     source_exists_or_err::<_, IO>(source.clone(), args.tx.force, client)

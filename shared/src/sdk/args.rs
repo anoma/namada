@@ -11,6 +11,7 @@ use namada_core::types::time::DateTimeUtc;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use crate::ibc::applications::transfer::TracePath;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::types::address::Address;
 use crate::types::keccak::KeccakHash;
@@ -135,6 +136,8 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub target: C::TransferTarget,
     /// Transferred token address
     pub token: C::Address,
+    /// Transferred token's trace path
+    pub trace_path: Option<TracePath>,
     /// Transferred token amount
     pub amount: InputAmount,
     /// Native token address
@@ -163,8 +166,10 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::Address,
     /// Transfer target address
     pub receiver: String,
-    /// Transferred token addres    s
+    /// Transferred token address
     pub token: C::Address,
+    /// Transferred token's trace path
+    pub trace_path: Option<TracePath>,
     /// Transferred token amount
     pub amount: InputAmount,
     /// Port ID
@@ -391,6 +396,8 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub owner: Option<C::BalanceOwner>,
     /// Address of a token
     pub token: Option<C::Address>,
+    /// Transferred token's trace path
+    pub trace_path: Option<TracePath>,
     /// Whether not to convert balances
     pub no_conversions: bool,
 }

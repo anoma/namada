@@ -426,6 +426,7 @@ pub async fn wrap_tx<
                         fee_payer_address.clone(),
                     ),
                     token: args.fee_token.clone(),
+                    trace_path: None,
                     amount: args::InputAmount::Validated(DenominatedAmount {
                         // NOTE: must unshield the total fee amount, not the
                         // diff, because the ledger evaluates the transaction in

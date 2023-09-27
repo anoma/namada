@@ -637,6 +637,7 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
+        None,
         "100000",
         ALBERT_KEY,
         port_id_a,
@@ -706,6 +707,7 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
+        None,
         "10.1",
         ALBERT_KEY,
         port_id_a,
@@ -721,6 +723,7 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
+        None,
         "10",
         ALBERT_KEY,
         &"port".parse().unwrap(),
@@ -736,6 +739,7 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
+        None,
         "10",
         ALBERT_KEY,
         port_id_a,
@@ -753,10 +757,8 @@ fn transfer_received_token(
     channel_id: &ChannelId,
     test: &Test,
 ) -> Result<()> {
-    let nam = find_address(test, NAM)?;
     // token received via the port and channel
-    let denom = format!("{port_id}/{channel_id}/{nam}");
-    let ibc_token = ibc_token(denom).to_string();
+    let trace_path = format!("{port_id}/{channel_id}");
 
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let amount = Amount::native_whole(50000).to_string_native();
@@ -767,7 +769,9 @@ fn transfer_received_token(
         "--target",
         ALBERT,
         "--token",
-        &ibc_token,
+        NAM,
+        "--trace-path",
+        &trace_path,
         "--amount",
         &amount,
         "--gas-token",
@@ -791,18 +795,17 @@ fn transfer_back(
     port_id_b: &PortId,
     channel_id_b: &ChannelId,
 ) -> Result<()> {
-    let token = find_address(test_b, NAM)?.to_string();
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
-    let denom_raw = format!("{}/{}/{}", port_id_b, channel_id_b, token);
-    let ibc_token = ibc_token(denom_raw).to_string();
+    let trace_path = format!("{}/{}", port_id_b, channel_id_b);
     // Send a token from Chain B
     let height = transfer(
         test_b,
         BERTHA,
         &receiver,
-        ibc_token,
+        NAM,
+        Some(&trace_path),
         "50000",
         BERTHA_KEY,
         port_id_b,
@@ -866,6 +869,7 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
+        None,
         "100000",
         ALBERT_KEY,
         port_id_a,
@@ -995,6 +999,7 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: &Address,
     token: impl AsRef<str>,
+    trace_path: Option<&str>,
     amount: impl AsRef<str>,
     signer: impl AsRef<str>,
     port_id: &PortId,
@@ -1027,6 +1032,11 @@ fn transfer(
         "--node",
         &rpc,
     ];
+
+    if let Some(trace_path) = trace_path {
+        tx_args.push("--trace-path");
+        tx_args.push(&trace_path.clone());
+    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
@@ -1211,8 +1221,6 @@ fn check_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    let token = find_address(test_a, NAM)?;
-
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
     let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
@@ -1229,13 +1237,20 @@ fn check_balances(
     client.assert_success();
 
     // Check the balance on Chain B
-    let denom = format!("{}/{}/{}", &dest_port_id, &dest_channel_id, &token,);
-    let ibc_token = ibc_token(denom).to_string();
+    let trace_path = format!("{}/{}", &dest_port_id, &dest_channel_id);
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
+        "balance",
+        "--owner",
+        BERTHA,
+        "--token",
+        NAM,
+        "--trace-path",
+        &trace_path,
+        "--node",
+        &rpc_b,
     ];
-    let expected = format!("{}: 100000", ibc_token);
+    let expected = format!("{}: 100000", format!("{}/nam", trace_path));
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1249,25 +1264,39 @@ fn check_balances_after_non_ibc(
     test: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let token = find_address(test, NAM)?;
-    let denom = format!("{}/{}/{}", port_id, channel_id, token);
-    let ibc_token = ibc_token(denom).to_string();
+    let trace_path = format!("{}/{}", port_id, channel_id);
 
     // Check the source
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc,
+        "balance",
+        "--owner",
+        BERTHA,
+        "--token",
+        NAM,
+        "--trace-path",
+        &trace_path,
+        "--node",
+        &rpc,
     ];
-    let expected = format!("{}: 50000", ibc_token);
+    let expected = format!("{}: 50000", format!("{}/nam", trace_path));
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
     // Check the traget
     let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", &ibc_token, "--node", &rpc,
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--trace-path",
+        &trace_path,
+        "--node",
+        &rpc,
     ];
-    let expected = format!("{}: 50000", ibc_token);
+    let expected = format!("{}: 50000", format!("{}/nam", trace_path));
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1282,8 +1311,6 @@ fn check_balances_after_back(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    let token = find_address(test_b, NAM)?;
-
     // Check the balances on Chain A
     let rpc_a = get_actor_rpc(test_a, &Who::Validator(0));
     let query_args = vec!["balance", "--token", NAM, "--node", &rpc_a];
@@ -1300,13 +1327,20 @@ fn check_balances_after_back(
     client.assert_success();
 
     // Check the balance on Chain B
-    let denom = format!("{}/{}/{}", dest_port_id, dest_channel_id, &token,);
-    let ibc_token = ibc_token(denom).to_string();
+    let trace_path = format!("{}/{}", dest_port_id, dest_channel_id);
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_token, "--node", &rpc_b,
+        "balance",
+        "--owner",
+        BERTHA,
+        "--token",
+        NAM,
+        "--trace-path",
+        &trace_path,
+        "--node",
+        &rpc_b,
     ];
-    let expected = format!("{}: 0", ibc_token);
+    let expected = format!("{}: 0", format!("{}/nam", trace_path));
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();

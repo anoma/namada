@@ -361,15 +361,16 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Write the IBC denom
     fn store_ibc_denom(
         &mut self,
+        receiver: &Address,
         trace_hash: impl AsRef<str>,
         denom: impl AsRef<str>,
     ) -> Result<(), ContextError> {
-        let key = storage::ibc_denom_key(trace_hash.as_ref());
+        let key = storage::ibc_denom_key(receiver, trace_hash.as_ref());
         let has_key = self.has_key(&key).map_err(|_| {
             ContextError::ChannelError(ChannelError::Other {
                 description: format!(
                     "Reading the IBC denom failed: Key {}",
-                    key
+                    key,
                 ),
             })
         })?;

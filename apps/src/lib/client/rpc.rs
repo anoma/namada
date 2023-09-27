@@ -29,6 +29,9 @@ use namada::core::ledger::governance::utils::{
 use namada::core::ledger::pgf::parameters::PgfParameters;
 use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::ledger::events::Event;
+use namada::ledger::ibc::storage::{
+    ibc_denom_key, ibc_denom_key_prefix, ibc_token, is_ibc_denom_key,
+};
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::{CommissionPair, PosParams, Slash};
 use namada::ledger::queries::RPC;
@@ -44,7 +47,7 @@ use namada::sdk::rpc::{
     TxResponse,
 };
 use namada::sdk::wallet::{AddressVpType, Wallet};
-use namada::types::address::{masp, Address};
+use namada::types::address::{masp, Address, InternalAddress};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::hash::Hash;
 use namada::types::io::Io;
@@ -348,12 +351,24 @@ pub async fn query_transparent_balance<
         Address::Internal(namada::types::address::InternalAddress::Multitoken)
             .to_db_key(),
     );
-    let tokens = wallet.tokens_with_aliases();
-    match (args.token, args.owner) {
+    let token = args.token.as_ref().map(|token| {
+        if let Some(trace_path) = &args.trace_path {
+            ibc_token(format!("{}/{}", trace_path, token))
+        } else {
+            token.clone()
+        }
+    });
+    match (token, args.owner) {
         (Some(token), Some(owner)) => {
             let balance_key =
                 token::balance_key(&token, &owner.address().unwrap());
-            let token_alias = wallet.lookup_alias(&token);
+            let base_token_alias =
+                wallet.lookup_alias(&args.token.expect("No token"));
+            let token_alias = if let Some(trace_path) = args.trace_path {
+                format!("{}/{}", trace_path, base_token_alias)
+            } else {
+                base_token_alias
+            };
             match query_storage_value::<C, token::Amount>(client, &balance_key)
                 .await
             {
@@ -377,6 +392,9 @@ pub async fn query_transparent_balance<
         }
         (None, Some(owner)) => {
             let owner = owner.address().unwrap();
+            let tokens =
+                query_tokens::<_, IO>(client, &wallet, Some(&owner)).await;
+            println!("DEBUG: tokens {:?}", tokens);
             for (token_alias, token) in tokens {
                 let balance = get_token_balance(client, &token, &owner).await;
                 if !balance.is_zero() {
@@ -413,6 +431,66 @@ pub async fn query_transparent_balance<
                     .await;
             }
         }
+    }
+}
+
+async fn get_token_alias<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    wallet: &Wallet<CliWalletUtils>,
+    token: &Address,
+    owner: &Address,
+) -> String {
+    if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
+        let ibc_denom_key = ibc_denom_key(owner, trace_hash);
+        match query_storage_value::<C, String>(client, &ibc_denom_key).await {
+            Ok(ibc_denom) => get_ibc_denom_alias(wallet, ibc_denom),
+            Err(_) => token.to_string(),
+        }
+    } else {
+        wallet.lookup_alias(token)
+    }
+}
+
+async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
+    client: &C,
+    wallet: &Wallet<CliWalletUtils>,
+    owner: Option<&Address>,
+) -> BTreeMap<String, Address> {
+    // Base tokens
+    let mut tokens = wallet.tokens_with_aliases();
+
+    let prefix = ibc_denom_key_prefix(owner);
+    let ibc_denoms =
+        query_storage_prefix::<C, String, IO>(client, &prefix).await;
+    if let Some(ibc_denoms) = ibc_denoms {
+        for (key, ibc_denom) in ibc_denoms {
+            if let Some((_, hash)) = is_ibc_denom_key(&key) {
+                let ibc_denom_alias = get_ibc_denom_alias(wallet, ibc_denom);
+                let ibc_token =
+                    Address::Internal(InternalAddress::IbcToken(hash));
+                tokens.insert(ibc_denom_alias, ibc_token);
+            }
+        }
+    }
+    tokens
+}
+
+fn get_ibc_denom_alias(
+    wallet: &Wallet<CliWalletUtils>,
+    ibc_denom: impl AsRef<str>,
+) -> String {
+    let (trace_path, base_denom) = ibc_denom
+        .as_ref()
+        .rsplit_once('/')
+        .unwrap_or(("", ibc_denom.as_ref()));
+    let token_alias = match Address::decode(&base_denom) {
+        Ok(token) => wallet.lookup_alias(&token),
+        Err(_) => base_denom.to_string(),
+    };
+    if trace_path.is_empty() {
+        token_alias
+    } else {
+        format!("{}/{}", trace_path, token_alias)
     }
 }
 
@@ -606,6 +684,7 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync, IO: Io>(
             ),
             None => continue,
         };
+        let token_alias = get_token_alias(client, wallet, &t, &o).await;
         // Get the token and the balance
         let (t, s) = match (token, target) {
             // the given token and the given target are the same as the
@@ -628,7 +707,6 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync, IO: Io>(
                 // the token has been already printed
             }
             _ => {
-                let token_alias = wallet.lookup_alias(&t);
                 display_line!(IO, &mut w; "Token {}", token_alias).unwrap();
                 print_token = Some(t);
             }
@@ -768,7 +846,8 @@ pub async fn query_shielded_balance<
                     .expect("context should contain viewing key")
             };
 
-            let token_alias = wallet.lookup_alias(&token);
+            let token_alias =
+                get_token_alias(client, wallet, &token, &masp()).await;
 
             let total_balance = balance
                 .get(&(epoch, token.clone()))

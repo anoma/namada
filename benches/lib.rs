@@ -783,6 +783,7 @@ impl BenchShieldedCtx {
             source: source.clone(),
             target: target.clone(),
             token: address::nam(),
+            trace_path: None,
             amount: InputAmount::Validated(DenominatedAmount {
                 amount,
                 denom: 0.into(),

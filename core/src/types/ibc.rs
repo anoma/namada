@@ -5,6 +5,11 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
+/// The event type defined in ibc-rs for receiving a token
+pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
+/// The event type defined in ibc-rs for IBC denom
+pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
+
 /// Wrapped IbcEvent
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
