@@ -2191,7 +2191,14 @@ mod tests {
             packet.chan_id_on_b.clone(),
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
-        let denom_key = ibc_denom_key(&receiver, &trace_hash);
+        let denom_key = ibc_denom_key(receiver.to_string(), &trace_hash);
+        let bytes = coin.denom.to_string().try_to_vec().unwrap();
+        wl_storage
+            .write_log
+            .write(&denom_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(denom_key);
+        let denom_key = ibc_denom_key(nam().to_string(), &trace_hash);
         let bytes = coin.denom.to_string().try_to_vec().unwrap();
         wl_storage
             .write_log

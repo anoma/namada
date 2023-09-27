@@ -396,8 +396,6 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub owner: Option<C::BalanceOwner>,
     /// Address of a token
     pub token: Option<C::Address>,
-    /// Transferred token's trace path
-    pub trace_path: Option<TracePath>,
     /// Whether not to convert balances
     pub no_conversions: bool,
 }

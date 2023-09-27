@@ -28,7 +28,9 @@ use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
-use crate::types::ibc::{EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET};
+use crate::types::ibc::{
+    split_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -147,13 +149,28 @@ where
                     // denomination is also set for the minting.
                     self.ctx
                         .borrow_mut()
-                        .store_ibc_denom(&receiver, trace_hash, &ibc_denom)
+                        .store_ibc_denom(
+                            &receiver.to_string(),
+                            &trace_hash,
+                            &ibc_denom,
+                        )
                         .map_err(|e| {
                             Error::Denom(format!(
                                 "Writing the IBC denom failed: {}",
                                 e
                             ))
                         })?;
+                    if let Some((_, base_token)) = split_ibc_denom(&ibc_denom) {
+                        self.ctx
+                            .borrow_mut()
+                            .store_ibc_denom(base_token, trace_hash, &ibc_denom)
+                            .map_err(|e| {
+                                Error::Denom(format!(
+                                    "Writing the IBC denom failed: {}",
+                                    e
+                                ))
+                            })?;
+                    }
                     let token = storage::ibc_token(ibc_denom);
                     self.ctx.borrow_mut().store_token_denom(&token).map_err(
                         |e| {

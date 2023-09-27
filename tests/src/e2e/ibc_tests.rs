@@ -1035,7 +1035,7 @@ fn transfer(
 
     if let Some(trace_path) = trace_path {
         tx_args.push("--trace-path");
-        tx_args.push(&trace_path.clone());
+        tx_args.push(trace_path.clone());
     }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
@@ -1240,15 +1240,7 @@ fn check_balances(
     let trace_path = format!("{}/{}", &dest_port_id, &dest_channel_id);
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--trace-path",
-        &trace_path,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
     let expected = format!("{}: 100000", format!("{}/nam", trace_path));
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
@@ -1268,34 +1260,16 @@ fn check_balances_after_non_ibc(
 
     // Check the source
     let rpc = get_actor_rpc(test, &Who::Validator(0));
-    let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--trace-path",
-        &trace_path,
-        "--node",
-        &rpc,
-    ];
+    let query_args =
+        vec!["balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc];
     let expected = format!("{}: 50000", format!("{}/nam", trace_path));
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
 
     // Check the traget
-    let query_args = vec![
-        "balance",
-        "--owner",
-        ALBERT,
-        "--token",
-        NAM,
-        "--trace-path",
-        &trace_path,
-        "--node",
-        &rpc,
-    ];
+    let query_args =
+        vec!["balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc];
     let expected = format!("{}: 50000", format!("{}/nam", trace_path));
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
@@ -1330,15 +1304,7 @@ fn check_balances_after_back(
     let trace_path = format!("{}/{}", dest_port_id, dest_channel_id);
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
-        "balance",
-        "--owner",
-        BERTHA,
-        "--token",
-        NAM,
-        "--trace-path",
-        &trace_path,
-        "--node",
-        &rpc_b,
+        "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
     let expected = format!("{}: 0", format!("{}/nam", trace_path));
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;

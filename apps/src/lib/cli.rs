@@ -4458,7 +4458,6 @@ pub mod args {
                 query: self.query.to_sdk(ctx),
                 owner: self.owner.map(|x| ctx.get_cached(&x)),
                 token: self.token.map(|x| ctx.get(&x)),
-                trace_path: self.trace_path,
                 no_conversions: self.no_conversions,
             }
         }
@@ -4469,13 +4468,11 @@ pub mod args {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
-            let trace_path = TRACE_PATH.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
-                trace_path,
                 no_conversions,
             }
         }
@@ -4492,7 +4489,6 @@ pub mod args {
                         .def()
                         .help("The token's address whose balance to query."),
                 )
-                .arg(TRACE_PATH.def().help("The transfer token's trace path."))
                 .arg(
                     NO_CONVERSIONS.def().help(
                         "Whether not to automatically perform conversions.",
