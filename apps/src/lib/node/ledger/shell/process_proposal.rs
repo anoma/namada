@@ -1000,7 +1000,7 @@ mod test_process_proposal {
     use namada::types::token;
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
-    use namada::types::transaction::{Fee, WrapperTx};
+    use namada::types::transaction::{Fee, Solution, WrapperTx};
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
     #[cfg(feature = "abcipp")]
@@ -2005,6 +2005,7 @@ mod test_process_proposal {
             epoch: Epoch(0),
             gas_limit: GAS_LIMIT_MULTIPLIER.into(),
             unshield_section_hash: None,
+            pow_solution: Solution::None,
         };
 
         let tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
