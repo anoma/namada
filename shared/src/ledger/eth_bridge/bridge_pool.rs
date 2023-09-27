@@ -19,11 +19,12 @@ use crate::ledger::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
     RPC,
 };
-use crate::proto::Tx;
-use crate::sdk::args;
-use crate::sdk::error::Error;
 use crate::sdk::rpc::{query_wasm_code_hash, validate_amount};
-use crate::sdk::tx::prepare_tx;
+use crate::ledger::signing::aux_signing_data;
+use crate::ledger::tx::prepare_tx;
+use crate::ledger::{args, Namada, SigningTxData};
+use crate::proto::Tx;
+use crate::sdk::error::Error;
 use crate::types::address::Address;
 use crate::types::control_flow::time::{Duration, Instant};
 use crate::types::control_flow::{
@@ -38,9 +39,6 @@ use crate::types::keccak::KeccakHash;
 use crate::types::token::{Amount, DenominatedAmount};
 use crate::types::voting_power::FractionalVotingPower;
 use crate::{display, display_line};
-use crate::ledger::Namada;
-use crate::sdk::signing::aux_signing_data;
-use crate::sdk::signing::SigningTxData;
 
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
@@ -66,7 +64,7 @@ pub async fn build_bridge_pool_tx<'a>(
         Some(sender.clone()),
         default_signer,
     )
-        .await?;
+    .await?;
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } = validate_amount(
         context.client,

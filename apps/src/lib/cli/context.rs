@@ -8,6 +8,7 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use namada::sdk::masp::ShieldedContext;
 use namada::sdk::wallet::Wallet;
+use namada::sdk::masp::fs::FsShieldedUtils;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
@@ -16,7 +17,6 @@ use namada::types::key::*;
 use namada::types::masp::*;
 
 use super::args;
-use crate::client::tx::CLIShieldedUtils;
 #[cfg(any(test, feature = "dev"))]
 use crate::config::genesis;
 use crate::config::genesis::genesis_config;
@@ -78,7 +78,7 @@ pub struct Context {
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
-    pub shielded: ShieldedContext<CLIShieldedUtils>,
+    pub shielded: ShieldedContext<FsShieldedUtils>,
     /// Native token's address
     pub native_token: Address,
 }
@@ -145,7 +145,7 @@ impl Context {
             wallet,
             global_config,
             config,
-            shielded: CLIShieldedUtils::new::<IO>(chain_dir),
+            shielded: FsShieldedUtils::new(chain_dir),
             native_token,
         })
     }

@@ -58,12 +58,13 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::proto::Tx;
 use crate::sdk::args::InputAmount;
-use crate::sdk::error::{EncodingError, Error, PinnedBalanceError, QueryError};
-use crate::sdk::queries::Client;
+use crate::ledger::queries::Client;
 use crate::sdk::rpc::{query_conversion, query_storage_value};
 use crate::sdk::tx::decode_component;
+use crate::ledger::Namada;
+use crate::proto::Tx;
+use crate::sdk::error::{EncodingError, Error, PinnedBalanceError, QueryError};
 use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
@@ -77,7 +78,6 @@ use crate::types::token::{
 };
 use crate::types::transaction::{EllipticCurve, PairingEngine, WrapperTx};
 use crate::{display_line, edisplay_line};
-use crate::ledger::Namada;
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1509,7 +1509,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // Load the current shielded context given the spending key we possess
         let _ = context.shielded.load().await;
         let context = &mut **context;
-        context.shielded.fetch(context.client, &spending_keys, &[]).await?;
+        context
+            .shielded
+            .fetch(context.client, &spending_keys, &[])
+            .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = context.shielded.save().await;
         // Determine epoch in which to submit potential shielded transaction
@@ -2108,5 +2111,130 @@ mod tests {
         std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
         super::load_pvks();
+    }
+}
+
+#[cfg(feature = "std")]
+/// Implementation of MASP functionality depending on a standard filesystem
+pub mod fs {
+    use std::fs::{File, OpenOptions};
+    use std::io::{Read, Write};
+    use async_trait::async_trait;
+
+    use super::*;
+
+    /// Shielded context file name
+    const FILE_NAME: &str = "shielded.dat";
+    const TMP_FILE_NAME: &str = "shielded.tmp";
+
+    #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
+    /// An implementation of ShieldedUtils for standard filesystems
+    pub struct FsShieldedUtils {
+        #[borsh_skip]
+        context_dir: PathBuf,
+    }
+
+    impl FsShieldedUtils {
+        /// Initialize a shielded transaction context that identifies notes
+        /// decryptable by any viewing key in the given set
+        pub fn new(context_dir: PathBuf) -> ShieldedContext<Self> {
+            // Make sure that MASP parameters are downloaded to enable MASP
+            // transaction building and verification later on
+            let params_dir = get_params_dir();
+            let spend_path = params_dir.join(SPEND_NAME);
+            let convert_path = params_dir.join(CONVERT_NAME);
+            let output_path = params_dir.join(OUTPUT_NAME);
+            if !(spend_path.exists()
+                && convert_path.exists()
+                && output_path.exists())
+            {
+                println!("MASP parameters not present, downloading...");
+                masp_proofs::download_masp_parameters(None)
+                    .expect("MASP parameters not present or downloadable");
+                println!(
+                    "MASP parameter download complete, resuming execution..."
+                );
+            }
+            // Finally initialize a shielded context with the supplied directory
+            let utils = Self { context_dir };
+            ShieldedContext {
+                utils,
+                ..Default::default()
+            }
+        }
+    }
+
+    impl Default for FsShieldedUtils {
+        fn default() -> Self {
+            Self {
+                context_dir: PathBuf::from(FILE_NAME),
+            }
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl ShieldedUtils for FsShieldedUtils {
+        fn local_tx_prover(&self) -> LocalTxProver {
+            if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
+                let params_dir = PathBuf::from(params_dir);
+                let spend_path = params_dir.join(SPEND_NAME);
+                let convert_path = params_dir.join(CONVERT_NAME);
+                let output_path = params_dir.join(OUTPUT_NAME);
+                LocalTxProver::new(&spend_path, &output_path, &convert_path)
+            } else {
+                LocalTxProver::with_default_location()
+                    .expect("unable to load MASP Parameters")
+            }
+        }
+
+        /// Try to load the last saved shielded context from the given context
+        /// directory. If this fails, then leave the current context unchanged.
+        async fn load(self) -> std::io::Result<ShieldedContext<Self>> {
+            // Try to load shielded context from file
+            let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
+            let mut bytes = Vec::new();
+            ctx_file.read_to_end(&mut bytes)?;
+            let mut new_ctx = ShieldedContext::deserialize(&mut &bytes[..])?;
+            // Associate the originating context directory with the
+            // shielded context under construction
+            new_ctx.utils = self;
+            Ok(new_ctx)
+        }
+
+        /// Save this shielded context into its associated context directory
+        async fn save(
+            &self,
+            ctx: &ShieldedContext<Self>,
+        ) -> std::io::Result<()> {
+            // TODO: use mktemp crate?
+            let tmp_path = self.context_dir.join(TMP_FILE_NAME);
+            {
+                // First serialize the shielded context into a temporary file.
+                // Inability to create this file implies a simultaneuous write
+                // is in progress. In this case, immediately
+                // fail. This is unproblematic because the data
+                // intended to be stored can always be re-fetched
+                // from the blockchain.
+                let mut ctx_file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(tmp_path.clone())?;
+                let mut bytes = Vec::new();
+                ctx.serialize(&mut bytes)
+                    .expect("cannot serialize shielded context");
+                ctx_file.write_all(&bytes[..])?;
+            }
+            // Atomically update the old shielded context file with new data.
+            // Atomicity is required to prevent other client instances from
+            // reading corrupt data.
+            std::fs::rename(
+                tmp_path.clone(),
+                self.context_dir.join(FILE_NAME),
+            )?;
+            // Finally, remove our temporary file to allow future saving of
+            // shielded contexts.
+            std::fs::remove_file(tmp_path)?;
+            Ok(())
+        }
     }
 }

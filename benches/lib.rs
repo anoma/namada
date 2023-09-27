@@ -69,13 +69,14 @@ use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::ledger::storage_api::StorageRead;
+use namada::sdk::wallet::Wallet;
+use namada::ledger::NamadaImpl;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
 use namada::sdk::args::InputAmount;
 use namada::sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
-use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
@@ -104,7 +105,6 @@ use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
-use namada::ledger::NamadaImpl;
 
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -804,13 +804,15 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
-        let mut namada = NamadaImpl::new(
-            &self.shell,
-            &mut self.wallet,
-            &mut self.shielded,
-        );
+        let mut namada =
+            NamadaImpl::new(&self.shell, &mut self.wallet, &mut self.shielded);
         let shielded = async_runtime
-            .block_on(ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(&mut namada, &args))
+            .block_on(
+                ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
+                    &mut namada,
+                    &args,
+                ),
+            )
             .unwrap()
             .map(
                 |ShieldedTransfer {

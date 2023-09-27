@@ -1,11 +1,5 @@
-use std::env;
-use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::fs::File;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use masp_proofs::prover::LocalTxProver;
 use namada::core::ledger::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
 };
@@ -13,11 +7,12 @@ use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
 use namada::ledger::pos;
-use namada::proof_of_stake::parameters::PosParams;
-use namada::proto::Tx;
 use namada::sdk::rpc::{TxBroadcastData, TxResponse};
 use namada::sdk::wallet::{Wallet, WalletUtils};
-use namada::sdk::{error, masp, signing, tx};
+use namada::ledger::{Namada, NamadaImpl};
+use namada::proof_of_stake::parameters::PosParams;
+use namada::proto::Tx;
+use namada::sdk::{error, signing, tx};
 use namada::tendermint_rpc::HttpClient;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
@@ -36,8 +31,6 @@ use crate::node::ledger::tendermint_node;
 use crate::wallet::{
     gen_validator_keys, read_and_confirm_encryption_password, CliWalletUtils,
 };
-use namada::ledger::NamadaImpl;
-use namada::ledger::Namada;
 use namada::types::io::StdIo;
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
@@ -49,8 +42,7 @@ pub async fn aux_signing_data<'a>(
     default_signer: Option<Address>,
 ) -> Result<signing::SigningTxData, error::Error> {
     let signing_data =
-        signing::aux_signing_data(context, args, owner, default_signer)
-            .await?;
+        signing::aux_signing_data(context, args, owner, default_signer).await?;
 
     if args.disposable_signing_key {
         if !(args.dry_run || args.dry_run_wrapper) {
@@ -91,14 +83,11 @@ pub async fn submit_reveal_aux<'a>(
 
         if tx::is_reveal_pk_needed(context.client, address, args.force).await? {
             println!(
-                "Submitting a tx to reveal the public key for address {address}..."
+                "Submitting a tx to reveal the public key for address \
+                 {address}..."
             );
-            let (mut tx, signing_data, _epoch) = tx::build_reveal_pk(
-                context,
-                &args,
-                &public_key,
-            )
-            .await?;
+            let (mut tx, signing_data, _epoch) =
+                tx::build_reveal_pk(context, &args, &public_key).await?;
 
             signing::generate_test_vector(context, &tx).await?;
 
@@ -123,7 +112,7 @@ where
     let mut namada =
         NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     submit_reveal_aux(&mut namada, args.tx.clone(), &args.owner).await?;
-    
+
     let (mut tx, signing_data, _epoch) = args.build(&mut namada).await?;
 
     signing::generate_test_vector(&mut namada, &tx).await?;
@@ -174,8 +163,8 @@ where
 {
     let mut namada =
         NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let (mut tx, signing_data, _epoch) = tx::build_init_account(&mut namada, &args)
-        .await?;
+    let (mut tx, signing_data, _epoch) =
+        tx::build_init_account(&mut namada, &args).await?;
 
     signing::generate_test_vector(&mut namada, &tx).await?;
 
@@ -507,122 +496,7 @@ where
     Ok(())
 }
 
-/// Shielded context file name
-const FILE_NAME: &str = "shielded.dat";
-const TMP_FILE_NAME: &str = "shielded.tmp";
-
-#[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
-pub struct CLIShieldedUtils {
-    #[borsh_skip]
-    context_dir: PathBuf,
-}
-
-impl CLIShieldedUtils {
-    /// Initialize a shielded transaction context that identifies notes
-    /// decryptable by any viewing key in the given set
-    pub fn new<IO: Io>(context_dir: PathBuf) -> masp::ShieldedContext<Self> {
-        // Make sure that MASP parameters are downloaded to enable MASP
-        // transaction building and verification later on
-        let params_dir = masp::get_params_dir();
-        let spend_path = params_dir.join(masp::SPEND_NAME);
-        let convert_path = params_dir.join(masp::CONVERT_NAME);
-        let output_path = params_dir.join(masp::OUTPUT_NAME);
-        if !(spend_path.exists()
-            && convert_path.exists()
-            && output_path.exists())
-        {
-            display_line!(IO, "MASP parameters not present, downloading...");
-            masp_proofs::download_masp_parameters(None)
-                .expect("MASP parameters not present or downloadable");
-            display_line!(
-                IO,
-                "MASP parameter download complete, resuming execution..."
-            );
-        }
-        // Finally initialize a shielded context with the supplied directory
-        let utils = Self { context_dir };
-        masp::ShieldedContext {
-            utils,
-            ..Default::default()
-        }
-    }
-}
-
-impl Default for CLIShieldedUtils {
-    fn default() -> Self {
-        Self {
-            context_dir: PathBuf::from(FILE_NAME),
-        }
-    }
-}
-
-#[cfg_attr(feature = "async-send", async_trait::async_trait)]
-#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-impl masp::ShieldedUtils for CLIShieldedUtils {
-    fn local_tx_prover(&self) -> LocalTxProver {
-        if let Ok(params_dir) = env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
-            let params_dir = PathBuf::from(params_dir);
-            let spend_path = params_dir.join(masp::SPEND_NAME);
-            let convert_path = params_dir.join(masp::CONVERT_NAME);
-            let output_path = params_dir.join(masp::OUTPUT_NAME);
-            LocalTxProver::new(&spend_path, &output_path, &convert_path)
-        } else {
-            LocalTxProver::with_default_location()
-                .expect("unable to load MASP Parameters")
-        }
-    }
-
-    /// Try to load the last saved shielded context from the given context
-    /// directory. If this fails, then leave the current context unchanged.
-    async fn load(self) -> std::io::Result<masp::ShieldedContext<Self>> {
-        // Try to load shielded context from file
-        let mut ctx_file = File::open(self.context_dir.join(FILE_NAME))?;
-        let mut bytes = Vec::new();
-        ctx_file.read_to_end(&mut bytes)?;
-        let mut new_ctx = masp::ShieldedContext::deserialize(&mut &bytes[..])?;
-        // Associate the originating context directory with the
-        // shielded context under construction
-        new_ctx.utils = self;
-        Ok(new_ctx)
-    }
-
-    /// Save this shielded context into its associated context directory
-    async fn save(
-        &self,
-        ctx: &masp::ShieldedContext<Self>,
-    ) -> std::io::Result<()> {
-        // TODO: use mktemp crate?
-        let tmp_path = self.context_dir.join(TMP_FILE_NAME);
-        {
-            // First serialize the shielded context into a temporary file.
-            // Inability to create this file implies a simultaneuous write is in
-            // progress. In this case, immediately fail. This is unproblematic
-            // because the data intended to be stored can always be re-fetched
-            // from the blockchain.
-            let mut ctx_file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(tmp_path.clone())?;
-            let mut bytes = Vec::new();
-            ctx.serialize(&mut bytes)
-                .expect("cannot serialize shielded context");
-            ctx_file.write_all(&bytes[..])?;
-        }
-        // Atomically update the old shielded context file with new data.
-        // Atomicity is required to prevent other client instances from reading
-        // corrupt data.
-        std::fs::rename(tmp_path.clone(), self.context_dir.join(FILE_NAME))?;
-        // Finally, remove our temporary file to allow future saving of shielded
-        // contexts.
-        std::fs::remove_file(tmp_path)?;
-        Ok(())
-    }
-}
-
-pub async fn submit_transfer<
-    C: namada::ledger::queries::Client + Sync,
-    IO: Io,
->(
+pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync, IO: Io>(
     client: &C,
     mut ctx: Context,
     args: args::TxTransfer,
@@ -630,7 +504,7 @@ pub async fn submit_transfer<
     for _ in 0..2 {
         let mut namada =
             NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-        
+
         submit_reveal_aux(
             &mut namada,
             args.tx.clone(),
@@ -638,7 +512,8 @@ pub async fn submit_transfer<
         )
         .await?;
 
-        let (mut tx, signing_data, tx_epoch) = args.clone().build(&mut namada).await?;
+        let (mut tx, signing_data, tx_epoch) =
+            args.clone().build(&mut namada).await?;
         signing::generate_test_vector(&mut namada, &tx).await?;
 
         if args.tx.dump_tx {
@@ -715,8 +590,7 @@ where
     let governance_parameters = rpc::query_governance_parameters(client).await;
     let mut namada =
         NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args
-        .is_offline
+    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
     {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
@@ -768,12 +642,7 @@ where
         )
         .await?;
 
-        tx::build_pgf_funding_proposal(
-            &mut namada,
-            &args,
-            proposal,
-        )
-            .await?
+        tx::build_pgf_funding_proposal(&mut namada, &args, proposal).await?
     } else if args.is_pgf_stewards {
         let proposal = PgfStewardProposal::try_from(
             args.proposal_data.as_ref(),
@@ -803,12 +672,7 @@ where
         )
         .await?;
 
-        tx::build_pgf_stewards_proposal(
-            &mut namada,
-            &args,
-            proposal,
-        )
-            .await?
+        tx::build_pgf_stewards_proposal(&mut namada, &args, proposal).await?
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
@@ -836,12 +700,7 @@ where
         )
         .await?;
 
-        tx::build_default_proposal(
-            &mut namada,
-            &args,
-            proposal,
-        )
-            .await?
+        tx::build_default_proposal(&mut namada, &args, proposal).await?
     };
     signing::generate_test_vector(&mut namada, &tx_builder).await?;
 
@@ -866,7 +725,8 @@ where
 {
     let mut namada =
         NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline {
+    let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
+    {
         let default_signer = Some(args.voter.clone());
         let signing_data = aux_signing_data(
             &mut namada,
@@ -874,8 +734,8 @@ where
             Some(args.voter.clone()),
             default_signer.clone(),
         )
-            .await?;
-        
+        .await?;
+
         let proposal_vote = ProposalVote::try_from(args.vote)
             .map_err(|_| error::TxError::InvalidProposalVote)?;
 
@@ -1049,14 +909,15 @@ where
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     submit_reveal_aux(&mut namada, args.tx.clone(), &default_address).await?;
 
-    let (mut tx, signing_data, _fee_unshield_epoch) = args.build(&mut namada).await?;
+    let (mut tx, signing_data, _fee_unshield_epoch) =
+        args.build(&mut namada).await?;
     signing::generate_test_vector(&mut namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx::<IO>(&args.tx, tx);
     } else {
         namada.sign(&mut tx, &args.tx, signing_data)?;
-        
+
         namada.submit(tx, &args.tx).await?;
     }
 
