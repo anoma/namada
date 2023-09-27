@@ -42,8 +42,8 @@ borsh = "0.9.0"
 once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
-# branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "50acc5028fbcd52a05970fe7991c7850ab04358e", optional = true }
+# branch = "ray/i128-conversions"
+masp_primitives = { git = "https://github.com/juped/masp", rev = "1a68887b118781f31960dc983d779c2bc6cce971", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]
