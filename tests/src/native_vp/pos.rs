@@ -95,9 +95,9 @@
 //! - add slashes
 //! - add rewards
 
-use namada::ledger::pos::namada_proof_of_stake::init_genesis;
-use namada::proof_of_stake::parameters::PosParams;
+use namada::proof_of_stake::parameters::{OwnedPosParams, PosParams};
 use namada::proof_of_stake::storage::GenesisValidator;
+use namada::proof_of_stake::test_init_genesis as init_genesis;
 use namada::types::storage::Epoch;
 
 use crate::tx::tx_host_env;
@@ -106,9 +106,9 @@ use crate::tx::tx_host_env;
 /// parameters.
 pub fn init_pos(
     genesis_validators: &[GenesisValidator],
-    params: &PosParams,
+    params: &OwnedPosParams,
     start_epoch: Epoch,
-) {
+) -> PosParams {
     tx_host_env::init();
 
     tx_host_env::with(|tx_env| {
@@ -130,9 +130,9 @@ pub fn init_pos(
         //     .storage
         //     .init_genesis(params, genesis_validators.iter(), start_epoch)
         //     .unwrap();
-        init_genesis(
+        let params = init_genesis(
             &mut tx_env.wl_storage,
-            params,
+            params.clone(),
             genesis_validators.iter().cloned(),
             start_epoch,
         )
@@ -140,7 +140,8 @@ pub fn init_pos(
 
         // Commit changes in WL to genesis state
         tx_env.commit_genesis();
-    });
+        params
+    })
 }
 
 #[cfg(test)]
@@ -334,6 +335,7 @@ mod tests {
                     // We're starting from an empty state
                     let state = vec![];
                     let epoch = Epoch(epoch);
+                    let params = params.with_default_gov_params();
                     arb_valid_pos_action(&state).prop_map(move |valid_action| {
                         Self {
                             epoch,

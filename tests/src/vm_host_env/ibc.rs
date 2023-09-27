@@ -84,6 +84,7 @@ use namada::types::time::DurationSecs;
 use namada::types::token::{self, Amount, DenominatedAmount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::ledger::gas::TxGasMeter;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerialize;
 
@@ -211,6 +212,8 @@ pub fn init_storage() -> (Address, Address) {
 
     tx_host_env::with(|env| {
         ibc::init_genesis_storage(&mut env.wl_storage);
+        let gov_params = GovernanceParameters::default();
+        gov_params.init_storage(&mut env.wl_storage).unwrap();
         pos::init_genesis_storage(
             &mut env.wl_storage,
             &PosParams::default(),

@@ -46,7 +46,7 @@ use namada_core::types::key::{
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token;
 use once_cell::unsync::Lazy;
-use parameters::{PosAndGovParams, PosParams};
+use parameters::{OwnedPosParams, PosParams};
 use rewards::PosRewardsCalculator;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
@@ -394,10 +394,10 @@ pub fn delegator_rewards_products_handle(
     RewardsProducts::open(key)
 }
 
-/// Init genesis
+/// Init genesis. Requires that the governance parameters are initialized.
 pub fn init_genesis<S>(
     storage: &mut S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
@@ -405,7 +405,8 @@ where
     S: StorageRead + StorageWrite,
 {
     tracing::debug!("Initializing PoS genesis");
-    write_pos_params(storage, params.clone())?;
+    write_pos_params(storage, params)?;
+    let params = read_non_pos_owned_params(storage, params.clone())?;
 
     let mut total_bonded = token::Amount::default();
     consensus_validator_set_handle().init(storage, current_epoch)?;
@@ -433,7 +434,7 @@ where
         // validator data
         insert_validator_into_validator_set(
             storage,
-            params,
+            &params,
             &address,
             tokens,
             current_epoch,
@@ -512,36 +513,38 @@ where
     Ok(())
 }
 
-/// Read PoS and Governance parameters
-pub fn read_pos_and_gov_params<S>(
-    storage: &S,
-) -> storage_api::Result<PosAndGovParams>
-where
-    S: StorageRead,
-{
-    let gov_params = governance::get_parameters(storage)?;
-    let pos_params = read_pos_params(storage)?;
-    Ok(PosAndGovParams {
-        pos_params,
-        gov_params,
-    })
-}
-
 /// Read PoS parameters
 pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
     S: StorageRead,
 {
-    storage
+    let params = storage
         .read(&params_key())
         .transpose()
-        .expect("PosParams should always exist in storage after genesis")
+        .expect("PosParams should always exist in storage after genesis")?;
+    read_non_pos_owned_params(storage, params)
+}
+
+/// Read non-PoS-owned parameters to add them to `OwnedPosParams` to construct
+/// `PosParams`.
+pub fn read_non_pos_owned_params<S>(
+    storage: &S,
+    owned: OwnedPosParams,
+) -> storage_api::Result<PosParams>
+where
+    S: StorageRead,
+{
+    let max_proposal_period = governance::get_max_proposal_period(storage)?;
+    Ok(PosParams {
+        owned,
+        max_proposal_period,
+    })
 }
 
 /// Write PoS parameters
 pub fn write_pos_params<S>(
     storage: &mut S,
-    params: PosParams,
+    params: &OwnedPosParams,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -4056,4 +4059,22 @@ where
         }
     }
     Ok(slashes)
+}
+
+/// Init PoS genesis wrapper helper that also initializes gov params that are
+/// used in PoS with default values.
+#[cfg(feature = "testing")]
+pub fn test_init_genesis<S>(
+    storage: &mut S,
+    owned: OwnedPosParams,
+    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<PosParams>
+where
+    S: StorageRead + StorageWrite,
+{
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(storage)?;
+    crate::init_genesis(storage, &owned, validators, current_epoch)?;
+    crate::read_non_pos_owned_params(storage, owned)
 }

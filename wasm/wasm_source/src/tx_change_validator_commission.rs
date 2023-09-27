@@ -19,7 +19,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 mod tests {
     use std::cmp;
 
-    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::validator_commission_rate_handle;
     use namada::types::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::types::storage::Epoch;
@@ -63,7 +63,7 @@ mod tests {
         max_change: Dec,
         commission_change: transaction::pos::CommissionChange,
         key: key::common::SecretKey,
-        pos_params: PosParams,
+        pos_params: OwnedPosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
         let eth_hot_key = key::common::PublicKey::Secp256k1(
@@ -82,7 +82,8 @@ mod tests {
             eth_cold_key,
         }];
 
-        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+        let pos_params =
+            init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let tx_code = vec![];
         let tx_data = commission_change.try_to_vec().unwrap();

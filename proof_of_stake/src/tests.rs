@@ -30,7 +30,7 @@ use proptest::test_runner::Config;
 use test_log::test;
 
 use crate::parameters::testing::arb_pos_params;
-use crate::parameters::PosParams;
+use crate::parameters::{OwnedPosParams, PosParams};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
@@ -41,36 +41,35 @@ use crate::{
     become_validator, below_capacity_validator_set_handle, bond_handle,
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
-    get_num_consensus_validators, init_genesis,
-    insert_validator_into_validator_set, is_validator, process_slashes,
-    purge_validator_sets_for_old_epoch,
+    get_num_consensus_validators, insert_validator_into_validator_set,
+    is_validator, process_slashes, purge_validator_sets_for_old_epoch,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_delta_value, read_validator_stake, slash,
-    staking_token_address, store_total_consensus_stake, total_deltas_handle,
-    unbond_handle, unbond_tokens, unjail_validator, update_validator_deltas,
-    update_validator_set, validator_consensus_key_handle,
-    validator_set_positions_handle, validator_set_update_tendermint,
-    validator_slashes_handle, validator_state_handle, withdraw_tokens,
-    write_validator_address_raw_hash, BecomeValidator,
-    STORE_VALIDATOR_SETS_LEN,
+    staking_token_address, store_total_consensus_stake, test_init_genesis,
+    total_deltas_handle, unbond_handle, unbond_tokens, unjail_validator,
+    update_validator_deltas, update_validator_set,
+    validator_consensus_key_handle, validator_set_positions_handle,
+    validator_set_update_tendermint, validator_slashes_handle,
+    validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
+    BecomeValidator, STORE_VALIDATOR_SETS_LEN,
 };
 
 proptest! {
-    // Generate arb valid input for `test_init_genesis_aux`
+    // Generate arb valid input for `test_test_init_genesis_aux`
     #![proptest_config(Config {
         cases: 1,
         .. Config::default()
     })]
     #[test]
-    fn test_init_genesis(
+    fn test_test_init_genesis(
 
     (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..10),
     start_epoch in (0_u64..1000).prop_map(Epoch),
 
     ) {
-        test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
+        test_test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
     }
 }
 
@@ -144,7 +143,7 @@ proptest! {
 fn arb_params_and_genesis_validators(
     num_max_validator_slots: Option<u64>,
     val_size: Range<usize>,
-) -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>)> {
+) -> impl Strategy<Value = (OwnedPosParams, Vec<GenesisValidator>)> {
     let params = arb_pos_params(num_max_validator_slots);
     params.prop_flat_map(move |params| {
         let validators = arb_genesis_validators(
@@ -156,7 +155,7 @@ fn arb_params_and_genesis_validators(
 }
 
 fn test_slashes_with_unbonding_params()
--> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
+-> impl Strategy<Value = (OwnedPosParams, Vec<GenesisValidator>, u64)> {
     let params = arb_pos_params(Some(5));
     params.prop_flat_map(|params| {
         let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
@@ -168,8 +167,8 @@ fn test_slashes_with_unbonding_params()
 }
 
 /// Test genesis initialization
-fn test_init_genesis_aux(
-    params: PosParams,
+fn test_test_init_genesis_aux(
+    params: OwnedPosParams,
     start_epoch: Epoch,
     mut validators: Vec<GenesisValidator>,
 ) {
@@ -181,8 +180,13 @@ fn test_init_genesis_aux(
     s.storage.block.epoch = start_epoch;
 
     validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
-    init_genesis(&mut s, &params, validators.clone().into_iter(), start_epoch)
-        .unwrap();
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        validators.clone().into_iter(),
+        start_epoch,
+    )
+    .unwrap();
 
     let mut bond_details = bonds_and_unbonds(&s, None, None).unwrap();
     assert!(bond_details.iter().all(|(_id, details)| {
@@ -250,7 +254,7 @@ fn test_init_genesis_aux(
 
 /// Test bonding
 /// NOTE: copy validator sets each time we advance the epoch
-fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
+fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     // This can be useful for debugging:
     // params.pipeline_len = 2;
     // params.unbonding_len = 4;
@@ -260,9 +264,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Genesis
     let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -801,7 +805,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
 /// Test validator initialization.
 fn test_become_validator_aux(
-    params: PosParams,
+    params: OwnedPosParams,
     new_validator: Address,
     new_validator_consensus_key: SecretKey,
     validators: Vec<GenesisValidator>,
@@ -815,9 +819,9 @@ fn test_become_validator_aux(
 
     // Genesis
     let mut current_epoch = dbg!(s.storage.block.epoch);
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -949,7 +953,7 @@ fn test_become_validator_aux(
 }
 
 fn test_slashes_with_unbonding_aux(
-    mut params: PosParams,
+    mut params: OwnedPosParams,
     validators: Vec<GenesisValidator>,
     unbond_delay: u64,
 ) {
@@ -975,9 +979,9 @@ fn test_slashes_with_unbonding_aux(
     // Genesis
     // let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -1128,7 +1132,7 @@ fn test_validator_raw_hash() {
 fn test_validator_sets() {
     let mut s = TestWlStorage::default();
     // Only 3 consensus validator slots
-    let params = PosParams {
+    let params = OwnedPosParams {
         max_validator_slots: 3,
         ..Default::default()
     };
@@ -1143,39 +1147,6 @@ fn test_validator_sets() {
         // bump the sk seed
         sk_seed += 1;
         res
-    };
-
-    // A helper to insert a non-genesis validator
-    let insert_validator = |s: &mut TestWlStorage,
-                            addr,
-                            pk: &PublicKey,
-                            stake: token::Amount,
-                            epoch: Epoch| {
-        insert_validator_into_validator_set(
-            s,
-            &params,
-            addr,
-            stake,
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
-
-        update_validator_deltas(
-            s,
-            &params,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
-
-        // Set their consensus key (needed for
-        // `validator_set_update_tendermint` fn)
-        validator_consensus_key_handle(addr)
-            .set(s, pk.clone(), epoch, params.pipeline_len)
-            .unwrap();
     };
 
     // Create genesis validators
@@ -1204,9 +1175,9 @@ fn test_validator_sets() {
     let start_epoch = Epoch::default();
     let epoch = start_epoch;
 
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         [
             GenesisValidator {
                 address: val1.clone(),
@@ -1245,6 +1216,39 @@ fn test_validator_sets() {
         epoch,
     )
     .unwrap();
+
+    // A helper to insert a non-genesis validator
+    let insert_validator = |s: &mut TestWlStorage,
+                            addr,
+                            pk: &PublicKey,
+                            stake: token::Amount,
+                            epoch: Epoch| {
+        insert_validator_into_validator_set(
+            s,
+            &params,
+            addr,
+            stake,
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        // Set their consensus key (needed for
+        // `validator_set_update_tendermint` fn)
+        validator_consensus_key_handle(addr)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
+            .unwrap();
+    };
 
     // Advance to EPOCH 1
     //
@@ -1804,7 +1808,7 @@ fn test_validator_sets() {
 fn test_validator_sets_swap() {
     let mut s = TestWlStorage::default();
     // Only 2 consensus validator slots
-    let params = PosParams {
+    let params = OwnedPosParams {
         max_validator_slots: 2,
         // Set the stake threshold to 0 so no validators are in the
         // below-threshold set
@@ -1826,39 +1830,6 @@ fn test_validator_sets_swap() {
         res
     };
 
-    // A helper to insert a non-genesis validator
-    let insert_validator = |s: &mut TestWlStorage,
-                            addr,
-                            pk: &PublicKey,
-                            stake: token::Amount,
-                            epoch: Epoch| {
-        insert_validator_into_validator_set(
-            s,
-            &params,
-            addr,
-            stake,
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
-
-        update_validator_deltas(
-            s,
-            &params,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
-
-        // Set their consensus key (needed for
-        // `validator_set_update_tendermint` fn)
-        validator_consensus_key_handle(addr)
-            .set(s, pk.clone(), epoch, params.pipeline_len)
-            .unwrap();
-    };
-
     // Start with two genesis validators, one with 1 voting power and other 0
     let epoch = Epoch::default();
     // 1M voting power
@@ -1874,9 +1845,9 @@ fn test_validator_sets_swap() {
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
 
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         [
             GenesisValidator {
                 address: val1,
@@ -1915,6 +1886,39 @@ fn test_validator_sets_swap() {
         epoch,
     )
     .unwrap();
+
+    // A helper to insert a non-genesis validator
+    let insert_validator = |s: &mut TestWlStorage,
+                            addr,
+                            pk: &PublicKey,
+                            stake: token::Amount,
+                            epoch: Epoch| {
+        insert_validator_into_validator_set(
+            s,
+            &params,
+            addr,
+            stake,
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        update_validator_deltas(
+            s,
+            &params,
+            addr,
+            stake.change(),
+            epoch,
+            params.pipeline_len,
+        )
+        .unwrap();
+
+        // Set their consensus key (needed for
+        // `validator_set_update_tendermint` fn)
+        validator_consensus_key_handle(addr)
+            .set(s, pk.clone(), epoch, params.pipeline_len)
+            .unwrap();
+    };
 
     // Advance to EPOCH 1
     let epoch = advance_epoch(&mut s, &params);
@@ -2043,7 +2047,7 @@ fn get_tendermint_set_updates(
 }
 
 /// Advance to the next epoch. Returns the new epoch.
-fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
+fn advance_epoch(s: &mut TestWlStorage, params: &OwnedPosParams) -> Epoch {
     s.storage.block.epoch = s.storage.block.epoch.next();
     let current_epoch = s.storage.block.epoch;
     store_total_consensus_stake(s, current_epoch).unwrap();
@@ -2131,7 +2135,7 @@ fn arb_genesis_validators(
 }
 
 fn test_unjail_validator_aux(
-    params: PosParams,
+    params: OwnedPosParams,
     mut validators: Vec<GenesisValidator>,
 ) {
     println!("\nTest inputs: {params:?}, genesis validators: {validators:#?}");
@@ -2153,9 +2157,9 @@ fn test_unjail_validator_aux(
 
     // Genesis
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )

@@ -191,7 +191,7 @@ fn validate_tx(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
+    use namada::ledger::pos::{GenesisValidator, OwnedPosParams};
     use namada::proto::{Code, Data, Signature};
     use namada::types::dec::Dec;
     use namada::types::storage::Epoch;
@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn test_unsigned_pos_action_rejected() {
         // Init PoS genesis
-        let pos_params = PosParams::default();
+        let pos_params = OwnedPosParams::default();
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
@@ -504,7 +504,7 @@ mod tests {
     #[test]
     fn test_signed_pos_action_accepted() {
         // Init PoS genesis
-        let pos_params = PosParams::default();
+        let pos_params = OwnedPosParams::default();
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();

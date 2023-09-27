@@ -8,10 +8,21 @@ use namada_core::types::token;
 use namada_core::types::uint::Uint;
 use thiserror::Error;
 
-/// Proof-of-Stake system parameters, set at genesis and can only be changed via
-/// governance
+/// Proof-of-Stake system parameters. This includes parameters that are used in
+/// PoS but are read from other accounts storage (governance).
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct PosParams {
+    /// PoS-owned params
+    pub owned: OwnedPosParams,
+    /// Governance param - Maximum proposal voting period in epochs.
+    /// This param is stored in governance.
+    pub max_proposal_period: u64,
+}
+
+/// Proof-of-Stake system parameters owned by the PoS address, set at genesis
+/// and can only be changed via governance
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct OwnedPosParams {
     /// A maximum number of consensus validators
     pub max_validator_slots: u64,
     /// Any change applied during an epoch `n` will become active at the
@@ -51,6 +62,17 @@ pub struct PosParams {
 
 impl Default for PosParams {
     fn default() -> Self {
+        let owned = OwnedPosParams::default();
+        let gov = GovernanceParameters::default();
+        Self {
+            owned,
+            max_proposal_period: gov.max_proposal_period,
+        }
+    }
+}
+
+impl Default for OwnedPosParams {
+    fn default() -> Self {
         Self {
             max_validator_slots: 100,
             pipeline_len: 2,
@@ -73,15 +95,6 @@ impl Default for PosParams {
             validator_stake_threshold: token::Amount::native_whole(1_u64),
         }
     }
-}
-
-/// A struct to hold both PoS and governance parameters
-#[derive(Debug, Clone)]
-pub struct PosAndGovParams {
-    /// Pos parameters
-    pub pos_params: PosParams,
-    /// Governance parameters
-    pub gov_params: GovernanceParameters,
 }
 
 #[allow(missing_docs)]
@@ -112,7 +125,7 @@ const MAX_TOTAL_VOTING_POWER: i64 = i64::MAX / 8;
 /// Assuming token amount is `u64` in micro units.
 const TOKEN_MAX_AMOUNT: u64 = u64::MAX / TOKENS_PER_NAM;
 
-impl PosParams {
+impl OwnedPosParams {
     /// Validate PoS parameters values. Returns an empty list if the values are
     /// valid.
     #[must_use]
@@ -183,6 +196,24 @@ impl PosParams {
         let end = infraction_epoch + self.cubic_slashing_window_length;
         (start, end)
     }
+
+    /// A test helper to add the default gov params to PoS params.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn with_default_gov_params(self) -> PosParams {
+        let gov = GovernanceParameters::default();
+        PosParams {
+            owned: self,
+            max_proposal_period: gov.max_proposal_period,
+        }
+    }
+}
+
+impl std::ops::Deref for PosParams {
+    type Target = OwnedPosParams;
+
+    fn deref(&self) -> &Self::Target {
+        &self.owned
+    }
 }
 
 #[cfg(test)]
@@ -224,8 +255,8 @@ pub mod testing {
             unbonding_len in pipeline_len + 1..pipeline_len + 8,
             pipeline_len in Just(pipeline_len),
             tm_votes_per_token in 1..10_001_i128)
-            -> PosParams {
-            PosParams {
+            -> OwnedPosParams {
+            OwnedPosParams {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,

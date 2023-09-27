@@ -151,9 +151,9 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
-        crate::init_genesis(
+        crate::test_init_genesis(
             &mut s,
-            &initial_state.params,
+            initial_state.params.owned.clone(),
             initial_state.genesis_validators.clone().into_iter(),
             initial_state.epoch,
         )
@@ -1197,6 +1197,7 @@ impl ReferenceStateMachine for AbstractPosState {
         println!("\nInitializing abstract state machine");
         arb_params_and_genesis_validators(Some(8), 8..10)
             .prop_map(|(params, genesis_validators)| {
+                let params = params.with_default_gov_params();
                 let epoch = Epoch::default();
                 let mut state = Self {
                     epoch,

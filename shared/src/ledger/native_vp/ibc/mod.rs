@@ -293,6 +293,7 @@ mod tests {
 
     use borsh::BorshSerialize;
     use namada_core::ledger::gas::TxGasMeter;
+    use namada_core::ledger::governance::parameters::GovernanceParameters;
     use prost::Message;
     use sha2::Digest;
 
@@ -409,6 +410,8 @@ mod tests {
 
         // initialize the storage
         ibc::init_genesis_storage(&mut wl_storage);
+        let gov_params = GovernanceParameters::default();
+        gov_params.init_storage(&mut wl_storage).unwrap();
         pos::init_genesis_storage(
             &mut wl_storage,
             &PosParams::default(),

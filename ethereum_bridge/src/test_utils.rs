@@ -6,6 +6,7 @@ use std::num::NonZeroU64;
 use borsh::BorshSerialize;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
@@ -16,7 +17,7 @@ use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{self, protocol_pk_key, RefTo};
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
-use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
@@ -212,9 +213,11 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
+    let gov_params = GovernanceParameters::default();
+    gov_params.init_storage(wl_storage).unwrap();
     namada_proof_of_stake::init_genesis(
         wl_storage,
-        &PosParams::default(),
+        &OwnedPosParams::default(),
         validators.into_iter(),
         0.into(),
     )

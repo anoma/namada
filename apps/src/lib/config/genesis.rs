@@ -8,7 +8,7 @@ use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::pgf::parameters::PgfParameters;
 use namada::ledger::eth_bridge::EthereumBridgeConfig;
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
+use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
 use namada::types::address::Address;
 use namada::types::chain::ProposalBytes;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -31,7 +31,7 @@ pub mod genesis_config {
     use namada::core::ledger::governance::parameters::GovernanceParameters;
     use namada::core::ledger::pgf::parameters::PgfParameters;
     use namada::ledger::parameters::EpochDuration;
-    use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
+    use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
     use namada::types::address::Address;
     use namada::types::chain::ProposalBytes;
     use namada::types::key::dkg_session_keys::DkgPublicKey;
@@ -665,7 +665,7 @@ pub mod genesis_config {
             validator_stake_threshold,
         } = pos_params;
 
-        let pos_params = PosParams {
+        let pos_params = OwnedPosParams {
             max_validator_slots,
             pipeline_len,
             unbonding_len,
@@ -738,7 +738,7 @@ pub struct Genesis {
     pub established_accounts: Vec<EstablishedAccount>,
     pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
-    pub pos_params: PosParams,
+    pub pos_params: OwnedPosParams,
     pub gov_params: GovernanceParameters,
     pub pgf_params: PgfParameters,
     // Ethereum bridge config
@@ -1109,7 +1109,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_accounts,
         token_accounts,
         parameters,
-        pos_params: PosParams::default(),
+        pos_params: OwnedPosParams::default(),
         gov_params: GovernanceParameters::default(),
         pgf_params: PgfParameters::default(),
         ethereum_bridge_params: Some(EthereumBridgeConfig {

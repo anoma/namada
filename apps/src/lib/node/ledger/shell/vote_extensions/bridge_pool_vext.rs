@@ -336,7 +336,7 @@ mod test_bp_vote_extensions {
 
         // change pipeline length to 1
         let mut params = shell.wl_storage.pos_queries().get_pos_params();
-        params.pipeline_len = 1;
+        params.owned.pipeline_len = 1;
 
         let consensus_key = gen_keypair();
         let hot_key = gen_secp256k1_keypair();

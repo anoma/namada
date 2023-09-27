@@ -4,7 +4,7 @@ use std::hash::Hash;
 
 use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::{self, Parameters};
-use namada::ledger::pos::{staking_token_address, PosParams};
+use namada::ledger::pos::{staking_token_address, OwnedPosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
@@ -412,7 +412,7 @@ where
         &mut self,
         staking_token: &Address,
         validators: Vec<genesis::Validator>,
-        pos_params: &PosParams,
+        pos_params: &OwnedPosParams,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized. Write the total

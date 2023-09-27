@@ -2653,8 +2653,8 @@ mod test_finalize_block {
             num_validators,
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
-        params.unbonding_len = 4;
-        write_pos_params(&mut shell.wl_storage, params.clone())?;
+        params.owned.unbonding_len = 4;
+        write_pos_params(&mut shell.wl_storage, &params.owned)?;
 
         let validator_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
@@ -3031,9 +3031,9 @@ mod test_finalize_block {
             num_validators,
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
-        params.unbonding_len = 4;
-        params.max_validator_slots = 4;
-        write_pos_params(&mut shell.wl_storage, params.clone())?;
+        params.owned.unbonding_len = 4;
+        params.owned.max_validator_slots = 4;
+        write_pos_params(&mut shell.wl_storage, &params.owned)?;
 
         // Slash pool balance
         let nam_address = shell.wl_storage.storage.native_token.clone();
