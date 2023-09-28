@@ -183,11 +183,10 @@ where
             (last_update, oldest_epoch)
         {
             let oldest_to_keep = current_epoch
-                .0
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
-            if oldest_epoch.0 < oldest_to_keep {
-                let diff = oldest_to_keep - oldest_epoch.0;
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
@@ -266,12 +265,9 @@ where
     }
 
     fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
-        Epoch(
-            epoch
-                .0
-                .checked_sub(PastEpochs::value(params))
-                .unwrap_or_default(),
-        )
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
@@ -400,12 +396,9 @@ where
     }
 
     fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
-        Epoch(
-            epoch
-                .0
-                .checked_sub(PastEpochs::value(params))
-                .unwrap_or_default(),
-        )
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
     }
 
     /// Update data by removing old epochs
@@ -426,11 +419,10 @@ where
             (last_update, oldest_epoch)
         {
             let oldest_to_keep = current_epoch
-                .0
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
-            if oldest_epoch.0 < oldest_to_keep {
-                let diff = oldest_to_keep - oldest_epoch.0;
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
@@ -610,11 +602,10 @@ where
             (last_update, oldest_epoch)
         {
             let oldest_to_keep = current_epoch
-                .0
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
-            if oldest_epoch.0 < oldest_to_keep {
-                let diff = oldest_to_keep - oldest_epoch.0;
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
                 // Go through the epochs before the expected oldest epoch and
                 // sum them into it
                 tracing::debug!(
@@ -713,12 +704,9 @@ where
     }
 
     fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
-        Epoch(
-            epoch
-                .0
-                .checked_sub(PastEpochs::value(params))
-                .unwrap_or_default(),
-        )
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
