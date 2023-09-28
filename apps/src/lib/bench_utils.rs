@@ -1,18 +1,5 @@
-//! Benchmarks module based on criterion.
-//!
-//! Measurements are taken on the elapsed wall-time.
-//!
-//! The benchmarks only focus on sucessfull transactions and vps: in case of
-//! failure, the bench function shall panic to avoid timing incomplete execution
-//! paths.
-//!
-//! In addition, this module also contains benchmarks for
-//! [`WrapperTx`][`namada::core::types::transaction::wrapper::WrapperTx`]
-//! validation and [`host_env`][`namada::vm::host_env`] exposed functions that
-//! define the gas constants of [`gas`][`namada::core::ledger::gas`].
-//!
-//! For more realistic results these benchmarks should be run on all the
-//! combination of supported OS/architecture.
+//! Library code for benchmarks provides a wrapper of the ledger's shell
+//! `BenchShell` and helper functions to generate transactions.
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
