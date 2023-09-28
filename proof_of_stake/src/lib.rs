@@ -4057,7 +4057,7 @@ where
 
 /// Init PoS genesis wrapper helper that also initializes gov params that are
 /// used in PoS with default values.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn test_init_genesis<S>(
     storage: &mut S,
     owned: OwnedPosParams,
