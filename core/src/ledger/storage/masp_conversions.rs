@@ -63,7 +63,7 @@ where
                     .tokens
                     .get(alias)
                     .cloned()
-                    .expect(&format!(
+                    .unwrap_or_else(|| panic!(
                         "Missing token alias {} from storage conversion state.",
                         alias
                     )),
