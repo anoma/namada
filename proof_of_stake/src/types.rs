@@ -77,7 +77,7 @@ pub type BelowCapacityValidatorSet =
 pub type ConsensusValidatorSets = crate::epoched::NestedEpoched<
     ConsensusValidatorSet,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched below-capacity validator sets.
@@ -98,7 +98,7 @@ pub type TotalConsensusStakes = crate::epoched::Epoched<
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
 /// Epoched total deltas.
@@ -141,7 +141,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetSlashProcessingLen, /* TODO: should this be slash procesing + cubic window? */
 >;
 
 /// Epoched validator's unbonds

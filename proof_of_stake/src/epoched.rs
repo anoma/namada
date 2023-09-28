@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops;
+use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api;
@@ -813,6 +813,106 @@ impl EpochOffset for OffsetMaxU64 {
     }
 }
 
+/// Offset at max proposal period.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriod;
+impl EpochOffset for OffsetMaxProposalPeriod {
+    fn value(params: &PosParams) -> u64 {
+        params.max_proposal_period
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriod
+    }
+}
+
+/// Offset at the max proposal period, plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodPlus;
+impl EpochOffset for OffsetMaxProposalPeriodPlus {
+    fn value(params: &PosParams) -> u64 {
+        params.max_proposal_period + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodPlus
+    }
+}
+
+/// Offset at the larger of the slash processing length and the max proposal
+/// period.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodOrSlashProcessingLen;
+impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLen {
+    fn value(params: &PosParams) -> u64 {
+        cmp::max(
+            params.slash_processing_epoch_offset(),
+            params.max_proposal_period,
+        )
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodOrSlashProcessingLen
+    }
+}
+
+/// Offset at the larger of the slash processing length and the max proposal
+/// period, plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodOrSlashProcessingLenPlus;
+impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLenPlus {
+    fn value(params: &PosParams) -> u64 {
+        cmp::max(
+            params.slash_processing_epoch_offset(),
+            params.max_proposal_period,
+        ) + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodOrSlashProcessingLenPlus
+    }
+}
+
 /// Offset length dynamic choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DynEpochOffset {
@@ -833,8 +933,13 @@ pub enum DynEpochOffset {
     SlashProcessingLen,
     /// Offset at the max proposal period
     MaxProposalPeriod,
+    /// Offset at the max proposal period plus the default num past epochs
+    MaxProposalPeriodPlus,
     /// Offset at the larger of max proposal period or slash processing delay
     MaxProposalPeriodOrSlashProcessingLen,
+    /// Offset at the larger of max proposal period or slash processing delay,
+    /// plus the default num past epochs
+    MaxProposalPeriodOrSlashProcessingLenPlus,
     /// Offset of the max u64 value
     MaxU64,
 }
