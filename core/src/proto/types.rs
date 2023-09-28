@@ -553,6 +553,7 @@ impl Signature {
         verified_pks: &mut HashSet<u8>,
         public_keys_index_map: &AccountPublicKeysMap,
         signer: &Option<Address>,
+        gas_meter: &mut Option<&mut VpGasMeter>,
     ) -> std::result::Result<u8, VerifySigError> {
         // Records whether there are any successful verifications
         let mut verifications = 0;
@@ -564,6 +565,11 @@ impl Signature {
                     if let Some(pk) =
                         public_keys_index_map.get_public_key_from_index(*idx)
                     {
+                        if let Some(meter) = gas_meter {
+                            meter
+                                .consume(VERIFY_TX_SIG_GAS_COST)
+                                .map_err(|_| VerifySigError::OutOfGas)?;
+                        }
                         common::SigScheme::verify_signature(
                             &pk,
                             &self.get_raw_hash(),
@@ -584,6 +590,11 @@ impl Signature {
                     if let Some(map_idx) =
                         public_keys_index_map.get_index_from_public_key(pk)
                     {
+                        if let Some(meter) = gas_meter {
+                            meter
+                                .consume(VERIFY_TX_SIG_GAS_COST)
+                                .map_err(|_| VerifySigError::OutOfGas)?;
+                        }
                         common::SigScheme::verify_signature(
                             pk,
                             &self.get_raw_hash(),
@@ -1381,7 +1392,7 @@ impl Tx {
         signer: &Option<Address>,
         threshold: u8,
         max_signatures: Option<u8>,
-        mut gas_meter: Option<&mut VpGasMeter>,
+        gas_meter: &mut Option<&mut VpGasMeter>,
     ) -> std::result::Result<Vec<&Signature>, Error> {
         let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
@@ -1408,26 +1419,22 @@ impl Tx {
                     }
 
                     // Finally verify that the signature itself is valid
-                    let prev_verifieds = verified_pks.len();
                     let amt_verifieds = signatures
                         .verify_signature(
                             &mut verified_pks,
                             &public_keys_index_map,
                             signer,
+                            gas_meter,
                         )
-                        .map_err(|_| {
-                            Error::InvalidSectionSignature(
-                                "found invalid signature.".to_string(),
-                            )
+                        .map_err(|e| {
+                            if let VerifySigError::OutOfGas = e {
+                                Error::OutOfGas
+                            } else {
+                                Error::InvalidSectionSignature(
+                                    "found invalid signature.".to_string(),
+                                )
+                            }
                         });
-                    // Compute the cost of the signature verifications
-                    if let Some(x) = gas_meter.as_mut() {
-                        let amt_verified = usize::from(amt_verifieds.is_err())
-                            + verified_pks.len()
-                            - prev_verifieds;
-                        x.consume(VERIFY_TX_SIG_GAS_COST * amt_verified as u64)
-                            .map_err(|_| Error::OutOfGas)?;
-                    }
                     // Record the section witnessing these signatures
                     if amt_verifieds? > 0 {
                         witnesses.push(signatures);
@@ -1458,7 +1465,7 @@ impl Tx {
             &None,
             1,
             None,
-            None,
+            &mut None,
         )
         .map(|x| *x.first().unwrap())
         .map_err(|_| Error::InvalidWrapperSignature)

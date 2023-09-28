@@ -1848,7 +1848,7 @@ where
             &Some(signer),
             threshold,
             max_signatures,
-            Some(gas_meter),
+            &mut Some(gas_meter),
         )
         .is_ok(),
     )
