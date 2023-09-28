@@ -264,6 +264,6 @@ where
 {
     let key = governance_keys::get_max_proposal_period_key();
     let max_proposal_period: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+        storage.read(&key)?.expect("Parameter should be defined.");
     Ok(max_proposal_period)
 }

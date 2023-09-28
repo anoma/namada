@@ -409,8 +409,8 @@ where
     }
 
     /// Update data by removing old epochs
-    /// TODO: should we consider more complex handling of empty epochs in the
-    /// data below?
+    // TODO: should we consider more complex handling of empty epochs in the
+    // data below?
     pub fn update_data<S>(
         &self,
         storage: &mut S,
@@ -422,10 +422,6 @@ where
     {
         let last_update = self.get_last_update(storage)?;
         let oldest_epoch = self.get_oldest_epoch(storage)?;
-        println!(
-            "\nLast update = {:?}\nOldest epoch = {:?}\n",
-            last_update, oldest_epoch
-        );
         if let (Some(last_update), Some(oldest_epoch)) =
             (last_update, oldest_epoch)
         {
