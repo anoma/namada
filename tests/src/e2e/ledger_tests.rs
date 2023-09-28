@@ -26,9 +26,9 @@ use namada::types::token;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_test_utils::TestWasms;
 use serde_json::json;
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use setup::constants::*;
 use setup::Test;
 
@@ -1301,8 +1301,17 @@ fn pos_init_validator() -> Result<()> {
                 .unwrap()
                 .iter()
                 .filter_map(|bond| {
-                    (bond.data.validator.to_string() == *"validator-0")
-                        .then(|| bond.data.amount.increase_precision(NATIVE_MAX_DECIMAL_PLACES.into()).unwrap().amount)
+                    (bond.data.validator.to_string() == *"validator-0").then(
+                        || {
+                            bond.data
+                                .amount
+                                .increase_precision(
+                                    NATIVE_MAX_DECIMAL_PLACES.into(),
+                                )
+                                .unwrap()
+                                .amount
+                        },
+                    )
                 })
                 .sum::<token::Amount>();
             assert_eq!(
@@ -1514,8 +1523,9 @@ fn pos_init_validator() -> Result<()> {
 #[test]
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
-        |genesis, base_dir: &_|
-            setup::set_validators(1, genesis, base_dir, |_| 0),
+        |genesis, base_dir: &_| {
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        },
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),
     )?);
@@ -1602,7 +1612,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 /// 13. Check governance address funds are 0
 #[test]
 fn proposal_submission() -> Result<()> {
-
     let test = setup::network(
         |mut genesis, base_dir: &_| {
             genesis.parameters.gov_params.max_proposal_code_size = 600000;
@@ -3047,12 +3056,7 @@ fn double_signing_gets_slashed() -> Result<()> {
             );
             // Make faster epochs to be more likely to discover boundary issues
             genesis.parameters.parameters.min_num_of_blocks = 2;
-            setup::set_validators(
-                4,
-                genesis,
-                base_dir,
-                default_port_offset,
-            )
+            setup::set_validators(4, genesis, base_dir, default_port_offset)
         },
         None,
     )?;

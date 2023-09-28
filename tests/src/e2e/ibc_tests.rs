@@ -78,20 +78,22 @@ use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
-use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::config::genesis::{chain, templates};
+use namada_apps::config::utils::set_port;
+use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
 use namada_apps::facade::tendermint::trust_threshold::TrustThresholdFraction;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
-use namada_apps::config::utils::set_port;
 use setup::constants::*;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who, working_dir, TestDir};
+use crate::e2e::setup::{
+    self, sleep, working_dir, Bin, NamadaCmd, Test, TestDir, Who,
+};
 use crate::{run, run_as};
 
 #[test]
@@ -213,11 +215,24 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     for entry in std::fs::read_dir(test_a.test_dir.path()).unwrap() {
         let entry = entry.unwrap();
         if entry.path().is_dir() {
-            copy_dir::copy_dir(entry.path(), test_b.test_dir.path().join(entry.file_name()))
-                .map_err(|e| eyre!("Failed copying directory from test_a to test_b with {}", e))?;
+            copy_dir::copy_dir(
+                entry.path(),
+                test_b.test_dir.path().join(entry.file_name()),
+            )
+            .map_err(|e| {
+                eyre!(
+                    "Failed copying directory from test_a to test_b with {}",
+                    e
+                )
+            })?;
         } else {
-            std::fs::copy(entry.path(), test_b.test_dir.path().join(entry.file_name()))
-                .map_err(|e| eyre!("Failed copying file from test_a to test_b with {}", e))?;
+            std::fs::copy(
+                entry.path(),
+                test_b.test_dir.path().join(entry.file_name()),
+            )
+            .map_err(|e| {
+                eyre!("Failed copying file from test_a to test_b with {}", e)
+            })?;
         }
     }
     let genesis_b_dir = test_b
@@ -229,28 +244,39 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
         &genesis_b_dir.join(test_a.net.chain_id.as_str()),
     )
     .map_err(|_| eyre!("Could not read genesis files from test b"))?;
-    let validator_tx = genesis_b.transactions
+    // chain b's validator needs to listen on a different port than chain a's
+    // validator
+    let validator_tx = genesis_b
+        .transactions
         .validator_account
         .as_mut()
         .unwrap()
         .iter_mut()
         .find(|val| val.tx.alias.to_string() == *"validator-0")
         .unwrap();
-    let new_port = validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    let new_port =
+        validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;
     validator_tx.tx.net_address.set_port(new_port);
-    genesis_b.write_toml_files(
-        &genesis_b_dir.join(test_a.net.chain_id.as_str()),
-    ).map_err(|_|eyre!("Could not write genesis toml files for test_b"))?;
+    genesis_b
+        .write_toml_files(&genesis_b_dir.join(test_a.net.chain_id.as_str()))
+        .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
     // modify chain b to use different ports for cometbft
-    let mut config = namada_apps::config::Config::load(&genesis_b_dir, &test_a.net.chain_id, Some(TendermintMode::Validator));
+    let mut config = namada_apps::config::Config::load(
+        &genesis_b_dir,
+        &test_a.net.chain_id,
+        Some(TendermintMode::Validator),
+    );
     let proxy_app = &mut config.ledger.cometbft.proxy_app;
     set_port(proxy_app, ANOTHER_PROXY_APP);
     let rpc_addr = &mut config.ledger.cometbft.rpc.laddr;
     set_port(rpc_addr, ANOTHER_RPC);
     let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
     set_port(p2p_addr, ANOTHER_P2P);
-    config.write(&genesis_b_dir, &test_a.net.chain_id,  true)
-        .map_err(|e| eyre!("Unable to modify chain b's config file due to {}", e))?;
+    config
+        .write(&genesis_b_dir, &test_a.net.chain_id, true)
+        .map_err(|e| {
+            eyre!("Unable to modify chain b's config file due to {}", e)
+        })?;
     Ok((test_a, test_b))
 }
 

@@ -995,7 +995,6 @@ pub fn validate(
             Some(validated_txs)
         }
     } else {
-        is_valid = false;
         None
     };
 

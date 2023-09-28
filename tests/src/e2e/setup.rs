@@ -232,21 +232,27 @@ where
 fn remove_self_bonds(genesis: &mut templates::All<templates::Unvalidated>) {
     let bonds = genesis.transactions.bond.take().unwrap();
     genesis.transactions.bond = Some(
-        bonds.into_iter()
+        bonds
+            .into_iter()
             .filter(|bond| {
-                if let genesis::transactions::AliasOrPk::Alias(alias) = &bond.data.source {
+                if let genesis::transactions::AliasOrPk::Alias(alias) =
+                    &bond.data.source
+                {
                     *alias != bond.data.validator
                 } else {
                     true
                 }
             })
-            .collect()
+            .collect(),
     );
 }
 
 /// Setup a network with a single genesis validator node.
 pub fn single_node_net() -> Result<Test> {
-    network(|genesis, base_dir: &_| set_validators(1, genesis, base_dir, |_| 0u16), None)
+    network(
+        |genesis, base_dir: &_| set_validators(1, genesis, base_dir, |_| 0u16),
+        None,
+    )
 }
 
 /// Setup a configurable network.

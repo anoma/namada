@@ -1919,6 +1919,14 @@ mod test_utils {
             .block
             .pred_epochs
             .new_epoch(BlockHeight(1), 1000);
+        // Insert a map assigning random addresses to each token alias.
+        // Needed for storage but not for this test.
+        for (token, _) in address::masp_rewards() {
+            shell.wl_storage.storage.conversion_state.tokens.insert(
+                token.to_string(),
+                address::gen_deterministic_established_address(token),
+            );
+        }
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");

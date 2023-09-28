@@ -288,7 +288,11 @@ impl Store {
         force_alias: bool,
     ) -> (Alias, ExtendedSpendingKey) {
         if Alias::is_reserved(&alias).is_some() {
-            panic!("Tried to generated spending key with reserved alias: {}. Action cancelled, no changes persisted.", alias);
+            panic!(
+                "Tried to generated spending key with reserved alias: {}. \
+                 Action cancelled, no changes persisted.",
+                alias
+            );
         }
         let spendkey = Self::generate_spending_key();
         let viewkey = ExtendedFullViewingKey::from(&spendkey.into()).into();
