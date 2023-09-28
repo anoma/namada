@@ -445,93 +445,6 @@ pub async fn query_transparent_balance<
     }
 }
 
-async fn lookup_token_alias<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    wallet: &Wallet<CliWalletUtils>,
-    token: &Address,
-    owner: &Address,
-) -> String {
-    if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
-        let ibc_denom_key = ibc_denom_key(owner.to_string(), trace_hash);
-        match query_storage_value::<C, String>(client, &ibc_denom_key).await {
-            Ok(ibc_denom) => get_ibc_denom_alias(wallet, ibc_denom),
-            Err(_) => token.to_string(),
-        }
-    } else {
-        wallet.lookup_alias(token)
-    }
-}
-
-/// Returns pairs of token alias and token address
-async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
-    client: &C,
-    wallet: &Wallet<CliWalletUtils>,
-    base_token: Option<&Address>,
-    owner: Option<&Address>,
-) -> BTreeMap<String, Address> {
-    // Base tokens
-    let mut tokens = match base_token {
-        Some(base_token) => {
-            let mut map = BTreeMap::new();
-            map.insert(wallet.lookup_alias(base_token), base_token.clone());
-            map
-        }
-        None => wallet.tokens_with_aliases(),
-    };
-
-    let prefixes = match (base_token, owner) {
-        (Some(base_token), Some(owner)) => vec![
-            ibc_denom_key_prefix(Some(base_token.to_string())),
-            ibc_denom_key_prefix(Some(owner.to_string())),
-        ],
-        (Some(base_token), None) => {
-            vec![ibc_denom_key_prefix(Some(base_token.to_string()))]
-        }
-        (None, Some(_)) => {
-            // Check all IBC denoms because the owner might not know IBC token
-            // transfers in the same chain
-            vec![ibc_denom_key_prefix(None)]
-        }
-        (None, None) => vec![ibc_denom_key_prefix(None)],
-    };
-
-    for prefix in prefixes {
-        let ibc_denoms =
-            query_storage_prefix::<C, String, IO>(client, &prefix).await;
-        if let Some(ibc_denoms) = ibc_denoms {
-            for (key, ibc_denom) in ibc_denoms {
-                if let Some((_, hash)) = is_ibc_denom_key(&key) {
-                    let ibc_denom_alias =
-                        get_ibc_denom_alias(wallet, ibc_denom);
-                    let ibc_token =
-                        Address::Internal(InternalAddress::IbcToken(hash));
-                    tokens.insert(ibc_denom_alias, ibc_token);
-                }
-            }
-        }
-    }
-    tokens
-}
-
-fn get_ibc_denom_alias(
-    wallet: &Wallet<CliWalletUtils>,
-    ibc_denom: impl AsRef<str>,
-) -> String {
-    split_ibc_denom(&ibc_denom)
-        .map(|(trace_path, base_token)| {
-            let base_token_alias = match Address::decode(&base_token) {
-                Ok(base_token) => wallet.lookup_alias(&base_token),
-                Err(_) => base_token,
-            };
-            if trace_path.is_empty() {
-                base_token_alias
-            } else {
-                format!("{}/{}", trace_path, base_token_alias)
-            }
-        })
-        .unwrap_or(ibc_denom.as_ref().to_string())
-}
-
 /// Query the token pinned balance(s)
 pub async fn query_pinned_balance<
     C: namada::ledger::queries::Client + Sync,
@@ -775,6 +688,94 @@ async fn print_balances<C: namada::ledger::queries::Client + Sync, IO: Io>(
         }
     }
 }
+
+async fn lookup_token_alias<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+    wallet: &Wallet<CliWalletUtils>,
+    token: &Address,
+    owner: &Address,
+) -> String {
+    if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
+        let ibc_denom_key = ibc_denom_key(owner.to_string(), trace_hash);
+        match query_storage_value::<C, String>(client, &ibc_denom_key).await {
+            Ok(ibc_denom) => get_ibc_denom_alias(wallet, ibc_denom),
+            Err(_) => token.to_string(),
+        }
+    } else {
+        wallet.lookup_alias(token)
+    }
+}
+
+/// Returns pairs of token alias and token address
+async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
+    client: &C,
+    wallet: &Wallet<CliWalletUtils>,
+    base_token: Option<&Address>,
+    owner: Option<&Address>,
+) -> BTreeMap<String, Address> {
+    // Base tokens
+    let mut tokens = match base_token {
+        Some(base_token) => {
+            let mut map = BTreeMap::new();
+            map.insert(wallet.lookup_alias(base_token), base_token.clone());
+            map
+        }
+        None => wallet.tokens_with_aliases(),
+    };
+
+    let prefixes = match (base_token, owner) {
+        (Some(base_token), Some(owner)) => vec![
+            ibc_denom_key_prefix(Some(base_token.to_string())),
+            ibc_denom_key_prefix(Some(owner.to_string())),
+        ],
+        (Some(base_token), None) => {
+            vec![ibc_denom_key_prefix(Some(base_token.to_string()))]
+        }
+        (None, Some(_)) => {
+            // Check all IBC denoms because the owner might not know IBC token
+            // transfers in the same chain
+            vec![ibc_denom_key_prefix(None)]
+        }
+        (None, None) => vec![ibc_denom_key_prefix(None)],
+    };
+
+    for prefix in prefixes {
+        let ibc_denoms =
+            query_storage_prefix::<C, String, IO>(client, &prefix).await;
+        if let Some(ibc_denoms) = ibc_denoms {
+            for (key, ibc_denom) in ibc_denoms {
+                if let Some((_, hash)) = is_ibc_denom_key(&key) {
+                    let ibc_denom_alias =
+                        get_ibc_denom_alias(wallet, ibc_denom);
+                    let ibc_token =
+                        Address::Internal(InternalAddress::IbcToken(hash));
+                    tokens.insert(ibc_denom_alias, ibc_token);
+                }
+            }
+        }
+    }
+    tokens
+}
+
+fn get_ibc_denom_alias(
+    wallet: &Wallet<CliWalletUtils>,
+    ibc_denom: impl AsRef<str>,
+) -> String {
+    split_ibc_denom(&ibc_denom)
+        .map(|(trace_path, base_token)| {
+            let base_token_alias = match Address::decode(&base_token) {
+                Ok(base_token) => wallet.lookup_alias(&base_token),
+                Err(_) => base_token,
+            };
+            if trace_path.is_empty() {
+                base_token_alias
+            } else {
+                format!("{}/{}", trace_path, base_token_alias)
+            }
+        })
+        .unwrap_or(ibc_denom.as_ref().to_string())
+}
+
 
 /// Query Proposals
 pub async fn query_proposal<

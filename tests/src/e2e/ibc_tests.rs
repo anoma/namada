@@ -1242,7 +1242,7 @@ fn check_balances(
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
-    let expected = format!("{}: 100000", format!("{}/nam", trace_path));
+    let expected = format!("{}/nam: 100000", trace_path);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1262,7 +1262,7 @@ fn check_balances_after_non_ibc(
     let rpc = get_actor_rpc(test, &Who::Validator(0));
     let query_args =
         vec!["balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc];
-    let expected = format!("{}: 50000", format!("{}/nam", trace_path));
+    let expected = format!("{}/nam: 50000", trace_path);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1270,7 +1270,7 @@ fn check_balances_after_non_ibc(
     // Check the traget
     let query_args =
         vec!["balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc];
-    let expected = format!("{}: 50000", format!("{}/nam", trace_path));
+    let expected = format!("{}/nam: 50000", trace_path);
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
@@ -1306,7 +1306,7 @@ fn check_balances_after_back(
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", NAM, "--node", &rpc_b,
     ];
-    let expected = format!("{}: 0", format!("{}/nam", trace_path));
+    let expected = format!("{}/nam: 0", trace_path);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
