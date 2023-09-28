@@ -849,17 +849,23 @@ pub trait EpochOffset:
 #[cfg(test)]
 mod test {
     use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_core::types::address::testing::established_address_1;
+    use namada_core::types::dec::Dec;
+    use namada_core::types::{key, token};
     use test_log::test;
 
     use super::*;
+    use crate::types::GenesisValidator;
 
     #[test]
     fn test_epoched_data_trimming() -> storage_api::Result<()> {
-        let mut s = TestWlStorage::default();
+        let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
         let epoched =
-            Epoched::<u64, OffsetPipelineLen, OffsetMaxU64>::open(key_prefix);
+            Epoched::<u64, OffsetPipelineLen, OffsetPipelineLen>::open(
+                key_prefix,
+            );
         let data_handler = epoched.get_data_handler();
         assert!(epoched.get_last_update(&s)?.is_none());
         assert!(epoched.get_oldest_epoch(&s)?.is_none());
@@ -924,7 +930,7 @@ mod test {
 
     #[test]
     fn test_epoched_without_data_trimming() -> storage_api::Result<()> {
-        let mut s = TestWlStorage::default();
+        let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
         let epoched =
@@ -992,11 +998,11 @@ mod test {
 
     #[test]
     fn test_epoched_delta_data_trimming() -> storage_api::Result<()> {
-        let mut s = TestWlStorage::default();
+        let mut s = init_storage()?;
 
         let key_prefix = storage::Key::parse("test").unwrap();
         let epoched =
-            EpochedDelta::<u64, OffsetPipelineLen, OffsetMaxU64>::open(
+            EpochedDelta::<u64, OffsetPipelineLen, OffsetPipelineLen>::open(
                 key_prefix,
             );
         let data_handler = epoched.get_data_handler();
@@ -1065,7 +1071,7 @@ mod test {
 
     #[test]
     fn test_epoched_delta_without_data_trimming() -> storage_api::Result<()> {
-        let mut s = TestWlStorage::default();
+        let mut s = init_storage()?;
 
         // Nothing should ever get trimmed
         let key_prefix = storage::Key::parse("test").unwrap();
@@ -1132,5 +1138,26 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
 
         Ok(())
+    }
+
+    fn init_storage() -> storage_api::Result<TestWlStorage> {
+        let mut s = TestWlStorage::default();
+        crate::init_genesis(
+            &mut s,
+            &PosParams::default(),
+            [GenesisValidator {
+                address: established_address_1(),
+                tokens: token::Amount::native_whole(1_000),
+                consensus_key: key::testing::keypair_1().to_public(),
+                eth_hot_key: key::testing::keypair_3().to_public(),
+                eth_cold_key: key::testing::keypair_3().to_public(),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
+            }]
+            .into_iter(),
+            Epoch::default(),
+        )?;
+        Ok(s)
     }
 }
