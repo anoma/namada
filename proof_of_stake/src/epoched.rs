@@ -1338,6 +1338,8 @@ mod test {
 
     fn init_storage() -> storage_api::Result<TestWlStorage> {
         let mut s = TestWlStorage::default();
+        let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+        gov_params.init_storage(&mut s)?;
         crate::init_genesis(
             &mut s,
             &PosParams::default(),

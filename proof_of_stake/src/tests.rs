@@ -1776,7 +1776,8 @@ fn test_validator_sets() {
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
 
-    // Check that the validator sets were purged for the old epochs
+    // Check that the below-capacity validator set was purged for the old epochs
+    // but that the consensus_validator_set was not
     let last_epoch = epoch;
     for e in Epoch::iter_bounds_inclusive(
         start_epoch,
@@ -1785,7 +1786,7 @@ fn test_validator_sets() {
             .sub_or_default(Epoch(1)),
     ) {
         assert!(
-            consensus_validator_set_handle()
+            !consensus_validator_set_handle()
                 .at(&e)
                 .is_empty(&s)
                 .unwrap()
