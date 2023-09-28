@@ -7,67 +7,6 @@ pub use dev::{
     ester_address, ester_keypair, keys, validator_address, validator_keypair,
     validator_keys,
 };
-use namada::ledger::wallet::alias::Alias;
-use namada::ledger::{eth_bridge, governance, pos};
-use namada::types::address::Address;
-use namada::types::key::*;
-
-use crate::config::genesis::genesis_config::GenesisConfig;
-
-/// The default addresses with their aliases.
-pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
-    // Internal addresses
-    let mut addresses: Vec<(Alias, Address)> = vec![
-        ("pos".into(), pos::ADDRESS),
-        ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
-        ("governance".into(), governance::ADDRESS),
-        ("eth_bridge".into(), eth_bridge::ADDRESS),
-    ];
-    // Genesis validators
-    let validator_addresses =
-        genesis.validator.into_iter().map(|(alias, validator)| {
-            // The address must be set in the genesis config file
-            (
-                alias.into(),
-                Address::decode(validator.address.unwrap()).unwrap(),
-            )
-        });
-    addresses.extend(validator_addresses);
-    // Genesis tokens
-    let token_addresses = genesis.token.into_iter().map(|(alias, token)| {
-        // The address must be set in the genesis config file
-        (
-            alias.into(),
-            Address::decode(token.address.unwrap()).unwrap(),
-        )
-    });
-    addresses.extend(token_addresses);
-    // Genesis established accounts
-    if let Some(accounts) = genesis.established {
-        let est_addresses = accounts.into_iter().map(|(alias, established)| {
-            // The address must be set in the genesis config file
-            (
-                alias.into(),
-                Address::decode(established.address.unwrap()).unwrap(),
-            )
-        });
-        addresses.extend(est_addresses);
-    }
-    // Genesis implicit accounts
-    if let Some(accounts) = genesis.implicit {
-        let imp_addresses =
-            accounts.into_iter().filter_map(|(alias, implicit)| {
-                // The public key may not be revealed, only add it if it is
-                implicit.public_key.map(|pk| {
-                    let pk: common::PublicKey = pk.to_public_key().unwrap();
-                    let addr: Address = (&pk).into();
-                    (alias.into(), addr)
-                })
-            });
-        addresses.extend(imp_addresses);
-    }
-    addresses
-}
 
 #[cfg(any(test, feature = "testing"))]
 mod dev {

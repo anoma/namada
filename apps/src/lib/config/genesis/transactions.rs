@@ -421,6 +421,52 @@ pub struct Transactions<T: TemplateValidation> {
     pub bond: Option<Vec<T::BondTx>>,
 }
 
+impl<T: TemplateValidation> Transactions<T> {
+    /// Take the union of two sets of transactions
+    pub fn merge(&mut self, mut other: Self) {
+        self.established_account = self
+            .established_account
+            .take()
+            .map(|mut txs| {
+                if let Some(new_txs) = other.established_account.as_mut() {
+                    txs.append(new_txs);
+                }
+                txs
+            })
+            .or(other.established_account);
+        self.validator_account = self
+            .validator_account
+            .take()
+            .map(|mut txs| {
+                if let Some(new_txs) = other.validator_account.as_mut() {
+                    txs.append(new_txs);
+                }
+                txs
+            })
+            .or(other.validator_account);
+        self.transfer = self
+            .transfer
+            .take()
+            .map(|mut txs| {
+                if let Some(new_txs) = other.transfer.as_mut() {
+                    txs.append(new_txs);
+                }
+                txs
+            })
+            .or(other.transfer);
+        self.bond = self
+            .bond
+            .take()
+            .map(|mut txs| {
+                if let Some(new_txs) = other.bond.as_mut() {
+                    txs.append(new_txs);
+                }
+                txs
+            })
+            .or(other.bond);
+    }
+}
+
 impl<T: TemplateValidation> Default for Transactions<T> {
     fn default() -> Self {
         Self {

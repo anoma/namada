@@ -451,23 +451,23 @@ where
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.get_merkle_tree(height))?;
-            if self.last_epoch.0 > 0 {
-                // The derived conversions will be placed in MASP address space
-                let masp_addr = masp();
-                let key_prefix: Key = masp_addr.to_db_key().into();
-                // Load up the conversions currently being given as query
-                // results
-                let state_key = key_prefix
-                    .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
-                    .map_err(Error::KeyError)?;
-                self.conversion_state = types::decode(
-                    self.read(&state_key)
-                        .expect("unable to read conversion state")
-                        .0
-                        .expect("unable to find conversion state"),
-                )
-                .expect("unable to decode conversion state")
-            }
+
+            // The derived conversions will be placed in MASP address space
+            let masp_addr = masp();
+            let key_prefix: Key = masp_addr.to_db_key().into();
+            // Load up the conversions currently being given as query
+            // results
+            let state_key = key_prefix
+                .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+                .map_err(Error::KeyError)?;
+            self.conversion_state = types::decode(
+                self.read(&state_key)
+                    .expect("unable to read conversion state")
+                    .0
+                    .expect("unable to find conversion state"),
+            )
+            .expect("unable to decode conversion state");
+
             #[cfg(feature = "ferveo-tpke")]
             {
                 self.tx_queue = tx_queue;

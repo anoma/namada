@@ -19,7 +19,7 @@ use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::storage::Epoch;
 use namada::types::token;
-use namada_apps::config::genesis::genesis_config;
+use namada_apps::config::genesis::chain;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -183,17 +183,19 @@ pub fn get_validator_pk(test: &Test, who: &Who) -> Option<common::PublicKey> {
         Who::NonValidator => return None,
         Who::Validator(i) => i,
     };
-    let file = format!("{}.toml", test.net.chain_id.as_str());
-    let path = test.test_dir.path().join(file);
-    let config = genesis_config::open_genesis_config(path).unwrap();
-    let pk = config
-        .validator
-        .get(&format!("validator-{}", index))
-        .unwrap()
-        .account_public_key
-        .as_ref()
-        .unwrap();
-    Some(pk.to_public_key().unwrap())
+    let path = test.test_dir.path().join("genesis");
+    let genesis = chain::Finalized::read_toml_files(
+        &path.join(test.net.chain_id.as_str()),
+    )
+    .unwrap();
+    genesis
+        .transactions
+        .validator_account?
+        .iter()
+        .find(|val_tx| {
+            val_tx.tx.alias.to_string() == format!("validator-{}", index)
+        })
+        .map(|val_tx| val_tx.tx.account_key.pk.raw.clone())
 }
 
 /// Find the address of an account by its alias from the wallet

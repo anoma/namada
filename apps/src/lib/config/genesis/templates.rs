@@ -67,7 +67,7 @@ pub fn read_transactions(
     Eq,
 )]
 pub struct UndenominatedBalances {
-    token: BTreeMap<Alias, RawTokenBalances>,
+    pub token: BTreeMap<Alias, RawTokenBalances>,
 }
 
 impl UndenominatedBalances {

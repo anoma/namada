@@ -310,6 +310,7 @@ async fn test_bridge_pool_e2e() {
             genesis
         },
         None,
+        None,
     )
     .unwrap();
     set_ethereum_bridge_mode(
@@ -524,6 +525,7 @@ async fn test_wnam_transfer() -> Result<()> {
             genesis
         },
         None,
+        None,
     )?;
     let native_token_address = Address::decode(native_token_address.unwrap())?;
 
@@ -618,6 +620,7 @@ fn test_configure_oracle_from_storage() -> Result<()> {
                 Some(ethereum_bridge_params.clone());
             genesis
         },
+        None,
         None,
     )?;
 

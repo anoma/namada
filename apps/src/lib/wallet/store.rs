@@ -2,25 +2,14 @@ use std::fs;
 use std::io::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-#[cfg(not(feature = "dev"))]
-use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use fd_lock::RwLock;
-#[cfg(not(feature = "dev"))]
-use namada::ledger::wallet::store::AddressVpType;
-#[cfg(feature = "dev")]
-use namada::ledger::wallet::StoredKeypair;
 use namada::ledger::wallet::{gen_sk_rng, Store, ValidatorKeys};
-#[cfg(not(feature = "dev"))]
-use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use thiserror::Error;
-
-use crate::config::genesis::genesis_config::GenesisConfig;
-use crate::wallet::CliWalletUtils;
 
 #[derive(Error, Debug)]
 pub enum LoadStoreError {
@@ -66,21 +55,6 @@ pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
     })
 }
 
-/// Load the store file or create a new one with the default addresses from
-/// the genesis file, if not found.
-pub fn load_or_new_from_genesis(
-    store_dir: &Path,
-    genesis_cfg: GenesisConfig,
-) -> Result<Store, LoadStoreError> {
-    load(store_dir).or_else(|_| {
-        let mut store = Store::default();
-        add_genesis_addresses(&mut store, genesis_cfg);
-        save(&store, store_dir)
-            .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
-        Ok(store)
-    })
-}
-
 /// Attempt to load the store file.
 pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
     let wallet_file = wallet_file(store_dir);
@@ -106,29 +80,6 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
         )
     })?;
     Store::decode(store).map_err(LoadStoreError::Decode)
-}
-
-/// Add addresses from a genesis configuration.
-pub fn add_genesis_addresses(store: &mut Store, genesis: GenesisConfig) {
-    for (alias, addr) in
-        super::defaults::addresses_from_genesis(genesis.clone())
-    {
-        store.insert_address::<CliWalletUtils>(alias, addr, true);
-    }
-    for (alias, token) in &genesis.token {
-        if let Some(address) = token.address.as_ref() {
-            match Address::from_str(address) {
-                Ok(address) => {
-                    store.add_vp_type_to_address(AddressVpType::Token, address)
-                }
-                Err(_) => {
-                    tracing::error!(
-                        "Weird address for token {alias}: {address}"
-                    )
-                }
-            }
-        }
-    }
 }
 
 /// Generate keypair for signing protocol txs and for the DKG

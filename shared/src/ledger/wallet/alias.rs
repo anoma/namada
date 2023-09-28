@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use namada_core::types::address::{Address, InternalAddress};
 
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
@@ -29,6 +30,14 @@ impl Alias {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// If the alias is reserved for an internal address,
+    /// return that address
+    pub fn is_reserved(alias : impl AsRef<str>) -> Option<Address> {
+        InternalAddress::try_from_alias(alias.as_ref())
+            .map(Address::Internal)
+    }
+
 }
 
 impl BorshSerialize for Alias {
@@ -122,6 +131,12 @@ impl FromStr for Alias {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self::from(s))
+    }
+}
+
+impl AsRef<str> for &Alias {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 

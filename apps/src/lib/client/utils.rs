@@ -266,7 +266,6 @@ pub async fn join_network(
             consensus_key.to_public()
         );
         let tm_home_dir = chain_dir.join(config::COMETBFT_DIR);
-
         // Write consensus key to tendermint home
         tendermint_node::write_validator_key(&tm_home_dir, &consensus_key);
 

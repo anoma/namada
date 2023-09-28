@@ -38,6 +38,7 @@ async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
 concat-idents.workspace = true
+copy_dir = "0.1.3"
 derivative.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
 ibc-relayer-types.workspace = true

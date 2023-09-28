@@ -363,7 +363,7 @@ impl ArgFromContext for Address {
             .or_else(|_| {
                 ctx.wallet
                     .find_address(raw)
-                    .cloned()
+                    .map(|addr| addr.into_owned())
                     .ok_or_else(|| format!("Unknown address {}", raw))
             })
     }
@@ -486,8 +486,7 @@ impl ArgFromContext for TransferTarget {
         Address::arg_from_ctx(ctx, raw)
             .map(Self::Address)
             .or_else(|_| {
-                PaymentAddress::arg_from_ctx(ctx, raw)
-                    .map(Self::PaymentAddress)
+                PaymentAddress::arg_from_ctx(ctx, raw).map(Self::PaymentAddress)
             })
     }
 }

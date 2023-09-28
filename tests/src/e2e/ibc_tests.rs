@@ -78,19 +78,20 @@ use namada_apps::client::rpc::{
     query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
-use namada_apps::config::ethereum_bridge;
-use namada_apps::config::genesis::genesis_config::GenesisConfig;
+use namada_apps::config::{ethereum_bridge, TendermintMode};
+use namada_apps::config::genesis::{chain, templates};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
 use namada_apps::facade::tendermint::trust_threshold::TrustThresholdFraction;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use prost::Message;
+use namada_apps::config::utils::set_port;
 use setup::constants::*;
 
 use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{find_address, get_actor_rpc, get_validator_pk};
-use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who};
+use crate::e2e::setup::{self, sleep, Bin, NamadaCmd, Test, Who, working_dir, TestDir};
 use crate::{run, run_as};
 
 #[test]
@@ -191,20 +192,66 @@ fn run_ledger_ibc() -> Result<()> {
     Ok(())
 }
 
+/// Set up two Namada chains to talk to each other via IBC.
 fn setup_two_single_node_nets() -> Result<(Test, Test)> {
+    const ANOTHER_PROXY_APP: u16 = 27659u16;
+    const ANOTHER_RPC: u16 = 27660u16;
+    const ANOTHER_P2P: u16 = 26655u16;
     // epoch per 100 seconds
-    let update_genesis = |mut genesis: GenesisConfig| {
-        genesis.parameters.epochs_per_year = 315_360;
-        genesis
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year = 315_360;
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let test_a = setup::network(update_genesis, None)?;
+    let test_b = Test {
+        working_dir: working_dir(),
+        test_dir: TestDir::new(),
+        net: test_a.net.clone(),
+        async_runtime: Default::default(),
     };
-    let update_genesis_b = |mut genesis: GenesisConfig| {
-        genesis.parameters.epochs_per_year = 315_360;
-        setup::set_validators(1, genesis, |_| setup::ANOTHER_CHAIN_PORT_OFFSET)
-    };
-    Ok((
-        setup::network(update_genesis, None)?,
-        setup::network(update_genesis_b, None)?,
-    ))
+    for entry in std::fs::read_dir(test_a.test_dir.path()).unwrap() {
+        let entry = entry.unwrap();
+        if entry.path().is_dir() {
+            copy_dir::copy_dir(entry.path(), test_b.test_dir.path().join(entry.file_name()))
+                .map_err(|e| eyre!("Failed copying directory from test_a to test_b with {}", e))?;
+        } else {
+            std::fs::copy(entry.path(), test_b.test_dir.path().join(entry.file_name()))
+                .map_err(|e| eyre!("Failed copying file from test_a to test_b with {}", e))?;
+        }
+    }
+    let genesis_b_dir = test_b
+        .test_dir
+        .path()
+        .join(namada_apps::client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-0");
+    let mut genesis_b = chain::Finalized::read_toml_files(
+        &genesis_b_dir.join(test_a.net.chain_id.as_str()),
+    )
+    .map_err(|_| eyre!("Could not read genesis files from test b"))?;
+    let validator_tx = genesis_b.transactions
+        .validator_account
+        .as_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|val| val.tx.alias.to_string() == *"validator-0")
+        .unwrap();
+    let new_port = validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    validator_tx.tx.net_address.set_port(new_port);
+    genesis_b.write_toml_files(
+        &genesis_b_dir.join(test_a.net.chain_id.as_str()),
+    ).map_err(|_|eyre!("Could not write genesis toml files for test_b"))?;
+    // modify chain b to use different ports for cometbft
+    let mut config = namada_apps::config::Config::load(&genesis_b_dir, &test_a.net.chain_id, Some(TendermintMode::Validator));
+    let proxy_app = &mut config.ledger.cometbft.proxy_app;
+    set_port(proxy_app, ANOTHER_PROXY_APP);
+    let rpc_addr = &mut config.ledger.cometbft.rpc.laddr;
+    set_port(rpc_addr, ANOTHER_RPC);
+    let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
+    set_port(p2p_addr, ANOTHER_P2P);
+    config.write(&genesis_b_dir, &test_a.net.chain_id,  true)
+        .map_err(|e| eyre!("Unable to modify chain b's config file due to {}", e))?;
+    Ok((test_a, test_b))
 }
 
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
@@ -1256,7 +1303,7 @@ fn check_balances(
     );
     client.exp_string(&expected)?;
     // Check the source balance
-    let expected = ": 900000, owned by albert".to_string();
+    let expected = ": 880000, owned by albert".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
@@ -1331,7 +1378,7 @@ fn check_balances_after_back(
     );
     client.exp_string(&expected)?;
     // Check the source balance
-    let expected = ": 950000, owned by albert".to_string();
+    let expected = ": 930000, owned by albert".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 

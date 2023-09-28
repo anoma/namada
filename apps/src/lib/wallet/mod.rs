@@ -18,7 +18,6 @@ pub use store::wallet_file;
 use zeroize::Zeroizing;
 
 use crate::cli;
-use crate::config::genesis::genesis_config::GenesisConfig;
 
 #[derive(Debug)]
 pub struct CliWalletUtils;
@@ -260,21 +259,6 @@ pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
         eprintln!("Unable to load or create the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
-}
-
-/// Load a wallet from the store file or create a new one with the default
-/// addresses loaded from the genesis file, if not found.
-/// TODO: update for new genesis
-pub fn load_or_new_from_genesis(
-    store_dir: &Path,
-    genesis_cfg: GenesisConfig,
-) -> Wallet<CliWalletUtils> {
-    let store = self::store::load_or_new_from_genesis(store_dir, genesis_cfg)
-        .unwrap_or_else(|err| {
-            eprintln!("Unable to load the wallet: {}", err);
-            cli::safe_exit(1)
-        });
     Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
 }
 

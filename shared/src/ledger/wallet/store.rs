@@ -247,6 +247,10 @@ impl Store {
         seed_and_derivation_path: Option<(Seed, DerivationPath)>,
         password: Option<Zeroizing<String>>,
     ) -> Option<(Alias, common::SecretKey)> {
+        // We cannot generate keys for reserved aliases
+        if alias.as_ref().and_then(Alias::is_reserved).is_some() {
+            return None;
+        }
         let sk = if let Some((seed, derivation_path)) = seed_and_derivation_path
         {
             gen_sk_from_seed_and_derivation_path(
@@ -283,6 +287,9 @@ impl Store {
         password: Option<Zeroizing<String>>,
         force_alias: bool,
     ) -> (Alias, ExtendedSpendingKey) {
+        if Alias::is_reserved(&alias).is_some() {
+            panic!("Tried to generated spending key with reserved alias: {}. Action cancelled, no changes persisted.", alias);
+        }
         let spendkey = Self::generate_spending_key();
         let viewkey = ExtendedFullViewingKey::from(&spendkey.into()).into();
         let (spendkey_to_store, _raw_spendkey) =
@@ -347,6 +354,11 @@ impl Store {
             println!("The key already exists.");
             return None;
         }
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
 
         if alias.is_empty() {
             println!(
@@ -395,6 +407,11 @@ impl Store {
         viewkey: ExtendedViewingKey,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -424,6 +441,11 @@ impl Store {
         viewkey: ExtendedViewingKey,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -469,6 +491,11 @@ impl Store {
         payment_addr: PaymentAddress,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -499,6 +526,11 @@ impl Store {
         key: Option<StoredKeypair<common::SecretKey>>,
         pkh: Option<PublicKeyHash>,
     ) {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return;
+        }
         key.map(|x| self.keys.insert(alias.clone(), x));
         pkh.map(|x| self.pkhs.insert(x, alias.clone()));
     }
@@ -513,6 +545,11 @@ impl Store {
         address: Address,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
         // abort if the address already exists in the wallet
         if self.addresses.contains_right(&address) && !force {
             println!(

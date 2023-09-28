@@ -547,6 +547,20 @@ impl Display for InternalAddress {
     }
 }
 
+impl InternalAddress {
+    /// Certain internal addresses have reserved aliases.
+    pub fn try_from_alias(alias: &str) -> Option<Self> {
+        match alias {
+            "pos" => Some(InternalAddress::PoS),
+            "ibc" => Some(InternalAddress::Ibc),
+            "ethbridge" => Some(InternalAddress::EthBridge),
+            "bridgepool" => Some(InternalAddress::EthBridgePool),
+            "governance" => Some(InternalAddress::Governance),
+            _ => None,
+        }
+    }
+}
+
 /// Temporary helper for testing
 pub fn nam() -> Address {
     Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")

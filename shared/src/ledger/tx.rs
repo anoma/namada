@@ -1424,11 +1424,7 @@ pub async fn build_transfer<
     let shielded_gas = masp_tx_key().ref_to() == chosen_signer;
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
-        TransferTarget::PaymentAddress(pa)
-            if pa.is_pinned() =>
-        {
-            Some(pa.hash())
-        }
+        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
         _ => None,
     };
 

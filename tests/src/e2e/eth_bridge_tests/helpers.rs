@@ -109,6 +109,7 @@ pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
             genesis
         },
         None,
+        None,
     )?;
 
     set_ethereum_bridge_mode(

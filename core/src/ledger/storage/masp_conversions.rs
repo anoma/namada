@@ -53,7 +53,6 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = address::masp();
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
-
     let masp_rewards = address::masp_rewards()
         .into_iter()
         .map(|(alias, reward)| {
@@ -79,8 +78,11 @@ where
     // with the zeroth epoch to minimize the number of convert notes clients
     // have to use. This trick works under the assumption that reward tokens
     // from different epochs are exactly equivalent.
-    let reward_asset =
-        encode_asset_type(wl_storage.storage.native_token.clone(), MaspDenom::Zero, Epoch(0));
+    let reward_asset = encode_asset_type(
+        wl_storage.storage.native_token.clone(),
+        MaspDenom::Zero,
+        Epoch(0),
+    );
     // Conversions from the previous to current asset for each address
     let mut current_convs =
         BTreeMap::<(Address, MaspDenom), AllowedConversion>::new();
@@ -162,7 +164,8 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    let reward_key = token::balance_key(&wl_storage.storage.native_token, &masp_addr);
+    let reward_key =
+        token::balance_key(&wl_storage.storage.native_token, &masp_addr);
     let addr_bal: token::Amount =
         wl_storage.read(&reward_key)?.unwrap_or_default();
     let new_bal = addr_bal + total_reward;

@@ -12,7 +12,7 @@ use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
-use namada::proof_of_stake::{BecomeValidator, Epoch};
+use namada::proof_of_stake::{BecomeValidator, Epoch, KeySeg};
 use namada::types::address::masp_rewards;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
@@ -162,7 +162,6 @@ where
             .get_abci_validator_updates(true)
             .expect("Must be able to set genesis validator set");
         debug_assert!(!response.validators.is_empty());
-
         Ok(response)
     }
 
@@ -261,6 +260,18 @@ where
                     .insert(alias, address.clone());
             }
         }
+        let key_prefix: Key = masp().to_db_key().into();
+        // Save the current conversion state
+        let state_key = key_prefix
+            .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+            .unwrap();
+        let conv_bytes = self
+            .wl_storage
+            .storage
+            .conversion_state
+            .try_to_vec()
+            .unwrap();
+        self.wl_storage.write_bytes(&state_key, conv_bytes).unwrap();
     }
 
     /// Init genesis token balances
@@ -279,7 +290,7 @@ where
 
                 let pk_storage_key = pk_key(&owner);
                 self.wl_storage
-                    .write(&pk_storage_key, owner_pk.try_to_vec().unwrap())
+                    .write(&pk_storage_key, &owner_pk.raw)
                     .unwrap();
                 tracing::info!(
                     "Crediting {} {} tokens to {}",
@@ -400,9 +411,9 @@ where
                 );
 
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache);
-
+                let code_hash = CodeHash::sha256(&vp_code);
                 self.wl_storage
-                    .write_bytes(&Key::validity_predicate(address), vp_code)
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
                 // Validator account key
                 let pk_key = pk_key(address);

@@ -4,8 +4,9 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::parameters::EpochDuration;
+use namada::ledger::wallet::store::AddressVpType;
 use namada::ledger::wallet::{pre_genesis, Wallet};
-use namada::types::address::{Address, EstablishedAddressGen, masp};
+use namada::types::address::{masp, Address, EstablishedAddressGen};
 use namada::types::chain::{ChainId, ChainIdPrefix};
 use namada::types::dec::Dec;
 use namada::types::hash::Hash;
@@ -105,6 +106,10 @@ impl Finalized {
                 alias.normalize(),
                 config.address.clone(),
                 false,
+            );
+            wallet.add_vp_type_to_address(
+                AddressVpType::Token,
+                config.address.clone(),
             );
         }
         if let Some(txs) = &self.transactions.validator_account {
@@ -404,14 +409,16 @@ impl Finalized {
     }
 
     pub fn get_user_address(&self, alias: &Alias) -> Option<Address> {
-        if alias.to_string() == "masp".to_string() {
+        if alias.to_string() == *"masp" {
             return Some(masp());
         }
         let established = self.transactions.established_account.as_ref()?;
         let validators = self.transactions.validator_account.as_ref()?;
         established
             .iter()
-            .find_map(|tx| (&tx.tx.alias == alias).then_some(tx.address.clone()))
+            .find_map(|tx| {
+                (&tx.tx.alias == alias).then_some(tx.address.clone())
+            })
             .or_else(|| {
                 validators.iter().find_map(|tx| {
                     (&tx.tx.alias == alias).then_some(tx.address.clone())

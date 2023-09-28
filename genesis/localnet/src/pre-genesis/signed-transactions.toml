@@ -115,6 +115,13 @@ amount = "1000000"
 signature = "sigtest1qprnsyhlruvw4a6jjs98xdd04gxdsgycywzt79gyyak68gn4f50ppdvdm0q6ns44cheu7s43kal0qsldml8s0zexqk3s9zmglu4l6fszwcqswy"
 
 [[transfer]]
+token = "kartoffel"
+source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+target = "albert"
+amount = "1000000"
+signature = "sigtest1qpg4y6ltax3qfclguym2kpa0ezlkf4hz4u3h8fc2ndmuzm4zfe26ygq9u6nhjjvj93n5v296x4arkvjk22ygee2fx054ce7ap6gvynq2j2k0vf"
+
+[[transfer]]
 token = "nam"
 source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
 target = "bertha"
