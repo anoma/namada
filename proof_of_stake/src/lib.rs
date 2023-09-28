@@ -3215,10 +3215,10 @@ fn make_unbond_details(
         if slash.epoch >= start
             && slash.epoch
                 < withdraw
-                    .checked_sub(Epoch(
+                    .checked_sub(
                         params.unbonding_len
                             + params.cubic_slashing_window_length,
-                    ))
+                    )
                     .unwrap_or_default()
         {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
@@ -3751,10 +3751,10 @@ where
                         start,
                         Some(
                             infraction_epoch
-                                .checked_sub(Epoch(
+                                .checked_sub(
                                     params.unbonding_len
                                         + params.cubic_slashing_window_length,
-                                ))
+                                )
                                 .unwrap_or_default(),
                         ),
                         &validator,
@@ -3813,10 +3813,10 @@ where
                         start,
                         Some(
                             infraction_epoch
-                                .checked_sub(Epoch(
+                                .checked_sub(
                                     params.unbonding_len
                                         + params.cubic_slashing_window_length,
-                                ))
+                                )
                                 .unwrap_or_default(),
                         ),
                         &validator,
