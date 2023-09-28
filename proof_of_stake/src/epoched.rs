@@ -325,7 +325,7 @@ where
         NestedMap::open(key)
     }
 
-    /// Initialize new nested data at the given epoch offset.
+    /// Initialize new nested data at the given epoch.
     pub fn init<S>(
         &self,
         storage: &mut S,

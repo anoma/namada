@@ -24,15 +24,14 @@ pub use rev_order::ReverseOrdTokenAmount;
 
 use crate::parameters::PosParams;
 
-// TODO: add this to the spec
+// TODO: review the offsets for each epoched type!!
+
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
     LazyMap<Address, Position>,
     crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
-
-// TODO: check the offsets for each epoched type!!
 
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = crate::epoched::Epoched<
@@ -87,7 +86,7 @@ pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
-/// Epoched total consensus validator stake
+/// Epoched total consensus validator set stake
 pub type TotalConsensusStakes = crate::epoched::Epoched<
     Amount,
     crate::epoched::OffsetZero,
@@ -123,7 +122,7 @@ pub type Bonds = crate::epoched::EpochedDelta<
 >;
 
 /// An epoched lazy set of all known active validator addresses (consensus,
-/// below-capacity, jailed)
+/// below-capacity, below-threshold, jailed)
 pub type ValidatorAddresses = crate::epoched::NestedEpoched<
     LazySet<Address>,
     crate::epoched::OffsetPipelineLen,
