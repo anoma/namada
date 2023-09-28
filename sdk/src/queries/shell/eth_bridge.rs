@@ -50,11 +50,11 @@ use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 )]
 pub struct Erc20FlowControl {
     /// Whether the wrapped asset is whitelisted.
-    whitelisted: bool,
+    pub whitelisted: bool,
     /// Total minted supply of some wrapped asset.
-    supply: Amount,
+    pub supply: Amount,
     /// The token cap of some wrapped asset.
-    cap: Amount,
+    pub cap: Amount,
 }
 
 impl Erc20FlowControl {
