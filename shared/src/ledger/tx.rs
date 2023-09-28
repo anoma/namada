@@ -52,7 +52,7 @@ use crate::ledger::rpc::{
     TxResponse,
 };
 use crate::ledger::signing::SigningTxData;
-use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::ledger::wallet::{Wallet, WalletIo};
 use crate::ledger::Namada;
 use crate::proto::{MaspBuilder, Tx};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -189,7 +189,7 @@ pub async fn prepare_tx<'a>(
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -436,7 +436,7 @@ pub fn decode_component<K, F>(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils>(
+pub async fn save_initialized_accounts<U: WalletIo>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,

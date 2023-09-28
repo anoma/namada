@@ -4091,6 +4091,7 @@ dependencies = [
  "ethbridge-governance-contract",
  "ethers",
  "eyre",
+ "fd-lock",
  "futures",
  "itertools",
  "libsecp256k1 0.7.0",

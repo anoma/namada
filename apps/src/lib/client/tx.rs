@@ -7,7 +7,7 @@ use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
 use namada::ledger::rpc::{TxBroadcastData, TxResponse};
-use namada::ledger::wallet::{Wallet, WalletUtils};
+use namada::ledger::wallet::{Wallet, WalletIo};
 use namada::ledger::{pos, signing, tx, Namada, NamadaImpl};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
@@ -239,11 +239,11 @@ pub async fn submit_init_validator<
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
         });
 
@@ -265,11 +265,11 @@ pub async fn submit_init_validator<
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });
@@ -292,11 +292,11 @@ pub async fn submit_init_validator<
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });
@@ -1051,7 +1051,7 @@ where
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils>(
+pub async fn save_initialized_accounts<U: WalletIo>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,

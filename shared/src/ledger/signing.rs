@@ -38,7 +38,7 @@ use crate::ledger::tx::{
     VP_USER_WASM,
 };
 pub use crate::ledger::wallet::store::AddressVpType;
-use crate::ledger::wallet::{Wallet, WalletUtils};
+use crate::ledger::wallet::{Wallet, WalletIo};
 use crate::ledger::{args, rpc, Namada, SdkTypes};
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::types::error::{EncodingError, Error, TxError};
@@ -81,7 +81,7 @@ pub struct SigningTxData {
 /// found or loaded.
 pub async fn find_pk<
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -122,7 +122,7 @@ pub async fn find_pk<
 /// Load the secret key corresponding to the given public key from the wallet.
 /// If the keypair is encrypted but a password is not supplied, then it is
 /// interactively prompted. Errors if the key cannot be found or loaded.
-pub fn find_key_by_pk<U: WalletUtils>(
+pub fn find_key_by_pk<U: WalletIo>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     public_key: &common::PublicKey,
@@ -196,7 +196,7 @@ pub async fn tx_signers<'a>(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub fn sign_tx<U: WalletUtils>(
+pub fn sign_tx<U: WalletIo>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     tx: &mut Tx,

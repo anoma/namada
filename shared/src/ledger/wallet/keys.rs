@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use crate::ledger::wallet::WalletUtils;
+use crate::ledger::wallet::WalletIo;
 
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
@@ -166,7 +166,7 @@ where
     /// Get a raw keypair from a stored keypair. If the keypair is encrypted and
     /// no password is provided in the argument, a password will be prompted
     /// from stdin.
-    pub fn get<U: WalletUtils>(
+    pub fn get<U: WalletIo>(
         &self,
         decrypt: bool,
         password: Option<Zeroizing<String>>,
@@ -175,7 +175,7 @@ where
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
                     let password = password
-                        .unwrap_or_else(|| U::read_decryption_password());
+                        .unwrap_or_else(|| U::read_password(false));
                     let key = encrypted_keypair.decrypt(password)?;
                     Ok(key)
                 } else {

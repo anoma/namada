@@ -40,12 +40,13 @@ pub enum GenRestoreKeyError {
     /// Mnemonic input error
     #[error("Mnemonic input error")]
     MnemonicInputError,
+    /// Key storage error
+    #[error("Key storage error")]
+    KeyStorageError,
 }
 
 /// Captures the interactive parts of the wallet's functioning
-pub trait WalletUtils {
-    /// The location where the wallet is stored
-    type Storage;
+pub trait WalletIo: Sized + Clone {
     /// Secure random number generator
     type Rng: RngCore;
 
@@ -67,29 +68,150 @@ pub trait WalletUtils {
     }
 
     /// Read the password for decryption from the file/env/stdin.
-    fn read_decryption_password() -> Zeroizing<String>;
-
-    /// Read the password for encryption from the file/env/stdin.
-    /// If the password is read from stdin, the implementation is expected
-    /// to ask for a confirmation.
-    fn read_encryption_password() -> Zeroizing<String>;
+    fn read_password(_confirm: bool) -> Zeroizing<String> {
+        panic!("attempted to prompt for password in non-interactive mode");
+    }
 
     /// Read an alias from the file/env/stdin.
-    fn read_alias(prompt_msg: &str) -> String;
+    fn read_alias(_prompt_msg: &str) -> String {
+        panic!("attempted to prompt for alias in non-interactive mode");
+    }
 
     /// Read mnemonic code from the file/env/stdin.
-    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError>;
+    fn read_mnemonic_code() -> Result<Mnemonic, GenRestoreKeyError> {
+        panic!("attempted to prompt for alias in non-interactive mode");
+    }
 
     /// Read a mnemonic code from the file/env/stdin.
-    fn read_mnemonic_passphrase(confirm: bool) -> Zeroizing<String>;
+    fn read_mnemonic_passphrase(_confirm: bool) -> Zeroizing<String> {
+        panic!("attempted to prompt for alias in non-interactive mode");
+    }
 
     /// The given alias has been selected but conflicts with another alias in
     /// the store. Offer the user to either replace existing mapping, alter the
     /// chosen alias to a name of their choice, or cancel the aliasing.
     fn show_overwrite_confirmation(
-        alias: &Alias,
-        alias_for: &str,
-    ) -> store::ConfirmationResponse;
+        _alias: &Alias,
+        _alias_for: &str,
+    ) -> store::ConfirmationResponse {
+        // Automatically replace aliases in non-interactive mode
+        store::ConfirmationResponse::Replace
+    }
+}
+
+/// Errors of wallet loading and storing
+#[derive(Error, Debug)]
+pub enum LoadStoreError {
+    /// Wallet store decoding error
+    #[error("Failed decoding the wallet store: {0}")]
+    Decode(toml::de::Error),
+    /// Wallet store reading error
+    #[error("Failed to read the wallet store from {0}: {1}")]
+    ReadWallet(String, String),
+    /// Wallet store writing error
+    #[error("Failed to write the wallet store: {0}")]
+    StoreNewWallet(String),
+}
+
+/// Captures the permanent storage parts of the wallet's functioning
+pub trait WalletStorage: Sized + Clone {
+    /// Save the wallet store to a file.
+    fn save<U>(&self, wallet: &Wallet<U>) -> Result<(), LoadStoreError>;
+
+    /// Load a wallet from the store file.
+    fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError>;
+}
+
+#[cfg(feature = "std")]
+/// Implementation of wallet functionality depending on a standard filesystem
+pub mod fs {
+    use super::*;
+    use std::fs;
+    use fd_lock::RwLock;
+    use std::path::PathBuf;
+    use rand_core::OsRng;
+    use std::io::{Read, Write};
+
+    /// A trait for deriving WalletStorage for standard filesystems
+    pub trait FsWalletStorage: Clone {
+        /// The directory in which the wallet is supposed to be stored
+        fn store_dir(&self) -> &PathBuf;
+    }
+
+    /// Wallet file name
+    const FILE_NAME: &str = "wallet.toml";
+
+    impl<F: FsWalletStorage> WalletStorage for F {
+        fn save<U>(&self, wallet: &Wallet<U>) -> Result<(), LoadStoreError> {
+            let data = wallet.store.encode();
+            let wallet_path = self.store_dir().join(FILE_NAME);
+            // Make sure the dir exists
+            let wallet_dir = wallet_path.parent().unwrap();
+            fs::create_dir_all(wallet_dir)
+                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
+            // Write the file
+            let mut options = fs::OpenOptions::new();
+            options.create(true).write(true).truncate(true);
+            let mut lock = RwLock::new(
+                options.open(wallet_path)
+                    .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?,
+            );
+            let mut guard = lock.write()
+                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
+            guard.write_all(&data).map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
+        }
+
+        fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError> {
+            let wallet_file = self.store_dir().join(FILE_NAME);
+            let mut options = fs::OpenOptions::new();
+            options.read(true).write(false);
+            let lock = RwLock::new(options.open(&wallet_file).map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    wallet_file.to_string_lossy().into_owned(),
+                    err.to_string(),
+                )
+            })?);
+            let guard = lock.read().map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    wallet_file.to_string_lossy().into_owned(),
+                    err.to_string(),
+                )
+            })?;
+            let mut store = Vec::<u8>::new();
+            (&*guard).read_to_end(&mut store).map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            wallet.store = Store::decode(store).map_err(LoadStoreError::Decode)?;
+            Ok(())
+        }
+    }
+
+    /// For a non-interactive filesystem based wallet
+    #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
+    pub struct FsWalletUtils {
+        #[borsh_skip]
+        store_dir: PathBuf,
+    }
+
+    impl FsWalletUtils {
+        /// Initialize a wallet at the given directory
+        pub fn new(store_dir: PathBuf) -> Wallet<Self> {
+            Wallet::new(Self { store_dir }, Store::default())
+        }
+    }
+
+    impl WalletIo for FsWalletUtils {
+        type Rng = OsRng;
+    }
+
+    impl FsWalletStorage for FsWalletUtils {
+        fn store_dir(&self) -> &PathBuf {
+            &self.store_dir
+        }
+    }
 }
 
 /// The error that is produced when a given key cannot be obtained
@@ -105,24 +227,217 @@ pub enum FindKeyError {
 
 /// Represents a collection of keys and addresses while caching key decryptions
 #[derive(Debug)]
-pub struct Wallet<U: WalletUtils> {
-    store_dir: U::Storage,
+pub struct Wallet<U> {
+    /// Location where this shielded context is saved
+    utils: U,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
     decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
 }
 
-impl<U: WalletUtils> Wallet<U> {
+impl<U> From<Wallet<U>> for Store {
+    fn from(wallet: Wallet<U>) -> Self {
+        wallet.store
+    }
+}
+
+impl<U> Wallet<U> {
     /// Create a new wallet from the given backing store and storage location
-    pub fn new(store_dir: U::Storage, store: Store) -> Self {
+    pub fn new(utils: U, store: Store) -> Self {
         Self {
-            store_dir,
+            utils,
             store,
             decrypted_key_cache: HashMap::default(),
             decrypted_spendkey_cache: HashMap::default(),
         }
     }
 
+    /// Add validator data to the store
+    pub fn add_validator_data(
+        &mut self,
+        address: Address,
+        keys: ValidatorKeys,
+    ) {
+        self.store.add_validator_data(address, keys);
+    }
+
+    /// Returns a reference to the validator data, if it exists.
+    pub fn get_validator_data(&self) -> Option<&ValidatorData> {
+        self.store.get_validator_data()
+    }
+
+    /// Returns a mut reference to the validator data, if it exists.
+    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
+        self.store.get_validator_data_mut()
+    }
+
+    /// Take the validator data, if it exists.
+    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+        self.store.take_validator_data()
+    }
+
+    /// Returns the validator data, if it exists.
+    pub fn into_validator_data(self) -> Option<ValidatorData> {
+        self.store.into_validator_data()
+    }
+
+    /// Provide immutable access to the backing store
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
+    /// Provide mutable access to the backing store
+    pub fn store_mut(&mut self) -> &mut Store {
+        &mut self.store
+    }
+
+    /// Extend this wallet from pre-genesis validator wallet.
+    pub fn extend_from_pre_genesis_validator(
+        &mut self,
+        validator_address: Address,
+        validator_alias: Alias,
+        other: pre_genesis::ValidatorWallet,
+    ) {
+        self.store.extend_from_pre_genesis_validator(
+            validator_address,
+            validator_alias,
+            other,
+        )
+    }
+
+    /// Gets all addresses given a vp_type
+    pub fn get_addresses_with_vp_type(
+        &self,
+        vp_type: AddressVpType,
+    ) -> HashSet<Address> {
+        self.store.get_addresses_with_vp_type(vp_type)
+    }
+
+    /// Add a vp_type to a given address
+    pub fn add_vp_type_to_address(
+        &mut self,
+        vp_type: AddressVpType,
+        address: Address,
+    ) {
+        // defaults to an empty set
+        self.store.add_vp_type_to_address(vp_type, address)
+    }
+
+    /// Get addresses with tokens VP type keyed and ordered by their aliases.
+    pub fn tokens_with_aliases(&self) -> BTreeMap<String, Address> {
+        self.get_addresses_with_vp_type(AddressVpType::Token)
+            .into_iter()
+            .map(|addr| {
+                let alias = self.lookup_alias(&addr);
+                (alias, addr)
+            })
+            .collect()
+    }
+
+    /// Find the stored address by an alias.
+    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
+        self.store.find_address(alias)
+    }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
+        self.store.find_alias(address)
+    }
+
+    /// Try to find an alias for a given address from the wallet. If not found,
+    /// formats the address into a string.
+    pub fn lookup_alias(&self, addr: &Address) -> String {
+        match self.find_alias(addr) {
+            Some(alias) => format!("{}", alias),
+            None => format!("{}", addr),
+        }
+    }
+
+    /// Find the viewing key with the given alias in the wallet and return it
+    pub fn find_viewing_key(
+        &mut self,
+        alias: impl AsRef<str>,
+    ) -> Result<&ExtendedViewingKey, FindKeyError> {
+        self.store
+            .find_viewing_key(alias.as_ref())
+            .ok_or(FindKeyError::KeyNotFound)
+    }
+
+    /// Find the payment address with the given alias in the wallet and return
+    /// it
+    pub fn find_payment_addr(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&PaymentAddress> {
+        self.store.find_payment_addr(alias.as_ref())
+    }
+
+    /// Get all known keys by their alias, paired with PKH, if known.
+    pub fn get_keys(
+        &self,
+    ) -> HashMap<
+        String,
+        (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
+    > {
+        self.store
+            .get_keys()
+            .into_iter()
+            .map(|(alias, value)| (alias.into(), value))
+            .collect()
+    }
+
+    /// Get all known addresses by their alias, paired with PKH, if known.
+    pub fn get_addresses(&self) -> HashMap<String, Address> {
+        self.store
+            .get_addresses()
+            .iter()
+            .map(|(alias, value)| (alias.into(), value.clone()))
+            .collect()
+    }
+
+    /// Get all known payment addresses by their alias
+    pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
+        self.store
+            .get_payment_addrs()
+            .iter()
+            .map(|(alias, value)| (alias.into(), *value))
+            .collect()
+    }
+
+    /// Get all known viewing keys by their alias
+    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
+        self.store
+            .get_viewing_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), *value))
+            .collect()
+    }
+
+    /// Get all known viewing keys by their alias
+    pub fn get_spending_keys(
+        &self,
+    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
+        self.store
+            .get_spending_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), value))
+            .collect()
+    }
+}
+
+impl<U: WalletStorage> Wallet<U> {
+    /// Load a wallet from the store file.
+    pub fn load(&mut self) -> Result<(), LoadStoreError> {
+        self.utils.clone().load(self)
+    }
+
+    /// Save the wallet store to a file.
+    pub fn save(&self) -> Result<(), LoadStoreError> {
+        self.utils.save(self)
+    }
+}
+
+impl<U: WalletIo> Wallet<U> {
     fn gen_and_store_key(
         &mut self,
         scheme: SchemeType,
@@ -161,6 +476,7 @@ impl<U: WalletUtils> Wallet<U> {
         alias: Option<String>,
         alias_force: bool,
         derivation_path: Option<String>,
+        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         password: Option<Zeroizing<String>>,
     ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
         let parsed_derivation_path = derivation_path
@@ -182,8 +498,12 @@ impl<U: WalletUtils> Wallet<U> {
             )
         }
         println!("Using HD derivation path {}", parsed_derivation_path);
-        let mnemonic = U::read_mnemonic_code()?;
-        let passphrase = U::read_mnemonic_passphrase(false);
+        let (mnemonic, passphrase) =
+            if let Some(mnemonic_passphrase) = mnemonic_passphrase {
+                mnemonic_passphrase
+            } else {
+                (U::read_mnemonic_code()?, U::read_mnemonic_passphrase(false))
+            };
         let seed = Seed::new(&mnemonic, &passphrase);
 
         Ok(self.gen_and_store_key(
@@ -212,9 +532,10 @@ impl<U: WalletUtils> Wallet<U> {
         scheme: SchemeType,
         alias: Option<String>,
         alias_force: bool,
+        passphrase: Option<Zeroizing<String>>,
         password: Option<Zeroizing<String>>,
         derivation_path_and_mnemonic_rng: Option<(String, &mut U::Rng)>,
-    ) -> Result<Option<(String, common::SecretKey)>, GenRestoreKeyError> {
+    ) -> Result<(String, common::SecretKey, Option<Mnemonic>), GenRestoreKeyError> {
         let parsed_path_and_rng = derivation_path_and_mnemonic_rng
             .map(|(raw_derivation_path, rng)| {
                 let is_default =
@@ -242,27 +563,31 @@ impl<U: WalletUtils> Wallet<U> {
             println!("Using HD derivation path {}", parsed_derivation_path);
         }
 
+        let mut mnemonic_opt = None;
         let seed_and_derivation_path //: Option<Result<Seed, GenRestoreKeyError>>
         = parsed_path_and_rng.map(|(path, rng)| {
             const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
-            let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?;
+            let mnemonic = mnemonic_opt
+                .insert(U::generate_mnemonic_code(MNEMONIC_TYPE, rng)?);
             println!(
                 "Safely store your {} words mnemonic.",
                 MNEMONIC_TYPE.word_count()
             );
             println!("{}", mnemonic.clone().into_phrase());
 
-            let passphrase = U::read_mnemonic_passphrase(true);
+            let passphrase = passphrase
+                .unwrap_or_else(|| U::read_mnemonic_passphrase(true));
             Ok((Seed::new(&mnemonic, &passphrase), path))
         }).transpose()?;
 
-        Ok(self.gen_and_store_key(
+        let (alias, key) = self.gen_and_store_key(
             scheme,
             alias,
             alias_force,
             seed_and_derivation_path,
             password,
-        ))
+        ).ok_or(GenRestoreKeyError::KeyStorageError)?;
+        Ok((alias, key, mnemonic_opt))
     }
 
     /// Generate a disposable signing key for fee payment and store it under the
@@ -280,10 +605,9 @@ impl<U: WalletUtils> Wallet<U> {
         // Generate a disposable keypair to sign the wrapper if requested
         // TODO: once the wrapper transaction has been accepted, this key can be
         // deleted from wallet
-        let (alias, disposable_keypair) = self
-            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None)
-            .expect("Failed to initialize disposable keypair")
-            .expect("Missing alias and secret key");
+        let (alias, disposable_keypair, _mnemonic) = self
+            .gen_key(SchemeType::Ed25519, Some(alias), false, None, None, None)
+            .expect("Failed to initialize disposable keypair");
 
         println!("Created disposable keypair with alias {alias}");
         disposable_keypair
@@ -302,35 +626,6 @@ impl<U: WalletUtils> Wallet<U> {
         // Cache the newly added key
         self.decrypted_spendkey_cache.insert(alias.clone(), key);
         (alias.into(), key)
-    }
-
-    /// Add validator data to the store
-    pub fn add_validator_data(
-        &mut self,
-        address: Address,
-        keys: ValidatorKeys,
-    ) {
-        self.store.add_validator_data(address, keys);
-    }
-
-    /// Returns a reference to the validator data, if it exists.
-    pub fn get_validator_data(&self) -> Option<&ValidatorData> {
-        self.store.get_validator_data()
-    }
-
-    /// Returns a mut reference to the validator data, if it exists.
-    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
-        self.store.get_validator_data_mut()
-    }
-
-    /// Take the validator data, if it exists.
-    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
-        self.store.take_validator_data()
-    }
-
-    /// Returns the validator data, if it exists.
-    pub fn into_validator_data(self) -> Option<ValidatorData> {
-        self.store.into_validator_data()
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.
@@ -389,25 +684,6 @@ impl<U: WalletUtils> Wallet<U> {
         )
     }
 
-    /// Find the viewing key with the given alias in the wallet and return it
-    pub fn find_viewing_key(
-        &mut self,
-        alias: impl AsRef<str>,
-    ) -> Result<&ExtendedViewingKey, FindKeyError> {
-        self.store
-            .find_viewing_key(alias.as_ref())
-            .ok_or(FindKeyError::KeyNotFound)
-    }
-
-    /// Find the payment address with the given alias in the wallet and return
-    /// it
-    pub fn find_payment_addr(
-        &self,
-        alias: impl AsRef<str>,
-    ) -> Option<&PaymentAddress> {
-        self.store.find_payment_addr(alias.as_ref())
-    }
-
     /// Find the stored key by a public key.
     /// If the key is encrypted and password not supplied, then password will be
     /// interactively prompted for. Any keys that are decrypted are stored in
@@ -463,7 +739,7 @@ impl<U: WalletUtils> Wallet<U> {
             .store
             .find_key_by_pkh(pkh)
             .ok_or(FindKeyError::KeyNotFound)?;
-        Self::decrypt_stored_key::<_>(
+        Self::decrypt_stored_key(
             &mut self.decrypted_key_cache,
             stored_key,
             alias,
@@ -489,7 +765,7 @@ impl<U: WalletUtils> Wallet<U> {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
                 let password =
-                    password.unwrap_or_else(U::read_decryption_password);
+                    password.unwrap_or_else(|| U::read_password(false));
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;
@@ -501,77 +777,6 @@ impl<U: WalletUtils> Wallet<U> {
             }
             StoredKeypair::Raw(raw) => Ok(raw.clone()),
         }
-    }
-
-    /// Get all known keys by their alias, paired with PKH, if known.
-    pub fn get_keys(
-        &self,
-    ) -> HashMap<
-        String,
-        (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
-    > {
-        self.store
-            .get_keys()
-            .into_iter()
-            .map(|(alias, value)| (alias.into(), value))
-            .collect()
-    }
-
-    /// Find the stored address by an alias.
-    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
-        self.store.find_address(alias)
-    }
-
-    /// Find an alias by the address if it's in the wallet.
-    pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
-        self.store.find_alias(address)
-    }
-
-    /// Try to find an alias for a given address from the wallet. If not found,
-    /// formats the address into a string.
-    pub fn lookup_alias(&self, addr: &Address) -> String {
-        match self.find_alias(addr) {
-            Some(alias) => format!("{}", alias),
-            None => format!("{}", addr),
-        }
-    }
-
-    /// Get all known addresses by their alias, paired with PKH, if known.
-    pub fn get_addresses(&self) -> HashMap<String, Address> {
-        self.store
-            .get_addresses()
-            .iter()
-            .map(|(alias, value)| (alias.into(), value.clone()))
-            .collect()
-    }
-
-    /// Get all known payment addresses by their alias
-    pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
-        self.store
-            .get_payment_addrs()
-            .iter()
-            .map(|(alias, value)| (alias.into(), *value))
-            .collect()
-    }
-
-    /// Get all known viewing keys by their alias
-    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
-        self.store
-            .get_viewing_keys()
-            .iter()
-            .map(|(alias, value)| (alias.into(), *value))
-            .collect()
-    }
-
-    /// Get all known viewing keys by their alias
-    pub fn get_spending_keys(
-        &self,
-    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
-        self.store
-            .get_spending_keys()
-            .iter()
-            .map(|(alias, value)| (alias.into(), value))
-            .collect()
     }
 
     /// Add a new address with the given alias. If the alias is already used,
@@ -663,63 +868,5 @@ impl<U: WalletUtils> Wallet<U> {
         self.store
             .insert_payment_addr::<U>(alias.into(), payment_addr, force_alias)
             .map(Into::into)
-    }
-
-    /// Extend this wallet from pre-genesis validator wallet.
-    pub fn extend_from_pre_genesis_validator(
-        &mut self,
-        validator_address: Address,
-        validator_alias: Alias,
-        other: pre_genesis::ValidatorWallet,
-    ) {
-        self.store.extend_from_pre_genesis_validator(
-            validator_address,
-            validator_alias,
-            other,
-        )
-    }
-
-    /// Gets all addresses given a vp_type
-    pub fn get_addresses_with_vp_type(
-        &self,
-        vp_type: AddressVpType,
-    ) -> HashSet<Address> {
-        self.store.get_addresses_with_vp_type(vp_type)
-    }
-
-    /// Add a vp_type to a given address
-    pub fn add_vp_type_to_address(
-        &mut self,
-        vp_type: AddressVpType,
-        address: Address,
-    ) {
-        // defaults to an empty set
-        self.store.add_vp_type_to_address(vp_type, address)
-    }
-
-    /// Provide immutable access to the backing store
-    pub fn store(&self) -> &Store {
-        &self.store
-    }
-
-    /// Provide mutable access to the backing store
-    pub fn store_mut(&mut self) -> &mut Store {
-        &mut self.store
-    }
-
-    /// Access storage location data
-    pub fn store_dir(&self) -> &U::Storage {
-        &self.store_dir
-    }
-
-    /// Get addresses with tokens VP type keyed and ordered by their aliases.
-    pub fn tokens_with_aliases(&self) -> BTreeMap<String, Address> {
-        self.get_addresses_with_vp_type(AddressVpType::Token)
-            .into_iter()
-            .map(|addr| {
-                let alias = self.lookup_alias(&addr);
-                (alias, addr)
-            })
-            .collect()
     }
 }

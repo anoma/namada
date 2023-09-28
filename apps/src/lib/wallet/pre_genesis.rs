@@ -6,7 +6,7 @@ use fd_lock::RwLock;
 use namada::ledger::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
-use namada::ledger::wallet::{gen_key_to_store, WalletUtils};
+use namada::ledger::wallet::{gen_key_to_store, WalletIo};
 use namada::types::key::SchemeType;
 use zeroize::Zeroizing;
 
@@ -75,7 +75,7 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
         || store.consensus_key.is_encrypted()
         || store.account_key.is_encrypted()
     {
-        Some(CliWalletUtils::read_decryption_password())
+        Some(CliWalletUtils::read_password(false))
     } else {
         None
     };

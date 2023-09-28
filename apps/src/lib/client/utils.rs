@@ -494,10 +494,9 @@ pub fn init_network(
             println!("Generating validator {} consensus key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
+            let (_alias, keypair, _mnemonic) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .expect("Key generation should not fail.");
 
             // Write consensus key for Tendermint
             tendermint_node::write_validator_key(&tm_home_dir, &keypair);
@@ -514,10 +513,9 @@ pub fn init_network(
             println!("Generating validator {} account key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
+            let (_alias, keypair, _mnemonic) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -530,10 +528,9 @@ pub fn init_network(
             println!("Generating validator {} protocol signing key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, password, None)
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
+            let (_alias, keypair, _mnemonic) = wallet
+                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -546,16 +543,16 @@ pub fn init_network(
             println!("Generating validator {} eth hot key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
+            let (_alias, keypair, _mnemonic) = wallet
                 .gen_key(
                     SchemeType::Secp256k1,
                     Some(alias),
                     true,
+                    None,
                     password,
                     None,
                 )
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -568,16 +565,16 @@ pub fn init_network(
             println!("Generating validator {} eth cold key...", name);
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
-            let (_alias, keypair) = wallet
+            let (_alias, keypair, _mnemonic) = wallet
                 .gen_key(
                     SchemeType::Secp256k1,
                     Some(alias),
                     true,
+                    None,
                     password,
                     None,
                 )
-                .expect("Key generation should not fail.")
-                .expect("No existing alias expected.");
+                .expect("Key generation should not fail.");
             keypair.ref_to()
         });
 
@@ -664,16 +661,16 @@ pub fn init_network(
                 );
                 let password =
                     read_and_confirm_encryption_password(unsafe_dont_encrypt);
-                let (_alias, keypair) = wallet
+                let (_alias, keypair, _mnemonic) = wallet
                     .gen_key(
                         SchemeType::Ed25519,
                         Some(name.clone()),
                         true,
+                        None,
                         password,
                         None,
                     )
-                    .expect("Key generation should not fail.")
-                    .expect("No existing alias expected.");
+                    .expect("Key generation should not fail.");
                 let public_key =
                     genesis_config::HexString(keypair.ref_to().to_string());
                 config.public_key = Some(public_key);
@@ -927,16 +924,16 @@ fn init_established_account(
         println!("Generating established account {} key...", name.as_ref());
         let password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
-        let (_alias, keypair) = wallet
+        let (_alias, keypair, _mnemonic) = wallet
             .gen_key(
                 SchemeType::Ed25519,
                 Some(format!("{}-key", name.as_ref())),
                 true,
+                None,
                 password,
                 None, // do not use mnemonic code / HD derivation path
             )
-            .expect("Key generation should not fail.")
-            .expect("No existing alias expected.");
+            .expect("Key generation should not fail.");
         let public_key =
             genesis_config::HexString(keypair.ref_to().to_string());
         config.public_key = Some(public_key);
