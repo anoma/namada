@@ -440,7 +440,6 @@ where
                 let data_handler = self.get_data_handler();
                 // Remove data before the new oldest epoch, keep the latest
                 // value
-                dbg!(&diff);
                 for epoch in oldest_epoch.iter_range(diff) {
                     let was_data = data_handler.remove_all(storage, &epoch)?;
                     if was_data {
