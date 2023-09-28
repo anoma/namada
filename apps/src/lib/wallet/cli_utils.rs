@@ -5,7 +5,7 @@ use borsh::BorshSerialize;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::sdk::masp::find_valid_diversifier;
-use namada::sdk::wallet::{DecryptionError, FindKeyError};
+use namada::sdk::wallet::{DecryptionError, FindKeyError, GenRestoreKeyError};
 use namada::types::key::{PublicKeyHash, RefTo};
 use namada::types::masp::{MaspValue, PaymentAddress};
 use rand_core::OsRng;
@@ -271,6 +271,7 @@ pub fn key_and_address_restore(
             alias,
             alias_force,
             derivation_path,
+            None,
             encryption_password,
         )
         .unwrap_or_else(|err| {
@@ -306,21 +307,26 @@ pub fn key_and_address_gen(
     let mut rng = OsRng;
     let derivation_path_and_mnemonic_rng =
         derivation_path.map(|p| (p, &mut rng));
-    let (alias, _key) = wallet
+    let (alias, _key, _mnemonic) = wallet
         .gen_key(
             scheme,
             alias,
             alias_force,
+            None,
             encryption_password,
             derivation_path_and_mnemonic_rng,
         )
         .unwrap_or_else(|err| {
-            eprintln!("{}", err);
-            cli::safe_exit(1);
-        })
-        .unwrap_or_else(|| {
-            println!("No changes are persisted. Exiting.");
-            cli::safe_exit(0);
+            match err {
+                GenRestoreKeyError::KeyStorageError => {
+                    println!("No changes are persisted. Exiting.");
+                    cli::safe_exit(0);
+                },
+                _ => {
+                    eprintln!("{}", err);
+                    cli::safe_exit(1);
+                }
+            }
         });
     crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(

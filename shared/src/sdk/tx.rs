@@ -49,7 +49,7 @@ use crate::sdk::rpc::{
     self, format_denominated_amount, validate_amount, TxBroadcastData,
     TxResponse, query_wasm_code_hash
 };
-use crate::sdk::wallet::{Wallet, WalletUtils};
+use crate::sdk::wallet::{Wallet, WalletIo};
 use crate::ledger::Namada;
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
@@ -187,7 +187,7 @@ pub async fn prepare_tx<'a>(
 /// initialized in the transaction if any. In dry run, this is always empty.
 pub async fn process_tx<
     C: crate::sdk::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
 >(
     client: &C,
     wallet: &mut Wallet<U>,
@@ -450,7 +450,7 @@ pub fn decode_component<K, F>(
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils, IO: Io>(
+pub async fn save_initialized_accounts<U: WalletIo, IO: Io>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,

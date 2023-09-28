@@ -22,7 +22,7 @@ pub use namada_core::ledger::{
     gas, parameters, replay_protection, storage_api, tx_env, vp_env,
 };
 
-use crate::sdk::wallet::{Wallet, WalletUtils};
+use crate::sdk::wallet::{Wallet, WalletIo, WalletStorage};
 use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
 use crate::types::masp::{TransferSource, TransferTarget};
 use crate::types::address::Address;
@@ -50,7 +50,7 @@ use namada_core::types::ethereum_events::EthAddress;
 pub struct NamadaStruct<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     /// Used to send and receive messages from the ledger
@@ -76,7 +76,7 @@ pub trait Namada<'a>:
     /// A client with async request dispatcher method
     type Client: 'a + crate::ledger::queries::Client + Sync;
     /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: 'a + WalletUtils;
+    type WalletUtils: 'a + WalletIo + WalletStorage;
     /// Abstracts platform specific details away from the logic of shielded pool
     /// operations.
     type ShieldedUtils: 'a + ShieldedUtils;
@@ -391,7 +391,7 @@ pub trait Namada<'a>:
 pub struct NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     namada: NamadaStruct<'a, C, U, V>,
@@ -401,7 +401,7 @@ where
 impl<'a, C, U, V> NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     /// Construct a new Namada context
@@ -451,7 +451,7 @@ where
 impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     type Target = NamadaStruct<'a, C, U, V>;
@@ -464,7 +464,7 @@ where
 impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -475,7 +475,7 @@ where
 impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo + WalletStorage,
     V: ShieldedUtils,
 {
     type Client = C;
@@ -492,7 +492,7 @@ where
 impl<'a, C, U, V> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
-    U: WalletUtils,
+    U: WalletIo,
     V: ShieldedUtils,
 {
     fn tx<F>(self, func: F) -> Self

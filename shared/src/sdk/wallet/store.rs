@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
-use crate::sdk::wallet::{StoredKeypair, WalletUtils};
+use crate::sdk::wallet::{StoredKeypair, WalletIo};
 use crate::types::address::{Address, ImplicitAddress};
 use crate::types::key::dkg_session_keys::DkgKeypair;
 use crate::types::key::*;
@@ -239,7 +239,7 @@ impl Store {
     /// key.
     /// Returns None if the alias already exists and the user decides to skip
     /// it. No changes in the wallet store are made.
-    pub fn gen_key<U: WalletUtils>(
+    pub fn gen_key<U: WalletIo>(
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
@@ -277,7 +277,7 @@ impl Store {
     }
 
     /// Generate a spending key similarly to how it's done for keypairs
-    pub fn gen_spending_key<U: WalletUtils>(
+    pub fn gen_spending_key<U: WalletIo>(
         &mut self,
         alias: String,
         password: Option<Zeroizing<String>>,
@@ -335,7 +335,7 @@ impl Store {
     /// will prompt for overwrite/reselection confirmation. If declined, then
     /// keypair is not inserted and nothing is returned, otherwise selected
     /// alias is returned.
-    pub fn insert_keypair<U: WalletUtils>(
+    pub fn insert_keypair<U: WalletIo>(
         &mut self,
         alias: Alias,
         keypair: StoredKeypair<common::SecretKey>,
@@ -388,7 +388,7 @@ impl Store {
     }
 
     /// Insert spending keys similarly to how it's done for keypairs
-    pub fn insert_spending_key<U: WalletUtils>(
+    pub fn insert_spending_key<U: WalletIo>(
         &mut self,
         alias: Alias,
         spendkey: StoredKeypair<ExtendedSpendingKey>,
@@ -418,7 +418,7 @@ impl Store {
     }
 
     /// Insert viewing keys similarly to how it's done for keypairs
-    pub fn insert_viewing_key<U: WalletUtils>(
+    pub fn insert_viewing_key<U: WalletIo>(
         &mut self,
         alias: Alias,
         viewkey: ExtendedViewingKey,
@@ -463,7 +463,7 @@ impl Store {
     }
 
     /// Insert payment addresses similarly to how it's done for keypairs
-    pub fn insert_payment_addr<U: WalletUtils>(
+    pub fn insert_payment_addr<U: WalletIo>(
         &mut self,
         alias: Alias,
         payment_addr: PaymentAddress,
@@ -507,7 +507,7 @@ impl Store {
     /// will prompt for overwrite/reselection confirmation, which when declined,
     /// the address won't be added. Return the selected alias if the address has
     /// been added.
-    pub fn insert_address<U: WalletUtils>(
+    pub fn insert_address<U: WalletIo>(
         &mut self,
         alias: Alias,
         address: Address,

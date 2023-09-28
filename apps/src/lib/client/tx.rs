@@ -8,7 +8,7 @@ use namada::core::ledger::governance::cli::onchain::{
 };
 use namada::ledger::pos;
 use namada::sdk::rpc::{TxBroadcastData, TxResponse};
-use namada::sdk::wallet::{Wallet, WalletUtils};
+use namada::sdk::wallet::{Wallet, WalletIo};
 use namada::ledger::{Namada, NamadaImpl};
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
@@ -247,11 +247,11 @@ where
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
         });
 
@@ -273,11 +273,11 @@ where
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });
@@ -300,11 +300,11 @@ where
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
                     tx_args.wallet_alias_force,
+                    None,
                     password,
                     None,
                 )
                 .expect("Key generation should not fail.")
-                .expect("No existing alias expected.")
                 .1
                 .ref_to()
         });
@@ -1087,7 +1087,7 @@ where
 }
 
 /// Save accounts initialized from a tx into the wallet, if any.
-pub async fn save_initialized_accounts<U: WalletUtils, IO: Io>(
+pub async fn save_initialized_accounts<U: WalletIo, IO: Io>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     initialized_accounts: Vec<Address>,
