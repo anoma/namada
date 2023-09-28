@@ -12,8 +12,6 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ledger::pos;
-use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::sdk::rpc::{TxBroadcastData, TxResponse};
 use namada::sdk::wallet::{Wallet, WalletUtils};
@@ -550,11 +548,7 @@ where
                 )
                 .unwrap();
 
-            let key = pos::params_key();
-            let pos_params =
-                rpc::query_storage_value::<C, PosParams>(client, &key)
-                    .await
-                    .expect("Pos parameter should be defined.");
+            let pos_params = rpc::query_pos_parameters(client).await;
 
             display_line!(IO, "");
             display_line!(
