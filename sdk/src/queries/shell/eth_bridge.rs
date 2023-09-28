@@ -57,6 +57,15 @@ pub struct Erc20FlowControl {
     cap: Amount,
 }
 
+impl Erc20FlowControl {
+    /// Check if the `transferred_amount` exceeds the token caps of some ERC20
+    /// asset.
+    #[inline]
+    pub fn exceeds_token_caps(&self, transferred_amount: Amount) -> bool {
+        self.supply + transferred_amount > self.cap
+    }
+}
+
 /// Request data to pass to `generate_bridge_pool_proof`.
 #[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct GenBridgePoolProofReq<'transfers, 'relayer> {
