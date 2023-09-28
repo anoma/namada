@@ -53,7 +53,6 @@ use namada::ibc_proto::google::protobuf::Any;
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{self, PosParams};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -249,7 +248,6 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
-    let key = pos::params_key();
     let pos_params =
         test.async_runtime().block_on(query_pos_parameters(&client));
     let pipeline_len = pos_params.pipeline_len;
