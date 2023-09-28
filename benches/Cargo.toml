@@ -12,10 +12,6 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
-[lib]
-name = "namada_benches"
-path = "lib.rs"
-
 [[bench]]
 name = "whitelisted_txs"
 harness = false
@@ -42,21 +38,21 @@ harness = false
 path = "host_env.rs"
 
 [dependencies]
-async-trait.workspace = true
-borsh.workspace = true
-ferveo-common.workspace = true
-masp_primitives.workspace = true
-masp_proofs.workspace = true
+
+[dev-dependencies]
 namada = { path = "../shared", features = ["testing"] }
 namada_apps = { path = "../apps", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
-prost.workspace = true
-rand.workspace = true
-rand_core.workspace = true
-sha2.workspace = true
-tokio.workspace = true
-tempfile.workspace = true
-tracing-subscriber = { workspace = true, features = ["std"]}
-
-[dev-dependencies]
+async-trait.workspace = true
+borsh.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
+ferveo-common.workspace = true
+masp_primitives.workspace = true
+masp_proofs.workspace = true
+prost.workspace = true
+rand_core.workspace = true
+rand.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tracing-subscriber = { workspace = true, features = ["std"]}
