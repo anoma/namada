@@ -85,10 +85,6 @@ pub fn staking_token_address(storage: &impl StorageRead) -> Address {
         .expect("Must be able to read native token address")
 }
 
-/// Number of epochs below the current epoch for which full validator sets are
-/// stored
-const STORE_VALIDATOR_SETS_LEN: u64 = 2;
-
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum GenesisError {
@@ -505,7 +501,12 @@ where
     credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
-        copy_validator_sets_and_positions(storage, current_epoch, epoch)?;
+        copy_validator_sets_and_positions(
+            storage,
+            &params,
+            current_epoch,
+            epoch,
+        )?;
     }
 
     tracing::debug!("Genesis initialized");
@@ -1554,6 +1555,7 @@ where
 /// Validator sets and positions copying into a future epoch
 pub fn copy_validator_sets_and_positions<S>(
     storage: &mut S,
+    params: &PosParams,
     current_epoch: Epoch,
     target_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -1623,6 +1625,9 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
+    // Purge consensus and below-capacity validator sets
+    consensus_validator_set.update_data(storage, params, current_epoch)?;
+    below_capacity_validator_set.update_data(storage, params, current_epoch)?;
 
     // Copy validator positions
     let mut positions = HashMap::<Address, Position>::default();
@@ -1641,6 +1646,13 @@ where
     }
     validator_set_positions_handle.set_last_update(storage, current_epoch)?;
 
+    // Purge old epochs of validator positions
+    validator_set_positions_handle.update_data(
+        storage,
+        params,
+        current_epoch,
+    )?;
+
     // Copy set of all validator addresses
     let mut all_validators = HashSet::<Address>::default();
     let validator_addresses_handle = validator_addresses_handle();
@@ -1655,6 +1667,9 @@ where
         let was_in = new_all_validators_handle.insert(storage, validator)?;
         debug_assert!(!was_in);
     }
+
+    // Purge old epochs of all validator addresses
+    validator_addresses_handle.update_data(storage, params, current_epoch)?;
 
     Ok(())
 }
@@ -1698,27 +1713,6 @@ where
         total.to_string_native()
     );
     total_consensus_stake_key_handle().set(storage, total, epoch, 0)
-}
-
-/// Purge the validator sets from the epochs older than the current epoch minus
-/// `STORE_VALIDATOR_SETS_LEN`
-pub fn purge_validator_sets_for_old_epoch<S>(
-    storage: &mut S,
-    epoch: Epoch,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    if Epoch(STORE_VALIDATOR_SETS_LEN) < epoch {
-        let old_epoch = epoch - STORE_VALIDATOR_SETS_LEN - 1;
-        consensus_validator_set_handle()
-            .get_data_handler()
-            .remove_all(storage, &old_epoch)?;
-        below_capacity_validator_set_handle()
-            .get_data_handler()
-            .remove_all(storage, &old_epoch)?;
-    }
-    Ok(())
 }
 
 /// Read the position of the validator in the subset of validators that have the

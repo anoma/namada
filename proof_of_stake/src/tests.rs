@@ -29,6 +29,7 @@ use proptest::test_runner::Config;
 // `tracing` logs from tests
 use test_log::test;
 
+use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::{OwnedPosParams, PosParams};
 use crate::types::{
@@ -42,7 +43,7 @@ use crate::{
     bond_tokens, bonds_and_unbonds, consensus_validator_set_handle,
     copy_validator_sets_and_positions, find_validator_by_raw_hash,
     get_num_consensus_validators, insert_validator_into_validator_set,
-    is_validator, process_slashes, purge_validator_sets_for_old_epoch,
+    is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
@@ -53,7 +54,7 @@ use crate::{
     validator_consensus_key_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
     validator_state_handle, withdraw_tokens, write_validator_address_raw_hash,
-    BecomeValidator, STORE_VALIDATOR_SETS_LEN,
+    BecomeValidator,
 };
 
 proptest! {
@@ -1780,7 +1781,7 @@ fn test_validator_sets() {
     for e in Epoch::iter_bounds_inclusive(
         start_epoch,
         last_epoch
-            .sub_or_default(Epoch(STORE_VALIDATOR_SETS_LEN))
+            .sub_or_default(Epoch(DEFAULT_NUM_PAST_EPOCHS))
             .sub_or_default(Epoch(1)),
     ) {
         assert!(
@@ -2047,17 +2048,18 @@ fn get_tendermint_set_updates(
 }
 
 /// Advance to the next epoch. Returns the new epoch.
-fn advance_epoch(s: &mut TestWlStorage, params: &OwnedPosParams) -> Epoch {
+fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
     s.storage.block.epoch = s.storage.block.epoch.next();
     let current_epoch = s.storage.block.epoch;
     store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,
+        params,
         current_epoch,
         current_epoch + params.pipeline_len,
     )
     .unwrap();
-    purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();
+    // purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();
     // process_slashes(s, current_epoch).unwrap();
     // dbg!(current_epoch);
     current_epoch

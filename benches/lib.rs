@@ -267,10 +267,8 @@ impl BenchShell {
     }
 
     pub fn advance_epoch(&mut self) {
-        let pipeline_len =
-            proof_of_stake::read_pos_params(&self.inner.wl_storage)
-                .unwrap()
-                .pipeline_len;
+        let params =
+            proof_of_stake::read_pos_params(&self.inner.wl_storage).unwrap();
 
         self.wl_storage.storage.block.epoch =
             self.wl_storage.storage.block.epoch.next();
@@ -278,8 +276,9 @@ impl BenchShell {
 
         proof_of_stake::copy_validator_sets_and_positions(
             &mut self.wl_storage,
+            &params,
             current_epoch,
-            current_epoch + pipeline_len,
+            current_epoch + params.pipeline_len,
         )
         .unwrap();
     }
