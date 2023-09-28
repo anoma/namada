@@ -4167,22 +4167,14 @@ dependencies = [
 name = "namada_benchmarks"
 version = "0.23.0"
 dependencies = [
- "async-trait",
  "borsh 0.9.4",
  "criterion",
  "ferveo-common",
- "masp_primitives",
- "masp_proofs",
  "namada",
  "namada_apps",
- "namada_test_utils",
- "prost",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
- "tempfile",
- "tokio",
- "tracing-subscriber 0.3.17",
 ]
 
 [[package]]
