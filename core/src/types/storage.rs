@@ -1035,11 +1035,12 @@ impl Epoch {
     /// overflow occurred.
     #[must_use = "this returns the result of the operation, without modifying \
                   the original"]
-    pub fn checked_sub(self, rhs: Epoch) -> Option<Self> {
-        if rhs.0 > self.0 {
+    pub fn checked_sub(self, rhs: impl Into<Epoch>) -> Option<Self> {
+        let Epoch(rhs) = rhs.into();
+        if rhs > self.0 {
             None
         } else {
-            Some(Self(self.0 - rhs.0))
+            Some(Self(self.0 - rhs))
         }
     }
 
