@@ -893,8 +893,6 @@ pub struct GenIbcShieldedTransafer<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
     /// The output directory path to where serialize the data
     pub output_folder: Option<PathBuf>,
-    /// The foreign sender address
-    pub sender: String,
     /// The target address
     pub target: C::TransferTarget,
     /// The token address

@@ -77,7 +77,6 @@ where
         }
         Address::Implicit(_) => Ok(true),
         Address::Internal(_) => Ok(false),
-        Address::Foreign(_) => Ok(false),
     }
 }
 

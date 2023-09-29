@@ -929,7 +929,6 @@ fn shielded_transfer(
 ) -> Result<()> {
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
-    let sender = find_address(test_a, ALBERT)?;
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let output_folder = test_b.test_dir.path().to_string_lossy();
     let amount = Amount::native_whole(10).to_string_native();
@@ -937,8 +936,6 @@ fn shielded_transfer(
         "ibc-gen-shielded",
         "--output-folder-path",
         &output_folder,
-        "--sender",
-        &sender.to_string(),
         "--target",
         AB_PAYMENT_ADDRESS,
         "--token",

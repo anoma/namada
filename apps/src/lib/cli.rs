@@ -4773,7 +4773,6 @@ pub mod args {
             GenIbcShieldedTransafer::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 output_folder: self.output_folder,
-                sender: self.sender,
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),
                 amount: self.amount,
@@ -4787,7 +4786,6 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
-            let sender = SENDER.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
@@ -4796,7 +4794,6 @@ pub mod args {
             Self {
                 query,
                 output_folder,
-                sender,
                 target,
                 token,
                 amount,
@@ -4810,7 +4807,6 @@ pub mod args {
                 .arg(OUTPUT_FOLDER_PATH.def().help(
                     "The output folder path where the artifact will be stored.",
                 ))
-                .arg(SENDER.def().help("The foreign sender address."))
                 .arg(TRANSFER_TARGET.def().help("The target address."))
                 .arg(TOKEN.def().help("The transfer token."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))

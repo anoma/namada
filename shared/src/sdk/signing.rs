@@ -120,10 +120,6 @@ pub async fn find_pk<
             "Internal address {} doesn't have any signing keys.",
             addr
         )),
-        Address::Foreign(_) => other_err(format!(
-            "Foreign address {} doesn't have any signing keys.",
-            addr
-        )),
     }
 }
 
@@ -278,8 +274,7 @@ pub async fn aux_signing_data<
             Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
             1u8,
         ),
-        Some(owner @ Address::Internal(_))
-        | Some(owner @ Address::Foreign(_)) => {
+        Some(owner @ Address::Internal(_)) => {
             return Err(Error::from(TxError::InvalidAccount(owner.encode())));
         }
         None => (None, 0u8),

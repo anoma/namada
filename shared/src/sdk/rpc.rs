@@ -217,7 +217,6 @@ pub async fn known_address<C: crate::ledger::queries::Client + Sync>(
             query_has_storage_key(client, &key).await
         }
         Address::Implicit(_) | Address::Internal(_) => Ok(true),
-        Address::Foreign(_) => Ok(false),
     }
 }
 

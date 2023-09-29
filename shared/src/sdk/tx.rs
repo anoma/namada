@@ -24,7 +24,7 @@ use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::ibc::storage::channel_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
-use namada_core::types::address::{masp, Address};
+use namada_core::types::address::{masp, Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::token::MaspDenom;
@@ -2023,7 +2023,7 @@ pub async fn gen_ibc_shielded_transfer<
         Some(_) => None,
         None => return Ok(None),
     };
-    let source = Address::Foreign(args.sender.clone());
+    let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(client, &args.port_id, &args.channel_id)
             .await?;
@@ -2094,30 +2094,34 @@ async fn get_ibc_src_port_channel<C: crate::ledger::queries::Client + Sync>(
     use crate::ibc_proto::protobuf::Protobuf;
 
     let channel_key = channel_key(dest_port_id, dest_channel_id);
-    match rpc::query_storage_value_bytes::<C>(client, &channel_key, None, false)
-        .await
-    {
-        Ok((Some(bytes), _)) => {
-            let channel = ChannelEnd::decode_vec(&bytes).map_err(|_| {
+    let bytes =
+        rpc::query_storage_value_bytes::<C>(client, &channel_key, None, false)
+            .await?
+            .0
+            .ok_or_else(|| {
                 Error::Other(format!(
-                    "Decoding channel end failed: port {}, channel {}",
-                    dest_port_id, dest_channel_id
+                    "No channel end: port {dest_port_id}, channel \
+                     {dest_channel_id}"
                 ))
             })?;
-            if let Some(src_channel) = channel.remote.channel_id() {
-                Ok((channel.remote.port_id.clone(), src_channel.clone()))
-            } else {
-                Err(Error::Other(format!(
-                    "The source channel doesn't exist: port {dest_port_id}, \
-                     channel {dest_channel_id}"
-                )))
-            }
-        }
-        _ => Err(Error::Other(format!(
-            "Reading channel end failed: port {dest_port_id}, channel \
-             {dest_channel_id}"
-        ))),
-    }
+    let channel = ChannelEnd::decode_vec(&bytes).map_err(|_| {
+        Error::Other(format!(
+            "Decoding channel end failed: port {dest_port_id}, channel \
+             {dest_channel_id}",
+        ))
+    })?;
+    channel
+        .remote
+        .channel_id()
+        .map(|src_channel| {
+            (channel.remote.port_id.clone(), src_channel.clone())
+        })
+        .ok_or_else(|| {
+            Error::Other(format!(
+                "The source channel doesn't exist: port {dest_port_id}, \
+                 channel {dest_channel_id}"
+            ))
+        })
 }
 
 async fn expect_dry_broadcast<

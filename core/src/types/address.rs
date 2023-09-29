@@ -96,8 +96,6 @@ const PREFIX_ESTABLISHED: &str = "est";
 const PREFIX_IMPLICIT: &str = "imp";
 /// Fixed-length address strings prefix for internal addresses.
 const PREFIX_INTERNAL: &str = "ano";
-/// Fixed-length address strings prefix for foreign addresses.
-const PREFIX_FOREIGN: &str = "for";
 /// Fixed-length address strings prefix for IBC addresses.
 const PREFIX_IBC: &str = "ibc";
 /// Fixed-length address strings prefix for Ethereum addresses.
@@ -136,8 +134,6 @@ pub enum Address {
     Implicit(ImplicitAddress),
     /// An internal address represents a module with a native VP
     Internal(InternalAddress),
-    /// An foreign address is provided from other chains
-    Foreign(String),
 }
 
 // We're using the string format of addresses (bech32m) for ordering to ensure
@@ -200,7 +196,6 @@ impl Address {
                 Some(hash_hex)
             }
             Address::Internal(_) => None,
-            Address::Foreign(_) => None,
         }
     }
 
@@ -258,9 +253,6 @@ impl Address {
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
-            }
-            Address::Foreign(addr) => {
-                format!("{}::{}", PREFIX_FOREIGN, addr)
             }
         }
         .into_bytes();
@@ -382,9 +374,6 @@ impl Address {
                     "Invalid ERC20 internal address".to_string(),
                 )),
             },
-            Some((PREFIX_FOREIGN, raw)) => {
-                Ok(Address::Foreign(raw.to_string()))
-            }
             _ => Err(DecodeError::InvalidInnerEncoding(
                 ErrorKind::InvalidData,
                 "Invalid address prefix".to_string(),
@@ -407,9 +396,6 @@ impl Address {
             }
             Address::Internal(kind) => {
                 format!("Internal {}: {}", kind, self.encode())
-            }
-            Address::Foreign(_) => {
-                format!("Foreign: {}", self.encode())
             }
         }
     }
