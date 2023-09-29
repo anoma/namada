@@ -68,7 +68,7 @@ mod ibc_rs_conversion {
     use data_encoding::HEXUPPER;
     use thiserror::Error;
 
-    use super::{IbcEvent, IbcShieldedTransfer};
+    use super::{IbcEvent, IbcShieldedTransfer, EVENT_TYPE_PACKET};
     use crate::ibc::applications::transfer::{Memo, PrefixedDenom, TracePath};
     use crate::ibc::core::events::{
         Error as IbcEventError, IbcEvent as RawIbcEvent,
@@ -146,7 +146,7 @@ mod ibc_rs_conversion {
     pub fn get_shielded_transfer(
         event: &IbcEvent,
     ) -> Result<Option<IbcShieldedTransfer>> {
-        if event.event_type != "fungible_token_packet" {
+        if event.event_type != EVENT_TYPE_PACKET {
             // This event is not for receiving a token
             return Ok(None);
         }

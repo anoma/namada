@@ -8,7 +8,7 @@ use super::storage_api::{self, OptionExt, ResultExt, StorageRead};
 use crate::proto::Tx;
 use crate::types::address::Address;
 use crate::types::hash::Hash;
-use crate::types::ibc::{get_shielded_transfer, IbcEvent};
+use crate::types::ibc::{get_shielded_transfer, IbcEvent, EVENT_TYPE_PACKET};
 use crate::types::storage::{
     BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
@@ -112,37 +112,35 @@ where
         tx_data: Tx,
     ) -> Result<(Transfer, Transaction), storage_api::Error> {
         let signed = tx_data;
-        match Transfer::try_from_slice(&signed.data().unwrap()[..]) {
-            Ok(transfer) => {
-                let shielded_hash = transfer
-                    .shielded
-                    .ok_or_err_msg("unable to find shielded hash")?;
-                let masp_tx = signed
-                    .get_section(&shielded_hash)
-                    .and_then(|x| x.as_ref().masp_tx())
-                    .ok_or_err_msg("unable to find shielded section")?;
-                Ok((transfer, masp_tx))
-            }
-            Err(_) => {
-                if let Some(event) =
-                    self.get_ibc_event("fungible_token_packet".to_string())?
-                {
-                    if let Some(shielded) =
-                        get_shielded_transfer(&event).into_storage_result()?
-                    {
-                        Ok((shielded.transfer, shielded.masp_tx))
-                    } else {
-                        Err(storage_api::Error::new_const(
-                            "No shielded transfer in the IBC event",
-                        ))
-                    }
-                } else {
-                    Err(storage_api::Error::new_const(
-                        "No IBC event for the shielded action",
-                    ))
-                }
-            }
+        if let Ok(transfer) =
+            Transfer::try_from_slice(&signed.data().unwrap()[..])
+        {
+            let shielded_hash = transfer
+                .shielded
+                .ok_or_err_msg("unable to find shielded hash")?;
+            let masp_tx = signed
+                .get_section(&shielded_hash)
+                .and_then(|x| x.as_ref().masp_tx())
+                .ok_or_err_msg("unable to find shielded section")?;
+            return Ok((transfer, masp_tx));
         }
+
+        // Shielded transfer over IBC
+        let event = self
+            .get_ibc_event(EVENT_TYPE_PACKET.to_string())?
+            .ok_or_else(|| {
+                storage_api::Error::new_const(
+                    "No IBC event for the shielded action",
+                )
+            })?;
+        get_shielded_transfer(&event)
+            .into_storage_result()?
+            .map(|shielded| (shielded.transfer, shielded.masp_tx))
+            .ok_or_else(|| {
+                storage_api::Error::new_const(
+                    "No shielded transfer in the IBC event",
+                )
+            })
     }
 
     /// Verify a MASP transaction

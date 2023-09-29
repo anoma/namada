@@ -270,7 +270,7 @@ where
                 let event = self
                     .ctx
                     .borrow()
-                    .get_ibc_event("fungible_token_packet")
+                    .get_ibc_event(EVENT_TYPE_PACKET)
                     .map_err(|_| {
                         Error::MaspTx(
                             "Reading the IBC event failed".to_string(),
