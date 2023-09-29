@@ -76,10 +76,8 @@ impl EventsEndpointClient {
     }
 }
 
-/// Sets up the necessary environment for a test involving a single Namada
-/// validator that is exposing an endpoint for submission of fake Ethereum
-/// events.
-pub fn setup_single_validator_test() -> Result<(Test, NamadaBgCmd)> {
+/// Sets up the necessary environment for an Ethereum bridge integration test.
+pub fn setup() -> Result<(MockNode, MockEthOracle)> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
