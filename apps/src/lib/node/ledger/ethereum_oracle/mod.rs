@@ -7,6 +7,7 @@ use std::ops::ControlFlow;
 use async_trait::async_trait;
 use ethabi::Address;
 use ethbridge_events::{event_codecs, EventKind};
+use futures::future::FutureExt;
 use namada::core::hints;
 use namada::core::types::ethereum_structs;
 use namada::eth_bridge::ethers;
@@ -300,6 +301,64 @@ pub fn run_oracle<C: RpcClient>(
         .with_no_cleanup()
 }
 
+enum ProcessEventAction {
+    ContinuePollingEvents,
+    ProcessError,
+    GreatSuccess,
+}
+
+impl From<ProcessEventAction> for ControlFlow<Result<(), ()>, ()> {
+    fn from(action: ProcessEventAction) -> Self {
+        match action {
+            ProcessEventAction::ContinuePollingEvents => {
+                ControlFlow::Continue(())
+            }
+            ProcessEventAction::ProcessError => ControlFlow::Break(Err(())),
+            ProcessEventAction::GreatSuccess => ControlFlow::Break(Ok(())),
+        }
+    }
+}
+
+/// Tentatively process a batch of Ethereum events.
+pub(crate) async fn try_process_eth_events<C: RpcClient>(
+    oracle: &Oracle<C>,
+    config: &Config,
+    next_block_to_process: ethereum_structs::BlockHeight,
+) -> ProcessEventAction {
+    match process(&oracle, &config, next_block_to_process.clone()).await {
+        Ok(()) => ProcessEventAction::GreatSuccess,
+        Err(
+            reason @ (Error::Timeout
+            | Error::Channel(_, _)
+            | Error::CheckEvents(_, _, _)),
+        ) => {
+            // the oracle is unresponsive, we don't want the test to end
+            if !C::EXIT_ON_EVENTS_FAILURE
+                && matches!(&reason, Error::CheckEvents(_, _, _))
+            {
+                tracing::debug!("Allowing the Ethereum oracle to keep running");
+                return ProcessEventAction::ContinuePollingEvents;
+            }
+            tracing::error!(
+                %reason,
+                block = ?next_block_to_process,
+                "The Ethereum oracle has disconnected"
+            );
+            ProcessEventAction::ProcessError
+        }
+        Err(error) => {
+            // this is a recoverable error, hence the debug log,
+            // to avoid spamming info logs
+            tracing::debug!(
+                %error,
+                block = ?next_block_to_process,
+                "Error while trying to process Ethereum block"
+            );
+            ProcessEventAction::ContinuePollingEvents
+        }
+    }
+}
+
 /// Given an oracle, watch for new Ethereum events, processing
 /// them into Namada native types.
 ///
@@ -334,43 +393,8 @@ async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
         );
         let res = Sleep { strategy: Constant(oracle.backoff) }.run(|| async {
             tokio::select! {
-                result = process(&oracle, &config, next_block_to_process.clone()) => {
-                    match result {
-                        Ok(()) => {
-                            ControlFlow::Break(Ok(()))
-                        },
-                        Err(
-                            reason @ (
-                                Error::Timeout
-                                | Error::Channel(_, _)
-                                | Error::CheckEvents(_, _, _)
-                            )
-                        ) => {
-                            // the oracle is unresponsive, we don't want the test to end
-                            if !C::EXIT_ON_EVENTS_FAILURE
-                                && matches!(&reason, Error::CheckEvents(_, _, _))
-                            {
-                                tracing::debug!("Allowing the Ethereum oracle to keep running");
-                                return ControlFlow::Continue(());
-                            }
-                            tracing::error!(
-                                %reason,
-                                block = ?next_block_to_process,
-                                "The Ethereum oracle has disconnected"
-                            );
-                            ControlFlow::Break(Err(()))
-                        }
-                        Err(error) => {
-                            // this is a recoverable error, hence the debug log,
-                            // to avoid spamming info logs
-                            tracing::debug!(
-                                %error,
-                                block = ?next_block_to_process,
-                                "Error while trying to process Ethereum block"
-                            );
-                            ControlFlow::Continue(())
-                        }
-                    }
+                action = try_process_eth_events() => {
+                    <ControlFlow<_, _>>::from(action)
                 },
                 _ = oracle.sender.closed() => {
                     tracing::info!(
