@@ -35,7 +35,9 @@ use crate::queries::{
 use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
 use crate::tx::prepare_tx;
-use crate::{args, display, display_line, Namada, SigningTxData};
+use crate::{
+    args, display, display_line, edisplay_line, Namada, SigningTxData,
+};
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<'a>(
@@ -279,7 +281,7 @@ async fn construct_bridge_pool_proof<'a>(
             let resp = io.read().await.map_err(|e| {
                 let msg =
                     format!("Encountered error reading from STDIN: {e:?}");
-                display_line!(io, "{msg}");
+                edisplay_line!(io, "{msg}");
                 Error::Other(msg)
             })?;
             match resp.trim() {
@@ -304,7 +306,11 @@ async fn construct_bridge_pool_proof<'a>(
         .generate_bridge_pool_proof(client, Some(data), None, false)
         .await
         .map_err(|e| {
-            display_line!(io, "Encountered error constructing proof:\n{:?}", e);
+            edisplay_line!(
+                io,
+                "Encountered error constructing proof:\n{:?}",
+                e
+            );
             Error::EthereumBridge(EthereumBridgeError::GenBridgePoolProof(
                 e.to_string(),
             ))
@@ -434,7 +440,7 @@ where
         AbiDecode::decode(&abi_encoded_args).map_err(|error| {
             let msg =
                 format!("Unable to decode the generated proof: {:?}", error);
-            display_line!(io, "{msg}");
+            edisplay_line!(io, "{msg}");
             EncodingError::Decoding(msg)
         })?;
 
@@ -959,7 +965,7 @@ mod recommendations {
                 bridge_pool_gas_fees: total_fees,
             })
         } else {
-            display_line!(
+            edisplay_line!(
                 io,
                 "Unable to find a recommendation satisfying the input \
                  parameters."
