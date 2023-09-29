@@ -11,6 +11,34 @@ pub mod event_log {
     use namada::eth_bridge::ethers::abi::AbiEncode;
     use namada::eth_bridge::ethers::contract::EthEvent;
 
+    use super::super::try_process_eth_events;
+
+    pub struct MockEthOracle<C> {
+        pub oracle: Oracle<C>,
+        pub config: Config,
+        pub next_block_to_process: ethereum_structs::BlockHeight,
+    }
+
+    impl<C: RpcClient> MockEthOracle<C> {
+        /// Updates the state of the Ethereum oracle.
+        ///
+        /// This includes sending any confirmed Ethereum events to
+        /// the shell and updating the height of the next Ethereum
+        /// block to process.
+        pub async fn step(&self) {
+            if try_process_eth_events(
+                &self.oracle,
+                &self.config,
+                self.next_block_to_process.clone(),
+            )
+            .await
+            .is_great_success()
+            {
+                self.next_block_to_process += 1.into();
+            }
+        }
+    }
+
     /// Get an [`ethabi::RawLog`] from a given Ethereum event.
     pub trait GetLog {
         /// Return an [`ethabi::RawLog`].
