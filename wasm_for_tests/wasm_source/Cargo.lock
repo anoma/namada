@@ -1447,6 +1447,7 @@ dependencies = [
  "digest 0.10.6",
  "elliptic-curve",
  "rfc6979",
+ "serdect",
  "signature 2.1.0",
  "spki",
 ]
@@ -1513,6 +1514,7 @@ dependencies = [
  "pkcs8",
  "rand_core 0.6.4",
  "sec1",
+ "serdect",
  "subtle 2.4.1",
  "zeroize",
 ]
@@ -2524,17 +2526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hmac-drbg"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ea0a1394df5b6574da6e0c1ade9e78868c9fb0a4e5ef4428e32da4676b85b1"
-dependencies = [
- "digest 0.9.0",
- "generic-array 0.14.7",
- "hmac 0.8.1",
-]
-
-[[package]]
 name = "hmac-sha512"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2939,6 +2930,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
+ "serdect",
  "sha2 0.10.6",
  "signature 2.1.0",
 ]
@@ -2995,55 +2987,11 @@ dependencies = [
  "arrayref",
  "crunchy",
  "digest 0.8.1",
- "hmac-drbg 0.2.0",
+ "hmac-drbg",
  "rand 0.7.3",
  "sha2 0.8.2",
  "subtle 2.4.1",
  "typenum",
-]
-
-[[package]]
-name = "libsecp256k1"
-version = "0.7.0"
-source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
-dependencies = [
- "arrayref",
- "base64 0.13.1",
- "digest 0.9.0",
- "hmac-drbg 0.3.0",
- "libsecp256k1-core",
- "libsecp256k1-gen-ecmult",
- "libsecp256k1-gen-genmult",
- "rand 0.8.5",
- "serde",
- "sha2 0.9.9",
- "typenum",
-]
-
-[[package]]
-name = "libsecp256k1-core"
-version = "0.3.0"
-source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
-dependencies = [
- "crunchy",
- "digest 0.9.0",
- "subtle 2.4.1",
-]
-
-[[package]]
-name = "libsecp256k1-gen-ecmult"
-version = "0.3.0"
-source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
-dependencies = [
- "libsecp256k1-core",
-]
-
-[[package]]
-name = "libsecp256k1-gen-genmult"
-version = "0.3.0"
-source = "git+https://github.com/heliaxdev/libsecp256k1?rev=bbb3bd44a49db361f21d9db80f9a087c194c0ae9#bbb3bd44a49db361f21d9db80f9a087c194c0ae9"
-dependencies = [
- "libsecp256k1-core",
 ]
 
 [[package]]
@@ -3393,7 +3341,7 @@ dependencies = [
  "impl-num-traits",
  "index-set",
  "itertools",
- "libsecp256k1 0.7.0",
+ "k256",
  "masp_primitives",
  "namada_macros",
  "num-integer",
@@ -4876,6 +4824,7 @@ dependencies = [
  "der",
  "generic-array 0.14.7",
  "pkcs8",
+ "serdect",
  "subtle 2.4.1",
  "zeroize",
 ]
@@ -5021,6 +4970,16 @@ dependencies = [
  "form_urlencoded",
  "itoa",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serdect"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
+dependencies = [
+ "base16ct",
  "serde",
 ]
 
@@ -5546,7 +5505,7 @@ checksum = "01b874a4992538d4b2f4fbbac11b9419d685f4b39bdc3fed95b04e07bfd76040"
 dependencies = [
  "base58",
  "hmac 0.7.1",
- "libsecp256k1 0.3.5",
+ "libsecp256k1",
  "memzero",
  "sha2 0.8.2",
 ]

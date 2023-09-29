@@ -1612,11 +1612,11 @@ mod test_utils {
                 ref sig,
                 ref recovery_id,
             )) => {
-                let mut sig_bytes = sig.serialize();
-                let recovery_id_bytes = recovery_id.serialize();
+                let mut sig_bytes = sig.to_vec();
+                let recovery_id_bytes = recovery_id.to_byte();
                 sig_bytes[0] = sig_bytes[0].wrapping_add(1);
                 let bytes: [u8; 65] =
-                    [sig_bytes.as_slice(), [recovery_id_bytes].as_slice()]
+                    [sig_bytes.as_slice(), &[recovery_id_bytes]]
                         .concat()
                         .try_into()
                         .unwrap();

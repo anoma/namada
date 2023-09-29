@@ -9,9 +9,9 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXLOWER;
-use ethabi::ethereum_types::U256;
 use ethabi::Token;
-use libsecp256k1::RecoveryId;
+use k256::ecdsa::RecoveryId;
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::de::{Error, SeqAccess, Visitor};
@@ -22,7 +22,6 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
-use crate::hints;
 use crate::types::eth_abi::Encode;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::StorageHasher;
@@ -30,11 +29,16 @@ use crate::types::key::StorageHasher;
 /// The provided constant is for a traditional
 /// signature on this curve. For Ethereum, an extra byte is included
 /// that prevents malleability attacks.
-pub const SIGNATURE_LENGTH: usize = libsecp256k1::util::SIGNATURE_SIZE + 1;
+pub const SIGNATURE_SIZE: usize = 64 + 1;
 
 /// secp256k1 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct PublicKey(pub libsecp256k1::PublicKey);
+pub struct PublicKey(pub k256::PublicKey);
+
+/// Size of a compressed public key bytes
+const COMPRESSED_PUBLIC_KEY_SIZE: usize = 33;
+/// Size of a secret key bytes
+pub(crate) const SECRET_KEY_SIZE: usize = 32;
 
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
@@ -59,26 +63,23 @@ impl super::PublicKey for PublicKey {
 impl BorshDeserialize for PublicKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         // deserialize the bytes first
-        let pk = libsecp256k1::PublicKey::parse_compressed(
-            buf.get(0..libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE)
-                .ok_or_else(|| std::io::Error::from(ErrorKind::UnexpectedEof))?
-                .try_into()
-                .unwrap(),
-        )
-        .map_err(|e| {
+        let bytes = buf
+            .get(0..COMPRESSED_PUBLIC_KEY_SIZE)
+            .ok_or_else(|| std::io::Error::from(ErrorKind::UnexpectedEof))?;
+        let pk = k256::PublicKey::from_sec1_bytes(bytes).map_err(|e| {
             std::io::Error::new(
                 ErrorKind::InvalidInput,
                 format!("Error decoding secp256k1 public key: {}", e),
             )
         })?;
-        *buf = &buf[libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE..];
+        *buf = &buf[COMPRESSED_PUBLIC_KEY_SIZE..];
         Ok(PublicKey(pk))
     }
 }
 
 impl BorshSerialize for PublicKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        writer.write_all(&self.0.serialize_compressed())?;
+        writer.write_all(&self.0.to_sec1_bytes())?;
         Ok(())
     }
 }
@@ -92,7 +93,7 @@ impl BorshSchema for PublicKey {
     ) {
         // Encoded as `[u8; COMPRESSED_PUBLIC_KEY_SIZE]`
         let elements = "u8".into();
-        let length = libsecp256k1::util::COMPRESSED_PUBLIC_KEY_SIZE as u32;
+        let length = COMPRESSED_PUBLIC_KEY_SIZE as u32;
         let definition = borsh::schema::Definition::Array { elements, length };
         definitions.insert(Self::declaration(), definition);
     }
@@ -105,29 +106,25 @@ impl BorshSchema for PublicKey {
 #[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.serialize_compressed().hash(state);
+        self.0.to_sec1_bytes().hash(state);
     }
 }
 
 impl PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0
-            .serialize_compressed()
-            .partial_cmp(&other.0.serialize_compressed())
+        self.0.to_sec1_bytes().partial_cmp(&other.0.to_sec1_bytes())
     }
 }
 
 impl Ord for PublicKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0
-            .serialize_compressed()
-            .cmp(&other.0.serialize_compressed())
+        self.0.to_sec1_bytes().cmp(&other.0.to_sec1_bytes())
     }
 }
 
 impl Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.0.serialize_compressed()))
+        write!(f, "{}", HEXLOWER.encode(&self.0.to_sec1_bytes()))
     }
 }
 
@@ -143,8 +140,8 @@ impl FromStr for PublicKey {
     }
 }
 
-impl From<libsecp256k1::PublicKey> for PublicKey {
-    fn from(pk: libsecp256k1::PublicKey) -> Self {
+impl From<k256::PublicKey> for PublicKey {
+    fn from(pk: k256::PublicKey) -> Self {
         Self(pk)
     }
 }
@@ -154,9 +151,7 @@ impl From<&PublicKey> for EthAddress {
         use tiny_keccak::Hasher;
 
         let mut hasher = tiny_keccak::Keccak::v256();
-        // We're removing the first byte with
-        // `libsecp256k1::util::TAG_PUBKEY_FULL`
-        let pk_bytes = &pk.0.serialize()[1..];
+        let pk_bytes = &pk.0.to_encoded_point(false).to_bytes()[1..];
         hasher.update(pk_bytes);
         let mut output = [0_u8; 32];
         hasher.finalize(&mut output);
@@ -168,7 +163,7 @@ impl From<&PublicKey> for EthAddress {
 
 /// Secp256k1 secret key
 #[derive(Debug, Clone)]
-pub struct SecretKey(pub Box<libsecp256k1::SecretKey>);
+pub struct SecretKey(pub Box<k256::SecretKey>);
 
 impl super::SecretKey for SecretKey {
     type PublicKey = PublicKey;
@@ -197,7 +192,7 @@ impl Serialize for SecretKey {
     where
         S: Serializer,
     {
-        let arr = self.0.serialize();
+        let arr: [u8; SECRET_KEY_SIZE] = self.0.to_bytes().into();
         serde::Serialize::serialize(&arr, serializer)
     }
 }
@@ -207,10 +202,10 @@ impl<'de> Deserialize<'de> for SecretKey {
     where
         D: serde::Deserializer<'de>,
     {
-        let arr_res: [u8; libsecp256k1::util::SECRET_KEY_SIZE] =
+        let arr_res: [u8; SECRET_KEY_SIZE] =
             serde::Deserialize::deserialize(deserializer)?;
-        let key = libsecp256k1::SecretKey::parse_slice(&arr_res)
-            .map_err(D::Error::custom);
+        let key =
+            k256::SecretKey::from_slice(&arr_res).map_err(D::Error::custom);
         Ok(SecretKey(Box::new(key.unwrap())))
     }
 }
@@ -218,23 +213,21 @@ impl<'de> Deserialize<'de> for SecretKey {
 impl BorshDeserialize for SecretKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         // deserialize the bytes first
-        Ok(SecretKey(Box::new(
-            libsecp256k1::SecretKey::parse(
-                &(BorshDeserialize::deserialize(buf)?),
+        let bytes: [u8; SECRET_KEY_SIZE] = BorshDeserialize::deserialize(buf)?;
+        let sk = k256::SecretKey::from_slice(&bytes).map_err(|e| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                format!("Error decoding secp256k1 secret key: {}", e),
             )
-            .map_err(|e| {
-                std::io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Error decoding secp256k1 secret key: {}", e),
-                )
-            })?,
-        )))
+        })?;
+        Ok(SecretKey(Box::new(sk)))
     }
 }
 
 impl BorshSerialize for SecretKey {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.0.serialize(), writer)
+        let bytes: [u8; SECRET_KEY_SIZE] = self.0.to_bytes().into();
+        BorshSerialize::serialize(&bytes, writer)
     }
 }
 
@@ -247,7 +240,7 @@ impl BorshSchema for SecretKey {
     ) {
         // Encoded as `[u8; SECRET_KEY_SIZE]`
         let elements = "u8".into();
-        let length = libsecp256k1::util::SECRET_KEY_SIZE as u32;
+        let length = SECRET_KEY_SIZE as u32;
         let definition = borsh::schema::Definition::Array { elements, length };
         definitions.insert(Self::declaration(), definition);
     }
@@ -259,7 +252,7 @@ impl BorshSchema for SecretKey {
 
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.0.serialize()))
+        write!(f, "{}", HEXLOWER.encode(&self.0.to_bytes()))
     }
 }
 
@@ -277,13 +270,13 @@ impl FromStr for SecretKey {
 
 impl RefTo<PublicKey> for SecretKey {
     fn ref_to(&self) -> PublicKey {
-        PublicKey(libsecp256k1::PublicKey::from_secret_key(&self.0))
+        PublicKey(self.0.public_key())
     }
 }
 
 /// Secp256k1 signature
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Signature(pub libsecp256k1::Signature, pub RecoveryId);
+pub struct Signature(pub k256::ecdsa::Signature, pub RecoveryId);
 
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
@@ -305,15 +298,14 @@ impl super::Signature for Signature {
     }
 }
 
-// Would ideally like Serialize, Deserialize to be implemented in libsecp256k1,
+// Would ideally like Serialize, Deserialize to be implemented in k256,
 // may try to do so and merge upstream in the future.
-
 impl Serialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let arr = self.0.serialize();
+        let arr = self.0.to_bytes();
         // TODO: implement the line below, currently cannot support [u8; 64]
         // serde::Serialize::serialize(&arr, serializer)
 
@@ -321,7 +313,7 @@ impl Serialize for Signature {
         for elem in &arr[..] {
             seq.serialize_element(elem)?;
         }
-        seq.serialize_element(&self.1.serialize())?;
+        seq.serialize_element(&self.1.to_byte())?;
         seq.end()
     }
 }
@@ -334,22 +326,25 @@ impl<'de> Deserialize<'de> for Signature {
         struct ByteArrayVisitor;
 
         impl<'de> Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; SIGNATURE_LENGTH];
+            type Value = [u8; SIGNATURE_SIZE];
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!(
                     "an array of length {}",
-                    SIGNATURE_LENGTH,
+                    SIGNATURE_SIZE,
                 ))
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<[u8; 65], A::Error>
+            fn visit_seq<A>(
+                self,
+                mut seq: A,
+            ) -> Result<[u8; SIGNATURE_SIZE], A::Error>
             where
                 A: SeqAccess<'de>,
             {
-                let mut arr = [0u8; SIGNATURE_LENGTH];
+                let mut arr = [0u8; SIGNATURE_SIZE];
                 #[allow(clippy::needless_range_loop)]
-                for i in 0..SIGNATURE_LENGTH {
+                for i in 0..SIGNATURE_SIZE {
                     arr[i] = seq
                         .next_element()?
                         .ok_or_else(|| Error::invalid_length(i, &self))?;
@@ -358,14 +353,15 @@ impl<'de> Deserialize<'de> for Signature {
             }
         }
 
-        let arr_res = deserializer
-            .deserialize_tuple(SIGNATURE_LENGTH, ByteArrayVisitor)?;
+        let arr_res =
+            deserializer.deserialize_tuple(SIGNATURE_SIZE, ByteArrayVisitor)?;
         let sig_array: [u8; 64] = arr_res[..64].try_into().unwrap();
-        let sig = libsecp256k1::Signature::parse_standard(&sig_array)
+        let sig = k256::ecdsa::Signature::from_slice(&sig_array)
             .map_err(D::Error::custom);
         Ok(Signature(
             sig.unwrap(),
-            RecoveryId::parse(arr_res[64]).map_err(Error::custom)?,
+            RecoveryId::from_byte(arr_res[64])
+                .ok_or_else(|| Error::custom("Invalid recovery byte"))?,
         ))
     }
 }
@@ -373,21 +369,20 @@ impl<'de> Deserialize<'de> for Signature {
 impl BorshDeserialize for Signature {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         // deserialize the bytes first
-        let (sig_bytes, recovery_id) = BorshDeserialize::deserialize(buf)?;
+        let (sig_bytes, recovery_id): ([u8; 64], u8) =
+            BorshDeserialize::deserialize(buf)?;
 
         Ok(Signature(
-            libsecp256k1::Signature::parse_standard(&sig_bytes).map_err(
-                |e| {
-                    std::io::Error::new(
-                        ErrorKind::InvalidInput,
-                        format!("Error decoding secp256k1 signature: {}", e),
-                    )
-                },
-            )?,
-            RecoveryId::parse(recovery_id).map_err(|e| {
+            k256::ecdsa::Signature::from_slice(&sig_bytes).map_err(|e| {
                 std::io::Error::new(
                     ErrorKind::InvalidInput,
                     format!("Error decoding secp256k1 signature: {}", e),
+                )
+            })?,
+            RecoveryId::from_byte(recovery_id).ok_or_else(|| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "Error decoding secp256k1 signature recovery byte",
                 )
             })?,
         ))
@@ -396,10 +391,8 @@ impl BorshDeserialize for Signature {
 
 impl BorshSerialize for Signature {
     fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(
-            &(self.0.serialize(), self.1.serialize()),
-            writer,
-        )
+        let sig_bytes: [u8; 64] = self.0.to_bytes().into();
+        BorshSerialize::serialize(&(sig_bytes, self.1.to_byte()), writer)
     }
 }
 
@@ -411,11 +404,8 @@ impl BorshSchema for Signature {
         >,
     ) {
         // Encoded as `([u8; SIGNATURE_SIZE], u8)`
-        let signature =
-            <[u8; libsecp256k1::util::SIGNATURE_SIZE]>::declaration();
-        <[u8; libsecp256k1::util::SIGNATURE_SIZE]>::add_definitions_recursively(
-            definitions,
-        );
+        let signature = <[u8; SIGNATURE_SIZE]>::declaration();
+        <[u8; SIGNATURE_SIZE]>::add_definitions_recursively(definitions);
         let recovery = "u8".into();
         let definition = borsh::schema::Definition::Tuple {
             elements: vec![signature, recovery],
@@ -429,20 +419,19 @@ impl BorshSchema for Signature {
 }
 
 impl Signature {
-    const S_MALLEABILITY_FIX: U256 = U256([
-        13822214165235122497,
-        13451932020343611451,
-        18446744073709551614,
-        18446744073709551615,
-    ]);
-    // these constants are pulled from OpenZeppelin's ECDSA code
-    const S_MALLEABILITY_THRESHOLD: U256 = U256([
-        16134479119472337056,
-        6725966010171805725,
-        18446744073709551615,
-        9223372036854775807,
-    ]);
+    /// OpenZeppelin consumes v values in the range [27, 28],
+    /// rather than [0, 1], the latter returned by `k256`.
     const V_FIX: u8 = 27;
+
+    /// Given a v signature parameter, flip its value
+    /// (i.e. negate the input).
+    ///
+    /// __INVARIANT__: The value of `v` must be in the range [0, 1].
+    #[inline(always)]
+    fn flip_v(v: u8) -> u8 {
+        debug_assert!(v == 0 || v == 1);
+        v ^ 1
+    }
 
     /// Returns the `r`, `s` and `v` parameters of this [`Signature`],
     /// destroying the original value in the process.
@@ -450,31 +439,22 @@ impl Signature {
     /// The returned signature is unique (i.e. non-malleable). This
     /// ensures OpenZeppelin considers the signature valid.
     pub fn into_eth_rsv(self) -> ([u8; 32], [u8; 32], u8) {
-        // assuming the value of v is either 0 or 1,
-        // the output is essentially the negated input
-        #[inline(always)]
-        fn flip_v(v: u8) -> u8 {
-            v ^ 1
-        }
-
-        let (v, s) = {
-            let s1: U256 = self.0.s.b32().into();
-            let v = self.1.serialize();
-            let (v, non_malleable_s) =
-                if hints::unlikely(s1 > Self::S_MALLEABILITY_THRESHOLD) {
-                    // this code path seems quite rare. we often
-                    // get non-malleable signatures, which is good
-                    (flip_v(v) + Self::V_FIX, Self::S_MALLEABILITY_FIX - s1)
-                } else {
-                    (v + Self::V_FIX, s1)
-                };
-            let mut non_malleable_s: [u8; 32] = non_malleable_s.into();
-            self.0.s.fill_b32(&mut non_malleable_s);
-            (v, self.0.s.b32())
+        // A recovery id (dubbed v) is used by secp256k1 signatures
+        // to signal verifying code if a signature had been malleable
+        // or not (based on whether the s field of the signature was odd
+        // or not). In the `k256` dependency, the low-bit signifies the
+        // y-coordinate, associated with s, being odd.
+        let v = self.1.to_byte() & 1;
+        // Check if s needs to be normalized. In case it does,
+        // we must flip the value of v (e.g. 0 -> 1).
+        let (s, v) = if let Some(signature) = self.0.normalize_s() {
+            let normalized_s = signature.s();
+            (normalized_s, Self::flip_v(v))
+        } else {
+            (self.0.s(), v)
         };
-        let r = self.0.r.b32();
-
-        (r, s, v)
+        let r = self.0.r();
+        (r.to_bytes().into(), s.to_bytes().into(), v + Self::V_FIX)
     }
 }
 
@@ -491,16 +471,14 @@ impl Encode<1> for Signature {
 #[allow(clippy::derived_hash_with_manual_eq)]
 impl Hash for Signature {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.serialize().hash(state);
+        self.0.to_bytes().hash(state);
     }
 }
 
 impl PartialOrd for Signature {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.0.serialize().partial_cmp(&other.0.serialize()) {
-            Some(Ordering::Equal) => {
-                self.1.serialize().partial_cmp(&other.1.serialize())
-            }
+        match self.0.to_bytes().partial_cmp(&other.0.to_bytes()) {
+            Some(Ordering::Equal) => self.1.partial_cmp(&other.1),
             res => res,
         }
     }
@@ -516,21 +494,20 @@ impl TryFrom<&[u8; 65]> for Signature {
     type Error = ParseSignatureError;
 
     fn try_from(sig: &[u8; 65]) -> Result<Self, Self::Error> {
-        let sig_bytes = sig[..64].try_into().unwrap();
-        let recovery_id = RecoveryId::parse(sig[64]).map_err(|err| {
+        let recovery_id = RecoveryId::from_byte(sig[64]).ok_or_else(|| {
             ParseSignatureError::InvalidEncoding(std::io::Error::new(
                 ErrorKind::Other,
-                err,
+                "Invalid recovery byte",
             ))
         })?;
-        libsecp256k1::Signature::parse_standard(&sig_bytes)
-            .map(|sig| Self(sig, recovery_id))
-            .map_err(|err| {
+        let sig =
+            k256::ecdsa::Signature::from_slice(&sig[..64]).map_err(|err| {
                 ParseSignatureError::InvalidEncoding(std::io::Error::new(
                     ErrorKind::Other,
                     err,
                 ))
-            })
+            })?;
+        Ok(Self(sig, recovery_id))
     }
 }
 
@@ -563,12 +540,12 @@ impl super::SigScheme for SigScheme {
     where
         R: CryptoRng + RngCore,
     {
-        SecretKey(Box::new(libsecp256k1::SecretKey::random(csprng)))
+        SecretKey(Box::new(k256::SecretKey::random(csprng)))
     }
 
     fn from_bytes(sk: [u8; 32]) -> SecretKey {
         SecretKey(Box::new(
-            libsecp256k1::SecretKey::parse_slice(&sk)
+            k256::SecretKey::from_slice(&sk)
                 .expect("Secret key parsing should not fail."),
         ))
     }
@@ -580,20 +557,12 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        #[cfg(not(any(test, feature = "secp256k1-sign")))]
-        {
-            // to avoid `unused-variables` warn
-            let _ = (keypair, data);
-            panic!("\"secp256k1-sign\" feature must be enabled");
-        }
-
-        #[cfg(any(test, feature = "secp256k1-sign"))]
-        {
-            let message =
-                libsecp256k1::Message::parse(&data.signable_hash::<H>());
-            let (sig, recovery_id) = libsecp256k1::sign(&message, &keypair.0);
-            Signature(sig, recovery_id)
-        }
+        let sig_key = k256::ecdsa::SigningKey::from(keypair.0.as_ref());
+        let msg = data.signable_hash::<H>();
+        let (sig, recovery_id) = sig_key
+            .sign_prehash_recoverable(&msg)
+            .expect("Must be able to sign");
+        Signature(sig, recovery_id)
     }
 
     fn verify_signature_with_hasher<H>(
@@ -604,21 +573,23 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        let message = libsecp256k1::Message::parse(&data.signable_hash::<H>());
-        let is_valid = libsecp256k1::verify(&message, &sig.0, &pk.0);
-        if is_valid {
-            Ok(())
-        } else {
-            Err(VerifySigError::SigVerifyError(format!(
+        use k256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let vrf_key = k256::ecdsa::VerifyingKey::from(&pk.0);
+        let msg = data.signable_hash::<H>();
+        vrf_key.verify_prehash(&msg, &sig.0).map_err(|e| {
+            VerifySigError::SigVerifyError(format!(
                 "Error verifying secp256k1 signature: {}",
-                libsecp256k1::Error::InvalidSignature
-            )))
-        }
+                e
+            ))
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
+    use k256::elliptic_curve::sec1::ToEncodedPoint;
+
     use super::*;
 
     /// test vector from https://bitcoin.stackexchange.com/a/89848
@@ -635,9 +606,9 @@ mod test {
         let sk_bytes = HEXLOWER.decode(SECRET_KEY_HEX.as_bytes()).unwrap();
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let pk: PublicKey = sk.ref_to();
-        // We're removing the first byte with
-        // `libsecp256k1::util::TAG_PUBKEY_FULL`
-        let pk_hex = HEXLOWER.encode(&pk.0.serialize()[1..]);
+        // We're removing the first byte with tag
+        let pk_hex =
+            HEXLOWER.encode(&pk.0.to_encoded_point(false).to_bytes()[1..]);
         assert_eq!(expected_pk_hex, pk_hex);
 
         let eth_addr: EthAddress = (&pk).into();
@@ -653,7 +624,7 @@ mod test {
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let to_sign = "test".as_bytes();
         let mut signature = SigScheme::sign(&sk, to_sign);
-        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        signature.1 = RecoveryId::from_byte(3).expect("Test failed");
         let sig_json = serde_json::to_string(&signature).expect("Test failed");
         let sig: Signature =
             serde_json::from_str(&sig_json).expect("Test failed");
@@ -668,28 +639,10 @@ mod test {
         let sk = SecretKey::try_from_slice(&sk_bytes[..]).unwrap();
         let to_sign = "test".as_bytes();
         let mut signature = SigScheme::sign(&sk, to_sign);
-        signature.1 = RecoveryId::parse(3).expect("Test failed");
+        signature.1 = RecoveryId::from_byte(3).expect("Test failed");
         let sig_bytes = signature.try_to_vec().expect("Test failed");
         let sig = Signature::try_from_slice(sig_bytes.as_slice())
             .expect("Test failed");
         assert_eq!(sig, signature);
-    }
-
-    /// Ensures we are using the right malleability consts.
-    #[test]
-    fn test_signature_malleability_consts() {
-        let s_threshold = U256::from_str_radix(
-            "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0",
-            16,
-        )
-        .unwrap();
-        assert_eq!(Signature::S_MALLEABILITY_THRESHOLD, s_threshold);
-
-        let malleable_const = U256::from_str_radix(
-            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
-            16,
-        )
-        .unwrap();
-        assert_eq!(Signature::S_MALLEABILITY_FIX, malleable_const);
     }
 }

@@ -692,17 +692,15 @@ mod more_tests {
     fn zeroize_keypair_secp256k1() {
         use rand::thread_rng;
 
-        let mut sk = secp256k1::SigScheme::generate(&mut thread_rng());
-        let sk_scalar = sk.0.to_scalar_ref();
-        let len = sk_scalar.0.len();
-        let ptr = sk_scalar.0.as_ref().as_ptr();
-
-        let original_data = sk_scalar.0;
-
+        let sk = secp256k1::SigScheme::generate(&mut thread_rng());
+        let (ptr, original_data) = {
+            let sk_scalar = sk.0.as_scalar_primitive().as_ref();
+            (sk_scalar.as_ptr(), sk_scalar.to_owned())
+        };
         drop(sk);
 
-        assert_ne!(&original_data, unsafe {
-            core::slice::from_raw_parts(ptr, len)
+        assert_ne!(original_data.as_slice(), unsafe {
+            core::slice::from_raw_parts(ptr, secp256k1::SECRET_KEY_SIZE)
         });
     }
 }
