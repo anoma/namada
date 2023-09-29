@@ -159,11 +159,7 @@ where
                     // denomination is also set for the minting.
                     self.ctx
                         .borrow_mut()
-                        .store_ibc_denom(
-                            &receiver.to_string(),
-                            &trace_hash,
-                            &ibc_denom,
-                        )
+                        .store_ibc_denom(&receiver, &trace_hash, &ibc_denom)
                         .map_err(|e| {
                             Error::Denom(format!(
                                 "Writing the IBC denom failed: {}",
@@ -203,7 +199,7 @@ where
     /// events
     fn get_minted_token_info(
         &self,
-    ) -> Result<Option<(String, String, Address)>, Error> {
+    ) -> Result<Option<(String, String, String)>, Error> {
         let receive_event =
             self.ctx.borrow().get_ibc_event(EVENT_TYPE_PACKET).map_err(
                 |_| Error::Denom("Reading the IBC event failed".to_string()),
@@ -212,6 +208,7 @@ where
             .as_ref()
             .and_then(|event| event.attributes.get("receiver"))
         {
+            // Check the receiver address
             Some(receiver) => Some(
                 Address::decode(receiver)
                     .or_else(|_| {
@@ -224,7 +221,8 @@ where
                             "Decoding the receiver address failed: {:?}",
                             receive_event
                         ))
-                    })?,
+                    })?
+                    .to_string(),
             ),
             None => None,
         };

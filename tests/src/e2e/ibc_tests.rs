@@ -1437,21 +1437,18 @@ fn check_shielded_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balance on Chain B
-    let token = find_address(test_b, BTC)?;
-    let denom = format!("{}/{}/{}", dest_port_id, dest_channel_id, &token);
-    let ibc_token = ibc_token(denom).to_string();
     let rpc_b = get_actor_rpc(test_b, &Who::Validator(0));
     let query_args = vec![
         "balance",
         "--owner",
         AB_VIEWING_KEY,
         "--token",
-        &ibc_token,
+        BTC,
         "--no-conversions",
         "--node",
         &rpc_b,
     ];
-    let expected = format!("{}: 10", ibc_token);
+    let expected = format!("{}/{}/btc: 10", dest_port_id, dest_channel_id);
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
