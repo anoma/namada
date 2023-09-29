@@ -301,10 +301,18 @@ pub fn run_oracle<C: RpcClient>(
         .with_no_cleanup()
 }
 
-enum ProcessEventAction {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum ProcessEventAction {
     ContinuePollingEvents,
     ProcessError,
     GreatSuccess,
+}
+
+impl ProcessEventAction {
+    #[inline]
+    fn is_great_success(&self) -> bool {
+        matches!(self, Self::GreatSuccess)
+    }
 }
 
 impl From<ProcessEventAction> for ControlFlow<Result<(), ()>, ()> {
@@ -320,7 +328,7 @@ impl From<ProcessEventAction> for ControlFlow<Result<(), ()>, ()> {
 }
 
 /// Tentatively process a batch of Ethereum events.
-pub(crate) async fn try_process_eth_events<C: RpcClient>(
+async fn try_process_eth_events<C: RpcClient>(
     oracle: &Oracle<C>,
     config: &Config,
     next_block_to_process: ethereum_structs::BlockHeight,
