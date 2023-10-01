@@ -147,6 +147,7 @@ zeroize.workspace = true
 tokio = {workspace = true, features = ["full"]}
 
 [target.'cfg(target_family = "wasm")'.dependencies]
+tokio = {workspace = true, default-features = false, features = ["sync"]}
 wasmtimer = "0.2.0"
 
 [dev-dependencies]

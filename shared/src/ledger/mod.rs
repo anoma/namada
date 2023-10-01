@@ -21,9 +21,9 @@ pub mod tx;
 pub mod vp_host_fns;
 pub mod wallet;
 
-use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use masp::{ShieldedContext, ShieldedUtils};
 pub use namada_core::ledger::{
@@ -31,6 +31,7 @@ pub use namada_core::ledger::{
 };
 use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use wallet::{Wallet, WalletIo, WalletStorage};
 
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
@@ -52,33 +53,9 @@ use crate::types::token;
 use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use crate::types::transaction::GasLimit;
 
-/// Encapsulates a Namada session to enable splitting borrows of its parts
-pub struct NamadaStruct<'a, C, U, V>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-{
-    /// Used to send and receive messages from the ledger
-    pub client: &'a C,
-    /// Stores the addresses and keys required for ledger interactions
-    pub wallet: &'a mut Wallet<U>,
-    /// Stores the current state of the shielded pool
-    pub shielded: &'a mut ShieldedContext<V>,
-}
-
 #[async_trait::async_trait(?Send)]
 /// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a>:
-    DerefMut<
-    Target = NamadaStruct<
-        'a,
-        Self::Client,
-        Self::WalletUtils,
-        Self::ShieldedUtils,
-    >,
->
-{
+pub trait Namada<'a> {
     /// A client with async request dispatcher method
     type Client: 'a + crate::ledger::queries::Client + Sync;
     /// Captures the interactive parts of the wallet's functioning
@@ -87,16 +64,40 @@ pub trait Namada<'a>:
     /// operations.
     type ShieldedUtils: 'a + ShieldedUtils;
 
+    /// Obtain the client for communicating with the ledger
+    fn client(&self) -> &'a Self::Client;
+
+    /// Obtain read lock on the wallet
+    async fn wallet(
+        &self,
+    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>>;
+
+    /// Obtain write lock on the wallet
+    async fn wallet_mut(
+        &self,
+    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>>;
+
+    /// Obtain read lock on the shielded context
+    async fn shielded(
+        &self,
+    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+
+    /// Obtain write lock on the shielded context
+    async fn shielded_mut(
+        &self,
+    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+
     /// Return the native token
-    fn native_token(&self) -> Address {
-        self.wallet
+    async fn native_token(&self) -> Address {
+        self.wallet()
+            .await
             .find_address(args::NAM)
             .expect("NAM not in wallet")
             .clone()
     }
 
     /// Make a tx builder using no arguments
-    fn tx_builder(&self) -> args::Tx {
+    async fn tx_builder(&self) -> args::Tx {
         args::Tx {
             dry_run: false,
             dry_run_wrapper: false,
@@ -109,7 +110,7 @@ pub trait Namada<'a>:
             wallet_alias_force: false,
             fee_amount: None,
             wrapper_fee_payer: None,
-            fee_token: self.native_token(),
+            fee_token: self.native_token().await,
             fee_unshield: None,
             gas_limit: GasLimit::from(20_000),
             expiration: None,
@@ -124,7 +125,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a TxTransfer builder from the given minimum set of arguments
-    fn new_transfer(
+    async fn new_transfer(
         &self,
         source: TransferSource,
         target: TransferTarget,
@@ -137,24 +138,24 @@ pub trait Namada<'a>:
             token,
             amount,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
-            tx: self.tx_builder(),
-            native_token: self.native_token(),
+            tx: self.tx_builder().await,
+            native_token: self.native_token().await,
         }
     }
 
     /// Make a RevealPK builder from the given minimum set of arguments
-    fn new_reveal_pk(
+    async fn new_reveal_pk(
         &self,
         public_key: common::PublicKey,
     ) -> args::RevealPk {
         args::RevealPk {
             public_key,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a Bond builder from the given minimum set of arguments
-    fn new_bond(
+    async fn new_bond(
         &self,
         validator: Address,
         amount: token::Amount,
@@ -163,14 +164,14 @@ pub trait Namada<'a>:
             validator,
             amount,
             source: None,
-            tx: self.tx_builder(),
-            native_token: self.native_token(),
+            tx: self.tx_builder().await,
+            native_token: self.native_token().await,
             tx_code_path: PathBuf::from(TX_BOND_WASM),
         }
     }
 
     /// Make a Unbond builder from the given minimum set of arguments
-    fn new_unbond(
+    async fn new_unbond(
         &self,
         validator: Address,
         amount: token::Amount,
@@ -179,13 +180,13 @@ pub trait Namada<'a>:
             validator,
             amount,
             source: None,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
             tx_code_path: PathBuf::from(TX_UNBOND_WASM),
         }
     }
 
     /// Make a TxIbcTransfer builder from the given minimum set of arguments
-    fn new_ibc_transfer(
+    async fn new_ibc_transfer(
         &self,
         source: Address,
         receiver: String,
@@ -203,41 +204,41 @@ pub trait Namada<'a>:
             timeout_height: None,
             timeout_sec_offset: None,
             memo: None,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
             tx_code_path: PathBuf::from(TX_IBC_WASM),
         }
     }
 
     /// Make a InitProposal builder from the given minimum set of arguments
-    fn new_init_proposal(
+    async fn new_init_proposal(
         &self,
         proposal_data: Vec<u8>,
     ) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            native_token: self.native_token(),
+            native_token: self.native_token().await,
             is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
             tx_code_path: PathBuf::from(TX_INIT_PROPOSAL),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
+    async fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
             vp_code_path: None,
             public_keys: vec![],
             threshold: None,
             tx_code_path: PathBuf::from(TX_UPDATE_ACCOUNT_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a VoteProposal builder from the given minimum set of arguments
-    fn new_vote_prposal(
+    async fn new_vote_prposal(
         &self,
         vote: String,
         voter: Address,
@@ -249,13 +250,13 @@ pub trait Namada<'a>:
             is_offline: false,
             proposal_data: None,
             tx_code_path: PathBuf::from(TX_VOTE_PROPOSAL),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a CommissionRateChange builder from the given minimum set of
     /// arguments
-    fn new_change_commission_rate(
+    async fn new_change_commission_rate(
         &self,
         rate: Dec,
         validator: Address,
@@ -264,12 +265,12 @@ pub trait Namada<'a>:
             rate,
             validator,
             tx_code_path: PathBuf::from(TX_CHANGE_COMMISSION_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a TxInitValidator builder from the given minimum set of arguments
-    fn new_init_validator(
+    async fn new_init_validator(
         &self,
         commission_rate: Dec,
         max_commission_rate_change: Dec,
@@ -287,34 +288,34 @@ pub trait Namada<'a>:
             validator_vp_code_path: PathBuf::from(VP_USER_WASM),
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a TxUnjailValidator builder from the given minimum set of arguments
-    fn new_unjail_validator(
+    async fn new_unjail_validator(
         &self,
         validator: Address,
     ) -> args::TxUnjailValidator {
         args::TxUnjailValidator {
             validator,
             tx_code_path: PathBuf::from(TX_UNJAIL_VALIDATOR_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_withdraw(&self, validator: Address) -> args::Withdraw {
+    async fn new_withdraw(&self, validator: Address) -> args::Withdraw {
         args::Withdraw {
             validator,
             source: None,
             tx_code_path: PathBuf::from(TX_WITHDRAW_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_add_erc20_transfer(
+    async fn new_add_erc20_transfer(
         &self,
         sender: Address,
         recipient: EthAddress,
@@ -331,25 +332,28 @@ pub trait Namada<'a>:
                 denom: NATIVE_MAX_DECIMAL_PLACES.into(),
             }),
             fee_payer: None,
-            fee_token: self.native_token(),
+            fee_token: self.native_token().await,
             nut: false,
             code_path: PathBuf::from(TX_BRIDGE_POOL_WASM),
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
         }
     }
 
     /// Make a ResignSteward builder from the given minimum set of arguments
-    fn new_resign_steward(&self, steward: Address) -> args::ResignSteward {
+    async fn new_resign_steward(
+        &self,
+        steward: Address,
+    ) -> args::ResignSteward {
         args::ResignSteward {
             steward,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
             tx_code_path: PathBuf::from(TX_RESIGN_STEWARD),
         }
     }
 
     /// Make a UpdateStewardCommission builder from the given minimum set of
     /// arguments
-    fn new_update_steward_rewards(
+    async fn new_update_steward_rewards(
         &self,
         steward: Address,
         commission: Vec<u8>,
@@ -357,16 +361,16 @@ pub trait Namada<'a>:
         args::UpdateStewardCommission {
             steward,
             commission,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
             tx_code_path: PathBuf::from(TX_UPDATE_STEWARD_COMMISSION),
         }
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&self, owner: Address) -> args::TxCustom {
+    async fn new_custom(&self, owner: Address) -> args::TxCustom {
         args::TxCustom {
             owner,
-            tx: self.tx_builder(),
+            tx: self.tx_builder().await,
             code_path: None,
             data_path: None,
             serialized_tx: None,
@@ -374,22 +378,22 @@ pub trait Namada<'a>:
     }
 
     /// Sign the given transaction using the given signing data
-    fn sign(
-        &mut self,
+    async fn sign(
+        &self,
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
     ) -> crate::types::error::Result<()> {
-        signing::sign_tx(self.wallet, args, tx, signing_data)
+        signing::sign_tx(*self.wallet_mut().await, args, tx, signing_data)
     }
 
     /// Process the given transaction using the given flags
     async fn submit(
-        &mut self,
+        &self,
         tx: Tx,
         args: &args::Tx,
     ) -> crate::types::error::Result<ProcessTxResponse> {
-        tx::process_tx(self.client, self.wallet, args, tx).await
+        tx::process_tx(self.client(), *self.wallet_mut().await, args, tx).await
     }
 }
 
@@ -400,7 +404,13 @@ where
     U: WalletIo,
     V: ShieldedUtils,
 {
-    namada: NamadaStruct<'a, C, U, V>,
+    /// Used to send and receive messages from the ledger
+    pub client: &'a C,
+    /// Stores the addresses and keys required for ledger interactions
+    pub wallet: Arc<RwLock<&'a mut Wallet<U>>>,
+    /// Stores the current state of the shielded pool
+    pub shielded: Arc<RwLock<&'a mut ShieldedContext<V>>>,
+    /// The default builder for a Tx
     prototype: args::Tx,
 }
 
@@ -421,11 +431,9 @@ where
             .expect("NAM not in wallet")
             .clone();
         Self {
-            namada: NamadaStruct {
-                client,
-                wallet,
-                shielded,
-            },
+            client,
+            wallet: Arc::new(RwLock::new(wallet)),
+            shielded: Arc::new(RwLock::new(shielded)),
             prototype: args::Tx {
                 dry_run: false,
                 dry_run_wrapper: false,
@@ -454,30 +462,7 @@ where
     }
 }
 
-impl<'a, C, U, V> Deref for NamadaImpl<'a, C, U, V>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-{
-    type Target = NamadaStruct<'a, C, U, V>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.namada
-    }
-}
-
-impl<'a, C, U, V> DerefMut for NamadaImpl<'a, C, U, V>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.namada
-    }
-}
-
+#[async_trait::async_trait(?Send)]
 impl<'a, C, U, V> Namada<'a> for NamadaImpl<'a, C, U, V>
 where
     C: crate::ledger::queries::Client + Sync,
@@ -489,8 +474,36 @@ where
     type WalletUtils = U;
 
     /// Obtain the prototypical Tx builder
-    fn tx_builder(&self) -> args::Tx {
+    async fn tx_builder(&self) -> args::Tx {
         self.prototype.clone()
+    }
+
+    fn client(&self) -> &'a Self::Client {
+        self.client
+    }
+
+    async fn wallet(
+        &self,
+    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>> {
+        self.wallet.read().await
+    }
+
+    async fn wallet_mut(
+        &self,
+    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>> {
+        self.wallet.write().await
+    }
+
+    async fn shielded(
+        &self,
+    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+        self.shielded.read().await
+    }
+
+    async fn shielded_mut(
+        &self,
+    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
+        self.shielded.write().await
     }
 }
 

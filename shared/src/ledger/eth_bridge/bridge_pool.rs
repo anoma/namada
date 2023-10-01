@@ -41,7 +41,7 @@ use crate::types::voting_power::FractionalVotingPower;
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::EthereumBridgePool {
         tx: tx_args,
         nut,
@@ -65,7 +65,7 @@ pub async fn build_bridge_pool_tx<'a>(
     .await?;
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
     let DenominatedAmount { amount, .. } = validate_amount(
-        context.client,
+        context.client(),
         amount,
         &wrapped_erc20s::token(&asset),
         tx_args.force,
@@ -74,14 +74,19 @@ pub async fn build_bridge_pool_tx<'a>(
     .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
     let DenominatedAmount {
         amount: fee_amount, ..
-    } = validate_amount(context.client, fee_amount, &fee_token, tx_args.force)
-        .await
-        .map_err(|e| {
-            Error::Other(format!(
-                "Failed to validate Bridge pool fee amount. {}",
-                e
-            ))
-        })?;
+    } = validate_amount(
+        context.client(),
+        fee_amount,
+        &fee_token,
+        tx_args.force,
+    )
+    .await
+    .map_err(|e| {
+        Error::Other(format!(
+            "Failed to validate Bridge pool fee amount. {}",
+            e
+        ))
+    })?;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
@@ -102,7 +107,7 @@ pub async fn build_bridge_pool_tx<'a>(
     };
 
     let tx_code_hash =
-        query_wasm_code_hash(context.client, code_path.to_str().unwrap())
+        query_wasm_code_hash(context.client(), code_path.to_str().unwrap())
             .await
             .unwrap();
 

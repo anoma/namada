@@ -159,7 +159,7 @@ pub fn dump_tx(args: &args::Tx, tx: Tx) {
 /// to it.
 #[allow(clippy::too_many_arguments)]
 pub async fn prepare_tx<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: &args::Tx,
     tx: &mut Tx,
     fee_payer: common::PublicKey,
@@ -167,7 +167,7 @@ pub async fn prepare_tx<'a>(
     #[cfg(not(feature = "mainnet"))] requires_pow: bool,
 ) -> Result<Option<Epoch>> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(context.client).await?;
+        let epoch = rpc::query_epoch(context.client()).await?;
 
         Ok(signing::wrap_tx(
             context,
@@ -270,7 +270,7 @@ pub async fn has_revealed_pk<C: crate::ledger::queries::Client + Sync>(
 
 /// Submit transaction to reveal the given public key
 pub async fn build_reveal_pk<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: &args::Tx,
     public_key: &common::PublicKey,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
@@ -488,7 +488,7 @@ pub async fn save_initialized_accounts<U: WalletIo>(
 
 /// Submit validator comission rate change
 pub async fn build_validator_commission_change<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::CommissionRateChange {
         tx: tx_args,
         validator,
@@ -505,12 +505,12 @@ pub async fn build_validator_commission_change<'a>(
     )
     .await?;
 
-    let epoch = rpc::query_epoch(context.client).await?;
+    let epoch = rpc::query_epoch(context.client()).await?;
 
-    let params: PosParams = rpc::get_pos_params(context.client).await?;
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
 
     let validator = validator.clone();
-    if rpc::is_validator(context.client, &validator).await? {
+    if rpc::is_validator(context.client(), &validator).await? {
         if *rate < Dec::zero() || *rate > Dec::one() {
             eprintln!("Invalid new commission rate, received {}", rate);
             return Err(Error::from(TxError::InvalidCommissionRate(*rate)));
@@ -519,7 +519,7 @@ pub async fn build_validator_commission_change<'a>(
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
         match rpc::query_commission_rate(
-            context.client,
+            context.client(),
             &validator,
             Some(pipeline_epoch_minus_one),
         )
@@ -580,7 +580,7 @@ pub async fn build_validator_commission_change<'a>(
 
 /// Craft transaction to update a steward commission
 pub async fn build_update_steward_commission<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::UpdateStewardCommission {
         tx: tx_args,
         steward,
@@ -597,7 +597,7 @@ pub async fn build_update_steward_commission<'a>(
     )
     .await?;
 
-    if !rpc::is_steward(context.client, steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
@@ -632,7 +632,7 @@ pub async fn build_update_steward_commission<'a>(
 
 /// Craft transaction to resign as a steward
 pub async fn build_resign_steward<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::ResignSteward {
         tx: tx_args,
         steward,
@@ -648,7 +648,7 @@ pub async fn build_resign_steward<'a>(
     )
     .await?;
 
-    if !rpc::is_steward(context.client, steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
         eprintln!("The given address {} is not a steward.", &steward);
         return Err(Error::from(TxError::InvalidSteward(steward.clone())));
     };
@@ -668,7 +668,7 @@ pub async fn build_resign_steward<'a>(
 
 /// Submit transaction to unjail a jailed validator
 pub async fn build_unjail_validator<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::TxUnjailValidator {
         tx: tx_args,
         validator,
@@ -684,7 +684,7 @@ pub async fn build_unjail_validator<'a>(
     )
     .await?;
 
-    if !rpc::is_validator(context.client, validator).await? {
+    if !rpc::is_validator(context.client(), validator).await? {
         eprintln!("The given address {} is not a validator.", &validator);
         if !tx_args.force {
             return Err(Error::from(TxError::InvalidValidatorAddress(
@@ -693,12 +693,12 @@ pub async fn build_unjail_validator<'a>(
         }
     }
 
-    let params: PosParams = rpc::get_pos_params(context.client).await?;
-    let current_epoch = rpc::query_epoch(context.client).await?;
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
+    let current_epoch = rpc::query_epoch(context.client()).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     let validator_state_at_pipeline = rpc::get_validator_state(
-        context.client,
+        context.client(),
         validator,
         Some(pipeline_epoch),
     )
@@ -724,7 +724,7 @@ pub async fn build_unjail_validator<'a>(
     let last_slash_epoch_key =
         crate::ledger::pos::validator_last_slash_key(validator);
     let last_slash_epoch = rpc::query_storage_value::<_, Epoch>(
-        context.client,
+        context.client(),
         &last_slash_epoch_key,
     )
     .await;
@@ -774,7 +774,7 @@ pub async fn build_unjail_validator<'a>(
 
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::Withdraw {
         tx: tx_args,
         validator,
@@ -792,12 +792,12 @@ pub async fn build_withdraw<'a>(
     )
     .await?;
 
-    let epoch = rpc::query_epoch(context.client).await?;
+    let epoch = rpc::query_epoch(context.client()).await?;
 
     let validator = known_validator_or_err(
         validator.clone(),
         tx_args.force,
-        context.client,
+        context.client(),
     )
     .await?;
 
@@ -806,7 +806,7 @@ pub async fn build_withdraw<'a>(
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
     let tokens = rpc::query_withdrawable_tokens(
-        context.client,
+        context.client(),
         &bond_source,
         &validator,
         Some(epoch),
@@ -819,8 +819,12 @@ pub async fn build_withdraw<'a>(
              epoch {}.",
             epoch
         );
-        rpc::query_and_print_unbonds(context.client, &bond_source, &validator)
-            .await?;
+        rpc::query_and_print_unbonds(
+            context.client(),
+            &bond_source,
+            &validator,
+        )
+        .await?;
         if !tx_args.force {
             return Err(Error::from(TxError::NoUnbondReady(epoch)));
         }
@@ -849,7 +853,7 @@ pub async fn build_withdraw<'a>(
 
 /// Submit a transaction to unbond
 pub async fn build_unbond<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::Unbond {
         tx: tx_args,
         validator,
@@ -881,12 +885,12 @@ pub async fn build_unbond<'a>(
         known_validator_or_err(
             validator.clone(),
             tx_args.force,
-            context.client,
+            context.client(),
         )
         .await?;
 
         let bond_amount =
-            rpc::query_bond(context.client, &bond_source, validator, None)
+            rpc::query_bond(context.client(), &bond_source, validator, None)
                 .await?;
         println!(
             "Bond amount available for unbonding: {} NAM",
@@ -914,7 +918,7 @@ pub async fn build_unbond<'a>(
 
     // Query the unbonds before submitting the tx
     let unbonds = rpc::query_unbond_with_slashing(
-        context.client,
+        context.client(),
         &bond_source,
         validator,
     )
@@ -1011,7 +1015,7 @@ pub async fn query_unbonds<C: crate::ledger::queries::Client + Sync>(
 
 /// Submit a transaction to bond
 pub async fn build_bond<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::Bond {
         tx: tx_args,
         validator,
@@ -1034,14 +1038,14 @@ pub async fn build_bond<'a>(
     let validator = known_validator_or_err(
         validator.clone(),
         tx_args.force,
-        context.client,
+        context.client(),
     )
     .await?;
 
     // Check that the source address exists on chain
     let source = match source.clone() {
         Some(source) => {
-            source_exists_or_err(source, tx_args.force, context.client)
+            source_exists_or_err(source, tx_args.force, context.client())
                 .await
                 .map(Some)
         }
@@ -1059,7 +1063,7 @@ pub async fn build_bond<'a>(
         *amount,
         balance_key,
         tx_args.force,
-        context.client,
+        context.client(),
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
@@ -1089,7 +1093,7 @@ pub async fn build_bond<'a>(
 
 /// Build a default proposal governance
 pub async fn build_default_proposal<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1142,7 +1146,7 @@ pub async fn build_default_proposal<'a>(
 
 /// Build a proposal vote
 pub async fn build_vote_proposal<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::VoteProposal {
         tx,
         proposal_id,
@@ -1170,7 +1174,7 @@ pub async fn build_vote_proposal<'a>(
         Error::Other("Proposal id must be defined.".to_string())
     })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(context.client, proposal_id).await?
+        rpc::query_proposal_by_id(context.client(), proposal_id).await?
     {
         proposal
     } else {
@@ -1185,7 +1189,7 @@ pub async fn build_vote_proposal<'a>(
                 ))
             })?;
 
-    let is_validator = rpc::is_validator(context.client, voter).await?;
+    let is_validator = rpc::is_validator(context.client(), voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         return Err(Error::from(TxError::InvalidProposalVotingPeriod(
@@ -1194,7 +1198,7 @@ pub async fn build_vote_proposal<'a>(
     }
 
     let delegations = rpc::get_delegators_delegation_at(
-        context.client,
+        context.client(),
         voter,
         proposal.voting_start_epoch,
     )
@@ -1225,7 +1229,7 @@ pub async fn build_vote_proposal<'a>(
 
 /// Build a pgf funding proposal governance
 pub async fn build_pgf_funding_proposal<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1270,7 +1274,7 @@ pub async fn build_pgf_funding_proposal<'a>(
 
 /// Build a pgf funding proposal governance
 pub async fn build_pgf_stewards_proposal<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::InitProposal {
         tx,
         proposal_data: _,
@@ -1316,7 +1320,7 @@ pub async fn build_pgf_stewards_proposal<'a>(
 
 /// Submit an IBC transfer
 pub async fn build_ibc_transfer<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.clone());
@@ -1331,14 +1335,14 @@ pub async fn build_ibc_transfer<'a>(
     let source = source_exists_or_err(
         args.source.clone(),
         args.tx.force,
-        context.client,
+        context.client(),
     )
     .await?;
     // We cannot check the receiver
 
     // validate the amount given
     let validated_amount = validate_amount(
-        context.client,
+        context.client(),
         args.amount,
         &args.token,
         args.tx.force,
@@ -1361,7 +1365,7 @@ pub async fn build_ibc_transfer<'a>(
         validated_amount.amount,
         balance_key,
         args.tx.force,
-        context.client,
+        context.client(),
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
@@ -1371,7 +1375,7 @@ pub async fn build_ibc_transfer<'a>(
     });
 
     let tx_code_hash = query_wasm_code_hash(
-        context.client,
+        context.client(),
         args.tx_code_path.to_str().unwrap(),
     )
     .await
@@ -1381,7 +1385,7 @@ pub async fn build_ibc_transfer<'a>(
         Address::Internal(InternalAddress::IbcToken(hash)) => {
             let ibc_denom_key = ibc_denom_key(hash);
             rpc::query_storage_value::<_, String>(
-                context.client,
+                context.client(),
                 &ibc_denom_key,
             )
             .await
@@ -1463,7 +1467,7 @@ pub async fn build_ibc_transfer<'a>(
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
 pub async fn build<'a, F, D>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     tx_args: &crate::ledger::args::Tx,
     path: PathBuf,
     data: D,
@@ -1491,7 +1495,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 async fn build_pow_flag<'a, F, D>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     tx_args: &crate::ledger::args::Tx,
     path: PathBuf,
     mut data: D,
@@ -1509,7 +1513,7 @@ where
     let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
 
     let tx_code_hash =
-        query_wasm_code_hash(context.client, path.to_string_lossy())
+        query_wasm_code_hash(context.client(), path.to_string_lossy())
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
@@ -1534,13 +1538,13 @@ where
 /// Returns true only if a new decoding has been added to the given set.
 async fn add_asset_type<'a>(
     asset_types: &mut HashSet<(Address, MaspDenom, Epoch)>,
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     asset_type: AssetType,
 ) -> bool {
-    let context = &mut **context;
     if let Some(asset_type) = context
-        .shielded
-        .decode_asset_type(context.client, asset_type)
+        .shielded_mut()
+        .await
+        .decode_asset_type(context.client(), asset_type)
         .await
     {
         asset_types.insert(asset_type)
@@ -1553,7 +1557,7 @@ async fn add_asset_type<'a>(
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
 async fn used_asset_types<'a, P, R, K, N>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     builder: &Builder<P, R, K, N>,
 ) -> std::result::Result<HashSet<(Address, MaspDenom, Epoch)>, RpcError> {
     let mut asset_types = HashSet::new();
@@ -1587,7 +1591,7 @@ async fn used_asset_types<'a, P, R, K, N>(
 
 /// Submit an ordinary transfer
 pub async fn build_transfer<'a, N: Namada<'a>>(
-    context: &mut N,
+    context: &N,
     args: &mut args::TxTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let default_signer = Some(args.source.effective_address());
@@ -1604,15 +1608,17 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     let token = args.token.clone();
 
     // Check that the source address exists on chain
-    source_exists_or_err(source.clone(), args.tx.force, context.client).await?;
+    source_exists_or_err(source.clone(), args.tx.force, context.client())
+        .await?;
     // Check that the target address exists on chain
-    target_exists_or_err(target.clone(), args.tx.force, context.client).await?;
+    target_exists_or_err(target.clone(), args.tx.force, context.client())
+        .await?;
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
 
     // validate the amount given
     let validated_amount =
-        validate_amount(context.client, args.amount, &token, args.tx.force)
+        validate_amount(context.client(), args.amount, &token, args.tx.force)
             .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
@@ -1622,7 +1628,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         validated_amount.amount,
         balance_key,
         args.tx.force,
-        context.client,
+        context.client(),
     )
     .await?;
     let tx_source_balance = Some(TxSourcePostBalance {
@@ -1651,7 +1657,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
 
     #[cfg(not(feature = "mainnet"))]
     let is_source_faucet =
-        rpc::is_faucet_account(context.client, &source).await;
+        rpc::is_faucet_account(context.client(), &source).await;
     #[cfg(feature = "mainnet")]
     let is_source_faucet = false;
 
@@ -1763,7 +1769,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
 
 /// Submit a transaction to initialize an account
 pub async fn build_init_account<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::TxInitAccount {
         tx: tx_args,
         vp_code_path,
@@ -1776,7 +1782,7 @@ pub async fn build_init_account<'a>(
         signing::aux_signing_data(context, tx_args, None, None).await?;
 
     let vp_code_hash =
-        query_wasm_code_hash_buf(context.client, vp_code_path).await?;
+        query_wasm_code_hash_buf(context.client(), vp_code_path).await?;
 
     let threshold = match threshold {
         Some(threshold) => *threshold,
@@ -1816,7 +1822,7 @@ pub async fn build_init_account<'a>(
 
 /// Submit a transaction to update a VP
 pub async fn build_update_account<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::TxUpdateAccount {
         tx: tx_args,
         vp_code_path,
@@ -1836,7 +1842,7 @@ pub async fn build_update_account<'a>(
     .await?;
 
     let addr = if let Some(account) =
-        rpc::get_account_info(context.client, addr).await?
+        rpc::get_account_info(context.client(), addr).await?
     {
         account.address
     } else if tx_args.force {
@@ -1848,7 +1854,7 @@ pub async fn build_update_account<'a>(
     let vp_code_hash = match vp_code_path {
         Some(code_path) => {
             let vp_hash =
-                query_wasm_code_hash_buf(context.client, code_path).await?;
+                query_wasm_code_hash_buf(context.client(), code_path).await?;
             Some(vp_hash)
         }
         None => None,
@@ -1887,7 +1893,7 @@ pub async fn build_update_account<'a>(
 
 /// Submit a custom transaction
 pub async fn build_custom<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args::TxCustom {
         tx: tx_args,
         code_path,
@@ -1911,7 +1917,7 @@ pub async fn build_custom<'a>(
         })?
     } else {
         let tx_code_hash = query_wasm_code_hash_buf(
-            context.client,
+            context.client(),
             code_path
                 .as_ref()
                 .ok_or(Error::Other("No code path supplied".to_string()))?,

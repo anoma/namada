@@ -179,7 +179,7 @@ impl TxCustom {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -288,7 +288,7 @@ impl TxTransfer {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &mut self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -405,7 +405,7 @@ impl TxIbcTransfer {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -497,15 +497,15 @@ impl InitProposal {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
         Option<Epoch>,
     )> {
-        let current_epoch = rpc::query_epoch(context.client).await?;
+        let current_epoch = rpc::query_epoch(context.client()).await?;
         let governance_parameters =
-            rpc::query_governance_parameters(context.client).await;
+            rpc::query_governance_parameters(context.client()).await;
 
         if self.is_pgf_funding {
             let proposal =
@@ -526,9 +526,15 @@ impl InitProposal {
                 .map_err(|e| {
                     crate::types::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
                 })?;
+            let nam_address = context
+                .wallet()
+                .await
+                .find_address(NAM)
+                .expect("NAM not in wallet")
+                .clone();
             let author_balance = rpc::get_token_balance(
-                context.client,
-                context.wallet.find_address(NAM).expect("NAM not in wallet"),
+                context.client(),
+                &nam_address,
                 &proposal.proposal.author,
             )
             .await?;
@@ -549,9 +555,15 @@ impl InitProposal {
                 .map_err(|e| {
                     crate::types::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
                 })?;
+            let nam_address = context
+                .wallet()
+                .await
+                .find_address(NAM)
+                .expect("NAM not in wallet")
+                .clone();
             let author_balance = rpc::get_token_balance(
-                context.client,
-                context.wallet.find_address(NAM).expect("NAM not in wallet"),
+                context.client(),
+                &nam_address,
                 &proposal.proposal.author,
             )
             .await?;
@@ -646,13 +658,13 @@ impl VoteProposal {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
         Option<Epoch>,
     )> {
-        let current_epoch = rpc::query_epoch(context.client).await?;
+        let current_epoch = rpc::query_epoch(context.client()).await?;
         tx::build_vote_proposal(context, self, current_epoch).await
     }
 }
@@ -775,7 +787,7 @@ impl TxUpdateAccount {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -856,7 +868,7 @@ impl Bond {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -886,7 +898,7 @@ impl Unbond {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -970,7 +982,7 @@ impl RevealPk {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1057,7 +1069,7 @@ impl Withdraw {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1193,7 +1205,7 @@ impl CommissionRateChange {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1252,7 +1264,7 @@ impl UpdateStewardCommission {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1304,7 +1316,7 @@ impl ResignSteward {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1356,7 +1368,7 @@ impl TxUnjailValidator {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         &self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,
@@ -1881,7 +1893,7 @@ impl EthereumBridgePool {
     /// Build a transaction from this builder
     pub async fn build<'a>(
         self,
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
     ) -> crate::types::error::Result<(
         crate::proto::Tx,
         SigningTxData,

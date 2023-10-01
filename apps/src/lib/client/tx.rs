@@ -32,7 +32,7 @@ use crate::wallet::{
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
 pub async fn aux_signing_data<'a>(
-    context: &mut impl Namada<'a, WalletUtils = CliWalletUtils>,
+    context: &impl Namada<'a, WalletUtils = CliWalletUtils>,
     args: &args::Tx,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -43,7 +43,7 @@ pub async fn aux_signing_data<'a>(
     if args.disposable_signing_key {
         if !(args.dry_run || args.dry_run_wrapper) {
             // Store the generated signing key to wallet in case of need
-            crate::wallet::save(context.wallet).map_err(|_| {
+            crate::wallet::save(*context.wallet().await).map_err(|_| {
                 error::Error::Other(
                     "Failed to save disposable address to wallet".to_string(),
                 )
@@ -61,7 +61,7 @@ pub async fn aux_signing_data<'a>(
 
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: args::Tx,
     address: &Address,
 ) -> Result<(), error::Error> {
@@ -71,12 +71,15 @@ pub async fn submit_reveal_aux<'a>(
 
     if let Address::Implicit(ImplicitAddress(pkh)) = address {
         let key = context
-            .wallet
+            .wallet_mut()
+            .await
             .find_key_by_pkh(pkh, args.clone().password)
             .map_err(|e| error::Error::Other(e.to_string()))?;
         let public_key = key.ref_to();
 
-        if tx::is_reveal_pk_needed(context.client, address, args.force).await? {
+        if tx::is_reveal_pk_needed(context.client(), address, args.force)
+            .await?
+        {
             println!(
                 "Submitting a tx to reveal the public key for address \
                  {address}..."
@@ -86,7 +89,7 @@ pub async fn submit_reveal_aux<'a>(
 
             signing::generate_test_vector(context, &tx).await?;
 
-            context.sign(&mut tx, &args, signing_data)?;
+            context.sign(&mut tx, &args, signing_data).await?;
 
             context.submit(tx, &args).await?;
         }
@@ -103,18 +106,17 @@ pub async fn submit_custom<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    submit_reveal_aux(&mut namada, args.tx.clone(), &args.owner).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    submit_reveal_aux(&namada, args.tx.clone(), &args.owner).await?;
 
-    let (mut tx, signing_data, _epoch) = args.build(&mut namada).await?;
+    let (mut tx, signing_data, _epoch) = args.build(&namada).await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -130,16 +132,15 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let (mut tx, signing_data, _epoch) = args.build(&mut namada).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let (mut tx, signing_data, _epoch) = args.build(&namada).await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -154,17 +155,16 @@ pub async fn submit_init_account<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _epoch) =
-        tx::build_init_account(&mut namada, &args).await?;
+        tx::build_init_account(&namada, &args).await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -372,13 +372,11 @@ pub async fn submit_init_validator<
 
     tx.add_code_from_hash(tx_code_hash).add_data(data);
 
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let signing_data =
-        aux_signing_data(&mut namada, &tx_args, None, None).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let signing_data = aux_signing_data(&namada, &tx_args, None, None).await?;
 
     tx::prepare_tx(
-        &mut namada,
+        &namada,
         &tx_args,
         &mut tx,
         signing_data.fee_payer.clone(),
@@ -388,12 +386,12 @@ pub async fn submit_init_validator<
     )
     .await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if tx_args.dump_tx {
         tx::dump_tx(&tx_args, tx);
     } else {
-        namada.sign(&mut tx, &tx_args, signing_data)?;
+        namada.sign(&mut tx, &tx_args, signing_data).await?;
 
         let result = namada.submit(tx, &tx_args).await?.initialized_accounts();
 
@@ -475,25 +473,25 @@ pub async fn submit_transfer<C: namada::ledger::queries::Client + Sync>(
     args: args::TxTransfer,
 ) -> Result<(), error::Error> {
     for _ in 0..2 {
-        let mut namada =
+        let namada =
             NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
 
         submit_reveal_aux(
-            &mut namada,
+            &namada,
             args.tx.clone(),
             &args.source.effective_address(),
         )
         .await?;
 
         let (mut tx, signing_data, tx_epoch) =
-            args.clone().build(&mut namada).await?;
-        signing::generate_test_vector(&mut namada, &tx).await?;
+            args.clone().build(&namada).await?;
+        signing::generate_test_vector(&namada, &tx).await?;
 
         if args.tx.dump_tx {
             tx::dump_tx(&args.tx, tx);
             break;
         } else {
-            namada.sign(&mut tx, &args.tx, signing_data)?;
+            namada.sign(&mut tx, &args.tx, signing_data).await?;
             let result = namada.submit(tx, &args.tx).await?;
 
             let submission_epoch = rpc::query_and_print_epoch(client).await;
@@ -532,16 +530,15 @@ pub async fn submit_ibc_transfer<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    submit_reveal_aux(&mut namada, args.tx.clone(), &args.source).await?;
-    let (mut tx, signing_data, _epoch) = args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    submit_reveal_aux(&namada, args.tx.clone(), &args.source).await?;
+    let (mut tx, signing_data, _epoch) = args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -558,8 +555,7 @@ where
 {
     let current_epoch = rpc::query_and_print_epoch(client).await;
     let governance_parameters = rpc::query_governance_parameters(client).await;
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
     {
         let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
@@ -573,7 +569,7 @@ where
 
         let default_signer = Some(proposal.author.clone());
         let signing_data = aux_signing_data(
-            &mut namada,
+            &namada,
             &args.tx,
             Some(proposal.author.clone()),
             default_signer,
@@ -605,14 +601,10 @@ where
                 .validate(&governance_parameters, current_epoch, args.tx.force)
                 .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        submit_reveal_aux(
-            &mut namada,
-            args.tx.clone(),
-            &proposal.proposal.author,
-        )
-        .await?;
+        submit_reveal_aux(&namada, args.tx.clone(), &proposal.proposal.author)
+            .await?;
 
-        tx::build_pgf_funding_proposal(&mut namada, &args, proposal).await?
+        tx::build_pgf_funding_proposal(&namada, &args, proposal).await?
     } else if args.is_pgf_stewards {
         let proposal = PgfStewardProposal::try_from(
             args.proposal_data.as_ref(),
@@ -635,14 +627,10 @@ where
             )
             .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        submit_reveal_aux(
-            &mut namada,
-            args.tx.clone(),
-            &proposal.proposal.author,
-        )
-        .await?;
+        submit_reveal_aux(&namada, args.tx.clone(), &proposal.proposal.author)
+            .await?;
 
-        tx::build_pgf_stewards_proposal(&mut namada, &args, proposal).await?
+        tx::build_pgf_stewards_proposal(&namada, &args, proposal).await?
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
@@ -663,21 +651,17 @@ where
             )
             .map_err(|e| error::TxError::InvalidProposal(e.to_string()))?;
 
-        submit_reveal_aux(
-            &mut namada,
-            args.tx.clone(),
-            &proposal.proposal.author,
-        )
-        .await?;
+        submit_reveal_aux(&namada, args.tx.clone(), &proposal.proposal.author)
+            .await?;
 
-        tx::build_default_proposal(&mut namada, &args, proposal).await?
+        tx::build_default_proposal(&namada, &args, proposal).await?
     };
-    signing::generate_test_vector(&mut namada, &tx_builder).await?;
+    signing::generate_test_vector(&namada, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
     } else {
-        namada.sign(&mut tx_builder, &args.tx, signing_data)?;
+        namada.sign(&mut tx_builder, &args.tx, signing_data).await?;
         namada.submit(tx_builder, &args.tx).await?;
     }
 
@@ -693,13 +677,12 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx_builder, signing_data, _fee_unshield_epoch) = if args.is_offline
     {
         let default_signer = Some(args.voter.clone());
         let signing_data = aux_signing_data(
-            &mut namada,
+            &namada,
             &args.tx,
             Some(args.voter.clone()),
             default_signer.clone(),
@@ -747,14 +730,14 @@ where
         println!("Proposal vote serialized to: {}", output_file_path);
         return Ok(());
     } else {
-        args.build(&mut namada).await?
+        args.build(&namada).await?
     };
-    signing::generate_test_vector(&mut namada, &tx_builder).await?;
+    signing::generate_test_vector(&namada, &tx_builder).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx_builder);
     } else {
-        namada.sign(&mut tx_builder, &args.tx, signing_data)?;
+        namada.sign(&mut tx_builder, &args.tx, signing_data).await?;
         namada.submit(tx_builder, &args.tx).await?;
     }
 
@@ -780,11 +763,10 @@ where
         eprintln!("Couldn't decode the transaction.");
         safe_exit(1)
     };
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let default_signer = Some(owner.clone());
     let signing_data = aux_signing_data(
-        &mut namada,
+        &namada,
         &tx_args,
         Some(owner.clone()),
         default_signer,
@@ -855,9 +837,8 @@ pub async fn submit_reveal_pk<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    submit_reveal_aux(&mut namada, args.tx, &(&args.public_key).into()).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    submit_reveal_aux(&namada, args.tx, &(&args.public_key).into()).await?;
 
     Ok(())
 }
@@ -871,19 +852,18 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    submit_reveal_aux(&mut namada, args.tx.clone(), &default_address).await?;
+    submit_reveal_aux(&namada, args.tx.clone(), &default_address).await?;
 
     let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+        args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -899,16 +879,15 @@ pub async fn submit_unbond<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _fee_unshield_epoch, latest_withdrawal_pre) =
-        args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+        args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
 
@@ -926,16 +905,15 @@ pub async fn submit_withdraw<C: namada::ledger::queries::Client + Sync>(
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+        args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -953,16 +931,15 @@ pub async fn submit_validator_commission_change<
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+        args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -980,16 +957,15 @@ pub async fn submit_unjail_validator<
 where
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(&mut namada).await?;
-    signing::generate_test_vector(&mut namada, &tx).await?;
+        args.build(&namada).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
 
         namada.submit(tx, &args.tx).await?;
     }
@@ -1008,17 +984,16 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
     let (mut tx, signing_data, _fee_unshield_epoch) =
-        args.build(&mut namada).await?;
+        args.build(&namada).await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
@@ -1034,16 +1009,15 @@ where
     C: namada::ledger::queries::Client + Sync,
     C::Error: std::fmt::Display,
 {
-    let mut namada =
-        NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
-    let (mut tx, signing_data, _epoch) = args.build(&mut namada).await?;
+    let namada = NamadaImpl::new(client, &mut ctx.wallet, &mut ctx.shielded);
+    let (mut tx, signing_data, _epoch) = args.build(&namada).await?;
 
-    signing::generate_test_vector(&mut namada, &tx).await?;
+    signing::generate_test_vector(&namada, &tx).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(&args.tx, tx);
     } else {
-        namada.sign(&mut tx, &args.tx, signing_data)?;
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
 
