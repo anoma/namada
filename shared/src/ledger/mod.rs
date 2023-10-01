@@ -88,7 +88,7 @@ pub trait Namada<'a>:
     type ShieldedUtils: 'a + ShieldedUtils;
 
     /// Return the native token
-    fn native_token(&mut self) -> Address {
+    fn native_token(&self) -> Address {
         self.wallet
             .find_address(args::NAM)
             .expect("NAM not in wallet")
@@ -96,7 +96,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a tx builder using no arguments
-    fn tx_builder(&mut self) -> args::Tx {
+    fn tx_builder(&self) -> args::Tx {
         args::Tx {
             dry_run: false,
             dry_run_wrapper: false,
@@ -125,7 +125,7 @@ pub trait Namada<'a>:
 
     /// Make a TxTransfer builder from the given minimum set of arguments
     fn new_transfer(
-        &mut self,
+        &self,
         source: TransferSource,
         target: TransferTarget,
         token: Address,
@@ -144,7 +144,7 @@ pub trait Namada<'a>:
 
     /// Make a RevealPK builder from the given minimum set of arguments
     fn new_reveal_pk(
-        &mut self,
+        &self,
         public_key: common::PublicKey,
     ) -> args::RevealPk {
         args::RevealPk {
@@ -155,7 +155,7 @@ pub trait Namada<'a>:
 
     /// Make a Bond builder from the given minimum set of arguments
     fn new_bond(
-        &mut self,
+        &self,
         validator: Address,
         amount: token::Amount,
     ) -> args::Bond {
@@ -171,7 +171,7 @@ pub trait Namada<'a>:
 
     /// Make a Unbond builder from the given minimum set of arguments
     fn new_unbond(
-        &mut self,
+        &self,
         validator: Address,
         amount: token::Amount,
     ) -> args::Unbond {
@@ -186,7 +186,7 @@ pub trait Namada<'a>:
 
     /// Make a TxIbcTransfer builder from the given minimum set of arguments
     fn new_ibc_transfer(
-        &mut self,
+        &self,
         source: Address,
         receiver: String,
         token: Address,
@@ -210,7 +210,7 @@ pub trait Namada<'a>:
 
     /// Make a InitProposal builder from the given minimum set of arguments
     fn new_init_proposal(
-        &mut self,
+        &self,
         proposal_data: Vec<u8>,
     ) -> args::InitProposal {
         args::InitProposal {
@@ -225,7 +225,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(&mut self, addr: Address) -> args::TxUpdateAccount {
+    fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
             vp_code_path: None,
@@ -238,7 +238,7 @@ pub trait Namada<'a>:
 
     /// Make a VoteProposal builder from the given minimum set of arguments
     fn new_vote_prposal(
-        &mut self,
+        &self,
         vote: String,
         voter: Address,
     ) -> args::VoteProposal {
@@ -256,7 +256,7 @@ pub trait Namada<'a>:
     /// Make a CommissionRateChange builder from the given minimum set of
     /// arguments
     fn new_change_commission_rate(
-        &mut self,
+        &self,
         rate: Dec,
         validator: Address,
     ) -> args::CommissionRateChange {
@@ -270,7 +270,7 @@ pub trait Namada<'a>:
 
     /// Make a TxInitValidator builder from the given minimum set of arguments
     fn new_init_validator(
-        &mut self,
+        &self,
         commission_rate: Dec,
         max_commission_rate_change: Dec,
     ) -> args::TxInitValidator {
@@ -293,7 +293,7 @@ pub trait Namada<'a>:
 
     /// Make a TxUnjailValidator builder from the given minimum set of arguments
     fn new_unjail_validator(
-        &mut self,
+        &self,
         validator: Address,
     ) -> args::TxUnjailValidator {
         args::TxUnjailValidator {
@@ -304,7 +304,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_withdraw(&mut self, validator: Address) -> args::Withdraw {
+    fn new_withdraw(&self, validator: Address) -> args::Withdraw {
         args::Withdraw {
             validator,
             source: None,
@@ -315,7 +315,7 @@ pub trait Namada<'a>:
 
     /// Make a Withdraw builder from the given minimum set of arguments
     fn new_add_erc20_transfer(
-        &mut self,
+        &self,
         sender: Address,
         recipient: EthAddress,
         asset: EthAddress,
@@ -339,7 +339,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a ResignSteward builder from the given minimum set of arguments
-    fn new_resign_steward(&mut self, steward: Address) -> args::ResignSteward {
+    fn new_resign_steward(&self, steward: Address) -> args::ResignSteward {
         args::ResignSteward {
             steward,
             tx: self.tx_builder(),
@@ -350,7 +350,7 @@ pub trait Namada<'a>:
     /// Make a UpdateStewardCommission builder from the given minimum set of
     /// arguments
     fn new_update_steward_rewards(
-        &mut self,
+        &self,
         steward: Address,
         commission: Vec<u8>,
     ) -> args::UpdateStewardCommission {
@@ -363,7 +363,7 @@ pub trait Namada<'a>:
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&mut self, owner: Address) -> args::TxCustom {
+    fn new_custom(&self, owner: Address) -> args::TxCustom {
         args::TxCustom {
             owner,
             tx: self.tx_builder(),
@@ -489,7 +489,7 @@ where
     type WalletUtils = U;
 
     /// Obtain the prototypical Tx builder
-    fn tx_builder(&mut self) -> args::Tx {
+    fn tx_builder(&self) -> args::Tx {
         self.prototype.clone()
     }
 }
