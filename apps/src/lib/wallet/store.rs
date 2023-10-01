@@ -8,12 +8,11 @@ use ark_std::rand::SeedableRng;
 use namada::sdk::wallet::store::AddressVpType;
 #[cfg(feature = "dev")]
 use namada::sdk::wallet::StoredKeypair;
-use namada::sdk::wallet::{gen_sk_rng, Store, ValidatorKeys};
+use namada::sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
 #[cfg(not(feature = "dev"))]
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
-use namada::sdk::wallet::LoadStoreError;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;

@@ -83,10 +83,7 @@ pub struct SigningTxData {
 /// for it from the wallet. If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
-pub async fn find_pk<
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
->(
+pub async fn find_pk<C: crate::ledger::queries::Client + Sync, U: WalletIo>(
     client: &C,
     wallet: &mut Wallet<U>,
     addr: &Address,

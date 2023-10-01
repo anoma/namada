@@ -403,16 +403,14 @@ fn key_and_address_gen<IO: Io>(
             encryption_password,
             derivation_path_and_mnemonic_rng,
         )
-        .unwrap_or_else(|err| {
-            match err {
-                GenRestoreKeyError::KeyStorageError => {
-                    println!("No changes are persisted. Exiting.");
-                    cli::safe_exit(0);
-                },
-                _ => {
-                    eprintln!("{}", err);
-                    cli::safe_exit(1);
-                }
+        .unwrap_or_else(|err| match err {
+            GenRestoreKeyError::KeyStorageError => {
+                println!("No changes are persisted. Exiting.");
+                cli::safe_exit(0);
+            }
+            _ => {
+                eprintln!("{}", err);
+                cli::safe_exit(1);
             }
         });
     crate::wallet::save(&wallet)
