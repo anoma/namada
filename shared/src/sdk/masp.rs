@@ -1489,7 +1489,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// amounts and signatures specified by the containing Transfer object.
     #[cfg(feature = "masp-tx-gen")]
     pub async fn gen_shielded_transfer<'a>(
-        context: &mut impl Namada<'a>,
+        context: &impl Namada<'a>,
         args: &args::TxTransfer,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
@@ -1510,17 +1510,20 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         // We want to fund our transaction solely from supplied spending key
         let spending_key = spending_key.map(|x| x.into());
         let spending_keys: Vec<_> = spending_key.into_iter().collect();
-        // Load the current shielded context given the spending key we possess
-        let _ = context.shielded.load().await;
-        let context = &mut **context;
-        context
-            .shielded
-            .fetch(context.client, &spending_keys, &[])
-            .await?;
-        // Save the update state so that future fetches can be short-circuited
-        let _ = context.shielded.save().await;
+        {
+            // Load the current shielded context given the spending key we
+            // possess
+            let mut shielded = context.shielded_mut().await;
+            let _ = shielded.load().await;
+            shielded
+                .fetch(context.client(), &spending_keys, &[])
+                .await?;
+            // Save the update state so that future fetches can be
+            // short-circuited
+            let _ = shielded.save().await;
+        }
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(context.client).await?;
+        let epoch = rpc::query_epoch(context.client()).await?;
         // Context required for storing which notes are in the source's
         // possesion
         let memo = MemoBytes::empty();
@@ -1561,9 +1564,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction amount
             let (_, unspent_notes, used_convs) = context
-                .shielded
+                .shielded_mut()
+                .await
                 .collect_unspent_notes(
-                    context.client,
+                    context.client(),
                     &to_viewing_key(&sk).vk,
                     I128Sum::from_sum(amount),
                     epoch,
@@ -1749,17 +1753,17 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 Error::from(EncodingError::Conversion(e.to_string()))
             })?;
 
-        let build_transfer =
-            || -> Result<ShieldedTransfer, builder::Error<std::convert::Infallible>> {
-                let (masp_tx, metadata) = builder.build(
-                    &context.shielded.utils.local_tx_prover(),
-                    &FeeRule::non_standard(U64Sum::zero()),
-                )?;
-                Ok(ShieldedTransfer {
-                    builder: builder_clone,
-                    masp_tx,
-                    metadata,
-                    epoch,
+        let build_transfer = |prover: LocalTxProver| -> Result<
+            ShieldedTransfer,
+            builder::Error<std::convert::Infallible>,
+        > {
+            let (masp_tx, metadata) = builder
+                .build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
+            Ok(ShieldedTransfer {
+                builder: builder_clone,
+                masp_tx,
+                metadata,
+                epoch,
             })
         };
 
@@ -1805,7 +1809,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 Ok(Some(loaded))
             } else {
                 // Build and return the constructed transaction
-                let built = build_transfer()?;
+                let built = build_transfer(
+                    context.shielded().await.utils.local_tx_prover(),
+                )?;
                 if let LoadOrSaveProofs::Save = load_or_save {
                     let built_bytes = BorshSerialize::try_to_vec(&built)
                         .map_err(|e| {
@@ -1824,7 +1830,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         #[cfg(not(feature = "testing"))]
         {
             // Build and return the constructed transaction
-            let built = build_transfer()?;
+            let built = build_transfer(
+                context.shielded().await.utils.local_tx_prover(),
+            )?;
             Ok(Some(built))
         }
     }

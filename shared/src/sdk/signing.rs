@@ -151,7 +151,7 @@ pub fn find_key_by_pk<U: WalletIo>(
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
 pub async fn tx_signers<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
@@ -172,8 +172,8 @@ pub async fn tx_signers<'a>(
 
         Some(signer) => Ok(vec![
             find_pk(
-                context.client,
-                context.wallet,
+                context.client(),
+                *context.wallet_mut().await,
                 &signer,
                 args.password.clone(),
             )
@@ -240,7 +240,7 @@ pub fn sign_tx<U: WalletIo>(
 /// Return the necessary data regarding an account to be able to generate a
 /// multisignature section
 pub async fn aux_signing_data<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
@@ -253,7 +253,8 @@ pub async fn aux_signing_data<'a>(
 
     let (account_public_keys_map, threshold) = match &owner {
         Some(owner @ Address::Established(_)) => {
-            let account = rpc::get_account_info(context.client, owner).await?;
+            let account =
+                rpc::get_account_info(context.client(), owner).await?;
             if let Some(account) = account {
                 (Some(account.public_keys_map), account.threshold)
             } else {
@@ -273,7 +274,11 @@ pub async fn aux_signing_data<'a>(
     };
 
     let fee_payer = if args.disposable_signing_key {
-        context.wallet.generate_disposable_signing_key().to_public()
+        context
+            .wallet_mut()
+            .await
+            .generate_disposable_signing_key()
+            .to_public()
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.to_public(),
@@ -314,7 +319,7 @@ pub struct TxSourcePostBalance {
 /// progress on chain.
 #[allow(clippy::too_many_arguments)]
 pub async fn wrap_tx<'a, N: Namada<'a>>(
-    context: &mut N,
+    context: &N,
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
     tx_source_balance: Option<TxSourcePostBalance>,
@@ -327,7 +332,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
     let minimum_fee = match rpc::query_storage_value::<
         _,
         BTreeMap<Address, Amount>,
-    >(context.client, &gas_cost_key)
+    >(context.client(), &gas_cost_key)
     .await
     .and_then(|map| {
         map.get(&args.fee_token)
@@ -351,7 +356,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
     let fee_amount = match args.fee_amount {
         Some(amount) => {
             let validated_fee_amount = validate_amount(
-                context.client,
+                context.client(),
                 amount,
                 &args.fee_token,
                 args.force,
@@ -392,7 +397,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                 token::balance_key(&args.fee_token, &fee_payer_address);
 
             rpc::query_storage_value::<_, token::Amount>(
-                context.client,
+                context.client(),
                 &balance_key,
             )
             .await
@@ -460,7 +465,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                         let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
                         let descriptions_limit =
                             rpc::query_storage_value::<_, u64>(
-                                context.client,
+                                context.client(),
                                 &descriptions_limit_key,
                             )
                             .await
@@ -508,14 +513,14 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
                 let token_addr = args.fee_token.clone();
                 if !args.force {
                     let fee_amount = format_denominated_amount(
-                        context.client,
+                        context.client(),
                         &token_addr,
                         total_fee,
                     )
                     .await;
 
                     let balance = format_denominated_amount(
-                        context.client,
+                        context.client(),
                         &token_addr,
                         updated_balance,
                     )
@@ -779,7 +784,7 @@ pub async fn make_ledger_masp_endpoints<
 /// Internal method used to generate transaction test vectors
 #[cfg(feature = "std")]
 pub async fn generate_test_vector<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     tx: &Tx,
 ) -> Result<(), Error> {
     use std::env;
@@ -830,40 +835,45 @@ pub async fn generate_test_vector<'a>(
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector<'a>(
-    context: &mut impl Namada<'a>,
+    context: &impl Namada<'a>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     let init_account_hash =
-        query_wasm_code_hash(context.client, TX_INIT_ACCOUNT_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_INIT_ACCOUNT_WASM).await?;
     let init_validator_hash =
-        query_wasm_code_hash(context.client, TX_INIT_VALIDATOR_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_INIT_VALIDATOR_WASM).await?;
     let init_proposal_hash =
-        query_wasm_code_hash(context.client, TX_INIT_PROPOSAL).await?;
+        query_wasm_code_hash(context.client(), TX_INIT_PROPOSAL).await?;
     let vote_proposal_hash =
-        query_wasm_code_hash(context.client, TX_VOTE_PROPOSAL).await?;
+        query_wasm_code_hash(context.client(), TX_VOTE_PROPOSAL).await?;
     let reveal_pk_hash =
-        query_wasm_code_hash(context.client, TX_REVEAL_PK).await?;
+        query_wasm_code_hash(context.client(), TX_REVEAL_PK).await?;
     let update_account_hash =
-        query_wasm_code_hash(context.client, TX_UPDATE_ACCOUNT_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_UPDATE_ACCOUNT_WASM).await?;
     let transfer_hash =
-        query_wasm_code_hash(context.client, TX_TRANSFER_WASM).await?;
-    let ibc_hash = query_wasm_code_hash(context.client, TX_IBC_WASM).await?;
-    let bond_hash = query_wasm_code_hash(context.client, TX_BOND_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_TRANSFER_WASM).await?;
+    let ibc_hash = query_wasm_code_hash(context.client(), TX_IBC_WASM).await?;
+    let bond_hash =
+        query_wasm_code_hash(context.client(), TX_BOND_WASM).await?;
     let unbond_hash =
-        query_wasm_code_hash(context.client, TX_UNBOND_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_UNBOND_WASM).await?;
     let withdraw_hash =
-        query_wasm_code_hash(context.client, TX_WITHDRAW_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
-        query_wasm_code_hash(context.client, TX_CHANGE_COMMISSION_WASM).await?;
-    let user_hash = query_wasm_code_hash(context.client, VP_USER_WASM).await?;
+        query_wasm_code_hash(context.client(), TX_CHANGE_COMMISSION_WASM)
+            .await?;
+    let user_hash =
+        query_wasm_code_hash(context.client(), VP_USER_WASM).await?;
 
     // To facilitate lookups of human-readable token names
+    let wallet = context.wallet().await;
     let tokens: HashMap<Address, String> = context
-        .wallet
+        .wallet()
+        .await
         .get_addresses_with_vp_type(AddressVpType::Token)
         .into_iter()
         .map(|addr| {
-            let alias = match context.wallet.find_alias(&addr) {
+            let alias = match wallet.find_alias(&addr) {
                 Some(alias) => alias.to_string(),
                 None => addr.to_string(),
             };
@@ -1150,7 +1160,7 @@ pub async fn to_ledger_vector<'a>(
 
         tv.output.push("Type : Transfer".to_string());
         make_ledger_masp_endpoints(
-            context.client,
+            context.client(),
             &tokens,
             &mut tv.output,
             &transfer,
@@ -1159,7 +1169,7 @@ pub async fn to_ledger_vector<'a>(
         )
         .await;
         make_ledger_masp_endpoints(
-            context.client,
+            context.client(),
             &tokens,
             &mut tv.output_expert,
             &transfer,
@@ -1332,13 +1342,13 @@ pub async fn to_ledger_vector<'a>(
     if let Some(wrapper) = tx.header.wrapper() {
         let gas_token = wrapper.fee.token.clone();
         let gas_limit = format_denominated_amount(
-            context.client,
+            context.client(),
             &gas_token,
             Amount::from(wrapper.gas_limit),
         )
         .await;
         let fee_amount_per_gas_unit = format_denominated_amount(
-            context.client,
+            context.client(),
             &gas_token,
             wrapper.fee.amount_per_gas_unit,
         )

@@ -258,28 +258,30 @@ impl<IO: Io> CliApi<IO> {
                         let args = args.to_sdk(&mut ctx);
                         let tx_args = args.tx.clone();
 
-                        let mut namada = NamadaImpl::new(
+                        let namada = NamadaImpl::new(
                             &client,
                             &mut ctx.wallet,
                             &mut ctx.shielded,
                         );
 
                         let (mut tx, signing_data, _epoch) =
-                            args.clone().build(&mut namada).await?;
+                            args.clone().build(&namada).await?;
 
-                        signing::generate_test_vector(&mut namada, &tx).await?;
+                        signing::generate_test_vector(&namada, &tx).await?;
 
                         if args.tx.dump_tx {
                             dump_tx::<IO>(&args.tx, tx);
                         } else {
                             tx::submit_reveal_aux(
-                                &mut namada,
+                                &namada,
                                 tx_args.clone(),
                                 &args.sender,
                             )
                             .await?;
 
-                            namada.sign(&mut tx, &tx_args, signing_data)?;
+                            namada
+                                .sign(&mut tx, &tx_args, signing_data)
+                                .await?;
 
                             namada.submit(tx, &tx_args).await?;
                         }

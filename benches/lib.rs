@@ -811,13 +811,12 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
-        let mut namada =
+        let namada =
             NamadaImpl::new(&self.shell, &mut self.wallet, &mut self.shielded);
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
-                    &mut namada,
-                    &args,
+                    &namada, &args,
                 ),
             )
             .unwrap()
