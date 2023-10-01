@@ -586,7 +586,10 @@ impl ShieldedUtils for BenchShieldedUtils {
 
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
-    async fn load<U: ShieldedUtils>(&self, ctx: &mut ShieldedContext<U>) -> std::io::Result<()> {
+    async fn load<U: ShieldedUtils>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+    ) -> std::io::Result<()> {
         // Try to load shielded context from file
         let mut ctx_file = File::open(
             self.context_dir.0.path().to_path_buf().join(FILE_NAME),
@@ -602,7 +605,10 @@ impl ShieldedUtils for BenchShieldedUtils {
     }
 
     /// Save this shielded context into its associated context directory
-    async fn save<U: ShieldedUtils>(&self, ctx: &ShieldedContext<U>) -> std::io::Result<()> {
+    async fn save<U: ShieldedUtils>(
+        &self,
+        ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()> {
         let tmp_path =
             self.context_dir.0.path().to_path_buf().join(TMP_FILE_NAME);
         {
