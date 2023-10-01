@@ -209,6 +209,12 @@ impl std::str::FromStr for InputAmount {
     }
 }
 
+impl From<token::DenominatedAmount> for InputAmount {
+    fn from(amt: token::DenominatedAmount) -> Self {
+        InputAmount::Unvalidated(amt)
+    }
+}
+
 /// Transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxTransfer<C: NamadaTypes = SdkTypes> {

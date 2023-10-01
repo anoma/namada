@@ -1063,15 +1063,13 @@ where
     .try_halt(|_| ())
 }
 
-/// Look up the denomination of a token in order to format it
-/// correctly as a string.
-pub async fn format_denominated_amount<
-    C: crate::ledger::queries::Client + Sync,
->(
+/// Look up the denomination of a token in order to make a correctly denominated
+/// amount.
+pub async fn denominate_amount<C: crate::ledger::queries::Client + Sync>(
     client: &C,
     token: &Address,
     amount: token::Amount,
-) -> String {
+) -> DenominatedAmount {
     let denom = convert_response::<C, Option<Denomination>>(
         RPC.vp().token().denomination(client, token).await,
     )
@@ -1086,5 +1084,17 @@ pub async fn format_denominated_amount<
         );
         0.into()
     });
-    DenominatedAmount { amount, denom }.to_string()
+    DenominatedAmount { amount, denom }
+}
+
+/// Look up the denomination of a token in order to format it
+/// correctly as a string.
+pub async fn format_denominated_amount<
+    C: crate::ledger::queries::Client + Sync,
+>(
+    client: &C,
+    token: &Address,
+    amount: token::Amount,
+) -> String {
+    denominate_amount(client, token, amount).await.to_string()
 }
