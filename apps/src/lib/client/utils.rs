@@ -495,7 +495,14 @@ pub fn init_network(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair, _mnemonic) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    true,
+                    None,
+                    password,
+                    None,
+                )
                 .expect("Key generation should not fail.");
 
             // Write consensus key for Tendermint
@@ -514,7 +521,14 @@ pub fn init_network(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair, _mnemonic) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    true,
+                    None,
+                    password,
+                    None,
+                )
                 .expect("Key generation should not fail.");
             keypair.ref_to()
         });
@@ -529,7 +543,14 @@ pub fn init_network(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let (_alias, keypair, _mnemonic) = wallet
-                .gen_key(SchemeType::Ed25519, Some(alias), true, None, password, None)
+                .gen_key(
+                    SchemeType::Ed25519,
+                    Some(alias),
+                    true,
+                    None,
+                    password,
+                    None,
+                )
                 .expect("Key generation should not fail.");
             keypair.ref_to()
         });

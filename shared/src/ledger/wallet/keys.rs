@@ -174,8 +174,8 @@ where
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
-                    let password = password
-                        .unwrap_or_else(|| U::read_password(false));
+                    let password =
+                        password.unwrap_or_else(|| U::read_password(false));
                     let key = encrypted_keypair.decrypt(password)?;
                     Ok(key)
                 } else {

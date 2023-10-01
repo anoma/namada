@@ -8,12 +8,13 @@ use ark_std::rand::SeedableRng;
 use namada::ledger::wallet::store::AddressVpType;
 #[cfg(feature = "dev")]
 use namada::ledger::wallet::StoredKeypair;
-use namada::ledger::wallet::{gen_sk_rng, Store, ValidatorKeys};
+use namada::ledger::wallet::{
+    gen_sk_rng, LoadStoreError, Store, ValidatorKeys,
+};
 #[cfg(not(feature = "dev"))]
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
-use namada::ledger::wallet::LoadStoreError;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
@@ -24,14 +25,6 @@ const FILE_NAME: &str = "wallet.toml";
 /// Get the path to the wallet store.
 pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
     store_dir.as_ref().join(FILE_NAME)
-}
-
-/// Save the wallet store to a file.
-pub fn save(store: Store, store_dir: &Path) -> std::io::Result<()> {
-    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
-    *wallet.store_mut() = store;
-    wallet.save()
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
 }
 
 /// Load the store file or create a new one without any keys or addresses.

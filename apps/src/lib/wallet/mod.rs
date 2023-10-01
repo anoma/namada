@@ -10,6 +10,8 @@ use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
 pub use namada::ledger::wallet::alias::Alias;
+use namada::ledger::wallet::fs::FsWalletStorage;
+use namada::ledger::wallet::store::Store;
 use namada::ledger::wallet::{
     AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
     Wallet, WalletIo,
@@ -20,8 +22,6 @@ use namada::types::key::*;
 use rand_core::OsRng;
 pub use store::wallet_file;
 use zeroize::Zeroizing;
-use namada::ledger::wallet::store::Store;
-use namada::ledger::wallet::fs::FsWalletStorage;
 
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
@@ -66,7 +66,7 @@ impl WalletIo for CliWalletUtils {
                             cli::safe_exit(1)
                         },
                     )
-                },
+                }
                 Err(_) => {
                     let prompt = "Enter your decryption password: ";
                     rpassword::read_password_from_tty(Some(prompt))
@@ -258,7 +258,8 @@ pub fn add_genesis_addresses(
 
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
-    wallet.save()
+    wallet
+        .save()
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
 }
 

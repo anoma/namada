@@ -5,7 +5,9 @@ use borsh::BorshSerialize;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::ledger::masp::find_valid_diversifier;
-use namada::ledger::wallet::{DecryptionError, FindKeyError, GenRestoreKeyError};
+use namada::ledger::wallet::{
+    DecryptionError, FindKeyError, GenRestoreKeyError,
+};
 use namada::types::key::{PublicKeyHash, RefTo};
 use namada::types::masp::{MaspValue, PaymentAddress};
 use rand_core::OsRng;
@@ -316,16 +318,14 @@ pub fn key_and_address_gen(
             encryption_password,
             derivation_path_and_mnemonic_rng,
         )
-        .unwrap_or_else(|err| {
-            match err {
-                GenRestoreKeyError::KeyStorageError => {
-                    println!("No changes are persisted. Exiting.");
-                    cli::safe_exit(0);
-                },
-                _ => {
-                    eprintln!("{}", err);
-                    cli::safe_exit(1);
-                }
+        .unwrap_or_else(|err| match err {
+            GenRestoreKeyError::KeyStorageError => {
+                println!("No changes are persisted. Exiting.");
+                cli::safe_exit(0);
+            }
+            _ => {
+                eprintln!("{}", err);
+                cli::safe_exit(1);
             }
         });
     crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));

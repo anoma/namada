@@ -125,12 +125,14 @@ pub trait WalletStorage: Sized + Clone {
 #[cfg(feature = "std")]
 /// Implementation of wallet functionality depending on a standard filesystem
 pub mod fs {
-    use super::*;
     use std::fs;
-    use fd_lock::RwLock;
-    use std::path::PathBuf;
-    use rand_core::OsRng;
     use std::io::{Read, Write};
+    use std::path::PathBuf;
+
+    use fd_lock::RwLock;
+    use rand_core::OsRng;
+
+    use super::*;
 
     /// A trait for deriving WalletStorage for standard filesystems
     pub trait FsWalletStorage: Clone {
@@ -147,30 +149,38 @@ pub mod fs {
             let wallet_path = self.store_dir().join(FILE_NAME);
             // Make sure the dir exists
             let wallet_dir = wallet_path.parent().unwrap();
-            fs::create_dir_all(wallet_dir)
-                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
+            fs::create_dir_all(wallet_dir).map_err(|err| {
+                LoadStoreError::StoreNewWallet(err.to_string())
+            })?;
             // Write the file
             let mut options = fs::OpenOptions::new();
             options.create(true).write(true).truncate(true);
-            let mut lock = RwLock::new(
-                options.open(wallet_path)
-                    .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?,
-            );
-            let mut guard = lock.write()
-                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
-            guard.write_all(&data).map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
+            let mut lock =
+                RwLock::new(options.open(wallet_path).map_err(|err| {
+                    LoadStoreError::StoreNewWallet(err.to_string())
+                })?);
+            let mut guard = lock.write().map_err(|err| {
+                LoadStoreError::StoreNewWallet(err.to_string())
+            })?;
+            guard
+                .write_all(&data)
+                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
         }
 
-        fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError> {
+        fn load<U>(
+            &self,
+            wallet: &mut Wallet<U>,
+        ) -> Result<(), LoadStoreError> {
             let wallet_file = self.store_dir().join(FILE_NAME);
             let mut options = fs::OpenOptions::new();
             options.read(true).write(false);
-            let lock = RwLock::new(options.open(&wallet_file).map_err(|err| {
-                LoadStoreError::ReadWallet(
-                    wallet_file.to_string_lossy().into_owned(),
-                    err.to_string(),
-                )
-            })?);
+            let lock =
+                RwLock::new(options.open(&wallet_file).map_err(|err| {
+                    LoadStoreError::ReadWallet(
+                        wallet_file.to_string_lossy().into_owned(),
+                        err.to_string(),
+                    )
+                })?);
             let guard = lock.read().map_err(|err| {
                 LoadStoreError::ReadWallet(
                     wallet_file.to_string_lossy().into_owned(),
@@ -184,7 +194,8 @@ pub mod fs {
                     err.to_string(),
                 )
             })?;
-            wallet.store = Store::decode(store).map_err(LoadStoreError::Decode)?;
+            wallet.store =
+                Store::decode(store).map_err(LoadStoreError::Decode)?;
             Ok(())
         }
     }
@@ -535,7 +546,8 @@ impl<U: WalletIo> Wallet<U> {
         passphrase: Option<Zeroizing<String>>,
         password: Option<Zeroizing<String>>,
         derivation_path_and_mnemonic_rng: Option<(String, &mut U::Rng)>,
-    ) -> Result<(String, common::SecretKey, Option<Mnemonic>), GenRestoreKeyError> {
+    ) -> Result<(String, common::SecretKey, Option<Mnemonic>), GenRestoreKeyError>
+    {
         let parsed_path_and_rng = derivation_path_and_mnemonic_rng
             .map(|(raw_derivation_path, rng)| {
                 let is_default =
@@ -577,16 +589,18 @@ impl<U: WalletIo> Wallet<U> {
 
             let passphrase = passphrase
                 .unwrap_or_else(|| U::read_mnemonic_passphrase(true));
-            Ok((Seed::new(&mnemonic, &passphrase), path))
+            Ok((Seed::new(mnemonic, &passphrase), path))
         }).transpose()?;
 
-        let (alias, key) = self.gen_and_store_key(
-            scheme,
-            alias,
-            alias_force,
-            seed_and_derivation_path,
-            password,
-        ).ok_or(GenRestoreKeyError::KeyStorageError)?;
+        let (alias, key) = self
+            .gen_and_store_key(
+                scheme,
+                alias,
+                alias_force,
+                seed_and_derivation_path,
+                password,
+            )
+            .ok_or(GenRestoreKeyError::KeyStorageError)?;
         Ok((alias, key, mnemonic_opt))
     }
 
