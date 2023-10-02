@@ -140,7 +140,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetSlashProcessingLenPlus,
 >;
 
 /// Epoched validator's unbonds

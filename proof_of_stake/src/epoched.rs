@@ -877,6 +877,29 @@ impl EpochOffset for OffsetSlashProcessingLen {
     }
 }
 
+/// Offset at the slash processing delay plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetSlashProcessingLenPlus;
+impl EpochOffset for OffsetSlashProcessingLenPlus {
+    fn value(params: &PosParams) -> u64 {
+        params.slash_processing_epoch_offset() + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::SlashProcessingLenPlus
+    }
+}
+
 /// Maximum offset.
 #[derive(
     Debug,
@@ -1018,6 +1041,8 @@ pub enum DynEpochOffset {
     /// Offset at slash processing delay (unbonding +
     /// cubic_slashing_window + 1).
     SlashProcessingLen,
+    /// Offset at slash processing delay plus the defaul num past epochs
+    SlashProcessingLenPlus,
     /// Offset at the max proposal period
     MaxProposalPeriod,
     /// Offset at the max proposal period plus the default num past epochs
