@@ -124,16 +124,16 @@ where
         Ok(())
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error> {
-        for event in &self.event {
-            if event.event_type == *event_type.as_ref() {
-                return Ok(Some(event.clone()));
-            }
-        }
-        Ok(None)
+    ) -> Result<Vec<IbcEvent>, Self::Error> {
+        Ok(self
+            .event
+            .iter()
+            .filter(|event| event.event_type == *event_type.as_ref())
+            .cloned()
+            .collect())
     }
 
     fn transfer_token(
@@ -381,10 +381,10 @@ where
         unimplemented!("Validation doesn't emit an event")
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         _event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, Self::Error> {
         unimplemented!("Validation doesn't get an event")
     }
 

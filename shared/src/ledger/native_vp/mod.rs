@@ -450,11 +450,11 @@ where
         .into_storage_result()
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         event_type: String,
-    ) -> Result<Option<IbcEvent>, storage_api::Error> {
-        vp_host_fns::get_ibc_event(
+    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
+        vp_host_fns::get_ibc_events(
             &mut self.gas_meter.borrow_mut(),
             self.write_log,
             event_type,

@@ -78,11 +78,11 @@ where
     /// Get the address of the native token.
     fn get_native_token(&self) -> Result<Address, storage_api::Error>;
 
-    /// Get the IBC event.
-    fn get_ibc_event(
+    /// Get the IBC events.
+    fn get_ibc_events(
         &self,
         event_type: String,
-    ) -> Result<Option<IbcEvent>, storage_api::Error>;
+    ) -> Result<Vec<IbcEvent>, storage_api::Error>;
 
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
@@ -126,14 +126,14 @@ where
         }
 
         // Shielded transfer over IBC
-        let event = self
-            .get_ibc_event(EVENT_TYPE_PACKET.to_string())?
-            .ok_or_else(|| {
-                storage_api::Error::new_const(
-                    "No IBC event for the shielded action",
-                )
-            })?;
-        get_shielded_transfer(&event)
+        let events = self.get_ibc_events(EVENT_TYPE_PACKET.to_string())?;
+        // The receiving event should be only one in the single IBC transaction
+        let event = events.first().ok_or_else(|| {
+            storage_api::Error::new_const(
+                "No IBC event for the shielded action",
+            )
+        })?;
+        get_shielded_transfer(event)
             .into_storage_result()?
             .map(|shielded| (shielded.transfer, shielded.masp_tx))
             .ok_or_else(|| {

@@ -75,11 +75,11 @@ impl IbcStorageContext for Ctx {
         <Ctx as TxEnv>::emit_ibc_event(self, &event)
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error> {
-        <Ctx as TxEnv>::get_ibc_event(self, &event_type)
+    ) -> Result<Vec<IbcEvent>, Self::Error> {
+        <Ctx as TxEnv>::get_ibc_events(self, &event_type)
     }
 
     fn transfer_token(

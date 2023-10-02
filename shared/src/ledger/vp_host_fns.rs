@@ -335,17 +335,17 @@ where
 }
 
 /// Getting the IBC event.
-pub fn get_ibc_event(
+pub fn get_ibc_events(
     _gas_meter: &mut VpGasMeter,
     write_log: &WriteLog,
     event_type: String,
-) -> EnvResult<Option<IbcEvent>> {
-    for event in write_log.get_ibc_events() {
-        if event.event_type == event_type {
-            return Ok(Some(event.clone()));
-        }
-    }
-    Ok(None)
+) -> EnvResult<Vec<IbcEvent>> {
+    Ok(write_log
+        .get_ibc_events()
+        .iter()
+        .filter(|event| event.event_type == event_type)
+        .cloned()
+        .collect())
 }
 
 /// Storage prefix iterator for prior state (before tx execution), ordered by

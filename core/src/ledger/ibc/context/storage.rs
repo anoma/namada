@@ -55,11 +55,11 @@ pub trait IbcStorageContext {
     /// Emit an IBC event
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error>;
 
-    /// Get an IBC event
-    fn get_ibc_event(
+    /// Get IBC events
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error>;
+    ) -> Result<Vec<IbcEvent>, Self::Error>;
 
     /// Transfer token
     fn transfer_token(

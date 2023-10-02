@@ -200,11 +200,16 @@ where
     fn get_minted_token_info(
         &self,
     ) -> Result<Option<(String, String, String)>, Error> {
-        let receive_event =
-            self.ctx.borrow().get_ibc_event(EVENT_TYPE_PACKET).map_err(
-                |_| Error::Denom("Reading the IBC event failed".to_string()),
-            )?;
+        let receive_event = self
+            .ctx
+            .borrow()
+            .get_ibc_events(EVENT_TYPE_PACKET)
+            .map_err(|_| {
+                Error::Denom("Reading the IBC event failed".to_string())
+            })?;
+        // The receiving event should be only one in the single IBC transaction
         let receiver = match receive_event
+            .first()
             .as_ref()
             .and_then(|event| event.attributes.get("receiver"))
         {
@@ -229,11 +234,12 @@ where
         let denom_event = self
             .ctx
             .borrow()
-            .get_ibc_event(EVENT_TYPE_DENOM_TRACE)
+            .get_ibc_events(EVENT_TYPE_DENOM_TRACE)
             .map_err(|_| {
                 Error::Denom("Reading the IBC event failed".to_string())
             })?;
-        Ok(denom_event.as_ref().and_then(|event| {
+        // The denom event should be only one in the single IBC transaction
+        Ok(denom_event.first().as_ref().and_then(|event| {
             let trace_hash = event.attributes.get("trace_hash").cloned()?;
             let denom = event.attributes.get("denom").cloned()?;
             Some((trace_hash, denom, receiver?))
@@ -270,14 +276,16 @@ where
                 let event = self
                     .ctx
                     .borrow()
-                    .get_ibc_event(EVENT_TYPE_PACKET)
+                    .get_ibc_events(EVENT_TYPE_PACKET)
                     .map_err(|_| {
                         Error::MaspTx(
                             "Reading the IBC event failed".to_string(),
                         )
                     })?;
-                match event {
-                    Some(event) => get_shielded_transfer(&event)
+                // The receiving event should be only one in the single IBC
+                // transaction
+                match event.first() {
+                    Some(event) => get_shielded_transfer(event)
                         .map_err(|e| Error::MaspTx(e.to_string()))?,
                     None => return Ok(()),
                 }

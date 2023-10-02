@@ -977,7 +977,7 @@ where
 }
 
 /// Getting an IBC event function exposed to the wasm VM Tx environment.
-pub fn tx_get_ibc_event<MEM, DB, H, CA>(
+pub fn tx_get_ibc_events<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -994,20 +994,20 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas(env, gas)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    for event in write_log.get_ibc_events() {
-        if event.event_type == event_type {
-            let value =
-                event.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
-            let len: i64 = value
-                .len()
-                .try_into()
-                .map_err(TxRuntimeError::NumConversionError)?;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value);
-            return Ok(len);
-        }
-    }
-    Ok(HostEnvResult::Fail.to_i64())
+    let events: Vec<IbcEvent> = write_log
+        .get_ibc_events()
+        .iter()
+        .filter(|event| event.event_type == event_type)
+        .cloned()
+        .collect();
+    let value = events.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+    let len: i64 = value
+        .len()
+        .try_into()
+        .map_err(TxRuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(value);
+    Ok(len)
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -1781,7 +1781,7 @@ where
 }
 
 /// Getting the IBC event function exposed to the wasm VM VP environment.
-pub fn vp_get_ibc_event<MEM, DB, H, EVAL, CA>(
+pub fn vp_get_ibc_events<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -1801,21 +1801,17 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    match vp_host_fns::get_ibc_event(gas_meter, write_log, event_type)? {
-        Some(event) => {
-            let value = event
-                .try_to_vec()
-                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-            let len: i64 = value
-                .len()
-                .try_into()
-                .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value);
-            Ok(len)
-        }
-        None => Ok(HostEnvResult::Fail.to_i64()),
-    }
+    let events = vp_host_fns::get_ibc_events(gas_meter, write_log, event_type)?;
+    let value = events
+        .try_to_vec()
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+    let len: i64 = value
+        .len()
+        .try_into()
+        .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(value);
+    Ok(len)
 }
 
 /// Verify a transaction signature
@@ -2245,16 +2241,17 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, Self::Error> {
         let write_log = unsafe { self.write_log.get() };
         Ok(write_log
             .get_ibc_events()
             .iter()
-            .find(|event| event.event_type == event_type.as_ref())
-            .cloned())
+            .filter(|event| event.event_type == event_type.as_ref())
+            .cloned()
+            .collect())
     }
 
     fn transfer_token(
