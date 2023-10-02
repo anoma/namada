@@ -104,7 +104,7 @@ pub type ValidatorDeltas = crate::epoched::EpochedDelta<
 pub type TotalDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
 /// Epoched validator commission rate
