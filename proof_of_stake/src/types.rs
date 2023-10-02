@@ -44,14 +44,14 @@ pub type ValidatorConsensusKeys = crate::epoched::Epoched<
 pub type ValidatorEthHotKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched validator's eth cold key.
 pub type ValidatorEthColdKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched validator's state.
