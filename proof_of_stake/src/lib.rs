@@ -3689,6 +3689,9 @@ where
         cur_slashes.push(updated_slash);
     }
 
+    // Update the epochs of enqueued slashes in storage
+    enqueued_slashes_handle().update_data(storage, &params, current_epoch)?;
+
     let mut deltas_for_update: HashMap<Address, Vec<(u64, token::Change)>> =
         HashMap::new();
 
