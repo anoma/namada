@@ -36,12 +36,11 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::packet::PacketData;
-use crate::ibc::applications::transfer::{PrefixedCoin, PrefixedDenom};
+use crate::ibc::applications::transfer::PrefixedCoin;
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
 use crate::ibc::core::timestamp::Timestamp as IbcTimestamp;
 use crate::ibc::core::Msg;
 use crate::ibc::Height as IbcHeight;
-use crate::ledger::ibc::storage::ibc_token;
 use crate::proto::{MaspBuilder, Tx};
 use crate::sdk::args::{self, InputAmount};
 use crate::sdk::error::{EncodingError, Error, QueryError, Result, TxError};
@@ -1414,16 +1413,10 @@ pub async fn build_ibc_transfer<
     .await
     .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
-    let ibc_denom = PrefixedDenom {
-        trace_path: args.trace_path.unwrap_or_default(),
-        base_denom: args
-            .token
-            .to_string()
-            .parse()
-            .expect("Conversion from the token shouldn't fail"),
-    };
+    let ibc_denom =
+        rpc::query_ibc_denom::<_, IO>(client, &args.token, Some(&source)).await;
     let token = PrefixedCoin {
-        denom: ibc_denom,
+        denom: ibc_denom.parse().expect("Invalid IBC denom"),
         // Set the IBC amount as an integer
         amount: validated_amount.into(),
     };
@@ -1666,11 +1659,6 @@ pub async fn build_transfer<
 ) -> Result<(Tx, Option<Epoch>)> {
     let source = args.source.effective_address();
     let target = args.target.effective_address();
-    let token = if let Some(trace_path) = &args.trace_path {
-        ibc_token(format!("{}/{}", trace_path.clone(), args.token))
-    } else {
-        args.token.clone()
-    };
 
     // Check that the source address exists on chain
     source_exists_or_err::<_, IO>(source.clone(), args.tx.force, client)
@@ -1679,16 +1667,20 @@ pub async fn build_transfer<
     target_exists_or_err::<_, IO>(target.clone(), args.tx.force, client)
         .await?;
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let balance_key = token::balance_key(&args.token, &source);
 
     // validate the amount given
-    let validated_amount =
-        validate_amount::<_, IO>(client, args.amount, &token, args.tx.force)
-            .await?;
+    let validated_amount = validate_amount::<_, IO>(
+        client,
+        args.amount,
+        &args.token,
+        args.tx.force,
+    )
+    .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
     let post_balance = check_balance_too_low_err::<C, IO>(
-        &token,
+        &args.token,
         &source,
         validated_amount.amount,
         balance_key,
@@ -1699,7 +1691,7 @@ pub async fn build_transfer<
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
         source: source.clone(),
-        token: token.clone(),
+        token: args.token.clone(),
     });
 
     let masp_addr = masp();
@@ -1712,7 +1704,7 @@ pub async fn build_transfer<
         // TODO Refactor me, we shouldn't rely on any specific token here.
         (token::Amount::default(), args.native_token.clone())
     } else {
-        (validated_amount.amount, token)
+        (validated_amount.amount, args.token.clone())
     };
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {
@@ -2215,6 +2207,7 @@ fn validate_untrusted_code_err<IO: Io>(
         Ok(())
     }
 }
+
 async fn query_wasm_code_hash_buf<
     C: crate::ledger::queries::Client + Sync,
     IO: Io,

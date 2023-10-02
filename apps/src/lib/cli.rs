@@ -2516,7 +2516,6 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
-    use namada::ibc::applications::transfer::TracePath;
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
     pub use namada::sdk::args::*;
     use namada::types::address::Address;
@@ -2726,7 +2725,6 @@ pub mod args {
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
-    pub const TRACE_PATH: ArgOpt<TracePath> = arg_opt("trace-path");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
@@ -3506,7 +3504,6 @@ pub mod args {
                 source: ctx.get_cached(&self.source),
                 target: ctx.get(&self.target),
                 token: ctx.get(&self.token),
-                trace_path: self.trace_path,
                 amount: self.amount,
                 native_token: ctx.native_token.clone(),
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -3520,7 +3517,6 @@ pub mod args {
             let source = TRANSFER_SOURCE.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
-            let trace_path = TRACE_PATH.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             Self {
@@ -3528,7 +3524,6 @@ pub mod args {
                 source,
                 target,
                 token,
-                trace_path,
                 amount,
                 native_token: (),
                 tx_code_path,
@@ -3546,7 +3541,6 @@ pub mod args {
                      to produce the signature.",
                 ))
                 .arg(TOKEN.def().help("The transfer token."))
-                .arg(TRACE_PATH.def().help("The transfer token's trace path."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
         }
     }
@@ -3558,7 +3552,6 @@ pub mod args {
                 source: ctx.get(&self.source),
                 receiver: self.receiver,
                 token: ctx.get(&self.token),
-                trace_path: self.trace_path,
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
@@ -3576,7 +3569,6 @@ pub mod args {
             let source = SOURCE.parse(matches);
             let receiver = RECEIVER.parse(matches);
             let token = TOKEN.parse(matches);
-            let trace_path = TRACE_PATH.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
@@ -3589,7 +3581,6 @@ pub mod args {
                 source,
                 receiver,
                 token,
-                trace_path,
                 amount,
                 port_id,
                 channel_id,
@@ -3610,7 +3601,6 @@ pub mod args {
                     "The receiver address on the destination chain as string.",
                 ))
                 .arg(TOKEN.def().help("The transfer token."))
-                .arg(TRACE_PATH.def().help("The transfer token's trace path."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
                 .arg(PORT_ID.def().help("The port ID."))
                 .arg(CHANNEL_ID.def().help("The channel ID."))

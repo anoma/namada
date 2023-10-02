@@ -637,7 +637,6 @@ fn transfer_token(
         ALBERT,
         &receiver,
         NAM,
-        None,
         "100000",
         ALBERT_KEY,
         port_id_a,
@@ -707,7 +706,6 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
-        None,
         "10.1",
         ALBERT_KEY,
         port_id_a,
@@ -723,7 +721,6 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
-        None,
         "10",
         ALBERT_KEY,
         &"port".parse().unwrap(),
@@ -739,7 +736,6 @@ fn try_invalid_transfers(
         ALBERT,
         &receiver,
         NAM,
-        None,
         "10",
         ALBERT_KEY,
         port_id_a,
@@ -757,10 +753,8 @@ fn transfer_received_token(
     channel_id: &ChannelId,
     test: &Test,
 ) -> Result<()> {
-    // token received via the port and channel
-    let trace_path = format!("{port_id}/{channel_id}");
-
     let rpc = get_actor_rpc(test, &Who::Validator(0));
+    let ibc_denom = format!("{port_id}/{channel_id}/nam");
     let amount = Amount::native_whole(50000).to_string_native();
     let tx_args = [
         "transfer",
@@ -769,9 +763,7 @@ fn transfer_received_token(
         "--target",
         ALBERT,
         "--token",
-        NAM,
-        "--trace-path",
-        &trace_path,
+        &ibc_denom,
         "--amount",
         &amount,
         "--gas-token",
@@ -798,14 +790,13 @@ fn transfer_back(
     let receiver = find_address(test_a, ALBERT)?;
 
     // Chain A was the source for the sent token
-    let trace_path = format!("{}/{}", port_id_b, channel_id_b);
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
     // Send a token from Chain B
     let height = transfer(
         test_b,
         BERTHA,
         &receiver,
-        NAM,
-        Some(&trace_path),
+        ibc_denom,
         "50000",
         BERTHA_KEY,
         port_id_b,
@@ -869,7 +860,6 @@ fn transfer_timeout(
         ALBERT,
         &receiver,
         NAM,
-        None,
         "100000",
         ALBERT_KEY,
         port_id_a,
@@ -999,7 +989,6 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: &Address,
     token: impl AsRef<str>,
-    trace_path: Option<&str>,
     amount: impl AsRef<str>,
     signer: impl AsRef<str>,
     port_id: &PortId,
@@ -1032,11 +1021,6 @@ fn transfer(
         "--node",
         &rpc,
     ];
-
-    if let Some(trace_path) = trace_path {
-        tx_args.push("--trace-path");
-        tx_args.push(trace_path.clone());
-    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {

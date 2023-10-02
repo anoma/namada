@@ -94,10 +94,11 @@ mod ibc_rs_conversion {
 
     /// Returns the trace path and the token string if the denom is an IBC
     /// denom.
-    pub fn split_ibc_denom(
-        denom: impl AsRef<str>,
-    ) -> Option<(TracePath, String)> {
+    pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
         let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
+        if prefixed_denom.trace_path.is_empty() {
+            return None;
+        }
         // The base token isn't decoded because it could be non Namada token
         Some((
             prefixed_denom.trace_path,

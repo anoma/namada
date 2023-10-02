@@ -50,7 +50,7 @@ use namada::sdk::wallet::{AddressVpType, Wallet};
 use namada::types::address::{masp, Address, InternalAddress};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::hash::Hash;
-use namada::types::ibc::split_ibc_denom;
+use namada::types::ibc::is_ibc_denom;
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -385,7 +385,7 @@ pub async fn query_transparent_balance<
                         display_line!(IO, "{}: {}", token_alias, balance);
                     }
                     Err(e) => {
-                        display_line!(IO, "Eror in querying: {e}");
+                        display_line!(IO, "Querying error: {e}");
                         display_line!(
                             IO,
                             "No {} balance found for {}",
@@ -761,7 +761,7 @@ fn get_ibc_denom_alias(
     wallet: &Wallet<CliWalletUtils>,
     ibc_denom: impl AsRef<str>,
 ) -> String {
-    split_ibc_denom(&ibc_denom)
+    is_ibc_denom(&ibc_denom)
         .map(|(trace_path, base_token)| {
             let base_token_alias = match Address::decode(&base_token) {
                 Ok(base_token) => wallet.lookup_alias(&base_token),
@@ -775,7 +775,6 @@ fn get_ibc_denom_alias(
         })
         .unwrap_or(ibc_denom.as_ref().to_string())
 }
-
 
 /// Query Proposals
 pub async fn query_proposal<

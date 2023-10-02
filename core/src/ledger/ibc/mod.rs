@@ -29,7 +29,7 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
 use crate::types::ibc::{
-    split_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+    is_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
 };
 
 #[allow(missing_docs)]
@@ -160,7 +160,7 @@ where
                                 e
                             ))
                         })?;
-                    if let Some((_, base_token)) = split_ibc_denom(&ibc_denom) {
+                    if let Some((_, base_token)) = is_ibc_denom(&ibc_denom) {
                         self.ctx
                             .borrow_mut()
                             .store_ibc_denom(base_token, trace_hash, &ibc_denom)
