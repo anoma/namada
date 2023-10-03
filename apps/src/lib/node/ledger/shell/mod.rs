@@ -825,7 +825,15 @@ where
         );
         response.data = root.0.to_vec();
 
-        // validator specific actions
+        self.bump_last_processed_eth_block();
+        self.broadcast_queued_txs();
+
+        response
+    }
+
+    /// Updates the Ethereum oracle's last processed block.
+    #[inline]
+    fn bump_last_processed_eth_block(&mut self) {
         if let ShellMode::Validator {
             eth_oracle: Some(eth_oracle),
             ..
@@ -851,20 +859,17 @@ where
                      blocks"
                 ),
             }
-
-            // broadcast any queued txs
-            self.broadcast_queued_txs();
         }
-
-        response
     }
 
     /// Empties all the ledger's queues of transactions to be broadcasted
     /// via CometBFT's P2P network.
     #[inline]
     fn broadcast_queued_txs(&mut self) {
-        self.broadcast_protocol_txs();
-        self.broadcast_expired_txs();
+        if let ShellMode::Validator { .. } = &self.mode {
+            self.broadcast_protocol_txs();
+            self.broadcast_expired_txs();
+        }
     }
 
     /// Broadcast any pending protocol transactions.
