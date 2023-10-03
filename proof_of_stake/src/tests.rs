@@ -853,6 +853,8 @@ fn test_become_validator_aux(
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
+    let protocol_sk = common_sk_from_simple_seed(0);
+    let protocol_key = protocol_sk.to_public();
     let eth_hot_key = key::common::PublicKey::Secp256k1(
         key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
     );
@@ -864,6 +866,7 @@ fn test_become_validator_aux(
         params: &params,
         address: &new_validator,
         consensus_key: &consensus_key,
+        protocol_key: &protocol_key,
         eth_cold_key: &eth_cold_key,
         eth_hot_key: &eth_hot_key,
         current_epoch,
@@ -1176,6 +1179,9 @@ fn test_validator_sets() {
     let start_epoch = Epoch::default();
     let epoch = start_epoch;
 
+    let protocol_sk_1 = common_sk_from_simple_seed(0);
+    let protocol_sk_2 = common_sk_from_simple_seed(1);
+
     let params = test_init_genesis(
         &mut s,
         params,
@@ -1184,6 +1190,7 @@ fn test_validator_sets() {
                 address: val1.clone(),
                 tokens: stake1,
                 consensus_key: pk1.clone(),
+                protocol_key: protocol_sk_1.to_public(),
                 eth_hot_key: key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
@@ -1200,6 +1207,7 @@ fn test_validator_sets() {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2.clone(),
+                protocol_key: protocol_sk_2.to_public(),
                 eth_hot_key: key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
@@ -1847,6 +1855,9 @@ fn test_validator_sets_swap() {
     println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
     println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
 
+    let protocol_sk_1 = common_sk_from_simple_seed(0);
+    let protocol_sk_2 = common_sk_from_simple_seed(1);
+
     let params = test_init_genesis(
         &mut s,
         params,
@@ -1855,6 +1866,7 @@ fn test_validator_sets_swap() {
                 address: val1,
                 tokens: stake1,
                 consensus_key: pk1,
+                protocol_key: protocol_sk_1.to_public(),
                 eth_hot_key: key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
@@ -1871,6 +1883,7 @@ fn test_validator_sets_swap() {
                 address: val2.clone(),
                 tokens: stake2,
                 consensus_key: pk2,
+                protocol_key: protocol_sk_2.to_public(),
                 eth_hot_key: key::common::PublicKey::Secp256k1(
                     key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                         .ref_to(),
@@ -2098,6 +2111,9 @@ fn arb_genesis_validators(
                     let consensus_sk = common_sk_from_simple_seed(seed);
                     let consensus_key = consensus_sk.to_public();
 
+                    let protocol_sk = common_sk_from_simple_seed(seed);
+                    let protocol_key = protocol_sk.to_public();
+
                     let eth_hot_key = key::common::PublicKey::Secp256k1(
                         key::testing::gen_keypair::<key::secp256k1::SigScheme>(
                         )
@@ -2116,6 +2132,7 @@ fn arb_genesis_validators(
                         address,
                         tokens,
                         consensus_key,
+                        protocol_key,
                         eth_hot_key,
                         eth_cold_key,
                         commission_rate,

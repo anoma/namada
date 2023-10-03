@@ -1,7 +1,6 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
@@ -172,17 +171,17 @@ where
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
     ) -> Result<WeightedValidator> {
-        let pk_bytes = pk
-            .try_to_vec()
-            .expect("Serializing public key should not fail");
+        let params = crate::read_pos_params(self.wl_storage)
+            .expect("Failed to fetch Pos params");
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| {
-                let pk_key = key::protocol_pk_key(&validator.address);
-                match self.wl_storage.storage.read(&pk_key) {
-                    Ok((Some(bytes), _)) => bytes == pk_bytes,
+                let protocol_keys =
+                    crate::validator_protocol_key_handle(&validator.address);
+                match protocol_keys.get(self.wl_storage, epoch, &params) {
+                    Ok(Some(key)) => key == *pk,
                     _ => false,
                 }
             })
@@ -195,26 +194,24 @@ where
         address: &Address,
         epoch: Option<Epoch>,
     ) -> Result<(token::Amount, key::common::PublicKey)> {
+        let params = crate::read_pos_params(self.wl_storage)
+            .expect("Failed to fetch Pos params");
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_consensus_validators(Some(epoch))
             .iter()
             .find(|validator| address == &validator.address)
             .map(|validator| {
-                let protocol_pk_key = key::protocol_pk_key(&validator.address);
-                // TODO: rewrite this, to use `StorageRead::read`
-                let bytes = self
-                    .wl_storage
-                    .storage
-                    .read(&protocol_pk_key)
-                    .expect("Validator should have public protocol key")
-                    .0
-                    .expect("Validator should have public protocol key");
-                let protocol_pk: key::common::PublicKey =
-                    BorshDeserialize::deserialize(&mut bytes.as_ref()).expect(
-                        "Protocol public key in storage should be \
-                         deserializable",
+                let protocol_keys =
+                    crate::validator_protocol_key_handle(&validator.address);
+                let protocol_pk = protocol_keys
+                    .get(self.wl_storage, epoch, &params)
+                    .unwrap()
+                    .expect(
+                        "Protocol public key should be set in storage after \
+                         genesis.",
                     );
+
                 (validator.bonded_stake, protocol_pk)
             })
             .ok_or_else(|| Error::NotValidatorAddress(address.clone(), epoch))

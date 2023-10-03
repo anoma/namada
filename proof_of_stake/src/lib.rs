@@ -41,7 +41,7 @@ use namada_core::ledger::storage_api::{
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::{
-    common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
+    common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use namada_core::types::token;
@@ -58,7 +58,7 @@ use storage::{
     BondsAndUnbondsDetail, BondsAndUnbondsDetails, EpochedSlashes,
     ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount,
     TotalConsensusStakes, UnbondDetails, ValidatorAddresses,
-    ValidatorUnbondRecords,
+    ValidatorProtocolKeys, ValidatorUnbondRecords,
 };
 use thiserror::Error;
 use types::{
@@ -261,6 +261,14 @@ pub fn validator_consensus_key_handle(
     ValidatorConsensusKeys::open(key)
 }
 
+/// Get the storage handle to a PoS validator's protocol key key.
+pub fn validator_protocol_key_handle(
+    validator: &Address,
+) -> ValidatorProtocolKeys {
+    let key = protocol_pk_key(validator);
+    ValidatorProtocolKeys::open(key)
+}
+
 /// Get the storage handle to a PoS validator's eth hot key.
 pub fn validator_eth_hot_key_handle(
     validator: &Address,
@@ -414,6 +422,7 @@ where
         address,
         tokens,
         consensus_key,
+        protocol_key,
         eth_cold_key,
         eth_hot_key,
         commission_rate,
@@ -451,6 +460,11 @@ where
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
+            current_epoch,
+        )?;
+        validator_protocol_key_handle(&address).init_at_genesis(
+            storage,
+            protocol_key,
             current_epoch,
         )?;
         validator_eth_hot_key_handle(&address).init_at_genesis(
@@ -2159,6 +2173,8 @@ pub struct BecomeValidator<'a, S> {
     pub address: &'a Address,
     /// The validator's consensus key, used by Tendermint.
     pub consensus_key: &'a common::PublicKey,
+    /// The validator's protocol key.
+    pub protocol_key: &'a common::PublicKey,
     /// The validator's Ethereum bridge cold key.
     pub eth_cold_key: &'a common::PublicKey,
     /// The validator's Ethereum bridge hot key.
@@ -2183,6 +2199,7 @@ where
         params,
         address,
         consensus_key,
+        protocol_key,
         eth_cold_key,
         eth_hot_key,
         current_epoch,
@@ -2210,6 +2227,12 @@ where
     validator_consensus_key_handle(address).set(
         storage,
         consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_protocol_key_handle(address).set(
+        storage,
+        protocol_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;

@@ -40,6 +40,13 @@ pub type ValidatorConsensusKeys = crate::epoched::Epoched<
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
+/// Epoched validator's protocol key.
+pub type ValidatorProtocolKeys = crate::epoched::Epoched<
+    common::PublicKey,
+    crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
+>;
+
 /// Epoched validator's eth hot key.
 pub type ValidatorEthHotKeys = crate::epoched::Epoched<
     common::PublicKey,
@@ -205,6 +212,8 @@ pub struct GenesisValidator {
     pub tokens: token::Amount,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
+    /// A public key used for signing protocol transactions
+    pub protocol_key: common::PublicKey,
     /// An Eth bridge governance public key
     pub eth_cold_key: common::PublicKey,
     /// An Eth bridge hot signing public key used for validator set updates and

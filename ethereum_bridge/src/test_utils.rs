@@ -198,6 +198,7 @@ pub fn init_storage_with_validators(
         .map(|(address, tokens)| {
             let keys = TestValidatorKeys::generate();
             let consensus_key = keys.consensus.ref_to();
+            let protocol_key = keys.protocol.ref_to();
             let eth_cold_key = keys.eth_gov.ref_to();
             let eth_hot_key = keys.eth_bridge.ref_to();
             all_keys.insert(address.clone(), keys);
@@ -205,6 +206,7 @@ pub fn init_storage_with_validators(
                 address,
                 tokens,
                 consensus_key,
+                protocol_key,
                 eth_cold_key,
                 eth_hot_key,
                 commission_rate: Dec::new(5, 2).unwrap(),
@@ -270,6 +272,7 @@ pub fn append_validators_to_storage(
         let keys = TestValidatorKeys::generate();
 
         let consensus_key = &keys.consensus.ref_to();
+        let protocol_key = &&keys.protocol.ref_to();
         let eth_cold_key = &keys.eth_gov.ref_to();
         let eth_hot_key = &keys.eth_bridge.ref_to();
 
@@ -278,6 +281,7 @@ pub fn append_validators_to_storage(
             params: &params,
             address: &validator,
             consensus_key,
+            protocol_key,
             eth_cold_key,
             eth_hot_key,
             current_epoch,

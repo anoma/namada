@@ -1372,6 +1372,7 @@ mod test {
                 address: established_address_1(),
                 tokens: token::Amount::native_whole(1_000),
                 consensus_key: key::testing::keypair_1().to_public(),
+                protocol_key: key::testing::keypair_2().to_public(),
                 eth_hot_key: key::testing::keypair_3().to_public(),
                 eth_cold_key: key::testing::keypair_3().to_public(),
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),

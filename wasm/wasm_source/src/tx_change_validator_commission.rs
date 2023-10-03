@@ -66,6 +66,8 @@ mod tests {
         pos_params: OwnedPosParams,
     ) -> TxResult {
         let consensus_key = key::testing::keypair_1().ref_to();
+        let protocol_key = key::testing::keypair_2().ref_to();
+
         let eth_hot_key = key::common::PublicKey::Secp256k1(
             key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
         );
@@ -76,6 +78,7 @@ mod tests {
             address: commission_change.validator.clone(),
             tokens: token::Amount::from_uint(1_000_000, 0).unwrap(),
             consensus_key,
+            protocol_key,
             commission_rate: initial_rate,
             max_commission_rate_change: max_change,
             eth_hot_key,

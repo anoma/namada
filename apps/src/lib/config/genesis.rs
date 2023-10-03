@@ -338,6 +338,12 @@ pub mod genesis_config {
                     .unwrap()
                     .to_public_key()
                     .unwrap(),
+                protocol_key: config
+                    .protocol_public_key
+                    .as_ref()
+                    .unwrap()
+                    .to_public_key()
+                    .unwrap(),
                 eth_cold_key: config
                     .eth_cold_key
                     .as_ref()
@@ -368,12 +374,6 @@ pub mod genesis_config {
             },
             account_key: config
                 .account_public_key
-                .as_ref()
-                .unwrap()
-                .to_public_key()
-                .unwrap(),
-            protocol_key: config
-                .protocol_public_key
                 .as_ref()
                 .unwrap()
                 .to_public_key()
@@ -774,9 +774,6 @@ pub struct Validator {
     /// this key on a transaction signature.
     /// Note that this is distinct from consensus key used in the PoS system.
     pub account_key: common::PublicKey,
-    /// Public key associated with validator account used for signing protocol
-    /// transactions
-    pub protocol_key: common::PublicKey,
     /// The public DKG session key used during the DKG protocol
     pub dkg_public_key: DkgPublicKey,
     /// These tokens are not staked and hence do not contribute to the
@@ -938,6 +935,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
             address,
             tokens: token::Amount::native_whole(200_000),
             consensus_key: consensus_keypair.ref_to(),
+            protocol_key: protocol_keypair.ref_to(),
             commission_rate: Dec::new(5, 2).expect("This can't fail"),
             max_commission_rate_change: Dec::new(1, 2)
                 .expect("This can't fail"),
@@ -945,7 +943,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
             eth_hot_key: eth_bridge_keypair.ref_to(),
         },
         account_key: account_keypair.ref_to(),
-        protocol_key: protocol_keypair.ref_to(),
         dkg_public_key: dkg_keypair.public(),
         non_staked_balance: token::Amount::native_whole(100_000),
         // TODO replace with https://github.com/anoma/namada/issues/25)
@@ -971,6 +968,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 address,
                 tokens: token::Amount::native_whole(200_000),
                 consensus_key: consensus_keypair.ref_to(),
+                protocol_key: protocol_keypair.ref_to(),
                 commission_rate: Dec::new(5, 2).expect("This can't fail"),
                 max_commission_rate_change: Dec::new(1, 2)
                     .expect("This can't fail"),
@@ -978,7 +976,6 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 eth_hot_key: eth_bridge_keypair.ref_to(),
             },
             account_key: account_keypair.ref_to(),
-            protocol_key: protocol_keypair.ref_to(),
             dkg_public_key: dkg_keypair.public(),
             non_staked_balance: token::Amount::native_whole(100_000),
             // TODO replace with https://github.com/anoma/namada/issues/25)

@@ -395,10 +395,6 @@ where
             .unwrap();
 
             self.wl_storage
-                .write(&protocol_pk_key(addr), &validator.protocol_key)
-                .expect("Unable to set genesis user protocol public key");
-
-            self.wl_storage
                 .write(
                     &dkg_session_keys::dkg_pk_key(addr),
                     &validator.dkg_public_key,
