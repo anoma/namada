@@ -257,6 +257,9 @@ pub fn get_dummy_genesis_validator()
     let consensus_sk = common_sk_from_simple_seed(0);
     let consensus_key = consensus_sk.to_public();
 
+    let protocol_sk = common_sk_from_simple_seed(1);
+    let protocol_key = protocol_sk.to_public();
+
     let commission_rate =
         Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
     let max_commission_rate_change =
@@ -278,6 +281,7 @@ pub fn get_dummy_genesis_validator()
         address,
         tokens,
         consensus_key,
+        protocol_key,
         eth_cold_key,
         eth_hot_key,
         commission_rate,

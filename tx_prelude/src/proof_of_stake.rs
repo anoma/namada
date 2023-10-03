@@ -96,8 +96,6 @@ impl Ctx {
             &account_keys,
             threshold,
         )?;
-        let protocol_pk_key = key::protocol_pk_key(&validator_address);
-        self.write(&protocol_pk_key, &protocol_key)?;
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);
         self.write(&dkg_pk_key, &dkg_key)?;
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
@@ -109,6 +107,7 @@ impl Ctx {
             params: &params,
             address: &validator_address,
             consensus_key: &consensus_key,
+            protocol_key: &protocol_key,
             eth_cold_key: &eth_cold_key,
             eth_hot_key: &eth_hot_key,
             current_epoch,

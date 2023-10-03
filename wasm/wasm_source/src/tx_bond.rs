@@ -76,6 +76,7 @@ mod tests {
         let is_delegation =
             matches!(&bond.source, Some(source) if *source != bond.validator);
         let consensus_key = key::testing::keypair_1().ref_to();
+        let protocol_key = key::testing::keypair_2().ref_to();
         let commission_rate = Dec::new(5, 2).expect("Cannot fail");
         let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
         let eth_cold_key = key::testing::keypair_3().ref_to();
@@ -85,6 +86,7 @@ mod tests {
             address: bond.validator.clone(),
             tokens: initial_stake,
             consensus_key,
+            protocol_key,
             eth_cold_key,
             eth_hot_key,
             commission_rate,
