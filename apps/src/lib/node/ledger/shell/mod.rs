@@ -1872,6 +1872,8 @@ mod test_utils {
         /// The number of validators to configure
         // in `InitChain`.
         pub num_validators: u64,
+        /// Whether to enable the Ethereum oracle or not.
+        pub enable_ethereum_oracle: bool,
     }
 
     impl<H: Default> Default for SetupCfg<H> {
@@ -1879,6 +1881,7 @@ mod test_utils {
             Self {
                 last_height: H::default(),
                 num_validators: 1,
+                enable_ethereum_oracle: true,
             }
         }
     }
@@ -1890,6 +1893,7 @@ mod test_utils {
         SetupCfg {
             last_height,
             num_validators,
+            enable_ethereum_oracle,
         }: SetupCfg<H>,
     ) -> (
         TestShell,
@@ -1897,8 +1901,14 @@ mod test_utils {
         Sender<EthereumEvent>,
         Receiver<oracle::control::Command>,
     ) {
-        let (mut test, receiver, eth_receiver, control_receiver) =
+        let (mut test, receiver, eth_sender, control_receiver) =
             TestShell::new_at_height(last_height);
+        if !enable_ethereum_oracle {
+            if let ShellMode::Validator { eth_oracle, .. } = &mut test.mode {
+                // drop the eth oracle event receiver
+                _ = eth_oracle.take();
+            }
+        }
         test.init_chain(
             RequestInitChain {
                 time: Some(Timestamp {
@@ -1911,7 +1921,7 @@ mod test_utils {
             num_validators,
         );
         test.wl_storage.commit_block().expect("Test failed");
-        (test, receiver, eth_receiver, control_receiver)
+        (test, receiver, eth_sender, control_receiver)
     }
 
     /// Same as [`setup_at_height`], but returns a shell at the given block
