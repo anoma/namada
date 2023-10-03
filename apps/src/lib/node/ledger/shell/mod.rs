@@ -2141,22 +2141,63 @@ mod test_utils {
     }
 }
 
-#[cfg(all(test, not(feature = "abcipp")))]
-mod abciplus_mempool_tests {
+#[cfg(test)]
+mod shell_tests {
     use namada::proto::{
-        Data, Section, SignableEthMessage, Signature, Signed, Tx,
+        Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };
     use namada::types::ethereum_events::EthereumEvent;
     use namada::types::key::RefTo;
-    use namada::types::storage::BlockHeight;
+    use namada::types::storage::{BlockHeight, Epoch};
     use namada::types::transaction::protocol::{
         ethereum_tx_data_variants, ProtocolTx, ProtocolTxType,
     };
+    use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     use crate::node::ledger::shell::test_utils;
     use crate::wallet;
+
+    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+
+    /// Check that the shell broadcasts validator set updates,
+    /// even when the Ethereum oracle is not running (e.g.
+    /// because the bridge is disabled).
+    #[tokio::test]
+    async fn test_broadcast_valset_upd_inspite_oracle_off() {
+        // this height should result in a validator set
+        // update being broadcasted
+        let (mut shell, mut broadcaster_rx, _, _) =
+            test_utils::setup_with_cfg(test_utils::SetupCfg {
+                last_height: 1,
+                enable_ethereum_oracle: false,
+                ..Default::default()
+            });
+
+        // broadcast validator set update
+        shell.broadcast_protocol_txs();
+
+        // check data inside tx - it should be a validator set update
+        // signed at epoch 0
+        let signed_valset_upd = loop {
+            // attempt to receive validator set update
+            let serialized_tx = tokio::time::timeout(
+                std::time::Duration::from_secs(1),
+                async { broadcaster_rx.recv().await.unwrap() },
+            )
+            .await
+            .unwrap();
+            let tx = Tx::try_from(&serialized_tx[..]).unwrap();
+
+            match ethereum_tx_data_variants::ValSetUpdateVext::try_from(&tx) {
+                Ok(signed_valset_upd) => break signed_valset_upd,
+                Err(_) => continue,
+            }
+        };
+
+        assert_eq!(signed_valset_upd.data.signing_epoch, Epoch(0));
+    }
 
     /// Check that broadcasting expired Ethereum events works
     /// as expected.
@@ -2334,17 +2375,6 @@ mod abciplus_mempool_tests {
         let rsp = shell.mempool_validate(&tx, Default::default());
         assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidVoteExtension));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use namada::proof_of_stake::Epoch;
-    use namada::proto::{Code, Data, Section, Signature, Tx};
-    use namada::types::transaction::{Fee, WrapperTx};
-
-    use super::*;
-
-    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
 
     /// Mempool validation must reject unsigned wrappers
     #[test]
