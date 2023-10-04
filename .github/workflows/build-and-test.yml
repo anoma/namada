@@ -58,6 +58,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
       - name: Build WASM
         run: make build-wasm-scripts
       - name: Upload wasm artifacts
@@ -113,6 +115,8 @@ jobs:
           profile: default
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -164,10 +168,6 @@ jobs:
         mold_version: [2.1.0]
         make:
           - name: ABCI
-            suffix: ''
-            cache_key: namada
-            cache_version: v2
-            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
       RUSTC_WRAPPER: sccache
@@ -205,15 +205,10 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+          cache-targets: false
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -235,18 +230,18 @@ jobs:
       - name: Check crates build with default features
         run: make check-crates
       - name: Run unit and integration tests
-        run: make test-coverage${{ matrix.make.suffix }}
+        run: make test-coverage
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
         uses: actions/upload-artifact@v3
         with:
-          name: coverage${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: coverage-${{ github.event.pull_request.head.sha || github.sha }}
           path: target/html
           retention-days: 3
       - name: Run benchmarks tests
-        run: make test-benches${{ matrix.make.suffix }}
+        run: make test-benches
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Print sccache stats
@@ -267,12 +262,8 @@ jobs:
         mold_version: [2.1.0]
         make:
           - name: ABCI Release build
-            suffix: ''
-            cache_key: namada-release
-            cache_version: "v2"
 
     env:
-
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
@@ -303,15 +294,10 @@ jobs:
         with:
           profile: default
           override: true
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+          cache-targets: false
       - name: Install mold linker
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
@@ -319,13 +305,13 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Build
-        run: make build-release${{ matrix.make.suffix }}
+        run: make build-release
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries (github)
         uses: actions/upload-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             target/release/namada
             target/release/namadac
@@ -334,23 +320,23 @@ jobs:
             target/release/namadar
       - name: Upload namada binaries (minio)
         run: |
+          unset AWS_SESSION_TOKEN
           zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
           aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
         env:
           BUCKET_NAME: namada-binaries
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
-          ZIP_FILENAME: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
+          ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       - name: Upload build timing report
-        if: success() || failure()
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            target/cargo-timings/cargo-timing.html
-          retention-days: 5
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 3
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -373,26 +359,10 @@ jobs:
         comet_bft: [0.37.2]
         hermes: [1.6.0-namada-beta1]
         make:
-          - name: e2e
-            suffix: ''
-            index: 0
-            cache_key: namada
-            cache_version: v2
-          - name: e2e
-            suffix: ''
-            index: 1
-            cache_key: namada
-            cache_version: v2
-          - name: e2e
-            suffix: ''
-            index: 2
-            cache_key: namada
-            cache_version: v2
-          - name: e2e
-            suffix: ''
-            index: 3
-            cache_key: namada
-            cache_version: v2
+          - index: 0
+          - index: 1
+          - index: 2
+          - index: 3
 
     env:
       RUSTC_WRAPPER: sccache
@@ -430,15 +400,10 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+          cache-targets: false
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -459,7 +424,7 @@ jobs:
       - name: Download namada binaries
         uses: actions/download-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./target/release/
       - name: Download CometBFT
         run: |

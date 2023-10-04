@@ -21,8 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, macos-latest]
-        namada_cache_version: [v1]
+        os: [ubuntu-20.04, macos-latest, windows-latest, ubuntu-22.04]
         make:
           - name: Build package
             command: package
@@ -54,15 +53,10 @@ jobs:
         with:
           profile: minimal
           override: true
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-namada-release-${{ matrix.namada_cache_version }}
+          cache-targets: false
       - name: Start sccache server
         run: sccache --start-server
       - name: Install cargo-about

@@ -37,8 +37,6 @@ jobs:
           - name: Run PoS state-machine tests
             command: make test-pos-sm
             timeout: 360
-            cache_key: namada
-            cache_version: v2
 
     env:
       RUSTC_WRAPPER: sccache
@@ -65,15 +63,10 @@ jobs:
         with:
           profile: default
           override: true
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+          cache-targets: false
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
