@@ -152,7 +152,7 @@ jobs:
         run: |
           unset AWS_SESSION_TOKEN
           aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
-          aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --region $AWS_REGION
         env:
           BUCKET_NAME: namada-wasm
           AWS_REGION: us-east-1
