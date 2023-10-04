@@ -38,6 +38,7 @@ use crate::facade::tendermint_proto::abci::{
 use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::{tendermint, tendermint_rpc};
+use crate::node::ledger::ethereum_oracle::try_process_eth_events;
 use crate::node::ledger::shell::testing::utils::TestDir;
 use crate::node::ledger::shell::{ErrorCodes, Shell};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -45,6 +46,35 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
 };
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::storage;
+
+/// Mock Ethereum oracle used for testing purposes.
+pub struct MockEthOracle<C> {
+    pub oracle: Oracle<C>,
+    pub config: Config,
+    pub next_block_to_process: ethereum_structs::BlockHeight,
+}
+
+impl<C: RpcClient> MockEthOracle<C> {
+    /// Updates the state of the Ethereum oracle.
+    ///
+    /// This includes sending any confirmed Ethereum events to
+    /// the shell and updating the height of the next Ethereum
+    /// block to process. Upon a successfully processed block,
+    /// this functions returns `true`.
+    pub async fn step(&self) -> bool {
+        let ok = try_process_eth_events(
+            &self.oracle,
+            &self.config,
+            &self.next_block_to_process,
+        )
+        .await
+        .is_great_success();
+        if ok {
+            self.next_block_to_process += 1.into();
+        }
+        ok
+    }
+}
 
 /// Status of tx
 #[derive(Debug, Clone, PartialEq, Eq)]

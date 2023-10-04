@@ -77,7 +77,7 @@ impl EventsEndpointClient {
 }
 
 /// Sets up the necessary environment for an Ethereum bridge integration test.
-pub fn setup() -> Result<(MockNode, MockEthOracle)> {
+pub fn setup() -> Result<MockNode> {
     let ethereum_bridge_params = EthereumBridgeConfig {
         eth_start_height: Default::default(),
         min_confirmations: MinimumConfirmations::from(unsafe {
