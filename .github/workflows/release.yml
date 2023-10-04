@@ -31,11 +31,6 @@ jobs:
           - name: Build package
             command: package
 
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
