@@ -24,6 +24,11 @@ env:
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
+  SCCACHE_BUCKET: namada-cache
+  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+  SCCACHE_REGION: us-east-1
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_ACCESS_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
 
 jobs:
   build-wasm:
@@ -62,7 +67,7 @@ jobs:
           cache-targets: false
       - name: Build WASM
         run: make build-wasm-scripts
-      - name: Upload wasm artifacts
+      - name: Upload wasm artifacts (github)
         uses: actions/upload-artifact@v3
         with:
           name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
@@ -70,6 +75,17 @@ jobs:
             wasm/tx_*.wasm
             wasm/vp_*.wasm
             wasm/checksums.json
+      - name: Upload wasm artifacts (minio)
+        run: |
+          unset AWS_SESSION_TOKEN
+          aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+        env:
+          BUCKET_NAME: namada-wasm
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: https://minio.heliax.click
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
 
   test-wasm:
     timeout-minutes: 30
@@ -125,38 +141,6 @@ jobs:
         if: failure()
         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
 
-  update-wasm:
-    runs-on: ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-wasm.result == 'success' }}
-    timeout-minutes: 30
-    needs: [build-wasm]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-20.04]
-
-    steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ./wasm
-      - name: Upload WASM
-        run: |
-          unset AWS_SESSION_TOKEN
-          aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
-        env:
-          BUCKET_NAME: namada-wasm
-          AWS_REGION: us-east-1
-          S3_ENDPOINT_URL: https://minio.heliax.click
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
@@ -171,11 +155,6 @@ jobs:
         make:
           - name: ABCI
 
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -186,11 +165,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
@@ -263,11 +237,6 @@ jobs:
         make:
           - name: ABCI
 
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -278,11 +247,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
@@ -343,11 +307,6 @@ jobs:
         make:
           - name: ABCI Release build
 
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -358,11 +317,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
@@ -408,8 +362,8 @@ jobs:
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
           ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
       - name: Upload build timing report
         if: always()
         uses: actions/upload-artifact@v3
@@ -444,11 +398,6 @@ jobs:
           - index: 2
           - index: 3
 
-    env:
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -459,11 +408,6 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
