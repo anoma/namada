@@ -19,6 +19,8 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
 
 jobs:
   docs:
@@ -44,7 +46,6 @@ jobs:
             cache_version: v1
 
     env:
-      CARGO_INCREMENTAL: 0
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
@@ -118,7 +119,6 @@ jobs:
         os: [ubuntu-20.04]
 
     env:
-      CARGO_INCREMENTAL: 0
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
@@ -189,7 +189,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest
-      - name: ${{ matrix.make.name }}
+      - name: Build and push `namada-rust-docs image`
         uses: docker/build-push-action@v4
         with:
           context: .

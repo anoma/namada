@@ -22,7 +22,8 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
-
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
 
 jobs:
   build-wasm:
@@ -55,9 +56,10 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
       - name: Build WASM
-        run: |
-          make build-wasm-scripts
+        run: make build-wasm-scripts
       - name: Upload wasm artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -109,6 +111,8 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -163,8 +167,6 @@ jobs:
             tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
@@ -267,8 +269,7 @@ jobs:
             cache_version: "v2"
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
+
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
@@ -376,8 +377,6 @@ jobs:
             wait_for: namada-release (ubuntu-20.04, 2.1.0, ABCI Release build, namada-e2e-release, v2)
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 100G
       SCCACHE_BUCKET: namada-sccache-master
