@@ -1,4 +1,5 @@
 target
+!target/doc
 .changelog
 .github
 .vscode
@@ -6,4 +7,5 @@ audit
 test
 wasm_for_tests
 genesis
-docker
+test_fixtures
+.changelog
