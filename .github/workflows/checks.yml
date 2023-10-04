@@ -78,6 +78,8 @@ jobs:
         run: rustup show
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Start sccache server
         run: sccache --start-server
       - name: ${{ matrix.make.name }}
