@@ -21,7 +21,6 @@ permissions:
   packages: read
 
 env:
-  RUSTC_WRAPPER: sccache
   SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
@@ -156,6 +155,9 @@ jobs:
         make:
           - name: ABCI
 
+    env:
+      RUSTC_WRAPPER: sccache
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -238,6 +240,9 @@ jobs:
         make:
           - name: ABCI
 
+    env:
+      RUSTC_WRAPPER: sccache
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -307,6 +312,9 @@ jobs:
         mold_version: [2.1.0]
         make:
           - name: ABCI Release build
+
+    env:
+      RUSTC_WRAPPER: sccache
 
     steps:
       - name: Checkout repo
@@ -398,6 +406,9 @@ jobs:
           - index: 1
           - index: 2
           - index: 3
+
+    env:
+      RUSTC_WRAPPER: sccache
 
     steps:
       - name: Checkout repo
