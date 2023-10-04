@@ -113,17 +113,6 @@ jobs:
           path: ./wasm
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Upload wasm artifacts (minio)
-        run: |
-          unset AWS_SESSION_TOKEN
-          aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
-          aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
-        env:
-          BUCKET_NAME: namada-wasm
-          AWS_REGION: us-east-1
-          S3_ENDPOINT_URL: https://minio.heliax.click
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Setup rust nightly
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -145,8 +134,6 @@ jobs:
     timeout-minutes: 5
     runs-on: ${{ matrix.os }}
     needs: [build-wasm]
-    container: 
-      image: ghcr.io/anoma/namada:wasm-main
     strategy:
       fail-fast: false
       matrix:
