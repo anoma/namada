@@ -68,7 +68,3 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
-      - name: Clean cache folder
-        run: |
-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache || true
-          cargo-cache

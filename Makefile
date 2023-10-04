@@ -51,7 +51,7 @@ build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	NAMADA_DEV=false $(cargo) build $(jobs) --release --package namada_apps --manifest-path Cargo.toml
+	NAMADA_DEV=false $(cargo) build $(jobs) --release --timings --package namada_apps --manifest-path Cargo.toml 
 
 build-debug:
 	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
