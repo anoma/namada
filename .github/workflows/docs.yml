@@ -18,6 +18,8 @@ permissions:
   contents: read
 
 env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: true
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full

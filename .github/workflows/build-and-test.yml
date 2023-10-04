@@ -21,12 +21,13 @@ permissions:
   packages: read
 
 env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: true
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
   SCCACHE_BUCKET: namada-cache
   SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
-  SCCACHE_REGION: us-east-1
   AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_ACCESS_KEY }}
   AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_SECRET_KEY }}
 
