@@ -14,6 +14,11 @@ env:
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
+  SCCACHE_BUCKET: namada-cache
+  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+  SCCACHE_REGION: us-east-1
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_ACCESS_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
 
 jobs:
   build:
@@ -37,11 +42,6 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
