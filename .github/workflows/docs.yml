@@ -42,8 +42,6 @@ jobs:
             folder: documentation/dev
             bucket: namada-dev-static-website
             command: cargo run --bin namada_encoding_spec && cd documentation/dev && mdbook build
-            cache_subkey: dev
-            cache_version: v1
 
     env:
       RUSTC_WRAPPER: sccache
