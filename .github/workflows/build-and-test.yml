@@ -160,7 +160,7 @@ jobs:
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 25
+    timeout-minutes: 35
     needs: [build-wasm]
     strategy:
       fail-fast: false
