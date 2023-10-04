@@ -24,18 +24,20 @@ pub mod event_log {
         ///
         /// This includes sending any confirmed Ethereum events to
         /// the shell and updating the height of the next Ethereum
-        /// block to process.
-        pub async fn step(&self) {
-            if try_process_eth_events(
+        /// block to process. Upon a successfully processed block,
+        /// this functions returns `true`.
+        pub async fn step(&self) -> bool {
+            let ok = try_process_eth_events(
                 &self.oracle,
                 &self.config,
-                self.next_block_to_process.clone(),
+                &self.next_block_to_process,
             )
             .await
-            .is_great_success()
-            {
+            .is_great_success();
+            if ok {
                 self.next_block_to_process += 1.into();
             }
+            ok
         }
     }
 

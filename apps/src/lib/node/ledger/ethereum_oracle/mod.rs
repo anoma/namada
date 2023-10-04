@@ -315,9 +315,9 @@ impl ProcessEventAction {
     }
 }
 
-impl From<ProcessEventAction> for ControlFlow<Result<(), ()>, ()> {
-    fn from(action: ProcessEventAction) -> Self {
-        match action {
+impl ProcessEventAction {
+    fn handle(self) -> ControlFlow<Result<(), ()>, ()> {
+        match self {
             ProcessEventAction::ContinuePollingEvents => {
                 ControlFlow::Continue(())
             }
@@ -331,7 +331,7 @@ impl From<ProcessEventAction> for ControlFlow<Result<(), ()>, ()> {
 async fn try_process_eth_events<C: RpcClient>(
     oracle: &Oracle<C>,
     config: &Config,
-    next_block_to_process: ethereum_structs::BlockHeight,
+    next_block_to_process: &ethereum_structs::BlockHeight,
 ) -> ProcessEventAction {
     match process(&oracle, &config, next_block_to_process.clone()).await {
         Ok(()) => ProcessEventAction::GreatSuccess,
@@ -401,8 +401,8 @@ async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
         );
         let res = Sleep { strategy: Constant(oracle.backoff) }.run(|| async {
             tokio::select! {
-                action = try_process_eth_events() => {
-                    <ControlFlow<_, _>>::from(action)
+                action = try_process_eth_events(&oracle, &config, &next_block_to_process) => {
+                    action.handle()
                 },
                 _ = oracle.sender.closed() => {
                     tracing::info!(
