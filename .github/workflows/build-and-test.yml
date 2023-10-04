@@ -147,7 +147,9 @@ jobs:
           name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./wasm
       - name: Upload WASM
-        run: aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+        run: |
+          unset AWS_SESSION_TOKEN
+          aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
         env:
           BUCKET_NAME: namada-wasm
           AWS_REGION: us-east-1
