@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-N_OF_MACHINES = 3
+N_OF_MACHINES = 4
 
 NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
 
@@ -41,16 +41,13 @@ for index, machine in enumerate(MACHINES):
 
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 
-import json
-print(json.dumps(MACHINES, indent=4))
-
 test_results = {}
 has_failures = False
 
 for task in tasks:
     try:
         command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task['name'])
-        # subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
+        subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
         test_results[task['name']] = {
             'status': 'ok',
             'time': task['time'],
