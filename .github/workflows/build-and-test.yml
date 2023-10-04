@@ -319,7 +319,7 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Build
-        run: make build-r§elease${{ matrix.make.suffix }}
+        run: make build-release${{ matrix.make.suffix }}
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries (github)
