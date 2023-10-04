@@ -64,11 +64,12 @@ use thiserror::Error;
 use types::{
     BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
     CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
-    SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorEthColdKeys, ValidatorEthHotKeys,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
+    ConsensusValidatorSets, EpochBounds, GenesisValidator, Position,
+    RewardsProducts, Slash, SlashType, Slashes, TotalDeltas, Unbonds,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
+    ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorSetPositions,
+    ValidatorSetUpdate, ValidatorState, ValidatorStates, VoteInfo,
+    WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -2265,7 +2266,7 @@ where
     // let mut total_slashed = token::Amount::default();
     let mut withdrawable_amount = token::Amount::default();
     // (withdraw_epoch, start_epoch)
-    let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
+    let mut unbonds_to_remove: Vec<EpochBounds> = Vec::new();
 
     for unbond in unbond_handle.iter(storage)? {
         let (
@@ -2305,7 +2306,10 @@ where
 
         // total_slashed += amount - token::Amount::from(amount_after_slashing);
         withdrawable_amount += token::Amount::from(amount_after_slashing);
-        unbonds_to_remove.push((withdraw_epoch, start_epoch));
+        unbonds_to_remove.push(EpochBounds {
+            start: start_epoch,
+            end: withdraw_epoch,
+        });
     }
     tracing::debug!(
         "Withdrawing total {}",
@@ -2313,7 +2317,11 @@ where
     );
 
     // Remove the unbond data from storage
-    for (withdraw_epoch, start_epoch) in unbonds_to_remove {
+    for EpochBounds {
+        start: start_epoch,
+        end: withdraw_epoch,
+    } in unbonds_to_remove
+    {
         tracing::debug!("Remove ({start_epoch}..{withdraw_epoch}) from unbond");
         unbond_handle
             .at(&withdraw_epoch)
@@ -2822,7 +2830,7 @@ pub fn find_unbonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<BTreeMap<(Epoch, Epoch), token::Amount>>
+) -> storage_api::Result<BTreeMap<EpochBounds, token::Amount>>
 where
     S: StorageRead,
 {
@@ -2836,7 +2844,13 @@ where
                 },
                 amount,
             ) = next_result?;
-            Ok(((start_epoch, withdraw_epoch), amount))
+            Ok((
+                EpochBounds {
+                    start: start_epoch,
+                    end: withdraw_epoch,
+                },
+                amount,
+            ))
         })
         .collect()
 }
@@ -3064,7 +3078,10 @@ where
             params,
             &validator,
             amount,
-            (start, withdraw),
+            EpochBounds {
+                start,
+                end: withdraw,
+            },
             slashes,
             &mut applied_slashes,
         ));
@@ -3186,7 +3203,7 @@ fn make_unbond_details(
     params: &PosParams,
     validator: &Address,
     amount: token::Amount,
-    (start, withdraw): (Epoch, Epoch),
+    epoch_bounds: EpochBounds,
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, Vec<Slash>>,
 ) -> UnbondDetails {
@@ -3196,6 +3213,10 @@ fn make_unbond_details(
         .cloned()
         .unwrap_or_default();
     let mut slash_rates_by_epoch = BTreeMap::<Epoch, Dec>::new();
+    let EpochBounds {
+        start,
+        end: withdraw,
+    } = epoch_bounds;
 
     let validator_slashes =
         applied_slashes.entry(validator.clone()).or_default();
