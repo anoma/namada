@@ -47,6 +47,25 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::storage;
 
+pub struct MockServices {
+    /// Whether to automatically drive the shell's background
+    /// services or not.
+    pub auto: bool,
+    /// Receives transactions that are supposed to be broadcasted
+    /// to the network.
+    pub tx_receiver: UnboundedReceiver<Vec<u8>>,
+}
+
+impl MockServices {
+    pub async fn drive(
+        &mut self,
+        shell: &Mutex<Shell<storage::PersistentDB, Sha256Hasher>>,
+    ) {
+        let _ = shell;
+        asd
+    }
+}
+
 /// Mock Ethereum oracle used for testing purposes.
 pub struct MockEthOracle<C> {
     pub oracle: Oracle<C>,
@@ -91,8 +110,8 @@ pub struct MockNode {
     pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
     pub test_dir: ManuallyDrop<TestDir>,
     pub keep_temp: bool,
-    pub _broadcast_recv: UnboundedReceiver<Vec<u8>>,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
+    pub services: Arc<Mutex<MockServices>>,
 }
 
 impl Drop for MockNode {
@@ -112,6 +131,17 @@ impl Drop for MockNode {
 }
 
 impl MockNode {
+    pub async fn set_auto_mock_services(&self, auto: bool) {
+        self.services.lock().unwrap().auto = auto;
+    }
+
+    async fn drive_mock_services(&self) {
+        let mut services = self.services.lock();
+        if services.auto {
+            services.drive(&*self.shell).await;
+        }
+    }
+
     pub fn genesis_dir(&self) -> PathBuf {
         self.test_dir
             .path()
@@ -340,6 +370,7 @@ impl MockNode {
     }
 }
 
+// TODO: drive mock services
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<'a> Client for &'a MockNode {
