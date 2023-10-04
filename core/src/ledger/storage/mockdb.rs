@@ -14,6 +14,7 @@ use super::{
 };
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::ethereum_structs;
+use crate::types::hash::Hash;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
@@ -413,6 +414,25 @@ impl DB for MockDB {
         Ok(Some((height, merkle_tree_stores)))
     }
 
+    //FIXME: I should dump the content of the last subey into all at the beginning of finalize block before writing any new hash into last. Do I need another function in this trait for that?
+    fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
+        let prefix_key =
+            Key::parse("replay_protection").map_err(Error::KeyError)?;
+        for prefix in ["last", "all"] {
+            let key = prefix_key
+                .push(&prefix.to_string())
+                .map_err(Error::KeyError)?
+                .push(&hash.to_string())
+                .map_err(Error::KeyError)?;
+
+            if self.0.borrow().contains_key(&key.to_string()) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
         Ok(self.0.borrow().get(&key.to_string()).cloned())
@@ -539,6 +559,45 @@ impl DB for MockDB {
             }
             None => Ok(()),
         }
+    }
+
+    fn write_replay_protection_entry(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        hash: &Hash,
+    ) -> Result<()> {
+        let key = Key::parse("replay_protection")
+            .map_err(Error::KeyError)?
+            .push(&"last".to_string())
+            .map_err(Error::KeyError)?
+            .push(&hash.to_string())
+            .map_err(Error::KeyError)?;
+
+        match self.0.borrow_mut().insert(key.to_string(), vec![]) {
+            Some(_) => Err(Error::DBError(format!(
+                "Replay protection key {key} already in storage"
+            ))),
+            None => Ok(()),
+        }
+    }
+
+    fn delete_replay_protection_entry(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        hash: &Hash,
+    ) -> Result<()> {
+        let key = Key::parse("replay_protection").map_err(Error::KeyError)?;
+        for prefix in ["last", "all"] {
+            let key = key
+                .push(&prefix.to_string())
+                .map_err(Error::KeyError)?
+                .push(&hash.to_string())
+                .map_err(Error::KeyError)?;
+
+            self.0.borrow_mut().remove(&key.to_string());
+        }
+
+        Ok(())
     }
 }
 

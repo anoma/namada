@@ -12,6 +12,7 @@
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
+//!   - `replay_protection`: hashes of the processed transactions
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
@@ -32,6 +33,9 @@
 //!     - `epoch`: block epoch
 //!     - `address_gen`: established address generator
 //!     - `header`: block's header
+//! - `replay_protection`: hashes of processed tx
+//!     - `all`: the hashes included up to the last block
+//!     - `last`: the hashes included in the last block
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -73,6 +77,7 @@ const SUBSPACE_CF: &str = "subspace";
 const DIFFS_CF: &str = "diffs";
 const STATE_CF: &str = "state";
 const BLOCK_CF: &str = "block";
+const REPLAY_PROTECTION_CF: &str = "replay_protection";
 
 /// RocksDB handle
 #[derive(Debug)]
@@ -159,6 +164,22 @@ pub fn open(
     block_cf_opts.set_compaction_style(rocksdb::DBCompactionStyle::Universal);
     block_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
+
+    // for replay protection (read/insert-intensive)
+    let mut replay_protection_cf_opts = Options::default();
+    replay_protection_cf_opts
+        .set_compression_type(rocksdb::DBCompressionType::Zstd);
+    replay_protection_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024); //FIXME :review these values
+    replay_protection_cf_opts.set_level_compaction_dynamic_level_bytes(true);
+    // Prioritize minimizing read amplification
+    //FIXME: well in theory I never update keys, so probably I can never incour in read amplification (but probably not even in write aplification)
+    replay_protection_cf_opts
+        .set_compaction_style(rocksdb::DBCompactionStyle::Level);
+    replay_protection_cf_opts.set_block_based_table_factory(&table_opts);
+    cfs.push(ColumnFamilyDescriptor::new(
+        REPLAY_PROTECTION_CF,
+        replay_protection_cf_opts,
+    ));
 
     rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
@@ -305,6 +326,7 @@ impl RocksDB {
             self.dump_it(cf, Some(prefix.clone()), &mut file);
 
             // Block
+            //FIXME: shouldn't this be dumped even if not historic?
             let cf = self
                 .get_column_family(BLOCK_CF)
                 .expect("Block column family should exist");
@@ -351,6 +373,22 @@ impl RocksDB {
                 .get_column_family(SUBSPACE_CF)
                 .expect("Subspace column family should exist");
             self.dump_it(cf, None, &mut file);
+        }
+
+        // replay protection
+        // Dump of replay protection keys is possible only at the last height or the previous one
+        if height == last_height {
+            //FIXME: review this (really need to dump replay prot? REally need the all prefix?)
+
+            let cf = self
+                .get_column_family(REPLAY_PROTECTION_CF)
+                .expect("Replay protection column family should exist");
+            self.dump_it(cf, None, &mut file);
+        } else if height == last_height - 1 {
+            let cf = self
+                .get_column_family(REPLAY_PROTECTION_CF)
+                .expect("Replay protection column family should exist");
+            self.dump_it(cf, Some("all".to_string()), &mut file);
         }
 
         println!("Done writing to {}", full_path.to_string_lossy());
@@ -448,6 +486,11 @@ impl RocksDB {
         let block_cf = self.get_column_family(BLOCK_CF)?;
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
+
+        // Delete the tx hashes included in the last block
+        let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
+        tracing::info!("Removing replay protection hashes");
+        batch.delete_cf(reprot_cf, "last".to_string());
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -1055,6 +1098,29 @@ impl DB for RocksDB {
         Ok(Some((stored_height, merkle_tree_stores)))
     }
 
+    fn has_replay_protection_entry(
+        &self,
+        hash: &namada::types::hash::Hash,
+    ) -> Result<bool> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        for prefix in ["last", "all"] {
+            let key = Key::parse(prefix)
+                .map_err(Error::KeyError)?
+                .push(&hash.to_string())
+                .map_err(Error::KeyError)?;
+            if let Some(_) = self
+                .0
+                .get_cf(replay_protection_cf, key.to_string())
+                .map_err(|e| Error::DBError(e.into_string()))?
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
         self.0
@@ -1340,6 +1406,46 @@ impl DB for RocksDB {
             }
             None => Ok(()),
         }
+    }
+
+    fn write_replay_protection_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        hash: &namada::types::hash::Hash,
+    ) -> Result<()> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        let key = Key::parse("last")
+            .map_err(Error::KeyError)?
+            .push(&hash.to_string())
+            .map_err(Error::KeyError)?;
+
+        batch
+            .0
+            .put_cf(replay_protection_cf, key.to_string(), vec![]);
+
+        Ok(())
+    }
+
+    fn delete_replay_protection_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        hash: &namada::types::hash::Hash,
+    ) -> Result<()> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        for prefix in ["last", "all"] {
+            let key = Key::parse(prefix)
+                .map_err(Error::KeyError)?
+                .push(&hash.to_string())
+                .map_err(Error::KeyError)?;
+
+            batch.0.delete_cf(replay_protection_cf, key.to_string())
+        }
+
+        Ok(())
     }
 }
 

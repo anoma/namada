@@ -286,6 +286,9 @@ pub trait DB: std::fmt::Debug {
         height: BlockHeight,
     ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>>;
 
+    /// Check if the given replay protection entry exists
+    fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool>;
+
     /// Read the latest value for account subspace key from the DB
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>>;
 
@@ -352,6 +355,20 @@ pub trait DB: std::fmt::Debug {
         batch: &mut Self::WriteBatch,
         pruned_epoch: Epoch,
         pred_epochs: &Epochs,
+    ) -> Result<()>;
+
+    /// Write a replay protection entry
+    fn write_replay_protection_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        hash: &Hash,
+    ) -> Result<()>;
+
+    /// Delete a replay protection entry
+    fn delete_replay_protection_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        hash: &Hash,
     ) -> Result<()>;
 }
 
@@ -570,6 +587,7 @@ where
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
+        //FIXME: remove all the ifs for replya protection keys
         if is_replay_protection_key(key) {
             // Replay protection keys are not included in the merkle
             // tree
@@ -1120,6 +1138,29 @@ where
             .as_ref()
             .map(|b| b.height)
             .unwrap_or_default()
+    }
+
+    /// Check it the given transaction's hash is already present in storage
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
+        self.db.has_replay_protection_entry(hash)
+    }
+
+    /// Write the provided tx hash to storage
+    pub fn write_replay_protection_entry(
+        &mut self,
+        batch: &mut D::WriteBatch,
+        hash: &Hash,
+    ) -> Result<()> {
+        self.db.write_replay_protection_entry(batch, hash)
+    }
+
+    /// Delete the provided tx hash from storage
+    pub fn delete_replay_protection_entry(
+        &mut self,
+        batch: &mut D::WriteBatch,
+        hash: &Hash,
+    ) -> Result<()> {
+        self.db.delete_replay_protection_entry(batch, hash)
     }
 }
 
