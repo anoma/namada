@@ -91,7 +91,7 @@ jobs:
           path: ./*.tar.gz
       - name: Print sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true

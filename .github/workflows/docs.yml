@@ -69,23 +69,8 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.5.4
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -119,12 +104,6 @@ jobs:
         with:
           name: ${{ matrix.make.bucket }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ matrix.make.bucket }}.tar
-      - name: Publish docs
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: aws s3 sync ${{ matrix.make.folder }}/book/html/ s3://${{ matrix.make.bucket }} --region eu-west-1 --delete
-      - name: Invalidate distribution cache
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        run: aws cloudfront create-invalidation --distribution-id ${{ matrix.make.distribution_id }} --paths "/*"
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats
@@ -164,23 +143,8 @@ jobs:
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.5.4
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
