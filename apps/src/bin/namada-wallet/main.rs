@@ -6,5 +6,5 @@ pub fn main() -> Result<()> {
     color_eyre::install()?;
     let (cmd, ctx) = cli::namada_wallet_cli()?;
     // run the CLI
-    CliApi::<CliIo>::handle_wallet_command(cmd, ctx)
+    CliApi::<CliIo>::handle_wallet_command(cmd, ctx, &CliIo)
 }

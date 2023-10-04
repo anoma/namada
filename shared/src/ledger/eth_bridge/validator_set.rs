@@ -26,7 +26,7 @@ use crate::types::control_flow::{
     self, install_shutdown_signal, Halt, TryHalt,
 };
 use crate::types::ethereum_events::EthAddress;
-use crate::types::io::{Io, StdIo};
+use crate::types::io::Io;
 use crate::types::vote_extensions::validator_set_update::ValidatorSetArgs;
 use crate::{display_line, edisplay_line};
 
@@ -268,12 +268,11 @@ impl From<Option<TransactionReceipt>> for RelayResult {
 
 /// Query an ABI encoding of the validator set to be installed
 /// at the given epoch, and its associated proof.
-pub async fn query_validator_set_update_proof<C, IO: Io>(
-    client: &C,
+pub async fn query_validator_set_update_proof<'a>(
+    client: &(impl Client + Sync),
+    io: &impl Io,
     args: args::ValidatorSetProof,
-) where
-    C: Client + Sync,
-{
+) {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
@@ -287,17 +286,15 @@ pub async fn query_validator_set_update_proof<C, IO: Io>(
         .await
         .unwrap();
 
-    display_line!(IO, "0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
+    display_line!(io, "0x{}", HEXLOWER.encode(encoded_proof.as_ref()));
 }
 
 /// Query an ABI encoding of the Bridge validator set at a given epoch.
-pub async fn query_bridge_validator_set<C, IO: Io>(
-    client: &C,
+pub async fn query_bridge_validator_set<'a>(
+    client: &(impl Client + Sync),
+    io: &impl Io,
     args: args::BridgeValidatorSet,
-) -> Halt<()>
-where
-    C: Client + Sync,
-{
+) -> Halt<()> {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
@@ -313,18 +310,16 @@ where
             tracing::error!(%err, "Failed to fetch Bridge validator set");
         })?;
 
-    display_validator_set::<IO>(args);
+    display_validator_set(io, args);
     control_flow::proceed(())
 }
 
 /// Query an ABI encoding of the Governance validator set at a given epoch.
-pub async fn query_governnace_validator_set<C, IO: Io>(
-    client: &C,
+pub async fn query_governnace_validator_set<'a>(
+    client: &(impl Client + Sync),
+    io: &impl Io,
     args: args::GovernanceValidatorSet,
-) -> Halt<()>
-where
-    C: Client + Sync,
-{
+) -> Halt<()> {
     let epoch = if let Some(epoch) = args.epoch {
         epoch
     } else {
@@ -340,12 +335,12 @@ where
             tracing::error!(%err, "Failed to fetch Governance validator set");
         })?;
 
-    display_validator_set::<IO>(args);
+    display_validator_set(io, args);
     control_flow::proceed(())
 }
 
 /// Display the given [`ValidatorSetArgs`].
-fn display_validator_set<IO: Io>(args: ValidatorSetArgs) {
+fn display_validator_set<IO: Io>(io: &IO, args: ValidatorSetArgs) {
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -373,28 +368,29 @@ fn display_validator_set<IO: Io>(args: ValidatorSetArgs) {
     };
 
     display_line!(
-        IO,
+        io,
         "{}",
         serde_json::to_string_pretty(&validator_set).unwrap()
     );
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update<C, E, IO: Io>(
+pub async fn relay_validator_set_update<'a, E>(
     eth_client: Arc<E>,
-    nam_client: &C,
+    client: &(impl Client + Sync),
+    io: &impl Io,
     args: args::ValidatorSetUpdateRelay,
 ) -> Halt<()>
 where
-    C: Client + Sync,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
 {
     let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
 
     if args.sync {
-        block_on_eth_sync::<_, IO>(
+        block_on_eth_sync(
             &*eth_client,
+            io,
             BlockOnEthSync {
                 deadline: Instant::now() + Duration::from_secs(60),
                 delta_sleep: Duration::from_secs(1),
@@ -402,14 +398,15 @@ where
         )
         .await?;
     } else {
-        eth_sync_or_exit::<_, IO>(&*eth_client).await?;
+        eth_sync_or_exit(&*eth_client, io).await?;
     }
 
     if args.daemon {
         relay_validator_set_update_daemon(
             args,
             eth_client,
-            nam_client,
+            client,
+            io,
             &mut signal_receiver,
         )
         .await
@@ -417,11 +414,11 @@ where
         relay_validator_set_update_once::<CheckNonce, _, _, _>(
             &args,
             eth_client,
-            nam_client,
+            client,
             |relay_result| match relay_result {
                 RelayResult::BridgeCallError(reason) => {
                     edisplay_line!(
-                        IO,
+                        io,
                         "Calling Bridge failed due to: {reason}"
                     );
                 }
@@ -432,27 +429,27 @@ where
                         Ordering::Greater => "too far ahead of",
                     };
                     edisplay_line!(
-                        IO,
+                        io,
                         "Argument nonce <{argument}> is {whence} contract \
                          nonce <{contract}>"
                     );
                 }
                 RelayResult::NoReceipt => {
                     edisplay_line!(
-                        IO,
+                        io,
                         "No transfer receipt received from the Ethereum node"
                     );
                 }
                 RelayResult::Receipt { receipt } => {
                     if receipt.is_successful() {
                         display_line!(
-                            IO,
+                            io,
                             "Ethereum transfer succeeded: {:?}",
                             receipt
                         );
                     } else {
                         display_line!(
-                            IO,
+                            io,
                             "Ethereum transfer failed: {:?}",
                             receipt
                         );
@@ -465,14 +462,14 @@ where
     }
 }
 
-async fn relay_validator_set_update_daemon<C, E, F>(
+async fn relay_validator_set_update_daemon<'a, E, F>(
     mut args: args::ValidatorSetUpdateRelay,
     eth_client: Arc<E>,
-    nam_client: &C,
+    client: &(impl Client + Sync),
+    io: &impl Io,
     shutdown_receiver: &mut Option<F>,
 ) -> Halt<()>
 where
-    C: Client + Sync,
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
     F: Future<Output = ()> + Unpin,
@@ -513,9 +510,7 @@ where
         time::sleep(sleep_for).await;
 
         let is_synchronizing =
-            eth_sync_or::<_, _, _, StdIo>(&*eth_client, || ())
-                .await
-                .is_break();
+            eth_sync_or(&*eth_client, io, || ()).await.is_break();
         if is_synchronizing {
             tracing::debug!("The Ethereum node is synchronizing");
             last_call_succeeded = false;
@@ -525,7 +520,7 @@ where
         // we could be racing against governance updates,
         // so it is best to always fetch the latest Bridge
         // contract address
-        let bridge = get_bridge_contract(nam_client, Arc::clone(&eth_client))
+        let bridge = get_bridge_contract(client, Arc::clone(&eth_client))
             .await
             .try_halt(|err| {
                 // only care about displaying errors,
@@ -544,7 +539,7 @@ where
         });
 
         let shell = RPC.shell();
-        let nam_current_epoch_fut = shell.epoch(nam_client).map(|result| {
+        let nam_current_epoch_fut = shell.epoch(client).map(|result| {
             result
                 .map_err(|err| {
                     tracing::error!(
@@ -596,7 +591,7 @@ where
         let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
             &args,
             Arc::clone(&eth_client),
-            nam_client,
+            client,
             |transf_result| {
                 let Some(receipt) = transf_result else {
                     tracing::warn!("No transfer receipt received from the Ethereum node");

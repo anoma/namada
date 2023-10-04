@@ -13,7 +13,7 @@ use crate::client::utils;
 #[async_trait::async_trait(?Send)]
 pub trait CliClient: Client + Sync {
     fn from_tendermint_address(address: &mut TendermintAddress) -> Self;
-    async fn wait_until_node_is_synced<IO: Io>(&self) -> Halt<()>;
+    async fn wait_until_node_is_synced(&self, io: &impl Io) -> Halt<()>;
 }
 
 #[async_trait::async_trait(?Send)]
@@ -22,8 +22,8 @@ impl CliClient for HttpClient {
         HttpClient::new(utils::take_config_address(address)).unwrap()
     }
 
-    async fn wait_until_node_is_synced<IO: Io>(&self) -> Halt<()> {
-        wait_until_node_is_synched::<_, IO>(self).await
+    async fn wait_until_node_is_synced(&self, io: &impl Io) -> Halt<()> {
+        wait_until_node_is_synched(self, io).await
     }
 }
 

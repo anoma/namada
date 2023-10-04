@@ -16,6 +16,7 @@ async fn main() -> Result<()> {
     CliApi::<CliIo>::handle_client_command::<HttpClient>(
         None,
         cli::namada_client_cli()?,
+        &CliIo,
     )
     .await
 }

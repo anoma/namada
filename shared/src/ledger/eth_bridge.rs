@@ -102,6 +102,7 @@ pub struct BlockOnEthSync {
 /// Block until Ethereum finishes synchronizing.
 pub async fn block_on_eth_sync<C, IO: Io>(
     client: &C,
+    io: &IO,
     args: BlockOnEthSync,
 ) -> Halt<()>
 where
@@ -111,7 +112,7 @@ where
         deadline,
         delta_sleep,
     } = args;
-    display_line!(IO, "Attempting to synchronize with the Ethereum network");
+    display_line!(io, "Attempting to synchronize with the Ethereum network");
     Sleep {
         strategy: LinearBackoff { delta: delta_sleep },
     }
@@ -128,11 +129,11 @@ where
     .await
     .try_halt(|_| {
         edisplay_line!(
-            IO,
+            io,
             "Timed out while waiting for Ethereum to synchronize"
         );
     })?;
-    display_line!(IO, "The Ethereum node is up to date");
+    display_line!(io, "The Ethereum node is up to date");
     control_flow::proceed(())
 }
 
@@ -140,6 +141,7 @@ where
 /// not, perform `action`.
 pub async fn eth_sync_or<C, F, T, IO: Io>(
     client: &C,
+    io: &IO,
     mut action: F,
 ) -> Halt<Either<T, ()>>
 where
@@ -151,7 +153,7 @@ where
         .map(|status| status.is_synchronized())
         .try_halt(|err| {
             edisplay_line!(
-                IO,
+                io,
                 "An error occurred while fetching the Ethereum \
                  synchronization status: {err}"
             );
@@ -165,11 +167,11 @@ where
 
 /// Check if Ethereum has finished synchronizing. In case it has
 /// not, end execution.
-pub async fn eth_sync_or_exit<C, IO: Io>(client: &C) -> Halt<()>
+pub async fn eth_sync_or_exit<C, IO: Io>(client: &C, io: &IO) -> Halt<()>
 where
     C: Middleware,
 {
-    eth_sync_or::<_, _, _, IO>(client, || {
+    eth_sync_or(client, io, || {
         tracing::error!("The Ethereum node has not finished synchronizing");
     })
     .await?

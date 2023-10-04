@@ -17,6 +17,8 @@ use zeroize::Zeroizing;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::ledger::eth_bridge::bridge_pool;
 use crate::ledger::Namada;
+use crate::sdk::signing::SigningTxData;
+use crate::sdk::{rpc, tx};
 use crate::types::address::Address;
 use crate::types::keccak::KeccakHash;
 use crate::types::key::{common, SchemeType};
@@ -24,11 +26,6 @@ use crate::types::masp::MaspValue;
 use crate::types::storage::Epoch;
 use crate::types::transaction::GasLimit;
 use crate::types::{storage, token};
-use crate::sdk::signing::SigningTxData;
-use crate::sdk::{tx, rpc};
-
-/// The Namada token
-pub const NAM: &str = "NAM";
 
 /// [`Duration`](StdDuration) wrapper that provides a
 /// method to parse a value from a string.
@@ -510,30 +507,30 @@ impl InitProposal {
             rpc::query_governance_parameters(context.client()).await;
 
         if self.is_pgf_funding {
-            let proposal =
-                PgfFundingProposal::try_from(self.proposal_data.as_ref())
-                .map_err(|e| {
-                    crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(
-                        e.to_string(),
-                    )
-                })?
-                .validate(&governance_parameters, current_epoch, self.tx.force)
-                .map_err(|e| crate::sdk::error::TxError::InvalidProposal(e.to_string()))?;
+            let proposal = PgfFundingProposal::try_from(
+                self.proposal_data.as_ref(),
+            )
+            .map_err(|e| {
+                crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(
+                    e.to_string(),
+                )
+            })?
+            .validate(&governance_parameters, current_epoch, self.tx.force)
+            .map_err(|e| {
+                crate::sdk::error::TxError::InvalidProposal(e.to_string())
+            })?;
 
             tx::build_pgf_funding_proposal(context, self, proposal).await
         } else if self.is_pgf_stewards {
             let proposal = PgfStewardProposal::try_from(
                 self.proposal_data.as_ref(),
             )
-                .map_err(|e| {
-                    crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
-                })?;
-            let nam_address = context
-                .wallet()
-                .await
-                .find_address(NAM)
-                .expect("NAM not in wallet")
-                .clone();
+            .map_err(|e| {
+                crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(
+                    e.to_string(),
+                )
+            })?;
+            let nam_address = context.native_token().await;
             let author_balance = rpc::get_token_balance(
                 context.client(),
                 &nam_address,
@@ -553,16 +550,15 @@ impl InitProposal {
 
             tx::build_pgf_stewards_proposal(context, self, proposal).await
         } else {
-            let proposal = DefaultProposal::try_from(self.proposal_data.as_ref())
-                .map_err(|e| {
-                    crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(e.to_string())
-                })?;
-            let nam_address = context
-                .wallet()
-                .await
-                .find_address(NAM)
-                .expect("NAM not in wallet")
-                .clone();
+            let proposal = DefaultProposal::try_from(
+                self.proposal_data.as_ref(),
+            )
+            .map_err(|e| {
+                crate::sdk::error::TxError::FailedGovernaneProposalDeserialize(
+                    e.to_string(),
+                )
+            })?;
+            let nam_address = context.native_token().await;
             let author_balance = rpc::get_token_balance(
                 context.client(),
                 &nam_address,
@@ -1358,7 +1354,7 @@ impl<C: NamadaTypes> TxUnjailValidator<C> {
     }
 
     /// Path to the TX WASM code file
-    pub fn tc_code_path(self, tx_code_path: PathBuf) -> Self {
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
         Self {
             tx_code_path,
             ..self

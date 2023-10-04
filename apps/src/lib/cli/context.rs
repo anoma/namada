@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::ledger::{Namada, NamadaImpl};
+use namada::sdk::masp::fs::FsShieldedUtils;
 use namada::sdk::masp::ShieldedContext;
 use namada::sdk::wallet::Wallet;
-use namada::sdk::masp::fs::FsShieldedUtils;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
@@ -148,6 +149,19 @@ impl Context {
             shielded: FsShieldedUtils::new(chain_dir),
             native_token,
         })
+    }
+
+    /// Make an implementation of Namada from this object and parameters.
+    pub fn to_sdk<'a, C, IO>(
+        &'a mut self,
+        client: &'a C,
+        io: &'a IO,
+    ) -> impl Namada
+    where
+        C: namada::ledger::queries::Client + Sync,
+        IO: Io,
+    {
+        NamadaImpl::new(client, &mut self.wallet, &mut self.shielded, io)
     }
 
     /// Parse and/or look-up the value from the context.

@@ -58,18 +58,18 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::sdk::args::InputAmount;
 use crate::ledger::queries::Client;
-use crate::sdk::rpc::{query_conversion, query_storage_value};
-use crate::sdk::tx::decode_component;
 use crate::ledger::Namada;
 use crate::proto::Tx;
+use crate::sdk::args::InputAmount;
 use crate::sdk::error::{EncodingError, Error, PinnedBalanceError, QueryError};
+use crate::sdk::rpc::{query_conversion, query_storage_value};
+use crate::sdk::tx::decode_component;
 use crate::sdk::{args, rpc};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::types::address::{masp, Address};
-use crate::types::io::{Io, StdIo};
+use crate::types::io::Io;
 use crate::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token;
@@ -1030,18 +1030,19 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// context and express that value in terms of the currently timestamped
     /// asset types. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_exchanged_balance<C: Client + Sync, IO: Io>(
+    pub async fn compute_exchanged_balance<'a>(
         &mut self,
-        client: &C,
+        context: &impl Namada<'a>,
         vk: &ViewingKey,
         target_epoch: Epoch,
     ) -> Result<Option<MaspAmount>, Error> {
         // First get the unexchanged balance
-        if let Some(balance) = self.compute_shielded_balance(client, vk).await?
+        if let Some(balance) =
+            self.compute_shielded_balance(context.client(), vk).await?
         {
             let exchanged_amount = self
                 .compute_exchanged_amount(
-                    client,
+                    context,
                     balance,
                     target_epoch,
                     BTreeMap::new(),
@@ -1050,7 +1051,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .0;
             // And then exchange balance into current asset types
             Ok(Some(
-                self.decode_all_amounts(client, exchanged_amount).await,
+                self.decode_all_amounts(context.client(), exchanged_amount)
+                    .await,
             ))
         } else {
             Ok(None)
@@ -1063,9 +1065,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     #[allow(clippy::too_many_arguments)]
-    async fn apply_conversion<C: Client + Sync>(
+    async fn apply_conversion<'a>(
         &mut self,
-        client: &C,
+        context: &impl Namada<'a>,
         conv: AllowedConversion,
         asset_type: (Epoch, Address, MaspDenom),
         value: i128,
@@ -1085,7 +1087,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
             edisplay_line!(
-                StdIo,
+                context.io(),
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
                 masp_asset
@@ -1104,7 +1106,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
         *input += self
-            .decode_all_amounts(client, conv.clone() * required)
+            .decode_all_amounts(context.client(), conv.clone() * required)
             .await
             - trace.clone();
         *output += trace;
@@ -1115,9 +1117,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount<C: Client + Sync>(
+    pub async fn compute_exchanged_amount<'a>(
         &mut self,
-        client: &C,
+        context: &impl Namada<'a>,
         mut input: MaspAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
@@ -1139,13 +1141,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
                 let denom_value = denom.denominate_i128(&value);
                 self.query_allowed_conversion(
-                    client,
+                    context.client(),
                     target_asset_type,
                     &mut conversions,
                 )
                 .await;
                 self.query_allowed_conversion(
-                    client,
+                    context.client(),
                     asset_type,
                     &mut conversions,
                 )
@@ -1154,7 +1156,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
                     display_line!(
-                        StdIo,
+                        context.io(),
                         "converting current asset type to latest asset type..."
                     );
                     // Not at the target asset type, not at the latest asset
@@ -1162,7 +1164,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // current asset type to the latest
                     // asset type.
                     self.apply_conversion(
-                        client,
+                        context,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1176,7 +1178,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     at_target_asset_type,
                 ) {
                     display_line!(
-                        StdIo,
+                        context.io(),
                         "converting latest asset type to target asset type..."
                     );
                     // Not at the target asset type, yet at the latest asset
@@ -1184,7 +1186,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // from latest asset type to the target
                     // asset type.
                     self.apply_conversion(
-                        client,
+                        context,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1218,9 +1220,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
     /// achieve the total value.
-    pub async fn collect_unspent_notes<C: Client + Sync>(
+    pub async fn collect_unspent_notes<'a>(
         &mut self,
-        client: &C,
+        context: &impl Namada<'a>,
         vk: &ViewingKey,
         target: I128Sum,
         target_epoch: Epoch,
@@ -1262,10 +1264,11 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                                     .to_string(),
                             )
                         })?;
-                let input = self.decode_all_amounts(client, pre_contr).await;
+                let input =
+                    self.decode_all_amounts(context.client(), pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
-                        client,
+                        context,
                         input,
                         target_epoch,
                         conversions.clone(),
@@ -1403,31 +1406,31 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the epoch of the transaction or even before, so exchange all these
     /// amounts to the epoch of the transaction in order to get the value that
     /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance<C: Client + Sync, IO: Io>(
+    pub async fn compute_exchanged_pinned_balance<'a>(
         &mut self,
-        client: &C,
+        context: &impl Namada<'a>,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
     ) -> Result<(MaspAmount, Epoch), Error> {
         // Obtain the balance that will be exchanged
         let (amt, ep) =
-            Self::compute_pinned_balance(client, owner, viewing_key).await?;
-        display_line!(IO, "Pinned balance: {:?}", amt);
+            Self::compute_pinned_balance(context.client(), owner, viewing_key)
+                .await?;
+        display_line!(context.io(), "Pinned balance: {:?}", amt);
         // Establish connection with which to do exchange rate queries
-        let amount = self.decode_all_amounts(client, amt).await;
-        display_line!(IO, "Decoded pinned balance: {:?}", amount);
+        let amount = self.decode_all_amounts(context.client(), amt).await;
+        display_line!(context.io(), "Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount(
-                client,
-                amount,
-                ep,
-                BTreeMap::new(),
-            )
+            .compute_exchanged_amount(context, amount, ep, BTreeMap::new())
             .await?
             .0;
-        display_line!(IO, "Exchanged amount: {:?}", computed_amount);
-        Ok((self.decode_all_amounts(client, computed_amount).await, ep))
+        display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
+        Ok((
+            self.decode_all_amounts(context.client(), computed_amount)
+                .await,
+            ep,
+        ))
     }
 
     /// Convert an amount whose units are AssetTypes to one whose units are
@@ -1567,7 +1570,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .shielded_mut()
                 .await
                 .collect_unspent_notes(
-                    context.client(),
+                    context,
                     &to_viewing_key(&sk).vk,
                     I128Sum::from_sum(amount),
                     epoch,
@@ -2131,6 +2134,7 @@ mod tests {
 pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
+
     use async_trait::async_trait;
 
     use super::*;

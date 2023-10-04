@@ -10,6 +10,8 @@ use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
 pub use namada::sdk::wallet::alias::Alias;
+use namada::sdk::wallet::fs::FsWalletStorage;
+use namada::sdk::wallet::store::Store;
 use namada::sdk::wallet::{
     AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
     Wallet, WalletIo,
@@ -20,8 +22,6 @@ use namada::types::key::*;
 use rand_core::OsRng;
 pub use store::wallet_file;
 use zeroize::Zeroizing;
-use namada::sdk::wallet::store::Store;
-use namada::sdk::wallet::fs::FsWalletStorage;
 
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;

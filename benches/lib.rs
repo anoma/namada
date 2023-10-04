@@ -69,7 +69,6 @@ use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::ledger::storage_api::StorageRead;
-use namada::sdk::wallet::Wallet;
 use namada::ledger::NamadaImpl;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
@@ -77,6 +76,7 @@ use namada::sdk::args::InputAmount;
 use namada::sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
+use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
@@ -689,13 +689,12 @@ impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
 
-        let mut ctx =
-            Context::new::<StdIo>(namada_apps::cli::args::Global {
-                chain_id: None,
-                base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
-                wasm_dir: Some(WASM_DIR.into()),
-            })
-            .unwrap();
+        let mut ctx = Context::new::<StdIo>(namada_apps::cli::args::Global {
+            chain_id: None,
+            base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
+            wasm_dir: Some(WASM_DIR.into()),
+        })
+        .unwrap();
 
         // Generate spending key for Albert and Bertha
         ctx.wallet.gen_spending_key(
@@ -811,8 +810,12 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
-        let namada =
-            NamadaImpl::new(&self.shell, &mut self.wallet, &mut self.shielded);
+        let namada = NamadaImpl::new(
+            &self.shell,
+            &mut self.wallet,
+            &mut self.shielded,
+            &StdIo,
+        );
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(

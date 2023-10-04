@@ -11,20 +11,21 @@ impl Io for StdIo {}
 #[async_trait::async_trait(?Send)]
 #[allow(missing_docs)]
 pub trait Io {
-    fn print(output: impl AsRef<str>) {
+    fn print(&self, output: impl AsRef<str>) {
         print!("{}", output.as_ref());
     }
 
-    fn flush() {
+    fn flush(&self) {
         use std::io::Write;
         std::io::stdout().flush().unwrap();
     }
 
-    fn println(output: impl AsRef<str>) {
+    fn println(&self, output: impl AsRef<str>) {
         println!("{}", output.as_ref());
     }
 
     fn write<W: std::io::Write>(
+        &self,
         mut writer: W,
         output: impl AsRef<str>,
     ) -> std::io::Result<()> {
@@ -32,17 +33,18 @@ pub trait Io {
     }
 
     fn writeln<W: std::io::Write>(
+        &self,
         mut writer: W,
         output: impl AsRef<str>,
     ) -> std::io::Result<()> {
         writeln!(writer, "{}", output.as_ref())
     }
 
-    fn eprintln(output: impl AsRef<str>) {
+    fn eprintln(&self, output: impl AsRef<str>) {
         eprintln!("{}", output.as_ref());
     }
 
-    async fn read() -> std::io::Result<String> {
+    async fn read(&self) -> std::io::Result<String> {
         #[cfg(not(target_family = "wasm"))]
         {
             read_aux(tokio::io::stdin()).await
@@ -53,7 +55,7 @@ pub trait Io {
         }
     }
 
-    async fn prompt(question: impl AsRef<str>) -> String {
+    async fn prompt(&self, question: impl AsRef<str>) -> String {
         #[cfg(not(target_family = "wasm"))]
         {
             prompt_aux(
@@ -111,14 +113,14 @@ where
 /// [`Io::print`]
 #[macro_export]
 macro_rules! display {
-    ($io:ty) => {
-      <$io>::print("")
+    ($io:expr) => {
+        $io.print("")
     };
-    ($io:ty, $w:expr; $($args:tt)*) => {
-        <$io>::write($w, format_args!($($args)*).to_string())
+    ($io:expr, $w:expr; $($args:tt)*) => {
+        $io.write($w, format_args!($($args)*).to_string())
     };
-    ($io:ty,$($args:tt)*) => {
-        <$io>::print(format_args!($($args)*).to_string())
+    ($io:expr,$($args:tt)*) => {
+        $io.print(format_args!($($args)*).to_string())
     };
 }
 
@@ -126,14 +128,14 @@ macro_rules! display {
 /// [`Io::println`] and [`Io::writeln`]
 #[macro_export]
 macro_rules! display_line {
-    ($io:ty) => {
-      <$io>::println("")
+    ($io:expr) => {
+        $io.println("")
     };
-    ($io:ty, $w:expr; $($args:tt)*) => {
-        <$io>::writeln($w, format_args!($($args)*).to_string())
+    ($io:expr, $w:expr; $($args:tt)*) => {
+        $io.writeln($w, format_args!($($args)*).to_string())
     };
-    ($io:ty,$($args:tt)*) => {
-        <$io>::println(format_args!($($args)*).to_string())
+    ($io:expr,$($args:tt)*) => {
+        $io.println(format_args!($($args)*).to_string())
     };
 }
 
@@ -141,8 +143,8 @@ macro_rules! display_line {
 /// [`Io::eprintln`]
 #[macro_export]
 macro_rules! edisplay_line {
-    ($io:ty,$($args:tt)*) => {
-        <$io>::eprintln(format_args!($($args)*).to_string())
+    ($io:expr,$($args:tt)*) => {
+        $io.eprintln(format_args!($($args)*).to_string())
     };
 }
 
@@ -150,7 +152,7 @@ macro_rules! edisplay_line {
 /// A convenience macro for formatting the user prompt before
 /// forwarding it to the [`Io::prompt`] method.
 macro_rules! prompt {
-    ($io:ty,$($arg:tt)*) => {{
-        <$io>::prompt(format!("{}", format_args!($($arg)*)))
+    ($io:expr,$($arg:tt)*) => {{
+        $io.prompt(format!("{}", format_args!($($arg)*)))
     }}
 }
