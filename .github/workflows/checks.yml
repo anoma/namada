@@ -18,9 +18,15 @@ permissions:
   contents: read
 
 env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
+  SCCACHE_BUCKET: namada-cache
+  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
 
 jobs:
   clippy-fmt:
@@ -72,5 +78,13 @@ jobs:
         run: rustup show
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: Start sccache server
+        run: sccache --start-server
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
