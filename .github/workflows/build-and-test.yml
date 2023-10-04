@@ -85,8 +85,8 @@ jobs:
           BUCKET_NAME: namada-wasm
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_SECRET_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
 
   test-wasm:
     timeout-minutes: 30
@@ -363,8 +363,8 @@ jobs:
           AWS_REGION: us-east-1
           S3_ENDPOINT_URL: https://minio.heliax.click
           ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_SECRET_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Upload build timing report
         if: always()
         uses: actions/upload-artifact@v3
