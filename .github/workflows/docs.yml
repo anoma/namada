@@ -104,6 +104,10 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   rust-docs:
     runs-on: ${{ matrix.os }}
@@ -181,3 +185,7 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache

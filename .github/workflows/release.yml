@@ -49,10 +49,16 @@ jobs:
         with:
           profile: minimal
           override: true
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install cargo-about
@@ -70,6 +76,10 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   release:
     needs: build

@@ -41,8 +41,17 @@ jobs:
           profile: minimal
       - name: Show rust toolchain info
         run: rustup show
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Install cargo ${{ matrix.make.command }}
         run: curl https://i.jpillora.com/${{ matrix.make.version }}! | bash
       - name: Install Protoc
@@ -57,5 +66,7 @@ jobs:
           python3 ${{ matrix.make.command }}.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Clean cache folder
-        run: cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache && cargo-cache
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
