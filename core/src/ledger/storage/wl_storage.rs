@@ -63,9 +63,7 @@ where
         hash: &Hash,
     ) -> Result<bool, super::Error> {
         let key =
-            crate::ledger::replay_protection::get_replay_protection_last_key(
-                hash,
-            );
+            crate::ledger::replay_protection::get_replay_protection_key(hash);
         if let Some(write_log::StorageModification::Write { .. }) =
             self.write_log.read(&key).0
         {

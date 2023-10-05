@@ -236,7 +236,7 @@ where
     // Writes wrapper tx hash to block write log (changes must be persisted even
     // in case of failure)
     let wrapper_hash_key =
-        replay_protection::get_replay_protection_last_key(&tx.header_hash());
+        replay_protection::get_replay_protection_key(&tx.header_hash());
     shell_params
         .wl_storage
         .write(&wrapper_hash_key, ())
@@ -256,7 +256,7 @@ where
     shell_params.tx_gas_meter.add_tx_size_gas(tx_bytes)?;
 
     // If wrapper was succesful, write inner tx hash to storage
-    let inner_hash_key = replay_protection::get_replay_protection_last_key(
+    let inner_hash_key = replay_protection::get_replay_protection_key(
         &tx.update_header(TxType::Raw).header_hash(),
     );
     shell_params

@@ -13,21 +13,10 @@ pub fn is_replay_protection_key(key: &Key) -> bool {
 }
 
 /// Get the transaction hash key under the last subkey
-pub fn get_replay_protection_last_key(hash: &Hash) -> Key {
+pub fn get_replay_protection_key(hash: &Hash) -> Key {
     Key::parse(STORAGE_ROOT)
         .expect("Cannot obtain a valid db key")
         .push(&"last".to_string())
-        .expect("Cannot obtain a valid db key")
-        .push(&hash.to_string())
-        .expect("Cannot obtain a valid db key")
-}
-
-/// Get the transaction hash key under the all subkey
-// FIXME: need this? If not remvoe and rename the previous one removeing "last"
-pub fn get_replay_protection_all_key(hash: &Hash) -> Key {
-    Key::parse(STORAGE_ROOT)
-        .expect("Cannot obtain a valid db key")
-        .push(&"all".to_string())
         .expect("Cannot obtain a valid db key")
         .push(&hash.to_string())
         .expect("Cannot obtain a valid db key")

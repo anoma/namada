@@ -946,7 +946,7 @@ where
 
         // Write inner hash to tx WAL
         let inner_hash_key =
-            replay_protection::get_replay_protection_last_key(&inner_tx_hash);
+            replay_protection::get_replay_protection_key(&inner_tx_hash);
         temp_wl_storage
             .write_log
             .write(&inner_hash_key, vec![])
@@ -967,7 +967,7 @@ where
 
         // Write wrapper hash to tx WAL
         let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(&wrapper_hash);
+            replay_protection::get_replay_protection_key(&wrapper_hash);
         temp_wl_storage
             .write_log
             .write(&wrapper_hash_key, vec![])
@@ -1267,9 +1267,7 @@ where
                 inner_tx.update_header(TxType::Raw);
                 let inner_tx_hash = &inner_tx.header_hash();
                 let inner_hash_key =
-                    replay_protection::get_replay_protection_last_key(
-                        inner_tx_hash,
-                    );
+                    replay_protection::get_replay_protection_key(inner_tx_hash);
                 if self
                     .wl_storage
                     .storage
@@ -1290,9 +1288,7 @@ where
                     .expect("Deserialization shouldn't fail");
                 let wrapper_hash = hash::Hash(tx.header_hash().0);
                 let wrapper_hash_key =
-                    replay_protection::get_replay_protection_last_key(
-                        &wrapper_hash,
-                    );
+                    replay_protection::get_replay_protection_key(&wrapper_hash);
                 if self
                     .wl_storage
                     .storage
@@ -2470,7 +2466,7 @@ mod tests {
         // Write wrapper hash to storage
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(&wrapper_hash);
+            replay_protection::get_replay_protection_key(&wrapper_hash);
         shell
             .wl_storage
             .storage
@@ -2510,7 +2506,7 @@ mod tests {
             wrapper.clone().update_header(TxType::Raw).header_hash();
         // Write inner hash in storage
         let inner_hash_key =
-            replay_protection::get_replay_protection_last_key(&inner_tx_hash);
+            replay_protection::get_replay_protection_key(&inner_tx_hash);
         shell
             .wl_storage
             .storage
