@@ -587,7 +587,7 @@ where
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
-        //FIXME: remove all the ifs for replya protection keys
+        // FIXME: remove all the ifs for replya protection keys
         if is_replay_protection_key(key) {
             // Replay protection keys are not included in the merkle
             // tree

@@ -9,6 +9,7 @@ use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
+use crate::types::hash::Hash;
 use crate::types::storage::{self, BlockHeight};
 use crate::types::time::DateTimeUtc;
 
@@ -54,6 +55,24 @@ where
             write_log: WriteLog::default(),
             storage,
         }
+    }
+
+    /// Check if the given tx hash is present
+    pub fn has_replay_protection_entry(
+        &self,
+        hash: &Hash,
+    ) -> Result<bool, super::Error> {
+        let key =
+            crate::ledger::replay_protection::get_replay_protection_last_key(
+                hash,
+            );
+        if let Some(write_log::StorageModification::Write { .. }) =
+            self.write_log.read(&key).0
+        {
+            return Ok(true);
+        }
+
+        self.storage.has_replay_protection_entry(hash)
     }
 }
 

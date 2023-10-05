@@ -1,21 +1,34 @@
 //! Replay protection storage
 
-use crate::types::address::{Address, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 
-/// Internal replay protection address
-pub const ADDRESS: Address =
-    Address::Internal(InternalAddress::ReplayProtection);
+/// Replay protection storage root
+const STORAGE_ROOT: &str = "replay_protection";
 
+// FIXME: remove the replay protection VP
 /// Check if a key is a replay protection key
 pub fn is_replay_protection_key(key: &Key) -> bool {
-    matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
+    matches!(&key.segments[0], DbKeySeg::StringSeg(root) if root == STORAGE_ROOT)
 }
 
-/// Get the transaction hash key
-pub fn get_replay_protection_key(hash: &Hash) -> Key {
-    Key::from(ADDRESS.to_db_key())
+/// Get the transaction hash key under the last subkey
+pub fn get_replay_protection_last_key(hash: &Hash) -> Key {
+    Key::parse(STORAGE_ROOT)
+        .expect("Cannot obtain a valid db key")
+        .push(&"last".to_string())
+        .expect("Cannot obtain a valid db key")
+        .push(&hash.to_string())
+        .expect("Cannot obtain a valid db key")
+}
+
+/// Get the transaction hash key under the all subkey
+// FIXME: need this? If not remvoe and rename the previous one removeing "last"
+pub fn get_replay_protection_all_key(hash: &Hash) -> Key {
+    Key::parse(STORAGE_ROOT)
+        .expect("Cannot obtain a valid db key")
+        .push(&"all".to_string())
+        .expect("Cannot obtain a valid db key")
         .push(&hash.to_string())
         .expect("Cannot obtain a valid db key")
 }

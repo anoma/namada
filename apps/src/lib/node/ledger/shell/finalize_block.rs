@@ -217,7 +217,9 @@ where
                         .update_header(TxType::Raw)
                         .header_hash();
                     let tx_hash_key =
-                        replay_protection::get_replay_protection_key(&tx_hash);
+                        replay_protection::get_replay_protection_last_key(
+                            &tx_hash,
+                        );
                     self.wl_storage
                         .delete(&tx_hash_key)
                         .expect("Error while deleting tx hash from storage");
@@ -516,7 +518,7 @@ where
                             msg
                         {
                             let tx_hash_key =
-                                replay_protection::get_replay_protection_key(
+                                replay_protection::get_replay_protection_last_key(
                                     &hash,
                                 );
                             self.wl_storage.delete(&tx_hash_key).expect(
@@ -2269,15 +2271,17 @@ mod test_finalize_block {
 
         let (wrapper_tx, processed_tx) =
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
-        let wrapper_hash_key = replay_protection::get_replay_protection_key(
-            &wrapper_tx.header_hash(),
-        );
+        let wrapper_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &wrapper_tx.header_hash(),
+            );
         let mut decrypted_tx = wrapper_tx;
 
         decrypted_tx.update_header(TxType::Raw);
-        let decrypted_hash_key = replay_protection::get_replay_protection_key(
-            &decrypted_tx.header_hash(),
-        );
+        let decrypted_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &decrypted_tx.header_hash(),
+            );
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
@@ -2361,7 +2365,7 @@ mod test_finalize_block {
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::get_replay_protection_key(
+        let inner_hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
@@ -2435,10 +2439,11 @@ mod test_finalize_block {
             None,
         )));
 
-        let wrapper_hash_key = replay_protection::get_replay_protection_key(
-            &wrapper.header_hash(),
-        );
-        let inner_hash_key = replay_protection::get_replay_protection_key(
+        let wrapper_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &wrapper.header_hash(),
+            );
+        let inner_hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper.clone().update_header(TxType::Raw).header_hash(),
         );
 

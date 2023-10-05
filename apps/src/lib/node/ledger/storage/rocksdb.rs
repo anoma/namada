@@ -169,10 +169,9 @@ pub fn open(
     let mut replay_protection_cf_opts = Options::default();
     replay_protection_cf_opts
         .set_compression_type(rocksdb::DBCompressionType::Zstd);
-    replay_protection_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024); //FIXME :review these values
+    replay_protection_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     replay_protection_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     // Prioritize minimizing read amplification
-    //FIXME: well in theory I never update keys, so probably I can never incour in read amplification (but probably not even in write aplification)
     replay_protection_cf_opts
         .set_compaction_style(rocksdb::DBCompactionStyle::Level);
     replay_protection_cf_opts.set_block_based_table_factory(&table_opts);
@@ -326,7 +325,6 @@ impl RocksDB {
             self.dump_it(cf, Some(prefix.clone()), &mut file);
 
             // Block
-            //FIXME: shouldn't this be dumped even if not historic?
             let cf = self
                 .get_column_family(BLOCK_CF)
                 .expect("Block column family should exist");
@@ -376,10 +374,9 @@ impl RocksDB {
         }
 
         // replay protection
-        // Dump of replay protection keys is possible only at the last height or the previous one
+        // Dump of replay protection keys is possible only at the last height or
+        // the previous one
         if height == last_height {
-            //FIXME: review this (really need to dump replay prot? REally need the all prefix?)
-
             let cf = self
                 .get_column_family(REPLAY_PROTECTION_CF)
                 .expect("Replay protection column family should exist");
@@ -490,7 +487,7 @@ impl RocksDB {
         // Delete the tx hashes included in the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
         tracing::info!("Removing replay protection hashes");
-        batch.delete_cf(reprot_cf, "last".to_string());
+        batch.delete_cf(reprot_cf, "last");
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -1110,10 +1107,11 @@ impl DB for RocksDB {
                 .map_err(Error::KeyError)?
                 .push(&hash.to_string())
                 .map_err(Error::KeyError)?;
-            if let Some(_) = self
+            if self
                 .0
-                .get_cf(replay_protection_cf, key.to_string())
+                .get_pinned_cf(replay_protection_cf, key.to_string())
                 .map_err(|e| Error::DBError(e.into_string()))?
+                .is_some()
             {
                 return Ok(true);
             }
@@ -1420,7 +1418,6 @@ impl DB for RocksDB {
             .map_err(Error::KeyError)?
             .push(&hash.to_string())
             .map_err(Error::KeyError)?;
-
         batch
             .0
             .put_cf(replay_protection_cf, key.to_string(), vec![]);

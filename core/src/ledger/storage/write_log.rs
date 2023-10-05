@@ -10,12 +10,14 @@ use crate::ledger;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
+use crate::ledger::replay_protection::is_replay_protection_key;
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
+use crate::types::storage::KeySeg;
 use crate::types::token::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
 };
@@ -490,17 +492,54 @@ impl WriteLog {
             + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
+        // FIXME: maybe better to use two new fields in the write log for replay
+        // protection keys?
+        let _iter = self.block_write_log.iter();
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
-                    storage
-                        .batch_write_subspace_val(batch, key, value.clone())
-                        .map_err(Error::StorageError)?;
+                    if is_replay_protection_key(key) {
+                        let hash = key
+                            .last()
+                            .ok_or(Error::StorageError(
+                                ledger::storage::Error::KeyError(
+                                    crate::types::storage::Error::EmptyKey,
+                                ),
+                            ))?
+                            .raw()
+                            .parse()
+                            .map_err(|_e| Error::StorageError(ledger::storage::Error::KeyError(crate::types::storage::Error::InvalidKeySeg("Expected valid hash".to_string()))))?;
+
+                        storage
+                            .write_replay_protection_entry(batch, &hash)
+                            .map_err(Error::StorageError)?;
+                    } else {
+                        storage
+                            .batch_write_subspace_val(batch, key, value.clone())
+                            .map_err(Error::StorageError)?;
+                    }
                 }
                 StorageModification::Delete => {
-                    storage
-                        .batch_delete_subspace_val(batch, key)
-                        .map_err(Error::StorageError)?;
+                    if is_replay_protection_key(key) {
+                        let hash = key
+                            .last()
+                            .ok_or(Error::StorageError(
+                                ledger::storage::Error::KeyError(
+                                    crate::types::storage::Error::EmptyKey,
+                                ),
+                            ))?
+                            .raw()
+                            .parse()
+                            .map_err(|_e| Error::StorageError(ledger::storage::Error::KeyError(crate::types::storage::Error::InvalidKeySeg("Expected valid hash".to_string()))))?;
+
+                        storage
+                            .delete_replay_protection_entry(batch, &hash)
+                            .map_err(Error::StorageError)?;
+                    } else {
+                        storage
+                            .batch_delete_subspace_val(batch, key)
+                            .map_err(Error::StorageError)?;
+                    }
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
@@ -511,6 +550,7 @@ impl WriteLog {
                 StorageModification::Temp { .. } => {}
             }
         }
+
         if let Some(address_gen) = self.address_gen.take() {
             storage.address_gen = address_gen
         }
