@@ -61,10 +61,18 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target
+            wasm/wasm_source/target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-
       - name: Build WASM
         run: make build-wasm-scripts
       - name: Upload wasm artifacts (github)
@@ -75,6 +83,10 @@ jobs:
             wasm/tx_*.wasm
             wasm/vp_*.wasm
             wasm/checksums.json
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   test-wasm:
     timeout-minutes: 30
@@ -118,10 +130,18 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target
+            wasm/wasm_source/target
+          key: ${{ runner.os }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -129,6 +149,10 @@ jobs:
       - name: Print diff
         if: failure()
         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   upload-wasm:
     timeout-minutes: 5
@@ -203,10 +227,16 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -244,6 +274,10 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   run-benchmarks:
     runs-on: 
@@ -288,10 +322,16 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -319,6 +359,10 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   namada-release:
     runs-on: 
@@ -356,10 +400,16 @@ jobs:
         with:
           profile: default
           override: true
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Install mold linker
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
@@ -405,6 +455,10 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
 
   namada-e2e:
@@ -455,10 +509,16 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
         with:
-          cache-targets: false
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -526,3 +586,7 @@ jobs:
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
