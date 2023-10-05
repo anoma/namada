@@ -19,8 +19,8 @@ use namada_core::types::token::{
     TX_KEY_PREFIX,
 };
 
-use super::Error;
 use crate::ledger::native_vp::CtxPreStorageRead;
+use crate::ledger::storage_api;
 use crate::vm::WasmCacheAccess;
 
 #[derive(Debug)]
@@ -68,10 +68,9 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type Error = Error;
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
-    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, storage_api::Error> {
         match self.store.get(key) {
             Some(StorageModification::Write { ref value }) => {
                 Ok(Some(value.clone()))
@@ -83,43 +82,49 @@ where
             Some(StorageModification::InitAccount { .. }) => {
                 unreachable!("InitAccount shouldn't be inserted")
             }
-            None => self.ctx.read_bytes(key).map_err(Error::NativeVpError),
+            None => self.ctx.read_bytes(key),
         }
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
-        Ok(self.store.contains_key(key)
-            || self.ctx.has_key(key).map_err(Error::NativeVpError)?)
+    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
+        Ok(self.store.contains_key(key) || self.ctx.has_key(key)?)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
         // NOTE: Read only the previous state since the updated state isn't
         // needed for the caller
-        self.ctx.iter_prefix(prefix).map_err(Error::NativeVpError)
+        self.ctx.iter_prefix(prefix)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.ctx.iter_next(iter).map_err(Error::NativeVpError)
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.ctx.iter_next(iter)
     }
 
-    fn write(&mut self, key: &Key, value: Vec<u8>) -> Result<(), Self::Error> {
+    fn write(
+        &mut self,
+        key: &Key,
+        value: Vec<u8>,
+    ) -> Result<(), storage_api::Error> {
         self.store
             .insert(key.clone(), StorageModification::Write { value });
         Ok(())
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), Self::Error> {
+    fn delete(&mut self, key: &Key) -> Result<(), storage_api::Error> {
         self.store.insert(key.clone(), StorageModification::Delete);
         Ok(())
     }
 
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error> {
+    fn emit_ibc_event(
+        &mut self,
+        event: IbcEvent,
+    ) -> Result<(), storage_api::Error> {
         self.event.insert(event);
         Ok(())
     }
@@ -127,7 +132,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
         Ok(self
             .event
             .iter()
@@ -142,18 +147,14 @@ where
         dest: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
-        let src_bal: Option<Amount> =
-            self.ctx.read(&src_key).map_err(Error::NativeVpError)?;
+        let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
         let mut src_bal = src_bal.expect("The source has no balance");
         src_bal.spend(&amount.amount);
-        let mut dest_bal: Amount = self
-            .ctx
-            .read(&dest_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let mut dest_bal: Amount =
+            self.ctx.read(&dest_key)?.unwrap_or_default();
         dest_bal.receive(&amount.amount);
 
         self.write(&src_key, src_bal.serialize_to_vec())?;
@@ -163,7 +164,7 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &IbcShieldedTransfer,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let masp_addr = address::masp();
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
@@ -177,9 +178,9 @@ where
         // so that clients do not have to separately look these
         // up
         let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
-            self.ctx.get_block_epoch().map_err(Error::NativeVpError)?,
-            self.ctx.get_block_height().map_err(Error::NativeVpError)?,
-            self.ctx.get_tx_index().map_err(Error::NativeVpError)?,
+            self.ctx.get_block_epoch()?,
+            self.ctx.get_block_height()?,
+            self.ctx.get_tx_index()?,
             shielded.transfer.clone(),
             shielded.masp_tx.clone(),
         );
@@ -200,21 +201,15 @@ where
         target: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let target_key = token::balance_key(token, target);
-        let mut target_bal: Amount = self
-            .ctx
-            .read(&target_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let mut target_bal: Amount =
+            self.ctx.read(&target_key)?.unwrap_or_default();
         target_bal.receive(&amount.amount);
 
         let minted_key = token::minted_balance_key(token);
-        let mut minted_bal: Amount = self
-            .ctx
-            .read(&minted_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let mut minted_bal: Amount =
+            self.ctx.read(&minted_key)?.unwrap_or_default();
         minted_bal.receive(&amount.amount);
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
@@ -232,21 +227,15 @@ where
         target: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         let target_key = token::balance_key(token, target);
-        let mut target_bal: Amount = self
-            .ctx
-            .read(&target_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let mut target_bal: Amount =
+            self.ctx.read(&target_key)?.unwrap_or_default();
         target_bal.spend(&amount.amount);
 
         let minted_key = token::minted_balance_key(token);
-        let mut minted_bal: Amount = self
-            .ctx
-            .read(&minted_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let mut minted_bal: Amount =
+            self.ctx.read(&minted_key)?.unwrap_or_default();
         minted_bal.spend(&amount.amount);
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
@@ -254,18 +243,16 @@ where
     }
 
     /// Get the current height of this chain
-    fn get_height(&self) -> Result<BlockHeight, Self::Error> {
-        self.ctx.get_block_height().map_err(Error::NativeVpError)
+    fn get_height(&self) -> Result<BlockHeight, storage_api::Error> {
+        self.ctx.get_block_height()
     }
 
     /// Get the block header of this chain
     fn get_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Self::Error> {
-        self.ctx
-            .get_block_header(height)
-            .map_err(Error::NativeVpError)
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
     }
 
     fn log_string(&self, message: String) {
@@ -311,47 +298,53 @@ where
     H: 'static + StorageHasher,
     CA: 'static + WasmCacheAccess,
 {
-    type Error = Error;
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
-    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error> {
-        self.ctx.read_bytes(key).map_err(Error::NativeVpError)
+    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, storage_api::Error> {
+        self.ctx.read_bytes(key)
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
-        self.ctx.has_key(key).map_err(Error::NativeVpError)
+    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
+        self.ctx.has_key(key)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
-        self.ctx.iter_prefix(prefix).map_err(Error::NativeVpError)
+    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+        self.ctx.iter_prefix(prefix)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
-        self.ctx.iter_next(iter).map_err(Error::NativeVpError)
+    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+        self.ctx.iter_next(iter)
     }
 
-    fn write(&mut self, _key: &Key, _data: Vec<u8>) -> Result<(), Self::Error> {
+    fn write(
+        &mut self,
+        _key: &Key,
+        _data: Vec<u8>,
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't write any data")
     }
 
-    fn delete(&mut self, _key: &Key) -> Result<(), Self::Error> {
+    fn delete(&mut self, _key: &Key) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't delete any data")
     }
 
-    fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<(), Self::Error> {
+    fn emit_ibc_event(
+        &mut self,
+        _event: IbcEvent,
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't emit an event")
     }
 
     fn get_ibc_events(
         &self,
         _event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
         unimplemented!("Validation doesn't get an event")
     }
 
@@ -361,14 +354,14 @@ where
         _dest: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't transfer")
     }
 
     fn handle_masp_tx(
         &mut self,
         _shielded: &IbcShieldedTransfer,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't handle a masp tx")
     }
 
@@ -377,7 +370,7 @@ where
         _target: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't mint")
     }
 
@@ -386,21 +379,19 @@ where
         _target: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<(), storage_api::Error> {
         unimplemented!("Validation doesn't burn")
     }
 
-    fn get_height(&self) -> Result<BlockHeight, Self::Error> {
-        self.ctx.get_block_height().map_err(Error::NativeVpError)
+    fn get_height(&self) -> Result<BlockHeight, storage_api::Error> {
+        self.ctx.get_block_height()
     }
 
     fn get_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Self::Error> {
-        self.ctx
-            .get_block_header(height)
-            .map_err(Error::NativeVpError)
+    ) -> Result<Option<Header>, storage_api::Error> {
+        self.ctx.get_block_header(height)
     }
 
     /// Logging

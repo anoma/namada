@@ -45,7 +45,7 @@ use crate::ibc::core::ics24_host::path::{
 };
 use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
 use crate::ibc::core::ContextError;
-use crate::ibc::Signer;
+use crate::ibc::{Height, Signer};
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
@@ -375,7 +375,9 @@ where
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        self.ctx.borrow().channel_end(channel_end_path)
+        self.ctx
+            .borrow()
+            .channel_end(&channel_end_path.0, &channel_end_path.1)
     }
 
     fn connection_end(
@@ -396,14 +398,22 @@ where
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        self.ctx.borrow().consensus_state(client_cons_state_path)
+        let height = Height::new(
+            client_cons_state_path.epoch,
+            client_cons_state_path.height,
+        )?;
+        self.ctx
+            .borrow()
+            .consensus_state(&client_cons_state_path.client_id, height)
     }
 
     fn get_next_sequence_send(
         &self,
         seq_send_path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        self.ctx.borrow().get_next_sequence_send(seq_send_path)
+        self.ctx
+            .borrow()
+            .get_next_sequence_send(&seq_send_path.0, &seq_send_path.1)
     }
 }
 
@@ -551,9 +561,11 @@ where
         seq_send_path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        self.ctx
-            .borrow_mut()
-            .store_next_sequence_send(seq_send_path, seq)
+        self.ctx.borrow_mut().store_next_sequence_send(
+            &seq_send_path.0,
+            &seq_send_path.1,
+            seq,
+        )
     }
 
     fn store_packet_commitment(
@@ -561,9 +573,12 @@ where
         commitment_path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        self.ctx
-            .borrow_mut()
-            .store_packet_commitment(commitment_path, commitment)
+        self.ctx.borrow_mut().store_packet_commitment(
+            &commitment_path.port_id,
+            &commitment_path.channel_id,
+            commitment_path.sequence,
+            commitment,
+        )
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) {

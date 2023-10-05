@@ -1,5 +1,7 @@
 //! IbcCommonContext implementation for IBC
 
+use core::time::Duration;
+
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use prost::Message;
@@ -11,16 +13,18 @@ use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as Tm
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
+use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
 use crate::ibc::core::ics03_connection::error::ConnectionError;
 use crate::ibc::core::ics04_channel::channel::ChannelEnd;
-use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
+use crate::ibc::core::ics04_channel::commitment::{
+    AcknowledgementCommitment, PacketCommitment,
+};
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::packet::Sequence;
+use crate::ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
-use crate::ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
-use crate::ibc::core::ics24_host::path::{
-    ChannelEndPath, ClientConsensusStatePath, CommitmentPath, Path, SeqSendPath,
+use crate::ibc::core::ics24_host::identifier::{
+    ChannelId, ClientId, ConnectionId, PortId,
 };
 use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::ContextError;
@@ -31,8 +35,14 @@ use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
 use crate::ledger::ibc::storage;
+use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
+use crate::ledger::storage::types::decode;
+use crate::ledger::storage_api;
+use crate::tendermint::Time as TmTime;
+use crate::tendermint_proto::Protobuf as TmProtobuf;
 use crate::types::address::Address;
-use crate::types::storage::Key;
+use crate::types::storage::{BlockHeight, Key};
+use crate::types::time::DurationSecs;
 use crate::types::token;
 
 /// Context to handle typical IBC data
@@ -43,57 +53,256 @@ pub trait IbcCommonContext: IbcStorageContext {
         client_id: &ClientId,
     ) -> Result<Box<dyn ClientState>, ContextError> {
         let key = storage::client_state_key(client_id);
-        match self.read(&key) {
-            Ok(Some(value)) => {
-                let any = Any::decode(&value[..]).map_err(|e| {
-                    ContextError::ClientError(ClientError::Decode(e))
-                })?;
+        match self.read(&key)? {
+            Some(value) => {
+                let any =
+                    Any::decode(&value[..]).map_err(ClientError::Decode)?;
                 self.decode_client_state(any)
             }
-            Ok(None) => Err(ContextError::ClientError(
-                ClientError::ClientStateNotFound {
-                    client_id: client_id.clone(),
-                },
-            )),
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "Reading the client state failed: ID {}",
-                    client_id,
-                ),
-            })),
+            None => Err(ClientError::ClientStateNotFound {
+                client_id: client_id.clone(),
+            }
+            .into()),
         }
+    }
+
+    /// Store the ClientState
+    fn store_client_state(
+        &mut self,
+        client_id: &ClientId,
+        client_state: Box<dyn ClientState>,
+    ) -> Result<(), ContextError> {
+        let key = storage::client_state_key(client_id);
+        let bytes = client_state.encode_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Decode ClientState from Any
+    fn decode_client_state(
+        &self,
+        client_state: Any,
+    ) -> Result<Box<dyn ClientState>, ContextError> {
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
+            return Ok(cs.into_box());
+        }
+
+        if let Ok(cs) = TmClientState::try_from(client_state) {
+            return Ok(cs.into_box());
+        }
+
+        Err(ClientError::ClientSpecific {
+            description: "Unknown client state".to_string(),
+        }
+        .into())
     }
 
     /// Get the ConsensusState
     fn consensus_state(
         &self,
-        client_cons_state_path: &ClientConsensusStatePath,
+        client_id: &ClientId,
+        height: Height,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        let path = Path::ClientConsensusState(client_cons_state_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        match self.read(&key) {
-            Ok(Some(value)) => {
-                let any = Any::decode(&value[..]).map_err(|e| {
-                    ContextError::ClientError(ClientError::Decode(e))
-                })?;
+        let key = storage::consensus_state_key(client_id, height);
+        match self.read(&key)? {
+            Some(value) => {
+                let any =
+                    Any::decode(&value[..]).map_err(ClientError::Decode)?;
                 self.decode_consensus_state(any)
             }
-            Ok(None) => {
-                let client_id = storage::client_id(&key).expect("invalid key");
-                let height =
-                    storage::consensus_height(&key).expect("invalid key");
-                Err(ContextError::ClientError(
-                    ClientError::ConsensusStateNotFound { client_id, height },
-                ))
+            None => Err(ClientError::ConsensusStateNotFound {
+                client_id: client_id.clone(),
+                height,
             }
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
+            .into()),
+        }
+    }
+
+    /// Store the ConsensusState
+    fn store_consensus_state(
+        &mut self,
+        client_id: &ClientId,
+        height: Height,
+        consensus_state: Box<dyn ConsensusState>,
+    ) -> Result<(), ContextError> {
+        let key = storage::consensus_state_key(client_id, height);
+        let bytes = consensus_state.encode_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Decode ConsensusState from Any
+    fn decode_consensus_state(
+        &self,
+        consensus_state: Any,
+    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
+        if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
+            return Ok(cs.into_box());
+        }
+
+        if let Ok(cs) = TmConsensusState::try_from(consensus_state) {
+            return Ok(cs.into_box());
+        }
+
+        Err(ClientError::ClientSpecific {
+            description: "Unknown consensus state".to_string(),
+        }
+        .into())
+    }
+
+    /// Decode ConsensusState from bytes
+    fn decode_consensus_state_value(
+        &self,
+        consensus_state: Vec<u8>,
+    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+        let any =
+            Any::decode(&consensus_state[..]).map_err(ClientError::Decode)?;
+        self.decode_consensus_state(any)
+    }
+
+    /// Get the client update time
+    fn client_update_time(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Timestamp, ContextError> {
+        let key = storage::client_update_timestamp_key(client_id);
+        match self.read(&key)? {
+            Some(value) => {
+                let time = TmTime::decode_vec(&value).map_err(|_| {
+                    ContextError::from(ClientError::Other {
+                        description: format!(
+                            "Decoding the client update time failed: ID \
+                             {client_id}",
+                        ),
+                    })
+                })?;
+                Ok(time.into())
+            }
+            None => Err(ClientError::ClientSpecific {
                 description: format!(
-                    "Reading the consensus state failed: Key {}",
-                    key,
+                    "The client update time doesn't exist: ID {client_id}",
+                ),
+            }
+            .into()),
+        }
+    }
+
+    /// Store the client update time
+    fn store_update_time(
+        &mut self,
+        client_id: &ClientId,
+        timestamp: Timestamp,
+    ) -> Result<(), ContextError> {
+        let key = storage::client_update_timestamp_key(client_id);
+        match timestamp.into_tm_time() {
+            Some(time) => self
+                .write(
+                    &key,
+                    time.encode_vec().expect("encoding shouldn't fail"),
+                )
+                .map_err(ContextError::from),
+            None => Err(ContextError::ClientError(ClientError::Other {
+                description: format!(
+                    "The client timestamp is invalid: ID {}",
+                    client_id
                 ),
             })),
         }
+    }
+
+    /// Get the client update height
+    fn client_update_height(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Height, ContextError> {
+        let key = storage::client_update_height_key(client_id);
+        match self.read(&key)? {
+            Some(value) => Height::decode_vec(&value).map_err(|_| {
+                ClientError::Other {
+                    description: format!(
+                        "Decoding the client update height failed: ID \
+                         {client_id}",
+                    ),
+                }
+                .into()
+            }),
+            None => Err(ClientError::ClientSpecific {
+                description: format!(
+                    "The client update height doesn't exist: ID {client_id}",
+                ),
+            }
+            .into()),
+        }
+    }
+
+    /// Get the timestamp on this chain
+    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+        let height = self.get_height()?;
+        let header = self.get_header(height)?.ok_or_else(|| {
+            ContextError::from(ClientError::Other {
+                description: "No host header".to_string(),
+            })
+        })?;
+        let time = TmTime::try_from(header.time).map_err(|_| {
+            ContextError::ClientError(ClientError::Other {
+                description: "Converting to Tendermint time failed".to_string(),
+            })
+        })?;
+        Ok(time.into())
+    }
+
+    /// Get the consensus state of this chain
+    fn host_consensus_state(
+        &self,
+        height: &Height,
+    ) -> Result<Box<dyn ConsensusState>, ContextError> {
+        let height = BlockHeight(height.revision_height());
+        let header = self.get_header(height)?.ok_or_else(|| {
+            ContextError::from(ClientError::Other {
+                description: "No host header".to_string(),
+            })
+        })?;
+        let commitment_root = header.hash.to_vec().into();
+        let time = header
+            .time
+            .try_into()
+            .expect("The time should be converted");
+        let next_validators_hash = header
+            .next_validators_hash
+            .try_into()
+            .expect("The hash should be converted");
+        let consensus_state =
+            TmConsensusState::new(commitment_root, time, next_validators_hash);
+        Ok(consensus_state.into_box())
+    }
+
+    /// Get the max expected time per block
+    fn max_expected_time_per_block(&self) -> Result<Duration, ContextError> {
+        let key = get_max_expected_time_per_block_key();
+        match self.read(&key)? {
+            Some(value) => decode::<DurationSecs>(value)
+                .map(Duration::from)
+                .map_err(|_| {
+                    ClientError::Other {
+                        description: "Decoding the max expected time per \
+                                      block failed"
+                            .to_string(),
+                    }
+                    .into()
+                }),
+            None => unreachable!("The parameter should be initialized"),
+        }
+    }
+
+    /// Store the client update height
+    fn store_update_height(
+        &mut self,
+        client_id: &ClientId,
+        host_height: Height,
+    ) -> Result<(), ContextError> {
+        let key = storage::client_update_height_key(client_id);
+        let bytes = host_height.encode_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
     }
 
     /// Get the ConnectionEnd
@@ -102,76 +311,184 @@ pub trait IbcCommonContext: IbcStorageContext {
         connection_id: &ConnectionId,
     ) -> Result<ConnectionEnd, ContextError> {
         let key = storage::connection_key(connection_id);
-        match self.read(&key) {
-            Ok(Some(value)) => {
-                ConnectionEnd::decode_vec(&value).map_err(|_| {
-                    ContextError::ConnectionError(ConnectionError::Other {
-                        description: format!(
-                            "Decoding the connection end failed: ID {}",
-                            connection_id,
-                        ),
-                    })
-                })
-            }
-            Ok(None) => Err(ContextError::ConnectionError(
-                ConnectionError::ConnectionNotFound {
-                    connection_id: connection_id.clone(),
-                },
-            )),
-            Err(_) => {
-                Err(ContextError::ConnectionError(ConnectionError::Other {
+        match self.read(&key)? {
+            Some(value) => ConnectionEnd::decode_vec(&value).map_err(|_| {
+                ConnectionError::Other {
                     description: format!(
-                        "Reading the connection end failed: ID {}",
+                        "Decoding the connection end failed: ID {}",
                         connection_id,
                     ),
-                }))
+                }
+                .into()
+            }),
+            None => Err(ConnectionError::ConnectionNotFound {
+                connection_id: connection_id.clone(),
             }
+            .into()),
         }
+    }
+
+    /// Store the ConnectionEnd
+    fn store_connection(
+        &mut self,
+        connection_id: &ConnectionId,
+        connection_end: ConnectionEnd,
+    ) -> Result<(), ContextError> {
+        let key = storage::connection_key(connection_id);
+        let bytes = connection_end.encode_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Append the connection ID to the connection list of the client
+    fn append_connection(
+        &mut self,
+        client_id: &ClientId,
+        conn_id: ConnectionId,
+    ) -> Result<(), ContextError> {
+        let key = storage::client_connections_key(client_id);
+        let list = match self.read(&key)? {
+            Some(value) => {
+                let prev = String::try_from_slice(&value).map_err(|_| {
+                    ConnectionError::Other {
+                        description: format!(
+                            "Decoding the connection list failed: Key {key} ",
+                        ),
+                    }
+                })?;
+                format!("{prev},{conn_id}")
+            }
+            None => conn_id.to_string(),
+        };
+        let bytes = list.serialize_to_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
     }
 
     /// Get the ChannelEnd
     fn channel_end(
         &self,
-        channel_end_path: &ChannelEndPath,
+        port_id: &PortId,
+        channel_id: &ChannelId,
     ) -> Result<ChannelEnd, ContextError> {
-        let path = Path::ChannelEnd(channel_end_path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        match self.read(&key) {
-            Ok(Some(value)) => ChannelEnd::decode_vec(&value).map_err(|_| {
-                ContextError::ChannelError(ChannelError::Other {
+        let key = storage::channel_key(port_id, channel_id);
+        match self.read(&key)? {
+            Some(value) => ChannelEnd::decode_vec(&value).map_err(|_| {
+                ChannelError::Other {
                     description: format!(
                         "Decoding the channel end failed: Key {}",
                         key,
                     ),
-                })
+                }
+                .into()
             }),
-            Ok(None) => {
-                let (port_id, channel_id) =
-                    storage::port_channel_id(&key).expect("invalid key");
-                Err(ContextError::ChannelError(ChannelError::ChannelNotFound {
-                    channel_id,
-                    port_id,
-                }))
+            None => Err(ChannelError::ChannelNotFound {
+                port_id: port_id.clone(),
+                channel_id: channel_id.clone(),
             }
-            Err(_) => Err(ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Reading the channel end failed: Key {}",
-                    key,
-                ),
-            })),
+            .into()),
         }
+    }
+
+    /// Store the ChannelEnd
+    fn store_channel(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        channel_end: ChannelEnd,
+    ) -> Result<(), ContextError> {
+        let key = storage::channel_key(port_id, channel_id);
+        let bytes = channel_end.encode_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
     }
 
     /// Get the NextSequenceSend
     fn get_next_sequence_send(
         &self,
-        path: &SeqSendPath,
+        port_id: &PortId,
+        channel_id: &ChannelId,
     ) -> Result<Sequence, ContextError> {
-        let path = Path::SeqSend(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
+        let key = storage::next_sequence_send_key(port_id, channel_id);
         self.read_sequence(&key)
+    }
+
+    /// Store the NextSequenceSend
+    fn store_next_sequence_send(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::next_sequence_send_key(port_id, channel_id);
+        self.store_sequence(&key, seq)
+    }
+
+    /// Get the NextSequenceRecv
+    fn get_next_sequence_recv(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Sequence, ContextError> {
+        let key = storage::next_sequence_recv_key(port_id, channel_id);
+        self.read_sequence(&key)
+    }
+
+    /// Store the NextSequenceRecv
+    fn store_next_sequence_recv(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::next_sequence_recv_key(port_id, channel_id);
+        self.store_sequence(&key, seq)
+    }
+
+    /// Get the NextSequenceAck
+    fn get_next_sequence_ack(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Sequence, ContextError> {
+        let key = storage::next_sequence_ack_key(port_id, channel_id);
+        self.read_sequence(&key)
+    }
+
+    /// Store the NextSequenceAck
+    fn store_next_sequence_ack(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        seq: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::next_sequence_ack_key(port_id, channel_id);
+        self.store_sequence(&key, seq)
+    }
+
+    /// Read a sequence
+    fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
+        match self.read(key)? {
+            Some(value) => {
+                let value: [u8; 8] =
+                    value.try_into().map_err(|_| ChannelError::Other {
+                        description: format!(
+                            "The counter value wasn't u64: Key {}",
+                            key
+                        ),
+                    })?;
+                Ok(u64::from_be_bytes(value).into())
+            }
+            // when the sequence has never been used, returns the initial value
+            None => Ok(1.into()),
+        }
+    }
+
+    /// Store the sequence
+    fn store_sequence(
+        &mut self,
+        key: &Key,
+        sequence: Sequence,
+    ) -> Result<(), ContextError> {
+        let bytes = u64::from(sequence).to_be_bytes().to_vec();
+        self.write(key, bytes).map_err(ContextError::from)
     }
 
     /// Calculate the hash
@@ -203,160 +520,140 @@ pub trait IbcCommonContext: IbcStorageContext {
         Self::hash(&hash_input).into()
     }
 
-    /// Decode ClientState from Any
-    fn decode_client_state(
+    /// Get the packet commitment
+    fn packet_commitment(
         &self,
-        client_state: Any,
-    ) -> Result<Box<dyn ClientState>, ContextError> {
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
-            return Ok(cs.into_box());
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<PacketCommitment, ContextError> {
+        let key = storage::commitment_key(port_id, channel_id, sequence);
+        match self.read(&key)? {
+            Some(value) => Ok(value.into()),
+            None => {
+                Err(PacketError::PacketCommitmentNotFound { sequence }.into())
+            }
         }
-
-        if let Ok(cs) = TmClientState::try_from(client_state) {
-            return Ok(cs.into_box());
-        }
-
-        Err(ContextError::ClientError(ClientError::ClientSpecific {
-            description: "Unknown client state".to_string(),
-        }))
     }
 
-    /// Decode ConsensusState from Any
-    fn decode_consensus_state(
+    /// Store the packet commitment
+    fn store_packet_commitment(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+        commitment: PacketCommitment,
+    ) -> Result<(), ContextError> {
+        let key = storage::commitment_key(port_id, channel_id, sequence);
+        let bytes = commitment.into_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Delete the packet commitment
+    fn delete_packet_commitment(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::commitment_key(port_id, channel_id, sequence);
+        self.delete(&key).map_err(ContextError::from)
+    }
+
+    /// Get the packet receipt
+    fn packet_receipt(
         &self,
-        consensus_state: Any,
-    ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
-            return Ok(cs.into_box());
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<Receipt, ContextError> {
+        let key = storage::receipt_key(port_id, channel_id, sequence);
+        match self.read(&key)? {
+            Some(_) => Ok(Receipt::Ok),
+            None => Err(PacketError::PacketReceiptNotFound { sequence }.into()),
         }
+    }
 
-        if let Ok(cs) = TmConsensusState::try_from(consensus_state) {
-            return Ok(cs.into_box());
+    /// Store the packet receipt
+    fn store_packet_receipt(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::receipt_key(port_id, channel_id, sequence);
+        // the value is the same as ibc-go
+        let bytes = [1_u8].to_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Get the packet acknowledgement
+    fn packet_ack(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<AcknowledgementCommitment, ContextError> {
+        let key = storage::ack_key(port_id, channel_id, sequence);
+        match self.read(&key)? {
+            Some(value) => Ok(value.into()),
+            None => {
+                Err(PacketError::PacketAcknowledgementNotFound { sequence }
+                    .into())
+            }
         }
+    }
 
-        Err(ContextError::ClientError(ClientError::ClientSpecific {
-            description: "Unknown consensus state".to_string(),
-        }))
+    /// Store the packet acknowledgement
+    fn store_packet_ack(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+        ack_commitment: AcknowledgementCommitment,
+    ) -> Result<(), ContextError> {
+        let key = storage::ack_key(port_id, channel_id, sequence);
+        let bytes = ack_commitment.into_vec();
+        self.write(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Delete the packet acknowledgement
+    fn delete_packet_ack(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+    ) -> Result<(), ContextError> {
+        let key = storage::ack_key(port_id, channel_id, sequence);
+        self.delete(&key).map_err(ContextError::from)
     }
 
     /// Read a counter
     fn read_counter(&self, key: &Key) -> Result<u64, ContextError> {
-        match self.read(key) {
-            Ok(Some(value)) => {
-                let value: [u8; 8] = value.try_into().map_err(|_| {
-                    ContextError::ClientError(ClientError::Other {
+        match self.read(key)? {
+            Some(value) => {
+                let value: [u8; 8] =
+                    value.try_into().map_err(|_| ClientError::Other {
                         description: format!(
                             "The counter value wasn't u64: Key {}",
                             key
                         ),
-                    })
-                })?;
+                    })?;
                 Ok(u64::from_be_bytes(value))
             }
-            Ok(None) => unreachable!("the counter should be initialized"),
-            Err(_) => Err(ContextError::ClientError(ClientError::Other {
-                description: format!("Reading the counter failed: Key {}", key),
-            })),
+            None => unreachable!("the counter should be initialized"),
         }
     }
 
-    /// Read a sequence
-    fn read_sequence(&self, key: &Key) -> Result<Sequence, ContextError> {
-        match self.read(key) {
-            Ok(Some(value)) => {
-                let value: [u8; 8] = value.try_into().map_err(|_| {
-                    ContextError::ChannelError(ChannelError::Other {
-                        description: format!(
-                            "The counter value wasn't u64: Key {}",
-                            key
-                        ),
-                    })
-                })?;
-                Ok(u64::from_be_bytes(value).into())
-            }
-            // when the sequence has never been used, returns the initial value
-            Ok(None) => Ok(1.into()),
-            Err(_) => {
-                let sequence = storage::port_channel_sequence_id(key)
-                    .expect("The key should have sequence")
-                    .2;
-                Err(ContextError::ChannelError(ChannelError::Other {
-                    description: format!(
-                        "Reading the next sequence send failed: Sequence {}",
-                        sequence
-                    ),
-                }))
-            }
-        }
-    }
-
-    /// Write the packet commitment
-    fn store_packet_commitment(
-        &mut self,
-        path: &CommitmentPath,
-        commitment: PacketCommitment,
-    ) -> Result<(), ContextError> {
-        let path = Path::Commitment(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        let bytes = commitment.into_vec();
-        self.write(&key, bytes).map_err(|_| {
-            ContextError::PacketError(PacketError::Channel(
-                ChannelError::Other {
-                    description: format!(
-                        "Writing the packet commitment failed: Key {}",
-                        key
-                    ),
-                },
-            ))
-        })
-    }
-
-    /// Write the NextSequenceSend
-    fn store_next_sequence_send(
-        &mut self,
-        path: &SeqSendPath,
-        seq: Sequence,
-    ) -> Result<(), ContextError> {
-        let path = Path::SeqSend(path.clone());
-        let key = storage::ibc_key(path.to_string())
-            .expect("Creating a key for the client state shouldn't fail");
-        self.store_sequence(&key, seq)
-    }
-
-    /// Increment and write the counter
-    fn increase_counter(&mut self, key: &Key) -> Result<(), ContextError> {
+    /// Increment the counter
+    fn increment_counter(&mut self, key: &Key) -> Result<(), ContextError> {
         let count = self.read_counter(key)?;
-        self.write(key, (count + 1).to_be_bytes().to_vec())
-            .map_err(|_| {
-                ContextError::ClientError(ClientError::Other {
-                    description: format!(
-                        "Writing the counter failed: Key {}",
-                        key
-                    ),
-                })
-            })
-    }
-
-    /// Write the sequence
-    fn store_sequence(
-        &mut self,
-        key: &Key,
-        sequence: Sequence,
-    ) -> Result<(), ContextError> {
-        self.write(key, u64::from(sequence).to_be_bytes().to_vec())
-            .map_err(|_| {
-                ContextError::PacketError(PacketError::Channel(
-                    ChannelError::Other {
-                        description: format!(
-                            "Writing the counter failed: Key {}",
-                            key
-                        ),
-                    },
-                ))
-            })
+        let count =
+            u64::checked_add(count, 1).ok_or_else(|| ClientError::Other {
+                description: format!("The counter overflow: Key {key}"),
+            })?;
+        self.write(key, count.to_be_bytes().to_vec())
+            .map_err(ContextError::from)
     }
 
     /// Write the IBC denom. The given address could be a non-Namada token.
@@ -367,23 +664,13 @@ pub trait IbcCommonContext: IbcStorageContext {
         denom: impl AsRef<str>,
     ) -> Result<(), ContextError> {
         let key = storage::ibc_denom_key(addr, trace_hash.as_ref());
-        let has_key = self.has_key(&key).map_err(|_| {
-            ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Reading the IBC denom failed: Key {}",
-                    key,
-                ),
-            })
+        let has_key = self.has_key(&key).map_err(|_| ChannelError::Other {
+            description: format!("Reading the IBC denom failed: Key {}", key,),
         })?;
         if !has_key {
             let bytes = denom.as_ref().serialize_to_vec();
-            self.write(&key, bytes).map_err(|_| {
-                ContextError::ChannelError(ChannelError::Other {
-                    description: format!(
-                        "Writing the denom failed: Key {}",
-                        key
-                    ),
-                })
+            self.write(&key, bytes).map_err(|_| ChannelError::Other {
+                description: format!("Writing the denom failed: Key {}", key),
             })?;
         }
         Ok(())
@@ -395,24 +682,20 @@ pub trait IbcCommonContext: IbcStorageContext {
         token: &Address,
     ) -> Result<Option<token::Denomination>, ContextError> {
         let key = token::denom_key(token);
-        let bytes = self.read(&key).map_err(|_| {
-            ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Reading the token denom failed: Key {}",
-                    key
-                ),
-            })
+        let bytes = self.read(&key).map_err(|_| ChannelError::Other {
+            description: format!("Reading the token denom failed: Key {}", key),
         })?;
         bytes
             .map(|b| token::Denomination::try_from_slice(&b))
             .transpose()
             .map_err(|_| {
-                ContextError::ChannelError(ChannelError::Other {
+                ChannelError::Other {
                     description: format!(
                         "Decoding the token denom failed: Token {}",
                         token
                     ),
-                })
+                }
+                .into()
             })
     }
 
@@ -422,27 +705,32 @@ pub trait IbcCommonContext: IbcStorageContext {
         token: &Address,
     ) -> Result<(), ContextError> {
         let key = token::denom_key(token);
-        let has_key = self.has_key(&key).map_err(|_| {
-            ContextError::ChannelError(ChannelError::Other {
-                description: format!(
-                    "Reading the token denom failed: Key {}",
-                    key
-                ),
-            })
+        let has_key = self.has_key(&key).map_err(|_| ChannelError::Other {
+            description: format!("Reading the token denom failed: Key {}", key),
         })?;
         if !has_key {
             // IBC denomination should be zero for U256
             let denom = token::Denomination::from(0);
             let bytes = denom.serialize_to_vec();
-            self.write(&key, bytes).map_err(|_| {
-                ContextError::ChannelError(ChannelError::Other {
-                    description: format!(
-                        "Writing the token denom failed: Key {}",
-                        key
-                    ),
-                })
+            self.write(&key, bytes).map_err(|_| ChannelError::Other {
+                description: format!(
+                    "Writing the token denom failed: Key {}",
+                    key
+                ),
             })?;
         }
         Ok(())
+    }
+}
+
+/// Convert `storage_api::Error` into `ContextError`.
+/// It always returns `ClientError` though the storage error could happen in any
+/// storage access.
+impl From<storage_api::Error> for ContextError {
+    fn from(error: storage_api::Error) -> Self {
+        ClientError::Other {
+            description: format!("Storage error: {error}"),
+        }
+        .into()
     }
 }
