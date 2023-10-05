@@ -147,52 +147,38 @@ where
 
     /// Store the denom when transfer with MsgRecvPacket
     fn store_denom(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
-        match envelope {
-            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
-                if let Some((trace_hash, ibc_denom, receiver)) =
-                    self.get_minted_token_info()?
-                {
-                    // If the denomination trace event has the trace hash and
-                    // the IBC denom, a token has been minted. The raw IBC denom
-                    // including the port ID, the channel ID and the base token
-                    // is stored to be restored from the trace hash. The amount
-                    // denomination is also set for the minting.
+        if let MsgEnvelope::Packet(PacketMsg::Recv(_)) = envelope {
+            if let Some((trace_hash, ibc_denom, receiver)) =
+                self.get_minted_token_info()?
+            {
+                // If the denomination trace event has the trace hash and
+                // the IBC denom, a token has been minted. The raw IBC denom
+                // including the port ID, the channel ID and the base token
+                // is stored to be restored from the trace hash. The amount
+                // denomination is also set for the minting.
+                self.ctx
+                    .borrow_mut()
+                    .store_ibc_denom(&receiver, &trace_hash, &ibc_denom)
+                    .map_err(|e| {
+                        Error::Denom(format!(
+                            "Writing the IBC denom failed: {}",
+                            e
+                        ))
+                    })?;
+                if let Some((_, base_token)) = is_ibc_denom(&ibc_denom) {
                     self.ctx
                         .borrow_mut()
-                        .store_ibc_denom(&receiver, &trace_hash, &ibc_denom)
+                        .store_ibc_denom(base_token, trace_hash, &ibc_denom)
                         .map_err(|e| {
                             Error::Denom(format!(
                                 "Writing the IBC denom failed: {}",
                                 e
                             ))
                         })?;
-                    if let Some((_, base_token)) = is_ibc_denom(&ibc_denom) {
-                        self.ctx
-                            .borrow_mut()
-                            .store_ibc_denom(base_token, trace_hash, &ibc_denom)
-                            .map_err(|e| {
-                                Error::Denom(format!(
-                                    "Writing the IBC denom failed: {}",
-                                    e
-                                ))
-                            })?;
-                    }
-                    let token = storage::ibc_token(ibc_denom);
-                    self.ctx.borrow_mut().store_token_denom(&token).map_err(
-                        |e| {
-                            Error::Denom(format!(
-                                "Writing the token denom failed: {}",
-                                e
-                            ))
-                        },
-                    )
-                } else {
-                    Ok(())
                 }
             }
-            // other messages
-            _ => Ok(()),
         }
+        Ok(())
     }
 
     /// Get the minted IBC denom, the trace hash, and the receiver from IBC

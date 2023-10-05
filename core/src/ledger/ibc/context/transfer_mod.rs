@@ -47,6 +47,7 @@ use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
 use crate::ibc::core::ContextError;
 use crate::ibc::{Height, Signer};
 use crate::ledger::ibc::storage;
+use crate::ledger::storage_api::token::read_denom;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
 use crate::types::uint::Uint;
@@ -96,22 +97,31 @@ where
         };
 
         // Convert IBC amount to Namada amount for the token
-        let denom = self
-            .ctx
-            .borrow()
-            .read_token_denom(&token)?
+        let denom = read_denom(&*self.ctx.borrow(), &token)
+            .map_err(|e| {
+                TokenTransferError::ContextError(
+                    ChannelError::Other {
+                        description: format!(
+                            "Reading the token denom failed: Coin {}, Error {}",
+                            coin, e
+                        ),
+                    }
+                    .into(),
+                )
+            })?
             .unwrap_or(token::Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
         let amount =
             token::Amount::from_uint(uint_amount, denom).map_err(|e| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
+                TokenTransferError::ContextError(
                     ChannelError::Other {
                         description: format!(
                             "The IBC amount is invalid: Coin {}, Error {}",
                             coin, e
                         ),
-                    },
-                ))
+                    }
+                    .into(),
+                )
             })?;
         let amount = token::DenominatedAmount { amount, denom };
 

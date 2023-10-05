@@ -55,7 +55,7 @@ where
             (token::denom_key(&token), true)
         }
         Address::Internal(InternalAddress::IbcToken(_)) => {
-            (token::denom_key(token), true)
+            return Ok(Some(0u8.into()));
         }
         token => (token::denom_key(token), false),
     };

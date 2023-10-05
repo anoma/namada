@@ -120,7 +120,7 @@ where
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        let height = self.ctx.borrow().get_height()?;
+        let height = self.ctx.borrow().get_block_height()?;
         // the revision number is always 0
         Height::new(0, height.0).map_err(ContextError::ClientError)
     }
@@ -287,7 +287,7 @@ where
         let height = self
             .ctx
             .borrow()
-            .get_height()
+            .get_block_height()
             .expect("The height should exist");
         Height::new(0, height.0).expect("The conversion shouldn't fail")
     }

@@ -4,24 +4,26 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
-use namada_core::ledger::storage::write_log::StorageModification;
-use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
-use namada_core::ledger::storage_api::StorageRead;
-use namada_core::types::address::{self, Address, InternalAddress};
-use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
-use namada_core::types::storage::{
-    BlockHeight, Epoch, Header, Key, KeySeg, TxIndex,
+
+use crate::ledger::ibc::storage::is_ibc_key;
+use crate::ledger::native_vp::CtxPreStorageRead;
+use crate::ledger::storage::write_log::StorageModification;
+use crate::ledger::storage::{self as ledger_storage, StorageHasher};
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
+use crate::types::address::{self, Address, InternalAddress};
+use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
+use crate::types::storage::{
+    BlockHash, BlockHeight, Epoch, Header, Key, KeySeg, TxIndex,
 };
-use namada_core::types::token::{
+use crate::types::token::{
     self, Amount, DenominatedAmount, Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX,
     TX_KEY_PREFIX,
 };
-
-use crate::ledger::native_vp::CtxPreStorageRead;
-use crate::ledger::storage_api;
 use crate::vm::WasmCacheAccess;
+
+/// Result of a storage API call.
+pub type Result<T> = std::result::Result<T, storage_api::Error>;
 
 #[derive(Debug)]
 pub struct PseudoExecutionContext<'view, 'a, DB, H, CA>
@@ -61,7 +63,7 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcStorageContext
+impl<'view, 'a, DB, H, CA> StorageRead
     for PseudoExecutionContext<'view, 'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -70,7 +72,7 @@ where
 {
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
-    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
             Some(StorageModification::Write { ref value }) => {
                 Ok(Some(value.clone()))
@@ -86,14 +88,14 @@ where
         }
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key(&self, key: &Key) -> Result<bool> {
         Ok(self.store.contains_key(key) || self.ctx.has_key(key)?)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>> {
         // NOTE: Read only the previous state since the updated state isn't
         // needed for the caller
         self.ctx.iter_prefix(prefix)
@@ -102,29 +104,74 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         self.ctx.iter_next(iter)
     }
 
-    fn write(
+    fn get_chain_id(&self) -> Result<String> {
+        self.ctx.get_chain_id()
+    }
+
+    fn get_block_height(&self) -> Result<BlockHeight> {
+        self.ctx.get_block_height()
+    }
+
+    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+        self.ctx.get_block_header(height)
+    }
+
+    fn get_block_hash(&self) -> Result<BlockHash> {
+        self.ctx.get_block_hash()
+    }
+
+    fn get_block_epoch(&self) -> Result<Epoch> {
+        self.ctx.get_block_epoch()
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex> {
+        self.ctx.get_tx_index()
+    }
+
+    fn get_native_token(&self) -> Result<Address> {
+        self.ctx.get_native_token()
+    }
+}
+
+impl<'view, 'a, DB, H, CA> StorageWrite
+    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    fn write_bytes(
         &mut self,
         key: &Key,
-        value: Vec<u8>,
-    ) -> Result<(), storage_api::Error> {
-        self.store
-            .insert(key.clone(), StorageModification::Write { value });
+        value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        self.store.insert(
+            key.clone(),
+            StorageModification::Write {
+                value: value.as_ref().to_vec(),
+            },
+        );
         Ok(())
     }
 
-    fn delete(&mut self, key: &Key) -> Result<(), storage_api::Error> {
+    fn delete(&mut self, key: &Key) -> Result<()> {
         self.store.insert(key.clone(), StorageModification::Delete);
         Ok(())
     }
+}
 
-    fn emit_ibc_event(
-        &mut self,
-        event: IbcEvent,
-    ) -> Result<(), storage_api::Error> {
+impl<'view, 'a, DB, H, CA> IbcStorageContext
+    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
         self.event.insert(event);
         Ok(())
     }
@@ -132,7 +179,7 @@ where
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
+    ) -> Result<Vec<IbcEvent>> {
         Ok(self
             .event
             .iter()
@@ -147,7 +194,7 @@ where
         dest: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         let src_key = token::balance_key(token, src);
         let dest_key = token::balance_key(token, dest);
         let src_bal: Option<Amount> = self.ctx.read(&src_key)?;
@@ -161,10 +208,7 @@ where
         self.write(&dest_key, dest_bal.serialize_to_vec())
     }
 
-    fn handle_masp_tx(
-        &mut self,
-        shielded: &IbcShieldedTransfer,
-    ) -> Result<(), storage_api::Error> {
+    fn handle_masp_tx(&mut self, shielded: &IbcShieldedTransfer) -> Result<()> {
         let masp_addr = address::masp();
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
@@ -201,7 +245,7 @@ where
         target: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
@@ -227,7 +271,7 @@ where
         target: &Address,
         token: &Address,
         amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         let target_key = token::balance_key(token, target);
         let mut target_bal: Amount =
             self.ctx.read(&target_key)?.unwrap_or_default();
@@ -240,19 +284,6 @@ where
 
         self.write(&target_key, target_bal.serialize_to_vec())?;
         self.write(&minted_key, minted_bal.serialize_to_vec())
-    }
-
-    /// Get the current height of this chain
-    fn get_height(&self) -> Result<BlockHeight, storage_api::Error> {
-        self.ctx.get_block_height()
-    }
-
-    /// Get the block header of this chain
-    fn get_header(
-        &self,
-        height: BlockHeight,
-    ) -> Result<Option<Header>, storage_api::Error> {
-        self.ctx.get_block_header(height)
     }
 
     fn log_string(&self, message: String) {
@@ -291,7 +322,7 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcStorageContext
+impl<'view, 'a, DB, H, CA> StorageRead
     for VpValidationContext<'view, 'a, DB, H, CA>
 where
     DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
@@ -300,51 +331,92 @@ where
 {
     type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
 
-    fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, storage_api::Error> {
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.ctx.read_bytes(key)
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool, storage_api::Error> {
+    fn has_key(&self, key: &Key) -> Result<bool> {
         self.ctx.has_key(key)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, storage_api::Error> {
+    ) -> Result<Self::PrefixIter<'iter>> {
         self.ctx.iter_prefix(prefix)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, storage_api::Error> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         self.ctx.iter_next(iter)
     }
 
-    fn write(
+    fn get_chain_id(&self) -> Result<String> {
+        self.ctx.get_chain_id()
+    }
+
+    fn get_block_height(&self) -> Result<BlockHeight> {
+        self.ctx.get_block_height()
+    }
+
+    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+        self.ctx.get_block_header(height)
+    }
+
+    fn get_block_hash(&self) -> Result<BlockHash> {
+        self.ctx.get_block_hash()
+    }
+
+    fn get_block_epoch(&self) -> Result<Epoch> {
+        self.ctx.get_block_epoch()
+    }
+
+    fn get_tx_index(&self) -> Result<TxIndex> {
+        self.ctx.get_tx_index()
+    }
+
+    fn get_native_token(&self) -> Result<Address> {
+        self.ctx.get_native_token()
+    }
+}
+
+impl<'view, 'a, DB, H, CA> StorageWrite
+    for VpValidationContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    fn write_bytes(
         &mut self,
         _key: &Key,
-        _data: Vec<u8>,
-    ) -> Result<(), storage_api::Error> {
+        _val: impl AsRef<[u8]>,
+    ) -> Result<()> {
         unimplemented!("Validation doesn't write any data")
     }
 
-    fn delete(&mut self, _key: &Key) -> Result<(), storage_api::Error> {
+    fn delete(&mut self, _key: &Key) -> Result<()> {
         unimplemented!("Validation doesn't delete any data")
     }
+}
 
-    fn emit_ibc_event(
-        &mut self,
-        _event: IbcEvent,
-    ) -> Result<(), storage_api::Error> {
+impl<'view, 'a, DB, H, CA> IbcStorageContext
+    for VpValidationContext<'view, 'a, DB, H, CA>
+where
+    DB: 'static + ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: 'static + WasmCacheAccess,
+{
+    fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<()> {
         unimplemented!("Validation doesn't emit an event")
     }
 
     fn get_ibc_events(
         &self,
         _event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, storage_api::Error> {
+    ) -> Result<Vec<IbcEvent>> {
         unimplemented!("Validation doesn't get an event")
     }
 
@@ -354,14 +426,14 @@ where
         _dest: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         unimplemented!("Validation doesn't transfer")
     }
 
     fn handle_masp_tx(
         &mut self,
         _shielded: &IbcShieldedTransfer,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         unimplemented!("Validation doesn't handle a masp tx")
     }
 
@@ -370,7 +442,7 @@ where
         _target: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         unimplemented!("Validation doesn't mint")
     }
 
@@ -379,19 +451,8 @@ where
         _target: &Address,
         _token: &Address,
         _amount: DenominatedAmount,
-    ) -> Result<(), storage_api::Error> {
+    ) -> Result<()> {
         unimplemented!("Validation doesn't burn")
-    }
-
-    fn get_height(&self) -> Result<BlockHeight, storage_api::Error> {
-        self.ctx.get_block_height()
-    }
-
-    fn get_header(
-        &self,
-        height: BlockHeight,
-    ) -> Result<Option<Header>, storage_api::Error> {
-        self.ctx.get_block_header(height)
     }
 
     /// Logging
