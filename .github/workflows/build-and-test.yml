@@ -71,7 +71,7 @@ jobs:
             ~/.cargo/git/db/
             target
             wasm/wasm_source/target
-          key: ${{ runner.os }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-wasm-
       - name: Build WASM
         run: make build-wasm-scripts
@@ -140,7 +140,7 @@ jobs:
             ~/.cargo/git/db/
             target
             wasm/wasm_source/target
-          key: ${{ runner.os }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-wasm-
       - name: Test Wasm
         run: make test-wasm
@@ -187,7 +187,7 @@ jobs:
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 35
+    timeout-minutes: 50
     needs: [build-wasm]
     strategy:
       fail-fast: false
@@ -235,7 +235,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
@@ -282,7 +282,7 @@ jobs:
   run-benchmarks:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 25
+    timeout-minutes: 30
     needs: [build-wasm]
     strategy:
       fail-fast: false
@@ -330,7 +330,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
@@ -408,7 +408,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Install mold linker
         run: |
@@ -517,7 +517,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
