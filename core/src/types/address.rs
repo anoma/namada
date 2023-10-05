@@ -82,8 +82,6 @@ mod internal {
         "ano::ETH Bridge Address                      ";
     pub const ETH_BRIDGE_POOL: &str =
         "ano::ETH Bridge Pool Address                 ";
-    pub const REPLAY_PROTECTION: &str =
-        "ano::Replay Protection                       ";
     pub const MULTITOKEN: &str =
         "ano::Multitoken                              ";
     pub const PGF: &str =
@@ -243,9 +241,6 @@ impl Address {
                             eth_addr.to_canonical().replace("0x", "");
                         format!("{PREFIX_NUT}::{eth_addr}")
                     }
-                    InternalAddress::ReplayProtection => {
-                        internal::REPLAY_PROTECTION.to_string()
-                    }
                     InternalAddress::Multitoken => {
                         internal::MULTITOKEN.to_string()
                     }
@@ -328,9 +323,6 @@ impl Address {
                 }
                 internal::ETH_BRIDGE_POOL => {
                     Ok(Address::Internal(InternalAddress::EthBridgePool))
-                }
-                internal::REPLAY_PROTECTION => {
-                    Ok(Address::Internal(InternalAddress::ReplayProtection))
                 }
                 internal::MULTITOKEN => {
                     Ok(Address::Internal(InternalAddress::Multitoken))
@@ -572,8 +564,6 @@ pub enum InternalAddress {
     Erc20(EthAddress),
     /// Non-usable ERC20 tokens
     Nut(EthAddress),
-    /// Replay protection contains transactions' hash
-    ReplayProtection,
     /// Multitoken
     Multitoken,
     /// Pgf
@@ -596,7 +586,6 @@ impl Display for InternalAddress {
                 Self::EthBridgePool => "EthBridgePool".to_string(),
                 Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
                 Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
-                Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
             }
@@ -892,7 +881,6 @@ pub mod testing {
             InternalAddress::EthBridgePool => {}
             InternalAddress::Erc20(_) => {}
             InternalAddress::Nut(_) => {}
-            InternalAddress::ReplayProtection => {}
             InternalAddress::Pgf => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
@@ -908,7 +896,6 @@ pub mod testing {
             Just(InternalAddress::EthBridgePool),
             Just(arb_erc20()),
             Just(arb_nut()),
-            Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
         ]

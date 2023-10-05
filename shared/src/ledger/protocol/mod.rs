@@ -24,7 +24,6 @@ use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::ibc::Ibc;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
-use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
@@ -83,10 +82,6 @@ pub enum Error {
     EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
     BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
-    #[error("Replay protection native VP error: {0}")]
-    ReplayProtectionNativeVpError(
-        crate::ledger::native_vp::replay_protection::Error,
-    ),
     #[error("Non usable tokens native VP error: {0}")]
     NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
     #[error("Access to an internal address {0} is forbidden")]
@@ -931,16 +926,6 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::BridgePoolNativeVpError);
                             gas_meter = bridge_pool.ctx.gas_meter.into_inner();
-                            result
-                        }
-                        InternalAddress::ReplayProtection => {
-                            let replay_protection_vp =
-                                ReplayProtectionVp { ctx };
-                            let result = replay_protection_vp
-                                .validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::ReplayProtectionNativeVpError);
-                            gas_meter =
-                                replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::Pgf => {

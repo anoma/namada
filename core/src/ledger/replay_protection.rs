@@ -6,7 +6,6 @@ use crate::types::storage::{DbKeySeg, Key, KeySeg};
 /// Replay protection storage root
 const STORAGE_ROOT: &str = "replay_protection";
 
-// FIXME: remove the replay protection VP
 /// Check if a key is a replay protection key
 pub fn is_replay_protection_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::StringSeg(root) if root == STORAGE_ROOT)

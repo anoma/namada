@@ -23,7 +23,6 @@ use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
 use namada::ledger::native_vp::ibc::Ibc;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
-use namada::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
 use namada::proto::{Code, Section};
@@ -38,48 +37,6 @@ use namada_benches::{
     generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
     TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
 };
-
-fn replay_protection(c: &mut Criterion) {
-    // Write a random key under the replay protection subspace
-    let tx = generate_foreign_key_tx(&defaults::albert_keypair());
-    let mut shell = BenchShell::default();
-
-    shell.execute_tx(&tx);
-    let (verifiers, keys_changed) = shell
-        .wl_storage
-        .write_log
-        .verifiers_and_changed_keys(&BTreeSet::default());
-
-    let replay_protection = ReplayProtectionVp {
-        ctx: Ctx::new(
-            &Address::Internal(InternalAddress::ReplayProtection),
-            &shell.wl_storage.storage,
-            &shell.wl_storage.write_log,
-            &tx,
-            &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
-            &keys_changed,
-            &verifiers,
-            shell.vp_wasm_cache.clone(),
-        ),
-    };
-
-    c.bench_function("vp_replay_protection", |b| {
-        b.iter(|| {
-            // NOTE: thiv VP will always fail when triggered so don't assert
-            // here
-            replay_protection
-                .validate_tx(
-                    &tx,
-                    replay_protection.ctx.keys_changed,
-                    replay_protection.ctx.verifiers,
-                )
-                .unwrap()
-        })
-    });
-}
 
 fn governance(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_governance");
@@ -476,7 +433,6 @@ fn vp_multitoken(c: &mut Criterion) {
 
 criterion_group!(
     native_vps,
-    replay_protection,
     governance,
     // slash_fund,
     ibc,
