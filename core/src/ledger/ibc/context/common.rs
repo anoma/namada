@@ -193,7 +193,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_update_timestamp_key(client_id);
         match timestamp.into_tm_time() {
             Some(time) => self
-                .write(
+                .write_bytes(
                     &key,
                     time.encode_vec().expect("encoding shouldn't fail"),
                 )
