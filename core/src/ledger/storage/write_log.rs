@@ -10,14 +10,15 @@ use crate::ledger;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
-use crate::ledger::replay_protection::is_replay_protection_key;
+use crate::ledger::replay_protection::{
+    get_replay_protection_all_subkey, get_replay_protection_last_subkey,
+};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
-use crate::types::storage::KeySeg;
 use crate::types::token::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
 };
@@ -38,6 +39,8 @@ pub enum Error {
     DeleteVp,
     #[error("Trying to write a temporary value after deleting")]
     WriteTempAfterDelete,
+    #[error("Replay protection key: {0}")]
+    ReplayProtection(String),
 }
 
 /// Result for functions that may fail
@@ -68,6 +71,17 @@ pub enum StorageModification {
     },
 }
 
+#[derive(Debug, Clone)]
+/// A replay protection storage modification
+enum ReProtStorageModification {
+    /// Write an entry
+    Write,
+    /// Delete an entry
+    Delete,
+    /// Finalize an entry
+    Finalize,
+}
+
 /// The write log storage
 #[derive(Debug, Clone)]
 pub struct WriteLog {
@@ -89,6 +103,9 @@ pub struct WriteLog {
     tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
     ibc_events: BTreeSet<IbcEvent>,
+    /// Storage modifications for the replay protection storage, always
+    /// committed regardless of the result of the transaction
+    replay_protection: HashMap<Hash, ReProtStorageModification>,
 }
 
 /// Write log prefix iterator
@@ -115,6 +132,7 @@ impl Default for WriteLog {
             tx_write_log: HashMap::with_capacity(100),
             tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
+            replay_protection: HashMap::with_capacity(1_000),
         }
     }
 }
@@ -492,54 +510,17 @@ impl WriteLog {
             + for<'iter> ledger::storage::DBIter<'iter>,
         H: StorageHasher,
     {
-        // FIXME: maybe better to use two new fields in the write log for replay
-        // protection keys?
-        let _iter = self.block_write_log.iter();
         for (key, entry) in self.block_write_log.iter() {
             match entry {
                 StorageModification::Write { value } => {
-                    if is_replay_protection_key(key) {
-                        let hash = key
-                            .last()
-                            .ok_or(Error::StorageError(
-                                ledger::storage::Error::KeyError(
-                                    crate::types::storage::Error::EmptyKey,
-                                ),
-                            ))?
-                            .raw()
-                            .parse()
-                            .map_err(|_e| Error::StorageError(ledger::storage::Error::KeyError(crate::types::storage::Error::InvalidKeySeg("Expected valid hash".to_string()))))?;
-
-                        storage
-                            .write_replay_protection_entry(batch, &hash)
-                            .map_err(Error::StorageError)?;
-                    } else {
-                        storage
-                            .batch_write_subspace_val(batch, key, value.clone())
-                            .map_err(Error::StorageError)?;
-                    }
+                    storage
+                        .batch_write_subspace_val(batch, key, value.clone())
+                        .map_err(Error::StorageError)?;
                 }
                 StorageModification::Delete => {
-                    if is_replay_protection_key(key) {
-                        let hash = key
-                            .last()
-                            .ok_or(Error::StorageError(
-                                ledger::storage::Error::KeyError(
-                                    crate::types::storage::Error::EmptyKey,
-                                ),
-                            ))?
-                            .raw()
-                            .parse()
-                            .map_err(|_e| Error::StorageError(ledger::storage::Error::KeyError(crate::types::storage::Error::InvalidKeySeg("Expected valid hash".to_string()))))?;
-
-                        storage
-                            .delete_replay_protection_entry(batch, &hash)
-                            .map_err(Error::StorageError)?;
-                    } else {
-                        storage
-                            .batch_delete_subspace_val(batch, key)
-                            .map_err(Error::StorageError)?;
-                    }
+                    storage
+                        .batch_delete_subspace_val(batch, key)
+                        .map_err(Error::StorageError)?;
                 }
                 StorageModification::InitAccount { vp_code_hash } => {
                     storage
@@ -548,6 +529,41 @@ impl WriteLog {
                 }
                 // temporary value isn't persisted
                 StorageModification::Temp { .. } => {}
+            }
+        }
+
+        for (hash, entry) in self.replay_protection.iter() {
+            match entry {
+                ReProtStorageModification::Write => storage
+                    .write_replay_protection_entry(
+                        batch,
+                        // Can only write tx hashes to the previous block, no
+                        // further
+                        &get_replay_protection_last_subkey(hash),
+                    )
+                    .map_err(Error::StorageError)?,
+                ReProtStorageModification::Delete => storage
+                    .delete_replay_protection_entry(
+                        batch,
+                        // Can only delete tx hashes from the previous block,
+                        // no further
+                        &get_replay_protection_last_subkey(hash),
+                    )
+                    .map_err(Error::StorageError)?,
+                ReProtStorageModification::Finalize => {
+                    storage
+                        .write_replay_protection_entry(
+                            batch,
+                            &get_replay_protection_all_subkey(hash),
+                        )
+                        .map_err(Error::StorageError)?;
+                    storage
+                        .delete_replay_protection_entry(
+                            batch,
+                            &get_replay_protection_last_subkey(hash),
+                        )
+                        .map_err(Error::StorageError)?
+                }
             }
         }
 
@@ -647,6 +663,67 @@ impl WriteLog {
 
         let iter = matches.into_iter();
         PrefixIter { iter }
+    }
+
+    /// Check if the given tx hash has already been processed
+    pub fn has_replay_protection_key(&self, hash: &Hash) -> bool {
+        match self.replay_protection.get(hash) {
+            Some(v) => !matches!(v, ReProtStorageModification::Delete),
+            None => false,
+        }
+    }
+
+    /// Write the transaction hash
+    pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        match self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Write)
+        {
+            // Cannot write an hash if other requests have already been
+            // committed for the same hash
+            Some(_) => Err(Error::ReplayProtection(
+                "Requested a write over a previous request".to_string(),
+            )),
+            None => Ok(()),
+        }
+    }
+
+    /// Remove the transaction hash
+    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        if let Some(ReProtStorageModification::Write) = self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Delete)
+        {
+            // Cannot delete an hash that still has to be written to
+            // storage, instead allow overwriting other deletes or finalize
+            // requests
+            return Err(Error::ReplayProtection(
+                "Requested a delete of an hash not yet committed to storage"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Move the transaction hash of the previous block to the list of all
+    /// blocks. This functions should be called at the end of the block
+    /// processing
+    pub fn finalize_tx_hashes(&mut self, hash: Hash) -> Result<()> {
+        if let Some(ReProtStorageModification::Write) = self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Finalize)
+        {
+            // Cannot finalize a tx hash that has to be written in this
+            // block, else avoid finalizing if a delete request or another
+            // finalize request has been committed
+            return Err(Error::ReplayProtection(
+                "Requested a finalize on a hash not yet committed to storage"
+                    .to_string(),
+            ));
+        }
+
+        Ok(())
     }
 }
 

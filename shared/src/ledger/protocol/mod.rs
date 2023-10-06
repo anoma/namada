@@ -7,7 +7,7 @@ use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::TxGasMeter;
 use namada_core::ledger::storage::wl_storage::WriteLogAndStorage;
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::proto::Section;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::Key;
@@ -228,15 +228,15 @@ where
     let mut changed_keys = BTreeSet::default();
     let mut tx: Tx = tx_bytes.try_into().unwrap();
 
-    // Writes wrapper tx hash to block write log (changes must be persisted even
-    // in case of failure)
-    let wrapper_hash_key =
-        replay_protection::get_replay_protection_key(&tx.header_hash());
+    // Writes wrapper tx hash
     shell_params
         .wl_storage
-        .write(&wrapper_hash_key, ())
+        .write_log_mut()
+        .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
-    changed_keys.insert(wrapper_hash_key);
+    changed_keys.insert(replay_protection::get_replay_protection_last_key(
+        &tx.header_hash(),
+    ));
 
     // Charge fee before performing any fallible operations
     charge_fee(
@@ -251,14 +251,14 @@ where
     shell_params.tx_gas_meter.add_tx_size_gas(tx_bytes)?;
 
     // If wrapper was succesful, write inner tx hash to storage
-    let inner_hash_key = replay_protection::get_replay_protection_key(
-        &tx.update_header(TxType::Raw).header_hash(),
-    );
     shell_params
         .wl_storage
-        .write(&inner_hash_key, ())
+        .write_log_mut()
+        .write_tx_hash(tx.update_header(TxType::Raw).header_hash())
         .expect("Error while writing tx hash to storage");
-    changed_keys.insert(inner_hash_key);
+    changed_keys.insert(replay_protection::get_replay_protection_last_key(
+        &tx.update_header(TxType::Raw).header_hash(),
+    ));
 
     Ok(changed_keys)
 }

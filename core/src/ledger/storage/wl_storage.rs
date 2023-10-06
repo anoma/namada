@@ -57,16 +57,12 @@ where
         }
     }
 
-    /// Check if the given tx hash is present
+    /// Check if the given tx hash has already been processed
     pub fn has_replay_protection_entry(
         &self,
         hash: &Hash,
     ) -> Result<bool, super::Error> {
-        let key =
-            crate::ledger::replay_protection::get_replay_protection_key(hash);
-        if let Some(write_log::StorageModification::Write { .. }) =
-            self.write_log.read(&key).0
-        {
+        if self.write_log.has_replay_protection_key(hash) {
             return Ok(true);
         }
 

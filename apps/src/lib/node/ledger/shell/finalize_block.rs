@@ -11,7 +11,7 @@ use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
-use namada::ledger::{inflation, protocol, replay_protection};
+use namada::ledger::{inflation, protocol};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -216,10 +216,9 @@ where
                         .clone()
                         .update_header(TxType::Raw)
                         .header_hash();
-                    let tx_hash_key =
-                        replay_protection::get_replay_protection_key(&tx_hash);
                     self.wl_storage
-                        .delete(&tx_hash_key)
+                        .write_log
+                        .delete_tx_hash(tx_hash)
                         .expect("Error while deleting tx hash from storage");
                 }
 
@@ -515,13 +514,13 @@ where
                         if let Error::TxApply(protocol::Error::GasError(_)) =
                             msg
                         {
-                            let tx_hash_key =
-                                replay_protection::get_replay_protection_key(
-                                    &hash,
+                            self.wl_storage
+                                .write_log
+                                .delete_tx_hash(hash)
+                                .expect(
+                                    "Error while deleting tx hash key from \
+                                     storage",
                                 );
-                            self.wl_storage.delete(&tx_hash_key).expect(
-                                "Error while deleting tx hash key from storage",
-                            );
                         }
                     }
 
@@ -537,6 +536,14 @@ where
                 }
             }
             response.events.push(tx_event);
+        }
+
+        // Finalize the transactions' hashes from the previous block
+        for hash in self.wl_storage.storage.iter_replay_protection() {
+            self.wl_storage
+                .write_log
+                .finalize_tx_hashes(hash)
+                .expect("Failed tx hashes finalization")
         }
 
         stats.set_tx_cache_size(
@@ -1045,6 +1052,7 @@ mod test_finalize_block {
     use namada::core::ledger::governance::storage::vote::{
         StorageProposalVote, VoteType,
     };
+    use namada::core::ledger::replay_protection;
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -2269,15 +2277,17 @@ mod test_finalize_block {
 
         let (wrapper_tx, processed_tx) =
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
-        let wrapper_hash_key = replay_protection::get_replay_protection_key(
-            &wrapper_tx.header_hash(),
-        );
+        let wrapper_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &wrapper_tx.header_hash(),
+            );
         let mut decrypted_tx = wrapper_tx;
 
         decrypted_tx.update_header(TxType::Raw);
-        let decrypted_hash_key = replay_protection::get_replay_protection_key(
-            &decrypted_tx.header_hash(),
-        );
+        let decrypted_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &decrypted_tx.header_hash(),
+            );
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
@@ -2361,7 +2371,7 @@ mod test_finalize_block {
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::get_replay_protection_key(
+        let inner_hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
@@ -2435,10 +2445,11 @@ mod test_finalize_block {
             None,
         )));
 
-        let wrapper_hash_key = replay_protection::get_replay_protection_key(
-            &wrapper.header_hash(),
-        );
-        let inner_hash_key = replay_protection::get_replay_protection_key(
+        let wrapper_hash_key =
+            replay_protection::get_replay_protection_last_key(
+                &wrapper.header_hash(),
+            );
+        let inner_hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper.clone().update_header(TxType::Raw).header_hash(),
         );
 

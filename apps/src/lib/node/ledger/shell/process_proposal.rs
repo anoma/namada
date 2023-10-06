@@ -988,6 +988,7 @@ mod test_process_proposal {
 
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
+    use namada::ledger::replay_protection;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
@@ -2132,7 +2133,7 @@ mod test_process_proposal {
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::get_replay_protection_key(
+        let hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper_unsigned_hash,
         );
         shell
@@ -2267,8 +2268,9 @@ mod test_process_proposal {
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
-        let hash_key =
-            replay_protection::get_replay_protection_key(&inner_unsigned_hash);
+        let hash_key = replay_protection::get_replay_protection_last_key(
+            &inner_unsigned_hash,
+        );
         shell
             .wl_storage
             .storage

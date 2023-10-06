@@ -48,7 +48,7 @@ use namada::ledger::storage::{
     EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::ledger::storage_api::{self, StorageRead};
-use namada::ledger::{parameters, pos, protocol, replay_protection};
+use namada::ledger::{parameters, pos, protocol};
 use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
 use namada::proto::{self, Section, Tx};
 use namada::types::address::Address;
@@ -63,7 +63,7 @@ use namada::types::transaction::{
     hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use namada::types::{address, hash, token};
+use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -945,11 +945,9 @@ where
         }
 
         // Write inner hash to tx WAL
-        let inner_hash_key =
-            replay_protection::get_replay_protection_key(&inner_tx_hash);
         temp_wl_storage
             .write_log
-            .write(&inner_hash_key, vec![])
+            .write_tx_hash(inner_tx_hash)
             .expect("Couldn't write inner transaction hash to write log");
 
         let tx =
@@ -966,11 +964,9 @@ where
         }
 
         // Write wrapper hash to tx WAL
-        let wrapper_hash_key =
-            replay_protection::get_replay_protection_key(&wrapper_hash);
         temp_wl_storage
             .write_log
-            .write(&wrapper_hash_key, vec![])
+            .write_tx_hash(wrapper_hash)
             .expect("Couldn't write wrapper tx hash to write log");
 
         Ok(())
@@ -1266,14 +1262,11 @@ where
                 let mut inner_tx = tx;
                 inner_tx.update_header(TxType::Raw);
                 let inner_tx_hash = &inner_tx.header_hash();
-                let inner_hash_key =
-                    replay_protection::get_replay_protection_key(inner_tx_hash);
                 if self
                     .wl_storage
                     .storage
-                    .has_key(&inner_hash_key)
+                    .has_replay_protection_entry(inner_tx_hash)
                     .expect("Error while checking inner tx hash key in storage")
-                    .0
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
@@ -1286,17 +1279,14 @@ where
 
                 let tx = Tx::try_from(tx_bytes)
                     .expect("Deserialization shouldn't fail");
-                let wrapper_hash = hash::Hash(tx.header_hash().0);
-                let wrapper_hash_key =
-                    replay_protection::get_replay_protection_key(&wrapper_hash);
+                let wrapper_hash = &tx.header_hash();
                 if self
                     .wl_storage
                     .storage
-                    .has_key(&wrapper_hash_key)
+                    .has_replay_protection_entry(wrapper_hash)
                     .expect(
                         "Error while checking wrapper tx hash key in storage",
                     )
-                    .0
                 {
                     response.code = ErrorCodes::ReplayTx.into();
                     response.log = format!(
@@ -2323,6 +2313,7 @@ mod abciplus_mempool_tests {
 
 #[cfg(test)]
 mod tests {
+    use namada::ledger::replay_protection;
     use namada::proof_of_stake::Epoch;
     use namada::proto::{Code, Data, Section, Signature, Tx};
     use namada::types::transaction::{Fee, WrapperTx};
@@ -2466,7 +2457,7 @@ mod tests {
         // Write wrapper hash to storage
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key =
-            replay_protection::get_replay_protection_key(&wrapper_hash);
+            replay_protection::get_replay_protection_last_key(&wrapper_hash);
         shell
             .wl_storage
             .storage
@@ -2506,7 +2497,7 @@ mod tests {
             wrapper.clone().update_header(TxType::Raw).header_hash();
         // Write inner hash in storage
         let inner_hash_key =
-            replay_protection::get_replay_protection_key(&inner_tx_hash);
+            replay_protection::get_replay_protection_last_key(&inner_tx_hash);
         shell
             .wl_storage
             .storage
