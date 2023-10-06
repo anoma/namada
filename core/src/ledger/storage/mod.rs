@@ -360,14 +360,14 @@ pub trait DB: std::fmt::Debug {
     fn write_replay_protection_entry(
         &mut self,
         batch: &mut Self::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()>;
 
     /// Delete a replay protection entry
     fn delete_replay_protection_entry(
         &mut self,
         batch: &mut Self::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()>;
 }
 
@@ -392,6 +392,9 @@ pub trait DBIter<'iter> {
 
     /// Read subspace new diffs at a given height
     fn iter_new_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
+
+    /// Read replay protection storage from the last block
+    fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
@@ -1122,18 +1125,31 @@ where
     pub fn write_replay_protection_entry(
         &mut self,
         batch: &mut D::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()> {
-        self.db.write_replay_protection_entry(batch, hash)
+        self.db.write_replay_protection_entry(batch, key)
     }
 
     /// Delete the provided tx hash from storage
     pub fn delete_replay_protection_entry(
         &mut self,
         batch: &mut D::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()> {
-        self.db.delete_replay_protection_entry(batch, hash)
+        self.db.delete_replay_protection_entry(batch, key)
+    }
+
+    /// Iterate the replay protection storage from the last block
+    pub fn iter_replay_protection(
+        &self,
+    ) -> Box<dyn Iterator<Item = Hash> + '_> {
+        Box::new(self.db.iter_replay_protection().map(|(key, _, _)| {
+            key.rsplit_once('/')
+                .expect("Missing tx hash in storage key")
+                .1
+                .parse()
+                .expect("Failed hash conversion")
+        }))
     }
 }
 

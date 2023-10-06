@@ -1409,15 +1409,11 @@ impl DB for RocksDB {
     fn write_replay_protection_entry(
         &mut self,
         batch: &mut Self::WriteBatch,
-        hash: &namada::types::hash::Hash,
+        key: &Key,
     ) -> Result<()> {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
-        let key = Key::parse("last")
-            .map_err(Error::KeyError)?
-            .push(&hash.to_string())
-            .map_err(Error::KeyError)?;
         batch
             .0
             .put_cf(replay_protection_cf, key.to_string(), vec![]);
@@ -1428,19 +1424,12 @@ impl DB for RocksDB {
     fn delete_replay_protection_entry(
         &mut self,
         batch: &mut Self::WriteBatch,
-        hash: &namada::types::hash::Hash,
+        key: &Key,
     ) -> Result<()> {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
-        for prefix in ["last", "all"] {
-            let key = Key::parse(prefix)
-                .map_err(Error::KeyError)?
-                .push(&hash.to_string())
-                .map_err(Error::KeyError)?;
-
-            batch.0.delete_cf(replay_protection_cf, key.to_string())
-        }
+        batch.0.delete_cf(replay_protection_cf, key.to_string());
 
         Ok(())
     }
@@ -1484,6 +1473,14 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
     ) -> PersistentPrefixIterator<'iter> {
         iter_diffs_prefix(self, height, false)
+    }
+
+    fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
+        let replay_protection_cf = self
+            .get_column_family(REPLAY_PROTECTION_CF)
+            .expect("{REPLAY_PROTECTION_CF} column family should exist");
+
+        iter_prefix(self, replay_protection_cf, "last".to_string(), None)
     }
 }
 

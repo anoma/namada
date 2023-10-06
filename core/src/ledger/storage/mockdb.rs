@@ -414,7 +414,6 @@ impl DB for MockDB {
         Ok(Some((height, merkle_tree_stores)))
     }
 
-    //FIXME: I should dump the content of the last subey into all at the beginning of finalize block before writing any new hash into last. Do I need another function in this trait for that?
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
         let prefix_key =
             Key::parse("replay_protection").map_err(Error::KeyError)?;
@@ -564,14 +563,11 @@ impl DB for MockDB {
     fn write_replay_protection_entry(
         &mut self,
         _batch: &mut Self::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()> {
         let key = Key::parse("replay_protection")
             .map_err(Error::KeyError)?
-            .push(&"last".to_string())
-            .map_err(Error::KeyError)?
-            .push(&hash.to_string())
-            .map_err(Error::KeyError)?;
+            .join(key);
 
         match self.0.borrow_mut().insert(key.to_string(), vec![]) {
             Some(_) => Err(Error::DBError(format!(
@@ -584,18 +580,13 @@ impl DB for MockDB {
     fn delete_replay_protection_entry(
         &mut self,
         _batch: &mut Self::WriteBatch,
-        hash: &Hash,
+        key: &Key,
     ) -> Result<()> {
-        let key = Key::parse("replay_protection").map_err(Error::KeyError)?;
-        for prefix in ["last", "all"] {
-            let key = key
-                .push(&prefix.to_string())
-                .map_err(Error::KeyError)?
-                .push(&hash.to_string())
-                .map_err(Error::KeyError)?;
+        let key = Key::parse("replay_protection")
+            .map_err(Error::KeyError)?
+            .join(key);
 
-            self.0.borrow_mut().remove(&key.to_string());
-        }
+        self.0.borrow_mut().remove(&key.to_string());
 
         Ok(())
     }
@@ -639,6 +630,18 @@ impl<'iter> DBIter<'iter> for MockDB {
     fn iter_new_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
         // Mock DB can read only the latest value for now
         unimplemented!()
+    }
+
+    fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
+        let db_prefix = "replay_protection/".to_owned();
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(
+            MockIterator {
+                prefix: "last".to_string(),
+                iter,
+            },
+            db_prefix,
+        )
     }
 }
 
