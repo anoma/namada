@@ -98,17 +98,7 @@ where
 
         // Convert IBC amount to Namada amount for the token
         let denom = read_denom(&*self.ctx.borrow(), &token)
-            .map_err(|e| {
-                TokenTransferError::ContextError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Reading the token denom failed: Coin {}, Error {}",
-                            coin, e
-                        ),
-                    }
-                    .into(),
-                )
-            })?
+            .map_err(ContextError::from)?
             .unwrap_or(token::Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
         let amount =
@@ -116,8 +106,7 @@ where
                 TokenTransferError::ContextError(
                     ChannelError::Other {
                         description: format!(
-                            "The IBC amount is invalid: Coin {}, Error {}",
-                            coin, e
+                            "The IBC amount is invalid: Coin {coin}, Error {e}",
                         ),
                     }
                     .into(),
@@ -503,16 +492,7 @@ where
         self.ctx
             .borrow_mut()
             .transfer_token(from, to, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            from, to, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 
     fn mint_coins_execute(
@@ -526,16 +506,7 @@ where
         self.ctx
             .borrow_mut()
             .mint_token(account, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Minting a coin failed: account {}, amount {}",
-                            account, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 
     fn burn_coins_execute(
@@ -549,16 +520,7 @@ where
         self.ctx
             .borrow_mut()
             .burn_token(account, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Burning a coin failed: account {}, amount {}",
-                            account, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 }
 

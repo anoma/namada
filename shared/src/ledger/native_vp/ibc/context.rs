@@ -287,7 +287,7 @@ where
     }
 
     fn log_string(&self, message: String) {
-        tracing::debug!("{} in the pseudo execution for IBC VP", message);
+        tracing::debug!("{message} in the pseudo execution for IBC VP");
     }
 }
 
@@ -457,7 +457,7 @@ where
 
     /// Logging
     fn log_string(&self, message: String) {
-        tracing::debug!("{} for validation in IBC VP", message);
+        tracing::debug!("{message} for validation in IBC VP");
     }
 }
 
