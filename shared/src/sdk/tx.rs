@@ -560,6 +560,18 @@ pub async fn build_validator_commission_change<
                 commission_rate,
                 max_commission_change_per_epoch,
             }) => {
+                if rate.is_negative() || rate > Dec::one() {
+                    edisplay_line!(
+                        IO,
+                        "New rate is outside of the allowed range of values \
+                         between 0.0 and 1.0."
+                    );
+                    if !tx_args.force {
+                        return Err(Error::from(
+                            TxError::InvalidCommissionRate(rate),
+                        ));
+                    }
+                }
                 if rate.abs_diff(&commission_rate)
                     > max_commission_change_per_epoch
                 {
