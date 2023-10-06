@@ -1,7 +1,9 @@
+use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
@@ -47,6 +49,7 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::storage;
 
+/// Services mocking the operation of the ledger's various async tasks.
 pub struct MockServices {
     /// Whether to automatically drive the shell's background
     /// services or not.
@@ -54,15 +57,37 @@ pub struct MockServices {
     /// Receives transactions that are supposed to be broadcasted
     /// to the network.
     pub tx_receiver: UnboundedReceiver<Vec<u8>>,
+    /// Mock Ethereum oracle, that processes blocks from Ethereum
+    /// in order to find events emitted by a transaction to vote on.
+    pub ethereum_oracle: MockEthOracle,
+}
+
+/// Actions to be performed by the mock node, as a result
+/// of driving [`MockServices`].
+pub enum MockServiceAction {
+    /// The ledger should broadcast a new transaction.
+    BroadcastTx(Vec<u8>),
 }
 
 impl MockServices {
-    pub async fn drive(
-        &mut self,
-        shell: &Mutex<Shell<storage::PersistentDB, Sha256Hasher>>,
-    ) {
-        let _ = shell;
-        asd
+    pub async fn drive(&mut self) -> Vec<MockServiceAction> {
+        let mut actions = vec![];
+
+        // process new eth events
+        self.ethereum_oracle.step().await;
+
+        // receive txs from the broadcaster
+        while let Some(tx) =
+            poll_fn(|cx| match self.tx_receiver.poll_recv(cx) {
+                Poll::Pending => Poll::Ready(None),
+                poll => poll,
+            })
+            .await
+        {
+            actions.push(MockServiceAction::BroadcastTx(tx));
+        }
+
+        actions
     }
 }
 
@@ -135,10 +160,24 @@ impl MockNode {
         self.services.lock().unwrap().auto = auto;
     }
 
+    pub async fn handle_service_action(action: MockServiceAction) {
+        match action {
+            MockServiceAction::BroadcastTx(tx) => {
+                _ = self.broadcast_tx_sync(tx).await;
+            }
+        }
+    }
+
     async fn drive_mock_services(&self) {
         let mut services = self.services.lock();
+
         if services.auto {
-            services.drive(&*self.shell).await;
+            let actions = services.drive().await;
+            drop(services);
+
+            for action in actions {
+                self.handle_service_action(action).await;
+            }
         }
     }
 
