@@ -1,11 +1,16 @@
+use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
+use itertools::Either;
 use lazy_static::lazy_static;
+use namada::core::types::ethereum_structs;
+use namada::eth_bridge::oracle::config::Config as OracleConfig;
 use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
     EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
@@ -23,13 +28,15 @@ use namada::sdk::queries::Client;
 use namada::tendermint_proto::abci::VoteInfo;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
+use namada::types::control_flow::time::Duration;
+use namada::types::ethereum_events::EthereumEvent;
 use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc;
 
 use crate::facade::tendermint_proto::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::abci::{
@@ -38,13 +45,192 @@ use crate::facade::tendermint_proto::abci::{
 use crate::facade::tendermint_rpc::endpoint::abci_info::AbciInfo;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
 use crate::facade::{tendermint, tendermint_rpc};
+use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
+    TestOracle, Web3Client, Web3Controller,
+};
+use crate::node::ledger::ethereum_oracle::{
+    control, last_processed_block, try_process_eth_events,
+};
 use crate::node::ledger::shell::testing::utils::TestDir;
-use crate::node::ledger::shell::{ErrorCodes, Shell};
+use crate::node::ledger::shell::{ErrorCodes, EthereumOracleChannels, Shell};
 use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::storage;
+
+/// Mock services data returned by [`mock_services`].
+pub struct MockServicesPackage {
+    /// Whether to automatically drive mock services or not.
+    pub auto_drive_services: bool,
+    /// Mock services stored by the [`MockNode`].
+    pub services: MockServices,
+    /// Handlers to mock services stored by the [`Shell`].
+    pub shell_handlers: MockServiceShellHandlers,
+    /// Handler to the mock services controller.
+    pub controller: MockServicesController,
+}
+
+/// Mock services config.
+pub struct MockServicesCfg {
+    /// Whether to automatically drive mock services or not.
+    pub auto_drive_services: bool,
+    /// Whether to enable the Ethereum oracle or not.
+    pub enable_eth_oracle: bool,
+}
+
+/// Instantiate mock services for a node.
+pub fn mock_services(cfg: MockServicesCfg) -> MockServicesPackage {
+    let (_, eth_client) = Web3Client::setup();
+    let (eth_sender, eth_receiver) = mpsc::channel(1000);
+    let (last_processed_block_sender, last_processed_block_receiver) =
+        last_processed_block::channel();
+    let (control_sender, control_receiver) = control::channel();
+    let eth_oracle_controller = eth_client.controller();
+    let oracle = TestOracle::new(
+        Either::Left(eth_client),
+        eth_sender.clone(),
+        last_processed_block_sender,
+        Duration::from_millis(5),
+        Duration::from_secs(30),
+        control_receiver,
+    );
+    let eth_oracle_channels = EthereumOracleChannels::new(
+        eth_receiver,
+        control_sender,
+        last_processed_block_receiver,
+    );
+    let (tx_broadcaster, tx_receiver) = mpsc::unbounded_channel();
+    let ethereum_oracle = MockEthOracle {
+        oracle,
+        config: Default::default(),
+        next_block_to_process: tokio::sync::RwLock::new(Default::default()),
+    };
+    MockServicesPackage {
+        auto_drive_services: cfg.auto_drive_services,
+        services: MockServices {
+            ethereum_oracle,
+            tx_receiver: tokio::sync::Mutex::new(tx_receiver),
+        },
+        shell_handlers: MockServiceShellHandlers {
+            tx_broadcaster: tx_broadcaster.clone(),
+            eth_oracle_channels: cfg
+                .enable_eth_oracle
+                .then_some(eth_oracle_channels),
+        },
+        controller: MockServicesController {
+            eth_oracle: eth_oracle_controller,
+            eth_events: eth_sender,
+            tx_broadcaster,
+        },
+    }
+}
+
+/// Controller of various mock node services.
+pub struct MockServicesController {
+    /// Ethereum oracle controller.
+    pub eth_oracle: Web3Controller,
+    /// Handler to the Ethereum oracle sender channel.
+    ///
+    /// Bypasses the Ethereum oracle service and sends
+    /// events directly to the [`Shell`].
+    pub eth_events: mpsc::Sender<EthereumEvent>,
+    /// Transaction broadcaster handle.
+    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
+}
+
+/// Service handlers to be passed to a [`Shell`], when building
+/// a mock node.
+pub struct MockServiceShellHandlers {
+    /// Transaction broadcaster handle.
+    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
+    /// Ethereum oracle channel handlers.
+    pub eth_oracle_channels: Option<EthereumOracleChannels>,
+}
+
+/// Services mocking the operation of the ledger's various async tasks.
+pub struct MockServices {
+    /// Receives transactions that are supposed to be broadcasted
+    /// to the network.
+    tx_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Vec<u8>>>,
+    /// Mock Ethereum oracle, that processes blocks from Ethereum
+    /// in order to find events emitted by a transaction to vote on.
+    ethereum_oracle: MockEthOracle,
+}
+
+/// Actions to be performed by the mock node, as a result
+/// of driving [`MockServices`].
+pub enum MockServiceAction {
+    /// The ledger should broadcast new transactions.
+    BroadcastTxs(Vec<Vec<u8>>),
+    /// Progress to the next Ethereum block to process.
+    IncrementEthHeight,
+}
+
+impl MockServices {
+    /// Drive the internal state machine of the mock node's services.
+    async fn drive(&self) -> Vec<MockServiceAction> {
+        let mut actions = vec![];
+
+        // process new eth events
+        // NOTE: this may result in a deadlock, if the events
+        // sent to the shell exceed the capacity of the oracle's
+        // events channel!
+        if self.ethereum_oracle.drive().await {
+            actions.push(MockServiceAction::IncrementEthHeight);
+        }
+
+        // receive txs from the broadcaster
+        let txs = {
+            let mut txs = vec![];
+            let mut tx_receiver = self.tx_receiver.lock().await;
+
+            while let Some(tx) = poll_fn(|cx| match tx_receiver.poll_recv(cx) {
+                Poll::Pending => Poll::Ready(None),
+                poll => poll,
+            })
+            .await
+            {
+                txs.push(tx);
+            }
+
+            txs
+        };
+        if !txs.is_empty() {
+            actions.push(MockServiceAction::BroadcastTxs(txs));
+        }
+
+        actions
+    }
+}
+
+/// Mock Ethereum oracle used for testing purposes.
+struct MockEthOracle {
+    /// The inner oracle.
+    oracle: TestOracle,
+    /// The inner oracle's configuration.
+    config: OracleConfig,
+    /// The inner oracle's next block to process.
+    next_block_to_process: tokio::sync::RwLock<ethereum_structs::BlockHeight>,
+}
+
+impl MockEthOracle {
+    /// Updates the state of the Ethereum oracle.
+    ///
+    /// This includes sending any confirmed Ethereum events to
+    /// the shell and updating the height of the next Ethereum
+    /// block to process. Upon a successfully processed block,
+    /// this functions returns `true`.
+    async fn drive(&self) -> bool {
+        try_process_eth_events(
+            &self.oracle,
+            &self.config,
+            &*self.next_block_to_process.read().await,
+        )
+        .await
+        .process_new_block()
+    }
+}
 
 /// Status of tx
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,8 +247,9 @@ pub struct MockNode {
     pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
     pub test_dir: ManuallyDrop<TestDir>,
     pub keep_temp: bool,
-    pub _broadcast_recv: UnboundedReceiver<Vec<u8>>,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
+    pub services: Arc<MockServices>,
+    pub auto_drive_services: bool,
 }
 
 impl Drop for MockNode {
@@ -82,6 +269,34 @@ impl Drop for MockNode {
 }
 
 impl MockNode {
+    pub async fn handle_service_action(&self, action: MockServiceAction) {
+        match action {
+            MockServiceAction::BroadcastTxs(txs) => {
+                self.submit_txs(txs);
+            }
+            MockServiceAction::IncrementEthHeight => {
+                *self
+                    .services
+                    .ethereum_oracle
+                    .next_block_to_process
+                    .write()
+                    .await += 1.into();
+            }
+        }
+    }
+
+    pub async fn drive_mock_services(&self) {
+        for action in self.services.drive().await {
+            self.handle_service_action(action).await;
+        }
+    }
+
+    async fn drive_mock_services_bg(&self) {
+        if self.auto_drive_services {
+            self.drive_mock_services().await;
+        }
+    }
+
     pub fn genesis_dir(&self) -> PathBuf {
         self.test_dir
             .path()
@@ -179,20 +394,43 @@ impl MockNode {
     pub fn finalize_and_commit(&self) {
         let (proposer_address, votes) = self.prepare_request();
 
-        let mut req = FinalizeBlock {
-            hash: BlockHash([0u8; 32]),
-            header: Header {
-                hash: Hash([0; 32]),
-                time: DateTimeUtc::now(),
-                next_validators_hash: Hash([0; 32]),
-            },
-            byzantine_validators: vec![],
-            txs: vec![],
-            proposer_address,
-            votes,
-        };
-        req.header.time = DateTimeUtc::now();
         let mut locked = self.shell.lock().unwrap();
+
+        // build finalize block abci request
+        let req = {
+            // check if we have protocol txs to be included
+            // in the finalize block request
+            let txs = {
+                let req = RequestPrepareProposal {
+                    proposer_address: proposer_address.clone(),
+                    ..Default::default()
+                };
+                let txs = locked.prepare_proposal(req).txs;
+
+                txs.into_iter()
+                    .map(|tx| ProcessedTx {
+                        tx,
+                        result: TxResult {
+                            code: 0,
+                            info: String::new(),
+                        },
+                    })
+                    .collect()
+            };
+            FinalizeBlock {
+                hash: BlockHash([0u8; 32]),
+                header: Header {
+                    hash: Hash([0; 32]),
+                    time: DateTimeUtc::now(),
+                    next_validators_hash: Hash([0; 32]),
+                },
+                byzantine_validators: vec![],
+                txs,
+                proposer_address,
+                votes,
+            }
+        };
+
         locked.finalize_block(req).expect("Test failed");
         locked.commit();
     }
@@ -213,19 +451,19 @@ impl MockNode {
 
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
-    fn submit_tx(&self, tx_bytes: Vec<u8>) {
-        // The block space allocator disallows txs in certain blocks.
+    fn submit_txs(&self, txs: Vec<Vec<u8>>) {
+        // The block space allocator disallows encrypted txs in certain blocks.
         // Advance to block height that allows txs.
         self.advance_to_allowed_block();
         let (proposer_address, votes) = self.prepare_request();
 
         let req = RequestProcessProposal {
-            txs: vec![tx_bytes.clone()],
+            txs: txs.clone(),
             proposer_address: proposer_address.clone(),
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
-        let mut result = locked.process_proposal(req);
+        let result = locked.process_proposal(req);
 
         let mut errors: Vec<_> = result
             .tx_results
@@ -252,10 +490,11 @@ impl MockNode {
                 next_validators_hash: Hash([0; 32]),
             },
             byzantine_validators: vec![],
-            txs: vec![ProcessedTx {
-                tx: tx_bytes,
-                result: result.tx_results.remove(0),
-            }],
+            txs: txs
+                .into_iter()
+                .zip(result.tx_results.into_iter())
+                .map(|(tx, result)| ProcessedTx { tx, result })
+                .collect(),
             proposer_address,
             votes,
         };
@@ -322,6 +561,7 @@ impl<'a> Client for &'a MockNode {
         height: Option<BlockHeight>,
         prove: bool,
     ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
+        self.drive_mock_services_bg().await;
         let rpc = RPC;
         let data = data.unwrap_or_default();
         let latest_height = {
@@ -367,6 +607,7 @@ impl<'a> Client for &'a MockNode {
 
     /// `/abci_info`: get information about the ABCI application.
     async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
+        self.drive_mock_services_bg().await;
         let locked = self.shell.lock().unwrap();
         Ok(AbciInfo {
             data: "Namada".to_string(),
@@ -398,6 +639,7 @@ impl<'a> Client for &'a MockNode {
         tx: namada::tendermint::abci::Transaction,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
+        self.drive_mock_services_bg().await;
         let mut resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
             code: Default::default(),
             data: Default::default(),
@@ -405,9 +647,10 @@ impl<'a> Client for &'a MockNode {
             hash: tendermint::abci::transaction::Hash::new([0; 32]),
         };
         let tx_bytes: Vec<u8> = tx.into();
-        self.submit_tx(tx_bytes);
+        self.submit_txs(vec![tx_bytes]);
         if !self.success() {
-            resp.code = tendermint::abci::Code::Err(1337); // TODO: submit_tx should return the correct error code + message
+            // TODO: submit_txs should return the correct error code + message
+            resp.code = tendermint::abci::Code::Err(1337);
             return Ok(resp);
         } else {
             self.clear_results();
@@ -417,11 +660,13 @@ impl<'a> Client for &'a MockNode {
             proposer_address,
             ..Default::default()
         };
-        let tx_bytes = {
+        let txs = {
             let locked = self.shell.lock().unwrap();
-            locked.prepare_proposal(req).txs.remove(0)
+            locked.prepare_proposal(req).txs
         };
-        self.submit_tx(tx_bytes);
+        if !txs.is_empty() {
+            self.submit_txs(txs);
+        }
         Ok(resp)
     }
 
@@ -434,6 +679,7 @@ impl<'a> Client for &'a MockNode {
         _order: namada::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
     {
+        self.drive_mock_services_bg().await;
         let matcher = parse_tm_query(query);
         let borrowed = self.shell.lock().unwrap();
         // we store an index into the event log as a block
@@ -503,6 +749,7 @@ impl<'a> Client for &'a MockNode {
     where
         H: Into<namada::tendermint::block::Height> + Send,
     {
+        self.drive_mock_services_bg().await;
         let height = height.into();
         let encoded_event = EncodedEvent(height.value());
         let locked = self.shell.lock().unwrap();
@@ -561,6 +808,7 @@ impl<'a> Client for &'a MockNode {
     /// Returns empty result (200 OK) on success, no response in case of an
     /// error.
     async fn health(&self) -> Result<(), RpcError> {
+        self.drive_mock_services_bg().await;
         Ok(())
     }
 }

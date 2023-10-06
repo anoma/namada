@@ -11,10 +11,13 @@ use namada_apps::config::genesis::genesis_config::GenesisConfig;
 use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
-use namada_apps::node::ledger::shell::testing::node::MockNode;
+use namada_apps::node::ledger::shell::testing::node::{
+    mock_services, MockNode, MockServicesCfg, MockServicesController,
+    MockServicesPackage,
+};
 use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
-use namada_core::types::address::Address;
+use namada_core::types::address::nam;
 use namada_core::types::chain::{ChainId, ChainIdPrefix};
 use toml::value::Table;
 
@@ -26,14 +29,14 @@ use crate::e2e::setup::{
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
 
 /// Setup a network with a single genesis validator node.
-pub fn setup() -> Result<MockNode> {
+pub fn setup() -> Result<(MockNode, MockServicesController)> {
     initialize_genesis(|genesis| genesis)
 }
 
 /// Setup folders with genesis, configs, wasm, etc.
 pub fn initialize_genesis(
     mut update_genesis: impl FnMut(GenesisConfig) -> GenesisConfig,
-) -> Result<MockNode> {
+) -> Result<(MockNode, MockServicesController)> {
     let working_dir = std::fs::canonicalize("..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
         Ok(val) => val.to_ascii_lowercase() != "false",
@@ -81,7 +84,23 @@ pub fn initialize_genesis(
         },
     );
 
-    create_node(test_dir, &genesis, keep_temp)
+    let auto_drive_services = {
+        // NB: for now, the only condition that
+        // dictates whether mock services should
+        // be enabled is if the Ethereum bridge
+        // is enabled at genesis
+        genesis.ethereum_bridge_params.is_some()
+    };
+    let enable_eth_oracle = {
+        // NB: we only enable the oracle if the
+        // Ethereum bridge is enabled at genesis
+        genesis.ethereum_bridge_params.is_some()
+    };
+    let services_cfg = MockServicesCfg {
+        auto_drive_services,
+        enable_eth_oracle,
+    };
+    create_node(test_dir, &genesis, keep_temp, services_cfg)
 }
 
 /// Create a mock ledger node.
@@ -89,7 +108,8 @@ fn create_node(
     base_dir: TestDir,
     genesis: &GenesisConfig,
     keep_temp: bool,
-) -> Result<MockNode> {
+    services_cfg: MockServicesCfg,
+) -> Result<(MockNode, MockServicesController)> {
     // look up the chain id from the global file.
     let chain_id = if let toml::Value::String(chain_id) =
         toml::from_str::<Table>(
@@ -119,26 +139,32 @@ fn create_node(
     );
 
     // instantiate and initialize the ledger node.
-    let (sender, recv) = tokio::sync::mpsc::unbounded_channel();
+    let MockServicesPackage {
+        auto_drive_services,
+        services,
+        shell_handlers,
+        controller,
+    } = mock_services(services_cfg);
     let node = MockNode {
         shell: Arc::new(Mutex::new(Shell::new(
             config::Ledger::new(
                 base_dir.path(),
                 chain_id.clone(),
-                TendermintMode::Validator
+                TendermintMode::Validator,
             ),
             wasm_dir,
-            sender,
-            None,
+            shell_handlers.tx_broadcaster,
+            shell_handlers.eth_oracle_channels,
             None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
-            Address::from_str("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
+            nam(),
         ))),
         test_dir: ManuallyDrop::new(base_dir),
         keep_temp,
-        _broadcast_recv: recv,
+        services: Arc::new(services),
         results: Arc::new(Mutex::new(vec![])),
+        auto_drive_services,
     };
     let init_req = namada_apps::facade::tower_abci::request::InitChain {
         time: Some(Timestamp {
@@ -156,8 +182,10 @@ fn create_node(
         locked
             .init_chain(init_req, 1)
             .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
+        // set the height of the first block (should be 1)
+        locked.wl_storage.storage.block.height = 1.into();
         locked.commit();
     }
 
-    Ok(node)
+    Ok((node, controller))
 }
