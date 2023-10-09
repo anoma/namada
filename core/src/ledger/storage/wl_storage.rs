@@ -62,7 +62,7 @@ where
         &self,
         hash: &Hash,
     ) -> Result<bool, super::Error> {
-        if self.write_log.has_replay_protection_key(hash) {
+        if self.write_log.has_replay_protection_entry(hash) {
             return Ok(true);
         }
 

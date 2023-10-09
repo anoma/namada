@@ -571,6 +571,7 @@ impl WriteLog {
             storage.address_gen = address_gen
         }
         self.block_write_log.clear();
+        self.replay_protection.clear();
         Ok(())
     }
 
@@ -666,7 +667,7 @@ impl WriteLog {
     }
 
     /// Check if the given tx hash has already been processed
-    pub fn has_replay_protection_key(&self, hash: &Hash) -> bool {
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> bool {
         match self.replay_protection.get(hash) {
             Some(v) => !matches!(v, ReProtStorageModification::Delete),
             None => false,
@@ -675,52 +676,58 @@ impl WriteLog {
 
     /// Write the transaction hash
     pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        match self
+        if self
             .replay_protection
             .insert(hash, ReProtStorageModification::Write)
+            .is_some()
         {
             // Cannot write an hash if other requests have already been
             // committed for the same hash
-            Some(_) => Err(Error::ReplayProtection(
-                "Requested a write over a previous request".to_string(),
-            )),
-            None => Ok(()),
-        }
-    }
-
-    /// Remove the transaction hash
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if let Some(ReProtStorageModification::Write) = self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Delete)
-        {
-            // Cannot delete an hash that still has to be written to
-            // storage, instead allow overwriting other deletes or finalize
-            // requests
-            return Err(Error::ReplayProtection(
-                "Requested a delete of an hash not yet committed to storage"
-                    .to_string(),
-            ));
+            return Err(Error::ReplayProtection(format!(
+                "Requested a write on hash {hash} over a previous request"
+            )));
         }
 
         Ok(())
     }
 
+    // FIXME: add a unit test to check the values inside the write log and
+    // storage for replay protection after a block
+    /// Remove the transaction hash
+    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        match self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Delete)
+        {
+            None => Ok(()),
+            // Allow overwriting a previous finalize request
+            Some(ReProtStorageModification::Finalize) => Ok(()),
+            Some(_) =>
+            // Cannot delete an hash that still has to be written to
+            // storage or has already been deleted
+            {
+                Err(Error::ReplayProtection(format!(
+                    "Requested a delete on hash {hash} not yet committed to \
+                     storage"
+                )))
+            }
+        }
+    }
+
     /// Move the transaction hash of the previous block to the list of all
-    /// blocks. This functions should be called at the end of the block
+    /// blocks. This functions should be called at the beginning of the block
     /// processing
     pub fn finalize_tx_hashes(&mut self, hash: Hash) -> Result<()> {
-        if let Some(ReProtStorageModification::Write) = self
+        if self
             .replay_protection
             .insert(hash, ReProtStorageModification::Finalize)
+            .is_some()
         {
-            // Cannot finalize a tx hash that has to be written in this
-            // block, else avoid finalizing if a delete request or another
-            // finalize request has been committed
-            return Err(Error::ReplayProtection(
-                "Requested a finalize on a hash not yet committed to storage"
-                    .to_string(),
-            ));
+            // Cannot finalize an hash if other requests have already been
+            // committed for the same hash
+            return Err(Error::ReplayProtection(format!(
+                "Requested a finalize on hash {hash} over a previous request"
+            )));
         }
 
         Ok(())
