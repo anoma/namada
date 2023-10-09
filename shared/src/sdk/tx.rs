@@ -2029,8 +2029,11 @@ pub async fn gen_ibc_shielded_transfer<
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom::<_, IO>(client, &args.token, Some(&source)).await;
+    let prefixed_denom = ibc_denom
+        .parse()
+        .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
     let token = namada_core::ledger::ibc::received_ibc_token(
-        &ibc_denom.parse().expect("Invalid IBC denom"),
+        &prefixed_denom,
         &src_port_id,
         &src_channel_id,
         &args.port_id,
@@ -2040,9 +2043,7 @@ pub async fn gen_ibc_shielded_transfer<
         Error::Other(format!("Getting IBC Token failed: error {e}"))
     })?;
     let validated_amount =
-        validate_amount::<_, IO>(client, args.amount, &token, false)
-            .await
-            .expect("expected to validate amount");
+        validate_amount::<_, IO>(client, args.amount, &token, false).await?;
 
     let shielded_transfer = shielded
         .gen_shielded_transfer::<_, IO>(
