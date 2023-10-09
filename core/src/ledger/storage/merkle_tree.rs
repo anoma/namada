@@ -657,7 +657,7 @@ pub struct Proof {
 }
 
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
-impl From<Proof> for crate::tendermint::merkle::proof::Proof {
+impl From<Proof> for crate::tendermint::merkle::proof::ProofOps {
     fn from(
         Proof {
             key,
@@ -667,7 +667,7 @@ impl From<Proof> for crate::tendermint::merkle::proof::Proof {
     ) -> Self {
         use prost::Message;
 
-        use crate::tendermint::merkle::proof::{Proof, ProofOp};
+        use crate::tendermint::merkle::proof::ProofOp;
 
         let mut data = vec![];
         sub_proof
@@ -690,7 +690,7 @@ impl From<Proof> for crate::tendermint::merkle::proof::Proof {
         };
 
         // Set ProofOps from leaf to root
-        Proof {
+        Self {
             ops: vec![sub_proof_op, base_proof_op],
         }
     }

@@ -39,7 +39,7 @@ use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
-use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint::merkle::proof::ProofOps;
 use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
 };
@@ -889,7 +889,7 @@ where
         key: &Key,
         value: merkle_tree::StorageBytes,
         height: BlockHeight,
-    ) -> Result<Proof> {
+    ) -> Result<ProofOps> {
         use std::array;
 
         if height > self.get_last_block_height() {
@@ -927,7 +927,7 @@ where
         &self,
         key: &Key,
         height: BlockHeight,
-    ) -> Result<Proof> {
+    ) -> Result<ProofOps> {
         if height > self.get_last_block_height() {
             Err(Error::Temporary {
                 error: format!(

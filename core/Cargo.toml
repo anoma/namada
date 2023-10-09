@@ -28,6 +28,7 @@ wasm-runtime = [
 
 abciplus = [
   "ibc",
+  "ibc-derive",
   "ibc-proto",
   "tendermint",
   "tendermint-proto",
@@ -68,8 +69,9 @@ ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 # TODO using the same version of tendermint-rs as we do here.
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs.git", rev = "206cb5fa74a7ca38038b937d202ae39fbbd63c19", features = ["serde"], optional = true}
-ibc-proto = {git = "https://github.com/heliaxdev/ibc-proto-rs.git", rev = "31892ee743b2af017d5629b2af419ee20b6100c7", default-features = false, optional = true}
+ibc = { version = "0.45.0", features = ["serde"], optional = true}
+ibc-derive = { version = "0.3.0", optional = true}
+ibc-proto = {version = "0.35.0", default-features = false, optional = true}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
@@ -90,8 +92,8 @@ rayon = {version = "=1.5.3", optional = true}
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-tendermint = { git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
-tendermint-proto = { git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7", optional = true}
+tendermint = { version = "0.33.2", optional = true}
+tendermint-proto = { version = "0.33.2", optional = true}
 thiserror.workspace = true
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing.workspace = true

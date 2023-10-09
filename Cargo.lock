@@ -710,21 +710,11 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
-dependencies = [
- "borsh-derive 0.10.3",
- "hashbrown 0.12.3",
-]
-
-[[package]]
-name = "borsh"
 version = "1.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41898277107b0d3f027593697912977397eba6ac39a55bdd2eb02c1d5d5013b5"
 dependencies = [
- "borsh-derive 1.0.0-alpha.4",
+ "borsh-derive 1.1.1",
  "cfg_aliases",
 ]
 
@@ -734,8 +724,8 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6441c552f230375d18e3cc377677914d2ca2b0d36e52129fe15450a2dce46775"
 dependencies = [
- "borsh-derive-internal 0.9.3",
- "borsh-schema-derive-internal 0.9.3",
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
  "proc-macro-crate 0.1.5",
  "proc-macro2",
  "syn 1.0.109",
@@ -743,22 +733,9 @@ dependencies = [
 
 [[package]]
 name = "borsh-derive"
-version = "0.10.3"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
-dependencies = [
- "borsh-derive-internal 0.10.3",
- "borsh-schema-derive-internal 0.10.3",
- "proc-macro-crate 0.1.5",
- "proc-macro2",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "1.0.0-alpha.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413cb435569fe499e89235f758304e0e7198016baa351d8f5827ea0f40526ce0"
+checksum = "318d18ba283f9aa5bfef1405996ce66c584127f401be1403729ec88b10adc772"
 dependencies = [
  "once_cell",
  "proc-macro-crate 1.3.1",
@@ -780,17 +757,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "borsh-ext"
 version = "1.0.0-alpha.4"
 source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.0.0-alpha.4#6bebf357002f96574ac37a28f547b6c88e91b799"
@@ -803,17 +769,6 @@ name = "borsh-schema-derive-internal"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdbd5696d8bfa21d53d9fe39a714a18538bad11492a42d066dbbc395fb1951c0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1225,7 +1180,7 @@ checksum = "1ba75b3d9449ecdccb27ecbc479fdc0b87fa2dd43d2f8298f9bf0e59aacc8dce"
 dependencies = [
  "once_cell",
  "owo-colors",
- "tracing-core 0.1.31",
+ "tracing-core",
  "tracing-error",
 ]
 
@@ -1632,6 +1587,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
+ "strsim",
  "syn 2.0.15",
 ]
 
@@ -1782,12 +1738,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
-name = "dyn-clone"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
-
-[[package]]
 name = "dynasm"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1839,6 +1789,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60f6d271ca33075c88028be6f04d502853d63a5ece419d269c15315d4fc1cf1d"
+dependencies = [
+ "pkcs8",
+ "signature 2.1.0",
+]
+
+[[package]]
 name = "ed25519-consensus"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1854,13 +1814,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-consensus"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c8465edc8ee7436ffea81d21a019b16676ee3db267aa8d5a8d729581ecf998b"
+dependencies = [
+ "curve25519-dalek-ng",
+ "hex",
+ "rand_core 0.6.4",
+ "sha2 0.9.9",
+ "zeroize",
+]
+
+[[package]]
 name = "ed25519-dalek"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
- "ed25519",
+ "ed25519 1.5.3",
  "merlin",
  "rand 0.7.3",
  "serde 1.0.163",
@@ -1968,15 +1941,6 @@ name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
-
-[[package]]
-name = "erased-serde"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f2b0c2380453a92ea8b6c8e5f64ecaafccddde8ceab55ff7a8ac1029f894569"
-dependencies = [
- "serde 1.0.163",
-]
 
 [[package]]
 name = "errno"
@@ -2248,7 +2212,7 @@ dependencies = [
  "serde 1.0.163",
  "serde_json",
  "thiserror",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -2273,8 +2237,8 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "tracing 0.1.37",
- "tracing-futures 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tracing",
+ "tracing-futures",
  "url",
 ]
 
@@ -2304,8 +2268,8 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "tracing 0.1.37",
- "tracing-futures 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tracing",
+ "tracing-futures",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2329,7 +2293,7 @@ dependencies = [
  "rand 0.8.5",
  "sha2 0.10.6",
  "thiserror",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -2839,7 +2803,7 @@ dependencies = [
  "slab",
  "tokio",
  "tokio-util 0.7.8",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -3043,7 +3007,7 @@ dependencies = [
  "socket2",
  "tokio",
  "tower-service",
- "tracing 0.1.37",
+ "tracing",
  "want",
 ]
 
@@ -3134,17 +3098,16 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.41.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=206cb5fa74a7ca38038b937d202ae39fbbd63c19#206cb5fa74a7ca38038b937d202ae39fbbd63c19"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ac37443194c5b5167e56cc10b79c69b9a08b2386a14a9788449f0754db4c590"
 dependencies = [
  "bytes",
- "cfg-if 1.0.0",
  "derive_more",
  "displaydoc",
- "dyn-clone",
- "erased-serde",
+ "ibc-derive",
  "ibc-proto",
- "ics23",
+ "ics23 0.10.2",
  "num-traits 0.2.15",
  "parking_lot",
  "primitive-types",
@@ -3155,30 +3118,41 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "subtle-encoding",
- "tendermint",
+ "tendermint 0.33.2",
  "tendermint-light-client-verifier",
- "tendermint-proto",
+ "tendermint-proto 0.33.2",
  "tendermint-testgen",
  "time",
- "tracing 0.1.37",
+ "tracing",
  "uint",
 ]
 
 [[package]]
+name = "ibc-derive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92f1528535e9ca495badb76c143bdd4763c1c9d987f59d1f8b47963ba0c11674"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.15",
+]
+
+[[package]]
 name = "ibc-proto"
-version = "0.30.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=31892ee743b2af017d5629b2af419ee20b6100c7#31892ee743b2af017d5629b2af419ee20b6100c7"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "459ccbab879b749bf500ae13244593fa16fc64c1b3159f6b0753c169625a1e23"
 dependencies = [
  "base64 0.21.0",
- "borsh 0.10.3",
  "bytes",
  "flex-error",
- "parity-scale-codec",
+ "ics23 0.10.2",
  "prost",
- "scale-info",
  "serde 1.0.163",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.33.2",
 ]
 
 [[package]]
@@ -3192,6 +3166,23 @@ dependencies = [
  "hex",
  "prost",
  "ripemd",
+ "sha2 0.10.6",
+ "sha3",
+]
+
+[[package]]
+name = "ics23"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "442d4bab37956e76f739c864f246c825d87c0bb7f9afa65660c57833c91bf6d4"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "hex",
+ "informalsystems-pbjson",
+ "prost",
+ "ripemd",
+ "serde 1.0.163",
  "sha2 0.10.6",
  "sha3",
 ]
@@ -3307,6 +3298,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "informalsystems-pbjson"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4eecd90f87bea412eac91c6ef94f6b1e390128290898cbe14f2b926787ae1fb"
+dependencies = [
+ "base64 0.13.1",
+ "serde 1.0.163",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3361,7 +3362,7 @@ checksum = "adcf93614601c8129ddf72e2d5633df827ba6551541c6d8c59520a371475be1f"
 dependencies = [
  "hermit-abi 0.3.1",
  "io-lifetimes",
- "rustix 0.37.13",
+ "rustix 0.37.1",
  "windows-sys 0.48.0",
 ]
 
@@ -3713,7 +3714,7 @@ dependencies = [
  "minreq",
  "rand_core 0.6.4",
  "redjubjub",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -3868,14 +3869,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.6"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b9d9a46eff5b4ff64b45a9e316a6d1e0bc719ef429cbec4dc630684212bfdf9"
+checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
 dependencies = [
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.45.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -3963,14 +3964,14 @@ dependencies = [
  "sha2 0.9.9",
  "slip10_ed25519",
  "tempfile",
- "tendermint-rpc",
+ "tendermint-rpc 0.33.2",
  "test-log",
  "thiserror",
  "tiny-bip39",
  "tiny-hderive",
  "tokio",
  "toml 0.5.9",
- "tracing 0.1.37",
+ "tracing",
  "tracing-subscriber",
  "wasm-instrument",
  "wasmer",
@@ -4008,7 +4009,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "directories",
- "ed25519-consensus",
+ "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-bridge-events",
  "ethbridge-events",
@@ -4057,7 +4058,7 @@ dependencies = [
  "sysinfo",
  "tar",
  "tempfile",
- "tendermint-config",
+ "tendermint-config 0.33.2",
  "test-log",
  "thiserror",
  "tokio",
@@ -4066,7 +4067,7 @@ dependencies = [
  "tonic",
  "tower",
  "tower-abci",
- "tracing 0.1.37",
+ "tracing",
  "tracing-appender",
  "tracing-log",
  "tracing-subscriber",
@@ -4104,7 +4105,7 @@ dependencies = [
  "chrono",
  "data-encoding",
  "derivative",
- "ed25519-consensus",
+ "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-structs",
  "eyre",
@@ -4112,8 +4113,9 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "ibc",
+ "ibc-derive",
  "ibc-proto",
- "ics23",
+ "ics23 0.9.0",
  "impl-num-traits",
  "index-set",
  "itertools 0.10.5",
@@ -4136,14 +4138,14 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "sparse-merkle-tree",
- "tendermint",
- "tendermint-proto",
+ "tendermint 0.33.2",
+ "tendermint-proto 0.33.2",
  "test-log",
  "thiserror",
  "tiny-keccak",
  "toml 0.5.9",
  "tonic-build",
- "tracing 0.1.37",
+ "tracing",
  "tracing-subscriber",
  "uint",
  "zeroize",
@@ -4178,11 +4180,11 @@ dependencies = [
  "rand 0.8.5",
  "serde 1.0.163",
  "serde_json",
- "tendermint",
- "tendermint-proto",
- "tendermint-rpc",
+ "tendermint 0.23.6",
+ "tendermint-proto 0.23.6",
+ "tendermint-rpc 0.23.6",
  "toml 0.5.9",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -4210,7 +4212,7 @@ dependencies = [
  "proptest-state-machine",
  "test-log",
  "thiserror",
- "tracing 0.1.37",
+ "tracing",
  "tracing-subscriber",
  "yansi",
 ]
@@ -4253,13 +4255,13 @@ dependencies = [
  "sha2 0.9.9",
  "slip10_ed25519",
  "tempfile",
- "tendermint-rpc",
+ "tendermint-rpc 0.23.6",
  "thiserror",
  "tiny-bip39",
  "tiny-hderive",
  "tokio",
  "toml 0.5.9",
- "tracing 0.1.37",
+ "tracing",
  "wasmtimer",
  "zeroize",
 ]
@@ -4318,7 +4320,7 @@ dependencies = [
  "test-log",
  "tokio",
  "toml 0.5.9",
- "tracing 0.1.37",
+ "tracing",
  "tracing-subscriber",
 ]
 
@@ -5754,16 +5756,16 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.37.13"
+version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f79bef90eb6d984c72722595b5b1348ab39275a5e5123faca6863bf07d75a4e0"
+checksum = "d4790277f605573dd24b6751701e0823582a63c7cafc095e427e6c66e45dd75e"
 dependencies = [
  "bitflags 1.2.1",
  "errno",
  "io-lifetimes",
  "libc",
  "linux-raw-sys 0.3.7",
- "windows-sys 0.48.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -6357,7 +6359,7 @@ dependencies = [
  "blake2b-rs",
  "borsh 1.0.0-alpha.4",
  "cfg-if 1.0.0",
- "ics23",
+ "ics23 0.9.0",
  "sha2 0.9.9",
 ]
 
@@ -6487,9 +6489,9 @@ dependencies = [
 
 [[package]]
 name = "syn_derive"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae6eef0000c4a12ecdfd7873ea84a8b5aab5e44db72e38e07b028a25386f29a5"
+checksum = "1329189c02ff984e9736652b1631330da25eaa6bc639089ed4915d25446cbe7b"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -6549,7 +6551,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "fastrand",
  "redox_syscall 0.3.5",
- "rustix 0.37.13",
+ "rustix 0.37.1",
  "windows-sys 0.45.0",
 ]
 
@@ -6560,7 +6562,7 @@ source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb
 dependencies = [
  "async-trait",
  "bytes",
- "ed25519",
+ "ed25519 1.5.3",
  "ed25519-dalek",
  "flex-error",
  "futures",
@@ -6576,7 +6578,36 @@ dependencies = [
  "signature 1.6.4",
  "subtle 2.4.1",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.23.6",
+ "time",
+ "zeroize",
+]
+
+[[package]]
+name = "tendermint"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c35fe4fd24a7715571814c22416dbc40ec0f2a6e3cce75d73e19699faecd246"
+dependencies = [
+ "bytes",
+ "digest 0.10.6",
+ "ed25519 2.2.2",
+ "ed25519-consensus 2.1.0",
+ "flex-error",
+ "futures",
+ "num-traits 0.2.15",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde 1.0.163",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.10.6",
+ "signature 2.1.0",
+ "subtle 2.4.1",
+ "subtle-encoding",
+ "tendermint-proto 0.33.2",
  "time",
  "zeroize",
 ]
@@ -6589,41 +6620,60 @@ dependencies = [
  "flex-error",
  "serde 1.0.163",
  "serde_json",
- "tendermint",
+ "tendermint 0.23.6",
+ "toml 0.5.9",
+ "url",
+]
+
+[[package]]
+name = "tendermint-config"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a213a026dfc1c68468160bee24bf128e26002170abc123678ecfbe5ff37f91d"
+dependencies = [
+ "flex-error",
+ "serde 1.0.163",
+ "serde_json",
+ "tendermint 0.33.2",
  "toml 0.5.9",
  "url",
 ]
 
 [[package]]
 name = "tendermint-light-client"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4ca7fd6b7533e44f18efcff6385d6eceff990b3828e232d8da8ca519514d73"
 dependencies = [
  "contracts",
  "crossbeam-channel 0.4.4",
  "derive_more",
  "flex-error",
  "futures",
+ "regex",
  "serde 1.0.163",
  "serde_cbor",
  "serde_derive",
+ "serde_json",
  "static_assertions",
- "tendermint",
+ "tendermint 0.33.2",
  "tendermint-light-client-verifier",
- "tendermint-rpc",
+ "tendermint-rpc 0.33.2",
  "time",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680639f67d51eceb700bff18b45b584373ec94ee0d7ffe61f4ca6c54ed7787ff"
 dependencies = [
  "derive_more",
  "flex-error",
  "serde 1.0.163",
- "tendermint",
+ "tendermint 0.33.2",
  "time",
 ]
 
@@ -6631,6 +6681,24 @@ dependencies = [
 name = "tendermint-proto"
 version = "0.23.6"
 source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive",
+ "num-traits 0.2.15",
+ "prost",
+ "prost-types",
+ "serde 1.0.163",
+ "serde_bytes",
+ "subtle-encoding",
+ "time",
+]
+
+[[package]]
+name = "tendermint-proto"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "639e5adffd77220d238a800a72c74c98d7e869290a6e4494c10b6b4e8f702f02"
 dependencies = [
  "bytes",
  "flex-error",
@@ -6654,23 +6722,54 @@ dependencies = [
  "flex-error",
  "futures",
  "getrandom 0.2.9",
- "http",
- "hyper",
- "hyper-proxy",
- "hyper-rustls",
  "peg",
  "pin-project",
  "serde 1.0.163",
  "serde_bytes",
  "serde_json",
  "subtle-encoding",
- "tendermint",
- "tendermint-config",
- "tendermint-proto",
+ "tendermint 0.23.6",
+ "tendermint-config 0.23.6",
+ "tendermint-proto 0.23.6",
  "thiserror",
  "time",
  "tokio",
- "tracing 0.1.37",
+ "tracing",
+ "url",
+ "uuid 0.8.2",
+ "walkdir",
+]
+
+[[package]]
+name = "tendermint-rpc"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4df40d6d298fdca6cc5af67c85eb62c1113b5834ca321bde30240c919d4912b"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "flex-error",
+ "futures",
+ "getrandom 0.2.9",
+ "http",
+ "hyper",
+ "hyper-proxy",
+ "hyper-rustls",
+ "peg",
+ "pin-project",
+ "semver 1.0.17",
+ "serde 1.0.163",
+ "serde_bytes",
+ "serde_json",
+ "subtle 2.4.1",
+ "subtle-encoding",
+ "tendermint 0.33.2",
+ "tendermint-config 0.33.2",
+ "tendermint-proto 0.33.2",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
  "url",
  "uuid 0.8.2",
  "walkdir",
@@ -6678,16 +6777,17 @@ dependencies = [
 
 [[package]]
 name = "tendermint-testgen"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6768bef6580abe3987cda669dc02fdfb18593e763ff2f4976ef6c58f20bde90a"
 dependencies = [
- "ed25519-dalek",
+ "ed25519-consensus 2.1.0",
  "gumdrop",
  "serde 1.0.163",
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint",
+ "tendermint 0.33.2",
  "time",
 ]
 
@@ -6962,7 +7062,7 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -7036,8 +7136,8 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
- "tracing 0.1.37",
- "tracing-futures 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tracing",
+ "tracing-futures",
 ]
 
 [[package]]
@@ -7071,25 +7171,26 @@ dependencies = [
  "tokio-util 0.7.8",
  "tower-layer",
  "tower-service",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
 name = "tower-abci"
-version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=cf9573dc02eba0faf1f9807244b156630e4c18d1#cf9573dc02eba0faf1f9807244b156630e4c18d1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a27715826a50956390a46848fe47ece6f75ec19384afd4da98b740873630f4e4"
 dependencies = [
  "bytes",
  "futures",
  "pin-project",
  "prost",
- "tendermint-proto",
+ "tendermint 0.33.2",
+ "tendermint-proto 0.33.2",
  "tokio",
  "tokio-stream",
  "tokio-util 0.6.10",
  "tower",
- "tracing 0.1.30",
- "tracing-tower",
+ "tracing",
 ]
 
 [[package]]
@@ -7099,30 +7200,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c20c8dbed6283a09604c3e69b4b7eeb54e298b8a600d4d5ecb5ad39de609f1d0"
 
 [[package]]
-name = "tower-make"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce50370d644a0364bf4877ffd4f76404156a248d104e2cc234cd391ea5cdc965"
-dependencies = [
- "tower-service",
-]
-
-[[package]]
 name = "tower-service"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
-
-[[package]]
-name = "tracing"
-version = "0.1.30"
-source = "git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30#df4ba17d857db8ba1b553f7b293ac8ba967a42f8"
-dependencies = [
- "cfg-if 1.0.0",
- "pin-project-lite",
- "tracing-attributes 0.1.19",
- "tracing-core 0.1.22",
-]
 
 [[package]]
 name = "tracing"
@@ -7133,8 +7214,8 @@ dependencies = [
  "cfg-if 1.0.0",
  "log",
  "pin-project-lite",
- "tracing-attributes 0.1.24",
- "tracing-core 0.1.31",
+ "tracing-attributes",
+ "tracing-core",
 ]
 
 [[package]]
@@ -7150,16 +7231,6 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.19"
-source = "git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30#df4ba17d857db8ba1b553f7b293ac8ba967a42f8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "tracing-attributes"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f57e3ca2a01450b1a921183a9c9cbfda207fd822cef4ccb00a65402cbba7a74"
@@ -7167,14 +7238,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.15",
-]
-
-[[package]]
-name = "tracing-core"
-version = "0.1.22"
-source = "git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30#df4ba17d857db8ba1b553f7b293ac8ba967a42f8"
-dependencies = [
- "lazy_static",
 ]
 
 [[package]]
@@ -7193,7 +7256,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d686ec1c0f384b1277f097b2f279a2ecc11afe8c133c1aabf036a27cb4cd206e"
 dependencies = [
- "tracing 0.1.37",
+ "tracing",
  "tracing-subscriber",
 ]
 
@@ -7204,16 +7267,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97d095ae15e245a057c8e8451bab9b3ee1e1f68e9ba2b4fbc18d0ac5237835f2"
 dependencies = [
  "pin-project",
- "tracing 0.1.37",
-]
-
-[[package]]
-name = "tracing-futures"
-version = "0.2.5"
-source = "git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30#df4ba17d857db8ba1b553f7b293ac8ba967a42f8"
-dependencies = [
- "pin-project-lite",
- "tracing 0.1.30",
+ "tracing",
 ]
 
 [[package]]
@@ -7224,7 +7278,7 @@ checksum = "78ddad33d2d10b1ed7eb9d1f518a5674713876e97e5bb9b7345a7984fbb4f922"
 dependencies = [
  "lazy_static",
  "log",
- "tracing-core 0.1.31",
+ "tracing-core",
 ]
 
 [[package]]
@@ -7234,7 +7288,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc6b213177105856957181934e4920de57730fc69bf42c37ee5bb664d406d9e1"
 dependencies = [
  "serde 1.0.163",
- "tracing-core 0.1.31",
+ "tracing-core",
 ]
 
 [[package]]
@@ -7251,24 +7305,10 @@ dependencies = [
  "serde_json",
  "sharded-slab",
  "thread_local",
- "tracing 0.1.37",
- "tracing-core 0.1.31",
+ "tracing",
+ "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "tracing-tower"
-version = "0.1.0"
-source = "git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30#df4ba17d857db8ba1b553f7b293ac8ba967a42f8"
-dependencies = [
- "futures",
- "pin-project-lite",
- "tower-layer",
- "tower-make",
- "tower-service",
- "tracing 0.1.30",
- "tracing-futures 0.2.5 (git+https://github.com/tokio-rs/tracing/?tag=tracing-0.1.30)",
 ]
 
 [[package]]
@@ -7504,7 +7544,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util 0.7.8",
  "tower-service",
- "tracing 0.1.37",
+ "tracing",
 ]
 
 [[package]]
@@ -7683,7 +7723,7 @@ dependencies = [
  "rayon",
  "smallvec",
  "target-lexicon",
- "tracing 0.1.37",
+ "tracing",
  "wasmer-compiler",
  "wasmer-types",
 ]
@@ -7754,7 +7794,7 @@ dependencies = [
  "rkyv",
  "serde 1.0.163",
  "tempfile",
- "tracing 0.1.37",
+ "tracing",
  "wasmer-artifact",
  "wasmer-compiler",
  "wasmer-engine",

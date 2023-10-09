@@ -8,7 +8,6 @@ use sha2::Digest;
 use super::storage::IbcStorageContext;
 use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
 use crate::ibc::core::ics02_client::height::Height;
@@ -26,12 +25,9 @@ use crate::ibc::core::ics24_host::identifier::{
 };
 use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::ContextError;
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::client_state::MockClientState;
-#[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-use crate::ibc::mock::consensus_state::MockConsensusState;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
+use crate::ledger::ibc::context::{AnyClientState, AnyConsensusState};
 use crate::ledger::ibc::storage;
 use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
 use crate::ledger::storage_api;
@@ -46,10 +42,7 @@ pub type Result<T> = std::result::Result<T, ContextError>;
 /// Context to handle typical IBC data
 pub trait IbcCommonContext: IbcStorageContext {
     /// Get the ClientState
-    fn client_state(
-        &self,
-        client_id: &ClientId,
-    ) -> Result<Box<dyn ClientState>> {
+    fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState> {
         let key = storage::client_state_key(client_id);
         match self.read_bytes(&key)? {
             Some(value) => {
@@ -68,31 +61,21 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn store_client_state(
         &mut self,
         client_id: &ClientId,
-        client_state: Box<dyn ClientState>,
+        client_state: AnyClientState,
     ) -> Result<()> {
         let key = storage::client_state_key(client_id);
-        let bytes = client_state.encode_vec();
+        let bytes = Protobuf::<Any>::encode_vec(&client_state);
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
     /// Decode ClientState from Any
-    fn decode_client_state(
-        &self,
-        client_state: Any,
-    ) -> Result<Box<dyn ClientState>> {
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
-            return Ok(cs.into_box());
-        }
-
-        if let Ok(cs) = TmClientState::try_from(client_state) {
-            return Ok(cs.into_box());
-        }
-
-        Err(ClientError::ClientSpecific {
-            description: "Unknown client state".to_string(),
-        }
-        .into())
+    fn decode_client_state(&self, client_state: Any) -> Result<AnyClientState> {
+        let cs = TmClientState::try_from(client_state).map_err(|_| {
+            ContextError::from(ClientError::ClientSpecific {
+                description: "Unknown client state".to_string(),
+            })
+        })?;
+        Ok(cs)
     }
 
     /// Get the ConsensusState
@@ -100,7 +83,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         &self,
         client_id: &ClientId,
         height: Height,
-    ) -> Result<Box<dyn ConsensusState>> {
+    ) -> Result<AnyConsensusState> {
         let key = storage::consensus_state_key(client_id, height);
         match self.read_bytes(&key)? {
             Some(value) => {
@@ -121,7 +104,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         &mut self,
         client_id: &ClientId,
         height: Height,
-        consensus_state: Box<dyn ConsensusState>,
+        consensus_state: AnyConsensusState,
     ) -> Result<()> {
         let key = storage::consensus_state_key(client_id, height);
         let bytes = consensus_state.encode_vec();
@@ -132,30 +115,80 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn decode_consensus_state(
         &self,
         consensus_state: Any,
-    ) -> Result<Box<dyn ConsensusState>> {
-        #[cfg(any(feature = "ibc-mocks-abcipp", feature = "ibc-mocks"))]
-        if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
-            return Ok(cs.into_box());
-        }
-
-        if let Ok(cs) = TmConsensusState::try_from(consensus_state) {
-            return Ok(cs.into_box());
-        }
-
-        Err(ClientError::ClientSpecific {
-            description: "Unknown consensus state".to_string(),
-        }
-        .into())
+    ) -> Result<AnyConsensusState> {
+        let cs = TmConsensusState::try_from(consensus_state).map_err(|_| {
+            ContextError::from(ClientError::ClientSpecific {
+                description: "Unknown consensus state".to_string(),
+            })
+        })?;
+        Ok(cs.into())
     }
 
     /// Decode ConsensusState from bytes
     fn decode_consensus_state_value(
         &self,
         consensus_state: Vec<u8>,
-    ) -> Result<Box<dyn ConsensusState>> {
+    ) -> Result<AnyConsensusState> {
         let any =
             Any::decode(&consensus_state[..]).map_err(ClientError::Decode)?;
         self.decode_consensus_state(any)
+    }
+
+    /// Get the next consensus state after the given height
+    fn next_consensus_state(
+        &self,
+        client_id: &ClientId,
+        height: &Height,
+    ) -> Result<Option<AnyConsensusState>> {
+        let prefix = storage::consensus_state_prefix(client_id);
+        let mut iter = self.iter_prefix(&prefix)?;
+        let mut lowest_height_value = None;
+        while let Some((key, value)) = self.iter_next(&mut iter)? {
+            let key = Key::parse(key).expect("the key should be parsable");
+            let consensus_height = storage::consensus_height(&key)
+                .expect("the key should have a height");
+            if consensus_height > *height {
+                lowest_height_value = match lowest_height_value {
+                    Some((lowest, _)) if consensus_height < lowest => {
+                        Some((consensus_height, value))
+                    }
+                    Some(_) => continue,
+                    None => Some((consensus_height, value)),
+                };
+            }
+        }
+        lowest_height_value
+            .map(|(_, value)| self.decode_consensus_state_value(value))
+            .transpose()
+    }
+
+    /// Get the previous consensus state before the given height
+    fn prev_consensus_state(
+        &self,
+        client_id: &ClientId,
+        height: &Height,
+    ) -> Result<Option<AnyConsensusState>> {
+        let prefix = storage::consensus_state_prefix(client_id);
+        // for iterator
+        let mut iter = self.iter_prefix(&prefix)?;
+        let mut highest_height_value = None;
+        while let Some((key, value)) = self.iter_next(&mut iter)? {
+            let key = Key::parse(key).expect("the key should be parsable");
+            let consensus_height = storage::consensus_height(&key)
+                .expect("the key should have the height");
+            if consensus_height < *height {
+                highest_height_value = match highest_height_value {
+                    Some((highest, _)) if consensus_height > highest => {
+                        Some((consensus_height, value))
+                    }
+                    Some(_) => continue,
+                    None => Some((consensus_height, value)),
+                };
+            }
+        }
+        highest_height_value
+            .map(|(_, value)| self.decode_consensus_state_value(value))
+            .transpose()
     }
 
     /// Get the client update time
@@ -188,11 +221,7 @@ pub trait IbcCommonContext: IbcStorageContext {
                 "The client timestamp is invalid: ID {client_id}",
             ),
         })?;
-        self.write_bytes(
-            &key,
-            time.encode_vec().expect("encoding shouldn't fail"),
-        )
-        .map_err(ContextError::from)
+        self.write_bytes(&key, time.encode_vec()).map_err(ContextError::from)
     }
 
     /// Get the client update height
@@ -235,7 +264,7 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn host_consensus_state(
         &self,
         height: &Height,
-    ) -> Result<Box<dyn ConsensusState>> {
+    ) -> Result<AnyConsensusState> {
         let height = BlockHeight(height.revision_height());
         let header = self.get_block_header(height)?.ok_or_else(|| {
             ContextError::from(ClientError::Other {
@@ -253,7 +282,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             .expect("The hash should be converted");
         let consensus_state =
             TmConsensusState::new(commitment_root, time, next_validators_hash);
-        Ok(consensus_state.into_box())
+        Ok(consensus_state.into())
     }
 
     /// Get the max expected time per block

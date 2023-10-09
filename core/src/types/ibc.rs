@@ -74,7 +74,7 @@ mod ibc_rs_conversion {
     use crate::ibc::core::events::{
         Error as IbcEventError, IbcEvent as RawIbcEvent,
     };
-    use crate::tendermint_proto::abci::Event as AbciEvent;
+    use crate::tendermint::abci::Event as AbciEvent;
     use crate::types::masp::PaymentAddress;
 
     #[allow(missing_docs)]

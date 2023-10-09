@@ -126,8 +126,8 @@ slip10_ed25519 = "0.1.3"
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint-config = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}
-tendermint-light-client = {git = "https://github.com/heliaxdev/tendermint-rs.git", rev = "b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"}
+tendermint-config = "0.33.2"
+tendermint-light-client = "0.33.2"
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = "0.3.0"
@@ -139,7 +139,7 @@ tonic = "0.8.3"
 tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "cf9573dc02eba0faf1f9807244b156630e4c18d1"}
+tower-abci = "0.10.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
