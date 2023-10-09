@@ -1,3 +1,5 @@
+extern crate alloc;
+
 pub use namada_core::proto;
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
@@ -29,6 +31,7 @@ pub mod tx;
 pub mod control_flow;
 pub mod error;
 pub mod events;
+pub(crate) mod internal_macros;
 pub mod io;
 pub mod queries;
 pub mod wallet;
