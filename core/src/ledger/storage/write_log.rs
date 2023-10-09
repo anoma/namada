@@ -691,8 +691,6 @@ impl WriteLog {
         Ok(())
     }
 
-    // FIXME: add a unit test to check the values inside the write log and
-    // storage for replay protection after a block
     /// Remove the transaction hash
     pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
         match self
@@ -956,6 +954,98 @@ mod tests {
         assert_eq!(value.expect("no read value"), val3);
         let (value, _) = storage.read(&key4).expect("read failed");
         assert_eq!(value, None);
+    }
+
+    #[test]
+    fn test_replay_protection_commit() {
+        let mut storage =
+            crate::ledger::storage::testing::TestStorage::default();
+        let mut write_log = WriteLog::default();
+        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
+
+        // write some replay protection keys
+        write_log
+            .write_tx_hash(Hash::sha256("tx1".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx2".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx3".as_bytes()))
+            .unwrap();
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        for tx in ["tx1", "tx2", "tx3"] {
+            assert!(
+                storage
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
+        }
+
+        // write some replay protection keys
+        write_log
+            .write_tx_hash(Hash::sha256("tx4".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx5".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx6".as_bytes()))
+            .unwrap();
+
+        // delete previous hash
+        write_log
+            .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
+            .unwrap();
+
+        // finalize previous hashes
+        for tx in ["tx2", "tx3"] {
+            write_log
+                .finalize_tx_hashes(Hash::sha256(tx.as_bytes()))
+                .unwrap();
+        }
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
+            assert!(
+                storage
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
+        }
+        assert!(
+            !storage
+                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+                .expect("read failed")
+        );
+
+        // try to delete finalized hash which shouldn't work
+        write_log
+            .delete_tx_hash(Hash::sha256("tx2".as_bytes()))
+            .unwrap();
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        assert!(
+            storage
+                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
+                .expect("read failed")
+        );
     }
 
     prop_compose! {

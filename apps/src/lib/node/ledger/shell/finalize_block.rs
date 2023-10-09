@@ -36,6 +36,8 @@ use crate::facade::tendermint_proto::abci::{
 };
 use crate::node::ledger::shell::stats::InternalStats;
 
+// FIXME: optimization with replay proteciton key removal
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -86,6 +88,14 @@ where
              {:?}",
             self.wl_storage.storage.update_epoch_blocks_delay
         );
+
+        // Finalize the transactions' hashes from the previous block
+        for hash in self.wl_storage.storage.iter_replay_protection() {
+            self.wl_storage
+                .write_log
+                .finalize_tx_hashes(hash)
+                .expect("Failed tx hashes finalization")
+        }
 
         if new_epoch {
             namada::ledger::storage::update_allowed_conversions(
@@ -536,14 +546,6 @@ where
                 }
             }
             response.events.push(tx_event);
-        }
-
-        // Finalize the transactions' hashes from the previous block
-        for hash in self.wl_storage.storage.iter_replay_protection() {
-            self.wl_storage
-                .write_log
-                .finalize_tx_hashes(hash)
-                .expect("Failed tx hashes finalization")
         }
 
         stats.set_tx_cache_size(
@@ -2281,7 +2283,7 @@ mod test_finalize_block {
             replay_protection::get_replay_protection_last_key(
                 &wrapper_tx.header_hash(),
             );
-        let mut decrypted_tx = wrapper_tx;
+        let mut decrypted_tx = wrapper_tx.clone();
 
         decrypted_tx.update_header(TxType::Raw);
         let decrypted_hash_key =
@@ -2314,8 +2316,20 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transactions' hashes in storage
-        assert!(shell.shell.wl_storage.has_key(&wrapper_hash_key).unwrap());
-        assert!(shell.shell.wl_storage.has_key(&decrypted_hash_key).unwrap());
+        assert!(
+            shell
+                .shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&wrapper_tx.header_hash())
+        );
+        assert!(
+            shell
+                .shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_tx.header_hash())
+        );
         // Check that non of the hashes is present in the merkle tree
         assert!(
             !shell
@@ -2345,6 +2359,8 @@ mod test_finalize_block {
     fn test_remove_tx_hash() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
 
         let mut wasm_path = top_level_directory();
         wasm_path.push("wasm_for_tests/tx_no_op.wasm");
@@ -2371,13 +2387,17 @@ mod test_finalize_block {
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
         // Write inner hash in storage
+        let inner_hash_subkey =
+            replay_protection::get_replay_protection_last_subkey(
+                &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
+            );
         let inner_hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
         );
         shell
             .wl_storage
             .storage
-            .write(&inner_hash_key, vec![])
+            .write_replay_protection_entry(&mut batch, &inner_hash_subkey)
             .expect("Test failed");
 
         let processed_tx = ProcessedTx {
@@ -2445,14 +2465,6 @@ mod test_finalize_block {
             None,
         )));
 
-        let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(
-                &wrapper.header_hash(),
-            );
-        let inner_hash_key = replay_protection::get_replay_protection_last_key(
-            &wrapper.clone().update_header(TxType::Raw).header_hash(),
-        );
-
         let processed_tx = ProcessedTx {
             tx: wrapper.to_bytes(),
             result: TxResult {
@@ -2477,15 +2489,12 @@ mod test_finalize_block {
         assert!(
             shell
                 .wl_storage
-                .has_key(&wrapper_hash_key)
-                .expect("Test failed")
+                .write_log
+                .has_replay_protection_entry(&wrapper.header_hash())
         );
-        assert!(
-            !shell
-                .wl_storage
-                .has_key(&inner_hash_key)
-                .expect("Test failed")
-        )
+        assert!(!shell.wl_storage.write_log.has_replay_protection_entry(
+            &wrapper.update_header(TxType::Raw).header_hash()
+        ))
     }
 
     // Test that if the fee payer doesn't have enough funds for fee payment the

@@ -2455,13 +2455,15 @@ mod tests {
         )));
 
         // Write wrapper hash to storage
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(&wrapper_hash);
+            replay_protection::get_replay_protection_last_subkey(&wrapper_hash);
         shell
             .wl_storage
             .storage
-            .write(&wrapper_hash_key, wrapper_hash)
+            .write_replay_protection_entry(&mut batch, &wrapper_hash_key)
             .expect("Test failed");
 
         // Try wrapper tx replay attack
@@ -2497,11 +2499,13 @@ mod tests {
             wrapper.clone().update_header(TxType::Raw).header_hash();
         // Write inner hash in storage
         let inner_hash_key =
-            replay_protection::get_replay_protection_last_key(&inner_tx_hash);
+            replay_protection::get_replay_protection_last_subkey(
+                &inner_tx_hash,
+            );
         shell
             .wl_storage
             .storage
-            .write(&inner_hash_key, inner_tx_hash)
+            .write_replay_protection_entry(&mut batch, &inner_hash_key)
             .expect("Test failed");
 
         // Try inner tx replay attack

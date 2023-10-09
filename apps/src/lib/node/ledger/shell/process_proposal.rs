@@ -2132,14 +2132,16 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::get_replay_protection_last_key(
+        let hash_key = replay_protection::get_replay_protection_last_subkey(
             &wrapper_unsigned_hash,
         );
         shell
             .wl_storage
             .storage
-            .write(&hash_key, vec![])
+            .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
         // Run validation
@@ -2268,13 +2270,15 @@ mod test_process_proposal {
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
-        let hash_key = replay_protection::get_replay_protection_last_key(
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
+        let hash_key = replay_protection::get_replay_protection_last_subkey(
             &inner_unsigned_hash,
         );
         shell
             .wl_storage
             .storage
-            .write(&hash_key, vec![])
+            .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
         // Run validation
