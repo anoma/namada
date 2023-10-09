@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use namada::sdk::queries::Client;
 use namada::sdk::rpc::wait_until_node_is_synched;
 use namada::tendermint_rpc::HttpClient;
@@ -32,4 +30,4 @@ pub struct CliIo;
 #[async_trait::async_trait(?Send)]
 impl Io for CliIo {}
 
-pub struct CliApi<IO: Io = CliIo>(PhantomData<IO>);
+pub struct CliApi;

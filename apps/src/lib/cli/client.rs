@@ -15,8 +15,8 @@ fn error() -> Report {
     eyre!("Fatal error")
 }
 
-impl<IO: Io> CliApi<IO> {
-    pub async fn handle_client_command<C>(
+impl CliApi {
+    pub async fn handle_client_command<C, IO: Io>(
         client: Option<C>,
         cmd: cli::NamadaClient,
         io: &IO,
@@ -139,11 +139,12 @@ impl<IO: Io> CliApi<IO> {
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = NamadaImpl::new(
+                        let namada = NamadaImpl::native_new(
                             &client,
                             &mut ctx.wallet,
                             &mut ctx.shielded,
                             io,
+                            ctx.native_token,
                         );
                         tx::submit_init_validator(
                             &namada,

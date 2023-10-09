@@ -2,28 +2,26 @@
 //! generic IO. The defaults are the obvious Rust native
 //! functions.
 
-/// Rust native I/O handling.
-pub struct StdIo;
-
+/// A trait that abstracts out I/O operations
 #[async_trait::async_trait(?Send)]
-impl Io for StdIo {}
-
-#[async_trait::async_trait(?Send)]
-#[allow(missing_docs)]
 pub trait Io {
+    /// Print the given string
     fn print(&self, output: impl AsRef<str>) {
         print!("{}", output.as_ref());
     }
 
+    /// Flush the output
     fn flush(&self) {
         use std::io::Write;
         std::io::stdout().flush().unwrap();
     }
 
+    /// Print the given string with a newline
     fn println(&self, output: impl AsRef<str>) {
         println!("{}", output.as_ref());
     }
 
+    /// Print the given string into the given Writer
     fn write<W: std::io::Write>(
         &self,
         mut writer: W,
@@ -32,6 +30,7 @@ pub trait Io {
         write!(writer, "{}", output.as_ref())
     }
 
+    /// Print the given string into the given Writer and terminate with newline
     fn writeln<W: std::io::Write>(
         &self,
         mut writer: W,
@@ -40,10 +39,12 @@ pub trait Io {
         writeln!(writer, "{}", output.as_ref())
     }
 
+    /// Print the given error string
     fn eprintln(&self, output: impl AsRef<str>) {
         eprintln!("{}", output.as_ref());
     }
 
+    /// Read a string from input
     async fn read(&self) -> std::io::Result<String> {
         #[cfg(not(target_family = "wasm"))]
         {
@@ -55,6 +56,7 @@ pub trait Io {
         }
     }
 
+    /// Display the given prompt and return the string input
     async fn prompt(&self, question: impl AsRef<str>) -> String {
         #[cfg(not(target_family = "wasm"))]
         {
@@ -73,6 +75,50 @@ pub trait Io {
                 question.as_ref()
             )
         }
+    }
+}
+
+/// Rust native I/O handling.
+pub struct StdIo;
+
+#[async_trait::async_trait(?Send)]
+impl Io for StdIo {}
+
+/// Ignores all I/O operations.
+pub struct NullIo;
+
+#[async_trait::async_trait(?Send)]
+impl Io for NullIo {
+    fn print(&self, _output: impl AsRef<str>) {}
+
+    fn flush(&self) {}
+
+    fn println(&self, _output: impl AsRef<str>) {}
+
+    fn write<W: std::io::Write>(
+        &self,
+        mut _writer: W,
+        _output: impl AsRef<str>,
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn writeln<W: std::io::Write>(
+        &self,
+        mut _writer: W,
+        _output: impl AsRef<str>,
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn eprintln(&self, _output: impl AsRef<str>) {}
+
+    async fn read(&self) -> std::io::Result<String> {
+        panic!("Unsupported operation")
+    }
+
+    async fn prompt(&self, _question: impl AsRef<str>) -> String {
+        panic!("Unsupported operation")
     }
 }
 

@@ -43,6 +43,9 @@ router! {SHELL,
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
 
+    // The address of the native token
+    ( "native_token" ) -> Address = native_token,
+
     // Epoch of the input block height
     ( "epoch_at_height" / [height: BlockHeight]) -> Option<Epoch> = epoch_at_height,
 
@@ -285,6 +288,15 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let data = ctx.wl_storage.storage.last_epoch;
+    Ok(data)
+}
+
+fn native_token<D, H>(ctx: RequestCtx<'_, D, H>) -> storage_api::Result<Address>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let data = ctx.wl_storage.storage.native_token.clone();
     Ok(data)
 }
 

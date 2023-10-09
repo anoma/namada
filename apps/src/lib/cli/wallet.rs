@@ -25,7 +25,7 @@ use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
 use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
 
-impl<IO: Io> CliApi<IO> {
+impl CliApi {
     pub fn handle_wallet_command(
         cmd: cmds::NamadaWallet,
         mut ctx: Context,

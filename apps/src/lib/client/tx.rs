@@ -641,7 +641,7 @@ where
         })?;
         let author_balance = rpc::get_token_balance(
             namada.client(),
-            &namada.native_token().await,
+            &namada.native_token(),
             &proposal.proposal.author,
         )
         .await;
@@ -665,7 +665,7 @@ where
         })?;
         let author_balane = rpc::get_token_balance(
             namada.client(),
-            &namada.native_token().await,
+            &namada.native_token(),
             &proposal.proposal.author,
         )
         .await;

@@ -530,7 +530,7 @@ impl InitProposal {
                     e.to_string(),
                 )
             })?;
-            let nam_address = context.native_token().await;
+            let nam_address = context.native_token();
             let author_balance = rpc::get_token_balance(
                 context.client(),
                 &nam_address,
@@ -558,7 +558,7 @@ impl InitProposal {
                     e.to_string(),
                 )
             })?;
-            let nam_address = context.native_token().await;
+            let nam_address = context.native_token();
             let author_balance = rpc::get_token_balance(
                 context.client(),
                 &nam_address,

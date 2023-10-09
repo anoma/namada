@@ -47,7 +47,7 @@ pub fn run(
                     NamadaClient::WithoutContext(sub_cmd, global)
                 }
             };
-            rt.block_on(CliApi::<TestingIo>::handle_client_command(
+            rt.block_on(CliApi::handle_client_command(
                 Some(node),
                 cmd,
                 &TestingIo,
@@ -61,7 +61,7 @@ pub fn run(
 
             let cmd = cmds::NamadaWallet::parse(&matches)
                 .expect("Could not parse wallet command");
-            CliApi::<TestingIo>::handle_wallet_command(cmd, ctx, &TestingIo)
+            CliApi::handle_wallet_command(cmd, ctx, &TestingIo)
         }
         Bin::Relayer => {
             args.insert(0, "relayer");
@@ -83,7 +83,7 @@ pub fn run(
                     NamadaRelayer::ValidatorSet(sub_cmd)
                 }
             };
-            rt.block_on(CliApi::<TestingIo>::handle_relayer_command(
+            rt.block_on(CliApi::handle_relayer_command(
                 Some(node),
                 cmd,
                 &TestingIo,

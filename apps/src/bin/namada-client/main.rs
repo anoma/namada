@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let _log_guard = logging::init_from_env_or(LevelFilter::INFO)?;
 
     // run the CLI
-    CliApi::<CliIo>::handle_client_command::<HttpClient>(
+    CliApi::handle_client_command::<HttpClient, _>(
         None,
         cli::namada_client_cli()?,
         &CliIo,

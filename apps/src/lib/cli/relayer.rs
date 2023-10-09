@@ -15,11 +15,11 @@ fn error() -> Report {
     eyre!("Fatal error")
 }
 
-impl<IO: Io> CliApi<IO> {
+impl CliApi {
     pub async fn handle_relayer_command<C>(
         client: Option<C>,
         cmd: cli::NamadaRelayer,
-        io: &IO,
+        io: &impl Io,
     ) -> Result<()>
     where
         C: CliClient,

@@ -161,7 +161,13 @@ impl Context {
         C: namada::ledger::queries::Client + Sync,
         IO: Io,
     {
-        NamadaImpl::new(client, &mut self.wallet, &mut self.shielded, io)
+        NamadaImpl::native_new(
+            client,
+            &mut self.wallet,
+            &mut self.shielded,
+            io,
+            self.native_token.clone(),
+        )
     }
 
     /// Parse and/or look-up the value from the context.

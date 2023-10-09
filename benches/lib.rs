@@ -810,11 +810,12 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
-        let namada = NamadaImpl::new(
+        let namada = NamadaImpl::native_new(
             &self.shell,
             &mut self.wallet,
             &mut self.shielded,
             &StdIo,
+            self.shell.wl_storage.storage.native_token.clone(),
         );
         let shielded = async_runtime
             .block_on(

@@ -103,6 +103,13 @@ pub async fn query_epoch<C: crate::ledger::queries::Client + Sync>(
     convert_response::<C, _>(RPC.shell().epoch(client).await)
 }
 
+/// Query the address of the native token
+pub async fn query_native_token<C: crate::ledger::queries::Client + Sync>(
+    client: &C,
+) -> Result<Address, error::Error> {
+    convert_response::<C, _>(RPC.shell().native_token(client).await)
+}
+
 /// Query the epoch of the given block height, if it exists.
 /// Will return none if the input block height is greater than
 /// the latest committed block height.
