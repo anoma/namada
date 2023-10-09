@@ -93,7 +93,7 @@ where
         for hash in self.wl_storage.storage.iter_replay_protection() {
             self.wl_storage
                 .write_log
-                .finalize_tx_hashes(hash)
+                .finalize_tx_hash(hash)
                 .expect("Failed tx hashes finalization")
         }
 

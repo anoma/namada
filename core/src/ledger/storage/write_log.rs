@@ -715,7 +715,7 @@ impl WriteLog {
     /// Move the transaction hash of the previous block to the list of all
     /// blocks. This functions should be called at the beginning of the block
     /// processing
-    pub fn finalize_tx_hashes(&mut self, hash: Hash) -> Result<()> {
+    pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
             .insert(hash, ReProtStorageModification::Finalize)
@@ -1007,7 +1007,7 @@ mod tests {
         // finalize previous hashes
         for tx in ["tx2", "tx3"] {
             write_log
-                .finalize_tx_hashes(Hash::sha256(tx.as_bytes()))
+                .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
                 .unwrap();
         }
 
