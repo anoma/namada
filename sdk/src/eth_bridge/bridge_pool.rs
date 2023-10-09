@@ -26,6 +26,7 @@ use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{Duration, Instant};
 use crate::error::{EncodingError, Error, EthereumBridgeError, QueryError};
 use crate::eth_bridge::ethers::abi::AbiDecode;
+use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::{
@@ -279,10 +280,10 @@ async fn construct_bridge_pool_proof<'a>(
         io.flush();
         loop {
             let resp = io.read().await.map_err(|e| {
-                let msg =
-                    format!("Encountered error reading from STDIN: {e:?}");
-                edisplay_line!(io, "{msg}");
-                Error::Other(msg)
+                Error::Other(echo_error!(
+                    io,
+                    "Encountered error reading from STDIN: {e:?}"
+                ))
             })?;
             match resp.trim() {
                 "y" => break,
@@ -438,10 +439,11 @@ where
 
     let (validator_set, signatures, bp_proof): TransferToErcArgs =
         AbiDecode::decode(&abi_encoded_args).map_err(|error| {
-            let msg =
-                format!("Unable to decode the generated proof: {:?}", error);
-            edisplay_line!(io, "{msg}");
-            EncodingError::Decoding(msg)
+            EncodingError::Decoding(echo_error!(
+                io,
+                "Unable to decode the generated proof: {:?}",
+                error
+            ))
         })?;
 
     // NOTE: this operation costs no gas on Ethereum
@@ -645,17 +647,18 @@ mod recommendations {
                     )
                     .await
                     .map_err(|err| {
-                        let msg =
-                            format!("Failed to query Bridge pool proof: {err}");
-                        edisplay_line!(context.io(), "{msg}");
-                        Error::Query(QueryError::General(msg))
+                        Error::Query(QueryError::General(echo_error!(
+                            context.io(),
+                            "Failed to query Bridge pool proof: {err}"
+                        )))
                     })?
                     .data,
             )
             .map_err(|err| {
-                let msg = format!("Failed to decode Bridge pool proof: {err}");
-                edisplay_line!(context.io(), "{msg}");
-                Error::Encode(EncodingError::Decoding(msg))
+                Error::Encode(EncodingError::Decoding(echo_error!(
+                    context.io(),
+                    "Failed to decode Bridge pool proof: {err}"
+                )))
             })?;
 
         // get the latest bridge pool nonce
@@ -670,17 +673,18 @@ mod recommendations {
                 )
                 .await
                 .map_err(|err| {
-                    let msg =
-                        format!("Failed to query Bridge pool nonce: {err}");
-                    edisplay_line!(context.io(), "{msg}");
-                    Error::Query(QueryError::General(msg))
+                    Error::Query(QueryError::General(echo_error!(
+                        context.io(),
+                        "Failed to query Bridge pool nonce: {err}"
+                    )))
                 })?
                 .data,
         )
         .map_err(|err| {
-            let msg = format!("Failed to decode Bridge pool nonce: {err}");
-            edisplay_line!(context.io(), "{msg}");
-            Error::Encode(EncodingError::Decoding(msg))
+            Error::Encode(EncodingError::Decoding(echo_error!(
+                context.io(),
+                "Failed to decode Bridge pool nonce: {err}"
+            )))
         })?;
 
         if latest_bp_nonce != bp_root.data.1 {
@@ -882,9 +886,9 @@ mod recommendations {
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| {
-                let msg = format!("Failed to calculate relaying cost: {err}");
-                edisplay_line!(context.io(), "{msg}");
-                Error::EthereumBridge(EthereumBridgeError::RelayCost(msg))
+                Error::EthereumBridge(EthereumBridgeError::RelayCost(
+                    echo_error!(io, "Failed to calculate relaying cost: {err}"),
+                ))
             })?;
 
         // sort transfers in increasing amounts of profitability
@@ -916,9 +920,10 @@ mod recommendations {
 
         let mut total_gas = validator_gas;
         let mut total_cost = I256::try_from(validator_gas).map_err(|err| {
-            let msg = format!("Failed to convert value to I256: {err}");
-            edisplay_line!(context.io(), "{msg}");
-            Error::Encode(EncodingError::Conversion(msg))
+            Error::Encode(EncodingError::Conversion(echo_error!(
+                io,
+                "Failed to convert value to I256: {err}"
+            )))
         })?;
         let mut total_fees = HashMap::new();
         let mut recommendation = vec![];

@@ -33,6 +33,7 @@ use crate::args::InputAmount;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxError};
 use crate::events::Event;
+use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
@@ -1017,12 +1018,12 @@ pub async fn wait_until_node_is_synched<'a>(
                 try_count.set(try_count.get() + 1);
                 ControlFlow::Continue(())
             }
-            Err(e) => {
-                let msg =
-                    format!("Failed to query node status with error: {e}");
-                edisplay_line!(io, "{msg}");
-                ControlFlow::Break(Err(Error::Query(QueryError::General(msg))))
-            }
+            Err(e) => ControlFlow::Break(Err(Error::Query(
+                QueryError::General(echo_error!(
+                    io,
+                    "Failed to query node status with error: {e}"
+                )),
+            ))),
         }
     })
     .await
