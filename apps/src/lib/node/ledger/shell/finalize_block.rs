@@ -211,23 +211,17 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed and remove the hash
-                // from storage
+                // from the queue of txs to be processed, remove its hash
+                // from storage and write the hash of the corresponding wrapper
                 if let TxType::Decrypted(_) = &tx_header.tx_type {
-                    let tx_hash = self
+                    let wrapper_tx = self
                         .wl_storage
                         .storage
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue")
-                        .tx
-                        .clone()
-                        .update_header(TxType::Raw)
-                        .header_hash();
-                    self.wl_storage
-                        .write_log
-                        .delete_tx_hash(tx_hash)
-                        .expect("Error while deleting tx hash from storage");
+                        .tx;
+                    self.allow_tx_replay(wrapper_tx);
                 }
 
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
@@ -436,16 +430,6 @@ where
             .map_err(Error::TxApply)
             {
                 Ok(result) => {
-                    if let Some(wrapper) = embedding_wrapper {
-                        // If transaction is decrypted remove the corresponding
-                        // wrapper hash from storage which is not needed anymore
-                        self.wl_storage
-                            .write_log
-                            .delete_tx_hash(wrapper.header_hash())
-                            .expect(
-                                "Error while deleting tx hash key from storage",
-                            );
-                    }
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -523,31 +507,20 @@ where
                     // If transaction type is Decrypted and failed because of
                     // out of gas, remove its hash from storage to allow
                     // rewrapping it
-                    if let Some(mut wrapper) = embedding_wrapper {
+                    if let Some(wrapper) = embedding_wrapper {
                         if let Error::TxApply(protocol::Error::GasError(_)) =
                             msg
                         {
-                            let raw_header_hash = wrapper
-                                .update_header(TxType::Raw)
-                                .header_hash();
-                            self.wl_storage
-                                .write_log
-                                .delete_tx_hash(raw_header_hash)
-                                .expect(
-                                    "Error while deleting tx hash key from \
-                                     storage",
-                                );
-                        } else {
-                            // Remove the wrapper hash which is not needed
-                            // anymore
-                            self.wl_storage
-                                .write_log
-                                .delete_tx_hash(wrapper.header_hash())
-                                .expect(
-                                    "Error while deleting tx hash key from \
-                                     storage",
-                                );
+                            self.allow_tx_replay(wrapper);
                         }
+                    } else if let Some(wrapper) = wrapper {
+                        // If transaction type was Wrapper and failed, write its
+                        // hash to storage to prevent
+                        // replay
+                        self.wl_storage
+                            .write_log
+                            .write_tx_hash(wrapper.header_hash())
+                            .expect("Error while writing tx hash to storage");
                     }
 
                     tx_event["gas_used"] =
@@ -984,6 +957,20 @@ where
             }
         }
         Ok(())
+    }
+
+    // Allow to replay a specific wasm transaction. Needs as argument the
+    // corresponding wrapper transaction to avoid replay of that in the process
+    fn allow_tx_replay(&mut self, mut wrapper_tx: Tx) {
+        self.wl_storage
+            .write_log
+            .write_tx_hash(wrapper_tx.header_hash())
+            .expect("Error while deleting tx hash from storage");
+
+        self.wl_storage
+            .write_log
+            .delete_tx_hash(wrapper_tx.update_header(TxType::Raw).header_hash())
+            .expect("Error while deleting tx hash from storage");
     }
 }
 
@@ -2295,11 +2282,7 @@ mod test_finalize_block {
 
         let (wrapper_tx, processed_tx) =
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
-        let wrapper_hash_key =
-            replay_protection::get_replay_protection_last_key(
-                &wrapper_tx.header_hash(),
-            );
-        let mut decrypted_tx = wrapper_tx.clone();
+        let mut decrypted_tx = wrapper_tx;
 
         decrypted_tx.update_header(TxType::Raw);
         let decrypted_hash_key =
@@ -2331,14 +2314,7 @@ mod test_finalize_block {
         let root_post = shell.shell.wl_storage.storage.block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        // Check transactions' hashes in storage
-        assert!(
-            shell
-                .shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&wrapper_tx.header_hash())
-        );
+        // Check transaction's hash in storage
         assert!(
             shell
                 .shell
@@ -2346,17 +2322,7 @@ mod test_finalize_block {
                 .write_log
                 .has_replay_protection_entry(&decrypted_tx.header_hash())
         );
-        // Check that non of the hashes is present in the merkle tree
-        assert!(
-            !shell
-                .shell
-                .wl_storage
-                .storage
-                .block
-                .tree
-                .has_key(&wrapper_hash_key)
-                .unwrap()
-        );
+        // Check that the hash is present in the merkle tree
         assert!(
             !shell
                 .shell
@@ -2421,13 +2387,8 @@ mod test_finalize_block {
             .update_header(TxType::Raw)
             .header_hash();
 
-        // Write wrapper and inner hashes in storage
-        for hash in [
-            &decrypted_hash,
-            &wrapper_hash,
-            &decrypted_2_hash,
-            &wrapper_2_hash,
-        ] {
+        // Write inner hashes in storage
+        for hash in [&decrypted_hash, &decrypted_2_hash] {
             let hash_subkey =
                 replay_protection::get_replay_protection_last_subkey(hash);
             shell
@@ -2446,7 +2407,8 @@ mod test_finalize_block {
                 info: "".into(),
             },
         }];
-        // Out of gas error triggering inner hash removal
+        // Out of gas error triggering inner hash removal and wrapper hash
+        // insert
         processed_txs.push(ProcessedTx {
             tx: decrypted_tx.to_bytes(),
             result: TxResult {
@@ -2454,8 +2416,8 @@ mod test_finalize_block {
                 info: "".into(),
             },
         });
-        // Wasm error that still leads to inner hash commitment and wrapper hash
-        // removal
+        // Wasm error that still leads to inner hash commitment and no wrapper
+        // hash insert
         processed_txs.push(ProcessedTx {
             tx: decrypted_tx_2.to_bytes(),
             result: TxResult {
@@ -2526,9 +2488,8 @@ mod test_finalize_block {
         assert!(
             shell
                 .wl_storage
-                .storage
+                .write_log
                 .has_replay_protection_entry(&wrapper_hash)
-                .expect("test failed")
         );
         assert!(
             shell

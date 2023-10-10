@@ -164,9 +164,12 @@ where
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
         TxType::Wrapper(ref wrapper) => {
+            let fee_unshielding_transaction =
+                get_fee_unshielding_transaction(&tx, wrapper);
             let changed_keys = apply_wrapper_tx(
+                tx,
                 wrapper,
-                get_fee_unshielding_transaction(&tx, wrapper),
+                fee_unshielding_transaction,
                 tx_bytes,
                 ShellParams {
                     tx_gas_meter,
@@ -207,12 +210,14 @@ where
 }
 
 /// Performs the required operation on a wrapper transaction:
-///  - replay protection
 ///  - fee payment
 ///  - gas accounting
+///  - replay protection
 ///
-/// Returns the set of changed storage keys.
+/// Returns the set of changed storage keys. The caller should write the hash of
+/// the wrapper header to storage in case of failure.
 pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
+    mut tx: Tx,
     wrapper: &WrapperTx,
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
@@ -226,17 +231,6 @@ where
     WLS: WriteLogAndStorage<D = D, H = H>,
 {
     let mut changed_keys = BTreeSet::default();
-    let mut tx: Tx = tx_bytes.try_into().unwrap();
-
-    // Writes wrapper tx hash
-    shell_params
-        .wl_storage
-        .write_log_mut()
-        .write_tx_hash(tx.header_hash())
-        .expect("Error while writing tx hash to storage");
-    changed_keys.insert(replay_protection::get_replay_protection_last_key(
-        &tx.header_hash(),
-    ));
 
     // Charge fee before performing any fallible operations
     charge_fee(
@@ -257,7 +251,7 @@ where
         .write_tx_hash(tx.update_header(TxType::Raw).header_hash())
         .expect("Error while writing tx hash to storage");
     changed_keys.insert(replay_protection::get_replay_protection_last_key(
-        &tx.update_header(TxType::Raw).header_hash(),
+        &tx.header_hash(),
     ));
 
     Ok(changed_keys)

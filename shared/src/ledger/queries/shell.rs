@@ -122,6 +122,7 @@ where
             let mut tx_gas_meter =
                 TxGasMeter::new(wrapper.gas_limit.to_owned());
             protocol::apply_wrapper_tx(
+                tx.clone(),
                 &wrapper,
                 None,
                 &request.data,
