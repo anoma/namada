@@ -135,7 +135,7 @@ where
     let clamped_inflation =
         I256::max(noterized_inflation, I256::from(i64::MAX));
 
-    tracing::debug!(
+    println!(
         "Controller, call: total_in_masp {:?}, total_tokens {:?}, \
          locked_target_ratio {:?}, last_locked_ratio {:?}, max_reward_rate \
          {:?}, last_inflation {:?}, kp_gain_nom {:?}, kd_gain_nom {:?}, \
@@ -171,7 +171,8 @@ where
     // move it to a ratio of x/100 to match the masp_rewards
     // function This may be unneeded, as we could describe it as a
     // ratio of x/1
-
+    println!("clamped_inflation: {:?}", clamped_inflation);
+    println!("denomination_offset: {:?}", denomination_offset);
     Ok((clamped_inflation, I256::from(100 * denomination_offset)))
 }
 
@@ -201,6 +202,7 @@ where
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let native_token = wl_storage.get_native_token().unwrap();
+    let native_token2 = native_token.clone();
     let masp_rewards = address::masp_rewards();
     let mut masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
     // Put the native rewards first because other inflation computations depend
@@ -228,6 +230,7 @@ where
     for addr in masp_rewards.keys() {
         // TODO please intergate this into the logic
         let reward = calculate_masp_rewards(wl_storage, addr)?;
+        println!("calculated reward: {:?}", reward);
 
         // TODO Fix for multiple inflation
         // Native token inflation values are always with respect to this
@@ -238,6 +241,11 @@ where
             .conversion_state
             .normed_inflation
             .get_or_insert(ref_inflation);
+        let native_supply: token::Amount = wl_storage
+            .read(&token::minted_balance_key(&native_token2))?
+            .expect("the total supply key should be here");
+        println!("native supply: {:?}", native_supply);
+        println!("normed_inflation: {:?}", normed_inflation);
 
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal: token::Amount = wl_storage
@@ -253,7 +261,8 @@ where
             // every amount of the native token given in the
             // previous epoch
             new_normed_inflation =
-                normed_inflation + (normed_inflation * reward.0) / reward.1;
+                normed_inflation * ((reward.0 / normed_inflation) / reward.1);
+            println!("new_normed_inflation: {:?}", new_normed_inflation);
 
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
