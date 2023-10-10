@@ -36,8 +36,6 @@ use crate::facade::tendermint_proto::abci::{
 };
 use crate::node::ledger::shell::stats::InternalStats;
 
-// FIXME: optimization with replay proteciton key removal
-
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -285,7 +283,7 @@ where
                 continue;
             }
 
-            let (mut tx_event, tx_unsigned_hash, mut tx_gas_meter, wrapper) =
+            let (mut tx_event, embedding_wrapper, mut tx_gas_meter, wrapper) =
                 match &tx_header.tx_type {
                     TxType::Wrapper(wrapper) => {
                         stats.increment_wrapper_txs();
@@ -295,7 +293,7 @@ where
                     }
                     TxType::Decrypted(inner) => {
                         // We remove the corresponding wrapper tx from the queue
-                        let mut tx_in_queue = self
+                        let tx_in_queue = self
                             .wl_storage
                             .storage
                             .tx_queue
@@ -332,12 +330,7 @@ where
 
                         (
                             event,
-                            Some(
-                                tx_in_queue
-                                    .tx
-                                    .update_header(TxType::Raw)
-                                    .header_hash(),
-                            ),
+                            Some(tx_in_queue.tx),
                             TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
                             None,
                         )
@@ -443,6 +436,16 @@ where
             .map_err(Error::TxApply)
             {
                 Ok(result) => {
+                    if let Some(wrapper) = embedding_wrapper {
+                        // If transaction is decrypted remove the corresponding
+                        // wrapper hash from storage which is not needed anymore
+                        self.wl_storage
+                            .write_log
+                            .delete_tx_hash(wrapper.header_hash())
+                            .expect(
+                                "Error while deleting tx hash key from storage",
+                            );
+                    }
                     if result.is_accepted() {
                         if let EventType::Accepted = tx_event.event_type {
                             // Wrapper transaction
@@ -520,13 +523,26 @@ where
                     // If transaction type is Decrypted and failed because of
                     // out of gas, remove its hash from storage to allow
                     // rewrapping it
-                    if let Some(hash) = tx_unsigned_hash {
+                    if let Some(mut wrapper) = embedding_wrapper {
                         if let Error::TxApply(protocol::Error::GasError(_)) =
                             msg
                         {
+                            let raw_header_hash = wrapper
+                                .update_header(TxType::Raw)
+                                .header_hash();
                             self.wl_storage
                                 .write_log
-                                .delete_tx_hash(hash)
+                                .delete_tx_hash(raw_header_hash)
+                                .expect(
+                                    "Error while deleting tx hash key from \
+                                     storage",
+                                );
+                        } else {
+                            // Remove the wrapper hash which is not needed
+                            // anymore
+                            self.wl_storage
+                                .write_log
+                                .delete_tx_hash(wrapper.header_hash())
                                 .expect(
                                     "Error while deleting tx hash key from \
                                      storage",
@@ -2353,97 +2369,17 @@ mod test_finalize_block {
         );
     }
 
-    /// Test that if a decrypted transaction fails because of out-of-gas, its
-    /// hash is removed from storage to allow rewrapping it
+    /// Test replay protection hash handling
     #[test]
-    fn test_remove_tx_hash() {
+    fn test_tx_hash_handling() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut batch =
             namada::core::ledger::storage::testing::TestStorage::batch();
 
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
-        let mut wrapper_tx =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: Amount::zero(),
-                    token: shell.wl_storage.storage.native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.set_code(Code::new(tx_code));
-        wrapper_tx.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
-        let mut decrypted_tx = wrapper_tx.clone();
-
-        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-
-        // Write inner hash in storage
-        let inner_hash_subkey =
-            replay_protection::get_replay_protection_last_subkey(
-                &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
-            );
-        let inner_hash_key = replay_protection::get_replay_protection_last_key(
-            &wrapper_tx.clone().update_header(TxType::Raw).header_hash(),
-        );
-        shell
-            .wl_storage
-            .storage
-            .write_replay_protection_entry(&mut batch, &inner_hash_subkey)
-            .expect("Test failed");
-
-        let processed_tx = ProcessedTx {
-            tx: decrypted_tx.to_bytes(),
-            result: TxResult {
-                code: ErrorCodes::Ok.into(),
-                info: "".into(),
-            },
-        };
-        shell.enqueue_tx(wrapper_tx, Gas::default());
-        // merkle tree root before finalize_block
-        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
-
-        let event = &shell
-            .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
-                ..Default::default()
-            })
-            .expect("Test failed")[0];
-
-        // the merkle tree root should not change after finalize_block
-        let root_post = shell.shell.wl_storage.storage.block.tree.root();
-        assert_eq!(root_pre.0, root_post.0);
-
-        // Check inner tx hash has been removed from storage
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Testfailed").as_str();
-        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
-
-        assert!(
-            !shell
-                .wl_storage
-                .has_key(&inner_hash_key)
-                .expect("Test failed")
-        )
-    }
-
-    #[test]
-    /// Test that the hash of the wrapper transaction is committed to storage
-    /// even if the wrapper tx fails. The inner transaction hash must instead be
-    /// removed
-    fn test_commits_hash_if_wrapper_failure() {
-        let (mut shell, _, _, _) = setup();
-        let keypair = gen_keypair();
-
-        let mut wrapper =
+        let (wrapper_tx, _) = mk_wrapper_tx(&shell, &keypair);
+        let (wrapper_tx_2, _) = mk_wrapper_tx(&shell, &keypair);
+        let mut invalid_wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: 0.into(),
@@ -2454,47 +2390,159 @@ mod test_finalize_block {
                 0.into(),
                 None,
             ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        wrapper.set_data(Data::new(
+        invalid_wrapper_tx.header.chain_id = shell.chain_id.clone();
+        invalid_wrapper_tx
+            .set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        invalid_wrapper_tx.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        wrapper.add_section(Section::Signature(Signature::new(
-            wrapper.sechashes(),
+        invalid_wrapper_tx.add_section(Section::Signature(Signature::new(
+            invalid_wrapper_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
         )));
 
-        let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes(),
+        let wrapper_hash = wrapper_tx.header_hash();
+        let wrapper_2_hash = wrapper_tx_2.header_hash();
+        let invalid_wrapper_hash = invalid_wrapper_tx.header_hash();
+        let mut decrypted_tx = wrapper_tx.clone();
+        let mut decrypted_tx_2 = wrapper_tx_2.clone();
+
+        decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+        decrypted_tx_2.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+        let decrypted_hash =
+            wrapper_tx.clone().update_header(TxType::Raw).header_hash();
+        let decrypted_2_hash = wrapper_tx_2
+            .clone()
+            .update_header(TxType::Raw)
+            .header_hash();
+        let decrypted_3_hash = invalid_wrapper_tx
+            .clone()
+            .update_header(TxType::Raw)
+            .header_hash();
+
+        // Write wrapper and inner hashes in storage
+        for hash in [
+            &decrypted_hash,
+            &wrapper_hash,
+            &decrypted_2_hash,
+            &wrapper_2_hash,
+        ] {
+            let hash_subkey =
+                replay_protection::get_replay_protection_last_subkey(hash);
+            shell
+                .wl_storage
+                .storage
+                .write_replay_protection_entry(&mut batch, &hash_subkey)
+                .expect("Test failed");
+        }
+
+        // Invalid wrapper tx that should lead to a commitment of the wrapper
+        // hash and no commitment of the inner hash
+        let mut processed_txs = vec![ProcessedTx {
+            tx: invalid_wrapper_tx.to_bytes(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
             },
-        };
+        }];
+        // Out of gas error triggering inner hash removal
+        processed_txs.push(ProcessedTx {
+            tx: decrypted_tx.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        });
+        // Wasm error that still leads to inner hash commitment and wrapper hash
+        // removal
+        processed_txs.push(ProcessedTx {
+            tx: decrypted_tx_2.to_bytes(),
+            result: TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "".into(),
+            },
+        });
+        shell.enqueue_tx(wrapper_tx, Gas::default());
+        shell.enqueue_tx(wrapper_tx_2, GAS_LIMIT_MULTIPLIER.into());
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.wl_storage.storage.block.tree.root();
 
         let event = &shell
             .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
+                txs: processed_txs,
                 ..Default::default()
             })
-            .expect("Test failed")[0];
+            .expect("Test failed");
 
-        // Check wrapper hash has been committed to storage even if it failed.
-        // Check that, instead, the inner hash has been removed
-        assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.wl_storage.storage.block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        // Check first inner tx hash has been removed from storage but
+        // corresponding wrapper hash is still there Check second inner
+        // tx is still there and corresponding wrapper hash has been removed
+        // since useless
+        assert_eq!(event[0].event_type.to_string(), String::from("accepted"));
+        let code = event[0]
+            .attributes
+            .get("code")
+            .expect("Test failed")
+            .as_str();
         assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
+        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        let code = event[1]
+            .attributes
+            .get("code")
+            .expect("Test failed")
+            .as_str();
+        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(event[2].event_type.to_string(), String::from("applied"));
+        let code = event[2]
+            .attributes
+            .get("code")
+            .expect("Test failed")
+            .as_str();
+        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
         assert!(
             shell
                 .wl_storage
                 .write_log
-                .has_replay_protection_entry(&wrapper.header_hash())
+                .has_replay_protection_entry(&invalid_wrapper_hash)
         );
-        assert!(!shell.wl_storage.write_log.has_replay_protection_entry(
-            &wrapper.update_header(TxType::Raw).header_hash()
-        ))
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_3_hash)
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_hash)
+        );
+        assert!(
+            shell
+                .wl_storage
+                .storage
+                .has_replay_protection_entry(&wrapper_hash)
+                .expect("test failed")
+        );
+        assert!(
+            shell
+                .wl_storage
+                .storage
+                .has_replay_protection_entry(&decrypted_2_hash)
+                .expect("test failed")
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&wrapper_2_hash)
+        );
     }
 
     // Test that if the fee payer doesn't have enough funds for fee payment the
