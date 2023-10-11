@@ -176,6 +176,10 @@ pub enum SlashError {
 pub enum CommissionRateChangeError {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
     NegativeRate(Dec, Address),
+    #[error(
+        "Unexpected commission rate {0} larger than 1.0 for validator {1}"
+    )]
+    LargerThanOne(Dec, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
     RateChangeTooLarge(Dec, Address),
     #[error(
@@ -2357,6 +2361,14 @@ where
 {
     if new_rate.is_negative() {
         return Err(CommissionRateChangeError::NegativeRate(
+            new_rate,
+            validator.clone(),
+        )
+        .into());
+    }
+
+    if new_rate > Dec::one() {
+        return Err(CommissionRateChangeError::LargerThanOne(
             new_rate,
             validator.clone(),
         )
