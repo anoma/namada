@@ -4,10 +4,6 @@ mod test_bridge_pool_vp {
 
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-    use namada::ledger::eth_bridge::{
-        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeConfig,
-        UpgradeableContract,
-    };
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::proto::Tx;
     use namada::types::address::{nam, wnam};
@@ -20,6 +16,10 @@ mod test_bridge_pool_vp {
     use namada::types::token::Amount;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
+    use namada_sdk::eth_bridge::{
+        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeConfig,
+        UpgradeableContract,
+    };
 
     use crate::native_vp::TestNativeVpEnv;
     use crate::tx::{tx_host_env, TestTxEnv};

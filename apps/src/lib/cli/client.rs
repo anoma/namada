@@ -1,9 +1,8 @@
 use color_eyre::eyre::{eyre, Report, Result};
-use namada::ledger::{Namada, NamadaImpl};
-use namada::sdk::signing;
-use namada::sdk::tx::dump_tx;
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::io::Io;
+use namada_sdk::tx::dump_tx;
+use namada_sdk::{signing, Namada, NamadaImpl};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};

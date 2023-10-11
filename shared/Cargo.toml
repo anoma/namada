@@ -24,6 +24,7 @@ std = ["fd-lock"]
 dev = []
 ferveo-tpke = [
   "namada_core/ferveo-tpke",
+  "namada_sdk/ferveo-tpke",
 ]
 wasm-runtime = [
   "namada_core/wasm-runtime",
@@ -41,6 +42,7 @@ wasm-runtime = [
 # Enable queries support for an async client
 async-client = [
   "async-trait",
+  "namada_sdk/async-client"
 ]
 
 # Requires async traits to be safe to send across threads
@@ -50,6 +52,7 @@ async-send = []
 tendermint-rpc = [
   "async-client",
   "dep:tendermint-rpc",
+  "namada_sdk/tendermint-rpc",
 ]
 # tendermint-rpc HttpClient
 http-client = [
@@ -60,15 +63,18 @@ abciplus = [
   "namada_core/abciplus",
   "namada_proof_of_stake/abciplus",
   "namada_ethereum_bridge/abciplus",
+  "namada_sdk/abciplus",
 ]
 
 ibc-mocks = [
   "namada_core/ibc-mocks",
+  "namada_sdk/ibc-mocks",
 ]
 
 masp-tx-gen = [
   "rand",
   "rand_core",
+  "namada_sdk/masp-tx-gen",
 ]
 
 # for integration tests and test utilies
@@ -76,6 +82,7 @@ testing = [
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
   "namada_proof_of_stake/testing",
+  "namada_sdk/testing",
   "async-client",
   "proptest",
   "rand_core",
@@ -87,13 +94,18 @@ namada-sdk = [
   "tendermint-rpc",
   "masp-tx-gen",
   "ferveo-tpke",
-  "masp_primitives/transparent-inputs"
+  "masp_primitives/transparent-inputs",
+  "namada_sdk/namada-sdk",
 ]
 
-multicore = ["masp_proofs/multicore"]
+multicore = [
+  "masp_proofs/multicore",
+  "namada_sdk/multicore",
+]
 
 [dependencies]
 namada_core = {path = "../core", default-features = false, features = ["secp256k1-sign"]}
+namada_sdk = {path = "../sdk", default-features = false}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_ethereum_bridge = {path = "../ethereum_bridge", default-features = false}
 async-trait = {version = "0.1.51", optional = true}

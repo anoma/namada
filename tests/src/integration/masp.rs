@@ -2,12 +2,12 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::sdk::masp::fs::FsShieldedUtils;
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_core::types::address::{btc, eth, masp_rewards};
 use namada_core::types::token;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 
 use super::setup;

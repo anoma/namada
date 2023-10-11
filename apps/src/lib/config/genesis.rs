@@ -6,7 +6,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::ledger::governance::parameters::GovernanceParameters;
 use namada::core::ledger::pgf::parameters::PgfParameters;
-use namada::ledger::eth_bridge::EthereumBridgeConfig;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
@@ -17,6 +16,7 @@ use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::uint::Uint;
 use namada::types::{storage, token};
+use namada_sdk::eth_bridge::EthereumBridgeConfig;
 
 /// Genesis configuration file format
 pub mod genesis_config {
@@ -900,14 +900,14 @@ pub fn genesis(
 }
 #[cfg(any(test, feature = "dev"))]
 pub fn genesis(num_validators: u64) -> Genesis {
-    use namada::ledger::eth_bridge::{
-        Contracts, Erc20WhitelistEntry, UpgradeableContract,
-    };
     use namada::types::address::{
         self, apfel, btc, dot, eth, kartoffel, nam, schnitzel, wnam,
     };
     use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada::types::ethereum_events::EthAddress;
+    use namada_sdk::eth_bridge::{
+        Contracts, Erc20WhitelistEntry, UpgradeableContract,
+    };
 
     use crate::wallet;
 

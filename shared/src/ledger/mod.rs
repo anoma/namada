@@ -1,7 +1,6 @@
 //! The ledger modules
 
-pub mod eth_bridge;
-pub mod events;
+pub use namada_sdk::{eth_bridge, events};
 pub mod governance;
 pub mod ibc;
 pub mod inflation;
@@ -10,535 +9,367 @@ pub mod pgf;
 pub mod pos;
 #[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
 pub mod protocol;
-pub mod queries;
+pub use namada_sdk::queries;
 pub mod storage;
 pub mod vp_host_fns;
 
-use std::path::PathBuf;
-use std::str::FromStr;
-
+use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
+use namada_core::ledger::storage_api::ResultExt;
 pub use namada_core::ledger::{
     gas, parameters, replay_protection, storage_api, tx_env, vp_env,
 };
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-use crate::proto::Tx;
-use crate::sdk::args::{self, InputAmount, SdkTypes};
-use crate::sdk::masp::{ShieldedContext, ShieldedUtils};
-use crate::sdk::rpc::query_native_token;
-use crate::sdk::signing::{self, SigningTxData};
-use crate::sdk::tx::{
-    self, ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-    VP_USER_WASM,
-};
-use crate::sdk::wallet::{Wallet, WalletIo, WalletStorage};
-use crate::types::address::Address;
-use crate::types::io::Io;
-use crate::types::key::*;
-use crate::types::masp::{TransferSource, TransferTarget};
-use crate::types::token;
-use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
-use crate::types::transaction::GasLimit;
+#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+use crate::vm::wasm::{TxCache, VpCache};
+use crate::vm::WasmCacheAccess;
 
-#[async_trait::async_trait(?Send)]
-/// An interface for high-level interaction with the Namada SDK
-pub trait Namada<'a>: Sized {
-    /// A client with async request dispatcher method
-    type Client: 'a + crate::ledger::queries::Client + Sync;
-    /// Captures the interactive parts of the wallet's functioning
-    type WalletUtils: 'a + WalletIo + WalletStorage;
-    /// Abstracts platform specific details away from the logic of shielded pool
-    /// operations.
-    type ShieldedUtils: 'a + ShieldedUtils;
-    /// Captures the input/output streams used by this object
-    type Io: 'a + Io;
+/// Dry run a transaction
+#[cfg(all(feature = "wasm-runtime", feature = "ferveo-tpke"))]
+pub fn dry_run_tx<D, H, CA>(
+    mut ctx: RequestCtx<'_, D, H, VpCache<CA>, TxCache<CA>>,
+    request: &RequestQuery,
+) -> storage_api::Result<EncodedResponseQuery>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    use borsh::BorshSerialize;
+    use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
+    use namada_core::ledger::storage::TempWlStorage;
+    use namada_core::proto::Tx;
+    use namada_core::types::transaction::wrapper::wrapper_tx::PairingEngine;
+    use namada_core::types::transaction::{
+        AffineCurve, DecryptedTx, EllipticCurve,
+    };
 
-    /// Obtain the client for communicating with the ledger
-    fn client(&self) -> &'a Self::Client;
+    use crate::ledger::protocol::ShellParams;
+    use crate::types::storage::TxIndex;
+    use crate::types::transaction::TxType;
 
-    /// Obtain the input/output handle for this context
-    fn io(&self) -> &'a Self::Io;
+    let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    tx.validate_tx().into_storage_result()?;
 
-    /// Obtain read guard on the wallet
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>>;
+    let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
+    let mut cumulated_gas = Gas::default();
 
-    /// Obtain write guard on the wallet
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>>;
+    // Wrapper dry run to allow estimating the gas cost of a transaction
+    let mut tx_gas_meter = match tx.header().tx_type {
+        TxType::Wrapper(wrapper) => {
+            let mut tx_gas_meter =
+                TxGasMeter::new(wrapper.gas_limit.to_owned());
+            protocol::apply_wrapper_tx(
+                &wrapper,
+                None,
+                &request.data,
+                ShellParams::new(
+                    &mut tx_gas_meter,
+                    &mut temp_wl_storage,
+                    &mut ctx.vp_wasm_cache,
+                    &mut ctx.tx_wasm_cache,
+                ),
+                None,
+            )
+            .into_storage_result()?;
 
-    /// Obtain read guard on the shielded context
-    async fn shielded(
-        &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
+            temp_wl_storage.write_log.commit_tx();
+            cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
 
-    /// Obtain write guard on the shielded context
-    async fn shielded_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>>;
-
-    /// Return the native token
-    fn native_token(&self) -> Address;
-
-    /// Make a tx builder using no arguments
-    fn tx_builder(&self) -> args::Tx {
-        args::Tx {
-            dry_run: false,
-            dry_run_wrapper: false,
-            dump_tx: false,
-            output_folder: None,
-            force: false,
-            broadcast_only: false,
-            ledger_address: (),
-            initialized_account_alias: None,
-            wallet_alias_force: false,
-            fee_amount: None,
-            wrapper_fee_payer: None,
-            fee_token: self.native_token(),
-            fee_unshield: None,
-            gas_limit: GasLimit::from(20_000),
-            expiration: None,
-            disposable_signing_key: false,
-            chain_id: None,
-            signing_keys: vec![],
-            signatures: vec![],
-            tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
-            verification_key: None,
-            password: None,
+            // NOTE: the encryption key for a dry-run should always be an
+            // hardcoded, dummy one
+            let _privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+            TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
         }
-    }
-
-    /// Make a TxTransfer builder from the given minimum set of arguments
-    fn new_transfer(
-        &self,
-        source: TransferSource,
-        target: TransferTarget,
-        token: Address,
-        amount: InputAmount,
-    ) -> args::TxTransfer {
-        args::TxTransfer {
-            source,
-            target,
-            token,
-            amount,
-            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
-            tx: self.tx_builder(),
-            native_token: self.native_token(),
+        TxType::Protocol(_) | TxType::Decrypted(_) => {
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
+            TxGasMeter::new(
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
+            )
         }
-    }
+        TxType::Raw => {
+            // Cast tx to a decrypted for execution
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
-    /// Make a RevealPK builder from the given minimum set of arguments
-    fn new_reveal_pk(&self, public_key: common::PublicKey) -> args::RevealPk {
-        args::RevealPk {
-            public_key,
-            tx: self.tx_builder(),
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
+            TxGasMeter::new(
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
+            )
         }
-    }
+    };
 
-    /// Make a Bond builder from the given minimum set of arguments
-    fn new_bond(
-        &self,
-        validator: Address,
-        amount: token::Amount,
-    ) -> args::Bond {
-        args::Bond {
-            validator,
-            amount,
-            source: None,
-            tx: self.tx_builder(),
-            native_token: self.native_token(),
-            tx_code_path: PathBuf::from(TX_BOND_WASM),
-        }
-    }
-
-    /// Make a Unbond builder from the given minimum set of arguments
-    fn new_unbond(
-        &self,
-        validator: Address,
-        amount: token::Amount,
-    ) -> args::Unbond {
-        args::Unbond {
-            validator,
-            amount,
-            source: None,
-            tx: self.tx_builder(),
-            tx_code_path: PathBuf::from(TX_UNBOND_WASM),
-        }
-    }
-
-    /// Make a TxIbcTransfer builder from the given minimum set of arguments
-    fn new_ibc_transfer(
-        &self,
-        source: Address,
-        receiver: String,
-        token: Address,
-        amount: InputAmount,
-        channel_id: ChannelId,
-    ) -> args::TxIbcTransfer {
-        args::TxIbcTransfer {
-            source,
-            receiver,
-            token,
-            amount,
-            channel_id,
-            port_id: PortId::from_str("transfer").unwrap(),
-            timeout_height: None,
-            timeout_sec_offset: None,
-            memo: None,
-            tx: self.tx_builder(),
-            tx_code_path: PathBuf::from(TX_IBC_WASM),
-        }
-    }
-
-    /// Make a InitProposal builder from the given minimum set of arguments
-    fn new_init_proposal(&self, proposal_data: Vec<u8>) -> args::InitProposal {
-        args::InitProposal {
-            proposal_data,
-            native_token: self.native_token(),
-            is_offline: false,
-            is_pgf_stewards: false,
-            is_pgf_funding: false,
-            tx_code_path: PathBuf::from(TX_INIT_PROPOSAL),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
-        args::TxUpdateAccount {
-            addr,
-            vp_code_path: None,
-            public_keys: vec![],
-            threshold: None,
-            tx_code_path: PathBuf::from(TX_UPDATE_ACCOUNT_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a VoteProposal builder from the given minimum set of arguments
-    fn new_vote_prposal(
-        &self,
-        vote: String,
-        voter: Address,
-    ) -> args::VoteProposal {
-        args::VoteProposal {
-            vote,
-            voter,
-            proposal_id: None,
-            is_offline: false,
-            proposal_data: None,
-            tx_code_path: PathBuf::from(TX_VOTE_PROPOSAL),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a CommissionRateChange builder from the given minimum set of
-    /// arguments
-    fn new_change_commission_rate(
-        &self,
-        rate: Dec,
-        validator: Address,
-    ) -> args::CommissionRateChange {
-        args::CommissionRateChange {
-            rate,
-            validator,
-            tx_code_path: PathBuf::from(TX_CHANGE_COMMISSION_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a TxInitValidator builder from the given minimum set of arguments
-    fn new_init_validator(
-        &self,
-        commission_rate: Dec,
-        max_commission_rate_change: Dec,
-    ) -> args::TxInitValidator {
-        args::TxInitValidator {
-            commission_rate,
-            max_commission_rate_change,
-            scheme: SchemeType::Ed25519,
-            account_keys: vec![],
-            threshold: None,
-            consensus_key: None,
-            eth_cold_key: None,
-            eth_hot_key: None,
-            protocol_key: None,
-            validator_vp_code_path: PathBuf::from(VP_USER_WASM),
-            unsafe_dont_encrypt: false,
-            tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a TxUnjailValidator builder from the given minimum set of arguments
-    fn new_unjail_validator(
-        &self,
-        validator: Address,
-    ) -> args::TxUnjailValidator {
-        args::TxUnjailValidator {
-            validator,
-            tx_code_path: PathBuf::from(TX_UNJAIL_VALIDATOR_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_withdraw(&self, validator: Address) -> args::Withdraw {
-        args::Withdraw {
-            validator,
-            source: None,
-            tx_code_path: PathBuf::from(TX_WITHDRAW_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a Withdraw builder from the given minimum set of arguments
-    fn new_add_erc20_transfer(
-        &self,
-        sender: Address,
-        recipient: EthAddress,
-        asset: EthAddress,
-        amount: InputAmount,
-    ) -> args::EthereumBridgePool {
-        args::EthereumBridgePool {
-            sender,
-            recipient,
-            asset,
-            amount,
-            fee_amount: InputAmount::Unvalidated(token::DenominatedAmount {
-                amount: token::Amount::default(),
-                denom: NATIVE_MAX_DECIMAL_PLACES.into(),
-            }),
-            fee_payer: None,
-            fee_token: self.native_token(),
-            nut: false,
-            code_path: PathBuf::from(TX_BRIDGE_POOL_WASM),
-            tx: self.tx_builder(),
-        }
-    }
-
-    /// Make a ResignSteward builder from the given minimum set of arguments
-    fn new_resign_steward(&self, steward: Address) -> args::ResignSteward {
-        args::ResignSteward {
-            steward,
-            tx: self.tx_builder(),
-            tx_code_path: PathBuf::from(TX_RESIGN_STEWARD),
-        }
-    }
-
-    /// Make a UpdateStewardCommission builder from the given minimum set of
-    /// arguments
-    fn new_update_steward_rewards(
-        &self,
-        steward: Address,
-        commission: Vec<u8>,
-    ) -> args::UpdateStewardCommission {
-        args::UpdateStewardCommission {
-            steward,
-            commission,
-            tx: self.tx_builder(),
-            tx_code_path: PathBuf::from(TX_UPDATE_STEWARD_COMMISSION),
-        }
-    }
-
-    /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&self, owner: Address) -> args::TxCustom {
-        args::TxCustom {
-            owner,
-            tx: self.tx_builder(),
-            code_path: None,
-            data_path: None,
-            serialized_tx: None,
-        }
-    }
-
-    /// Sign the given transaction using the given signing data
-    async fn sign(
-        &self,
-        tx: &mut Tx,
-        args: &args::Tx,
-        signing_data: SigningTxData,
-    ) -> crate::sdk::error::Result<()> {
-        signing::sign_tx(*self.wallet_mut().await, args, tx, signing_data)
-    }
-
-    /// Process the given transaction using the given flags
-    async fn submit(
-        &self,
-        tx: Tx,
-        args: &args::Tx,
-    ) -> crate::sdk::error::Result<ProcessTxResponse> {
-        tx::process_tx(self, args, tx).await
-    }
+    let mut data = protocol::apply_wasm_tx(
+        tx,
+        &TxIndex(0),
+        ShellParams::new(
+            &mut tx_gas_meter,
+            &mut temp_wl_storage,
+            &mut ctx.vp_wasm_cache,
+            &mut ctx.tx_wasm_cache,
+        ),
+    )
+    .into_storage_result()?;
+    cumulated_gas = cumulated_gas
+        .checked_add(tx_gas_meter.get_tx_consumed_gas())
+        .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
+            "Overflow in gas",
+        ))?;
+    // Account gas for both inner and wrapper (if available)
+    data.gas_used = cumulated_gas;
+    // NOTE: the keys changed by the wrapper transaction (if any) are not
+    // returned from this function
+    let data = data.try_to_vec().into_storage_result()?;
+    Ok(EncodedResponseQuery {
+        data,
+        proof: None,
+        info: Default::default(),
+    })
 }
 
-/// Provides convenience methods for common Namada interactions
-pub struct NamadaImpl<'a, C, U, V, I>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
-{
-    /// Used to send and receive messages from the ledger
-    pub client: &'a C,
-    /// Stores the addresses and keys required for ledger interactions
-    pub wallet: RwLock<&'a mut Wallet<U>>,
-    /// Stores the current state of the shielded pool
-    pub shielded: RwLock<&'a mut ShieldedContext<V>>,
-    /// Captures the input/output streams used by this object
-    pub io: &'a I,
-    /// The address of the native token
-    native_token: Address,
-    /// The default builder for a Tx
-    prototype: args::Tx,
-}
+#[cfg(test)]
+mod test {
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use namada_core::ledger::storage::testing::TestWlStorage;
+    use namada_core::ledger::storage_api::{self, StorageWrite};
+    use namada_core::types::hash::Hash;
+    use namada_core::types::storage::{BlockHeight, Key};
+    use namada_core::types::transaction::decrypted::DecryptedTx;
+    use namada_core::types::transaction::TxType;
+    use namada_core::types::{address, token};
+    use namada_sdk::queries::{Router, RPC};
+    use namada_test_utils::TestWasms;
+    use tempfile::TempDir;
+    use tendermint_rpc::{Error as RpcError, Response};
 
-impl<'a, C, U, V, I> NamadaImpl<'a, C, U, V, I>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
-{
-    /// Construct a new Namada context with the given native token address
-    pub fn native_new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
-        native_token: Address,
-    ) -> Self {
-        NamadaImpl {
-            client,
-            wallet: RwLock::new(wallet),
-            shielded: RwLock::new(shielded),
-            io,
-            native_token: native_token.clone(),
-            prototype: args::Tx {
-                dry_run: false,
-                dry_run_wrapper: false,
-                dump_tx: false,
-                output_folder: None,
-                force: false,
-                broadcast_only: false,
-                ledger_address: (),
-                initialized_account_alias: None,
-                wallet_alias_force: false,
-                fee_amount: None,
-                wrapper_fee_payer: None,
-                fee_token: native_token,
-                fee_unshield: None,
-                gas_limit: GasLimit::from(20_000),
-                expiration: None,
-                disposable_signing_key: false,
-                chain_id: None,
-                signing_keys: vec![],
-                signatures: vec![],
-                tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
-                verification_key: None,
-                password: None,
-            },
-        }
-    }
+    use crate::ledger::events::log::EventLog;
+    use crate::ledger::queries::Client;
+    use crate::ledger::{EncodedResponseQuery, RequestCtx, RequestQuery};
+    use crate::proto::{Code, Data, Tx};
+    use crate::vm::wasm::{TxCache, VpCache};
+    use crate::vm::{wasm, WasmCacheRoAccess};
 
-    /// Construct a new Namada context looking up the native token address
-    pub async fn new(
-        client: &'a C,
-        wallet: &'a mut Wallet<U>,
-        shielded: &'a mut ShieldedContext<V>,
-        io: &'a I,
-    ) -> crate::sdk::error::Result<NamadaImpl<'a, C, U, V, I>> {
-        let native_token = query_native_token(client).await?;
-        Ok(NamadaImpl::native_new(
-            client,
-            wallet,
-            shielded,
-            io,
-            native_token,
-        ))
-    }
-}
-
-#[async_trait::async_trait(?Send)]
-impl<'a, C, U, V, I> Namada<'a> for NamadaImpl<'a, C, U, V, I>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo + WalletStorage,
-    V: ShieldedUtils,
-    I: Io,
-{
-    type Client = C;
-    type Io = I;
-    type ShieldedUtils = V;
-    type WalletUtils = U;
-
-    /// Obtain the prototypical Tx builder
-    fn tx_builder(&self) -> args::Tx {
-        self.prototype.clone()
-    }
-
-    fn native_token(&self) -> Address {
-        self.native_token.clone()
-    }
-
-    fn io(&self) -> &'a Self::Io {
-        self.io
-    }
-
-    fn client(&self) -> &'a Self::Client {
-        self.client
-    }
-
-    async fn wallet(
-        &self,
-    ) -> RwLockReadGuard<&'a mut Wallet<Self::WalletUtils>> {
-        self.wallet.read().await
-    }
-
-    async fn wallet_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut Wallet<Self::WalletUtils>> {
-        self.wallet.write().await
-    }
-
-    async fn shielded(
-        &self,
-    ) -> RwLockReadGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
-        self.shielded.read().await
-    }
-
-    async fn shielded_mut(
-        &self,
-    ) -> RwLockWriteGuard<&'a mut ShieldedContext<Self::ShieldedUtils>> {
-        self.shielded.write().await
-    }
-}
-
-/// Allow the prototypical Tx builder to be modified
-impl<'a, C, U, V, I> args::TxBuilder<SdkTypes> for NamadaImpl<'a, C, U, V, I>
-where
-    C: crate::ledger::queries::Client + Sync,
-    U: WalletIo,
-    V: ShieldedUtils,
-    I: Io,
-{
-    fn tx<F>(self, func: F) -> Self
+    /// A test client that has direct access to the storage
+    pub struct TestClient<RPC>
     where
-        F: FnOnce(args::Tx<SdkTypes>) -> args::Tx<SdkTypes>,
+        RPC: Router,
     {
-        Self {
-            prototype: func(self.prototype),
-            ..self
+        /// RPC router
+        pub rpc: RPC,
+        /// storage
+        pub wl_storage: TestWlStorage,
+        /// event log
+        pub event_log: EventLog,
+        /// VP wasm compilation cache
+        pub vp_wasm_cache: VpCache<WasmCacheRoAccess>,
+        /// tx wasm compilation cache
+        pub tx_wasm_cache: TxCache<WasmCacheRoAccess>,
+        /// VP wasm compilation cache directory
+        pub vp_cache_dir: TempDir,
+        /// tx wasm compilation cache directory
+        pub tx_cache_dir: TempDir,
+    }
+
+    impl<RPC> TestClient<RPC>
+    where
+        RPC: Router,
+    {
+        #[allow(dead_code)]
+        /// Initialize a test client for the given root RPC router
+        pub fn new(rpc: RPC) -> Self {
+            // Initialize the `TestClient`
+            let mut wl_storage = TestWlStorage::default();
+
+            // Initialize mock gas limit
+            let max_block_gas_key =
+                namada_core::ledger::parameters::storage::get_max_block_gas_key(
+                );
+            wl_storage
+                .storage
+                .write(
+                    &max_block_gas_key,
+                    namada_core::ledger::storage::types::encode(
+                        &20_000_000_u64,
+                    ),
+                )
+                .expect(
+                    "Max block gas parameter must be initialized in storage",
+                );
+            let event_log = EventLog::default();
+            let (vp_wasm_cache, vp_cache_dir) =
+                wasm::compilation_cache::common::testing::cache();
+            let (tx_wasm_cache, tx_cache_dir) =
+                wasm::compilation_cache::common::testing::cache();
+            Self {
+                rpc,
+                wl_storage,
+                event_log,
+                vp_wasm_cache: vp_wasm_cache.read_only(),
+                tx_wasm_cache: tx_wasm_cache.read_only(),
+                vp_cache_dir,
+                tx_cache_dir,
+            }
         }
+    }
+
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+    impl<RPC> Client for TestClient<RPC>
+    where
+        RPC: Router + Sync,
+    {
+        type Error = std::io::Error;
+
+        async fn request(
+            &self,
+            path: String,
+            data: Option<Vec<u8>>,
+            height: Option<BlockHeight>,
+            prove: bool,
+        ) -> Result<EncodedResponseQuery, Self::Error> {
+            let data = data.unwrap_or_default();
+            let height = height.unwrap_or_default();
+            // Handle a path by invoking the `RPC.handle` directly with the
+            // borrowed storage
+            let request = RequestQuery {
+                data,
+                path,
+                height,
+                prove,
+            };
+            let ctx = RequestCtx {
+                wl_storage: &self.wl_storage,
+                event_log: &self.event_log,
+                vp_wasm_cache: self.vp_wasm_cache.clone(),
+                tx_wasm_cache: self.tx_wasm_cache.clone(),
+                storage_read_past_height_limit: None,
+            };
+            // TODO: this is a hack to propagate errors to the caller, we should
+            // really permit error types other than [`std::io::Error`]
+            if request.path == "/shell/dry_run_tx" {
+                super::dry_run_tx(ctx, &request)
+            } else {
+                self.rpc.handle(ctx, &request)
+            }
+            .map_err(|err| {
+                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
+            })
+        }
+
+        async fn perform<R>(&self, _request: R) -> Result<R::Response, RpcError>
+        where
+            R: tendermint_rpc::SimpleRequest,
+        {
+            Response::from_string("TODO")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_shell_queries_router_with_client() -> storage_api::Result<()>
+    {
+        // Initialize the `TestClient`
+        let mut client = TestClient::new(RPC);
+        // store the wasm code
+        let tx_no_op = TestWasms::TxNoOp.read_bytes();
+        let tx_hash = Hash::sha256(&tx_no_op);
+        let key = Key::wasm_code(&tx_hash);
+        let len_key = Key::wasm_code_len(&tx_hash);
+        client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
+        client
+            .wl_storage
+            .storage
+            .write(&len_key, (tx_no_op.len() as u64).try_to_vec().unwrap())
+            .unwrap();
+
+        // Request last committed epoch
+        let read_epoch = RPC.shell().epoch(&client).await.unwrap();
+        let current_epoch = client.wl_storage.storage.last_epoch;
+        assert_eq!(current_epoch, read_epoch);
+
+        // Request dry run tx
+        let mut outer_tx =
+            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
+        outer_tx.set_code(Code::from_hash(tx_hash));
+        outer_tx.set_data(Data::new(vec![]));
+        let tx_bytes = outer_tx.to_bytes();
+        let result = RPC
+            .shell()
+            .dry_run_tx(&client, Some(tx_bytes), None, false)
+            .await
+            .unwrap();
+        assert!(result.data.is_accepted());
+
+        // Request storage value for a balance key ...
+        let token_addr = address::testing::established_address_1();
+        let owner = address::testing::established_address_2();
+        let balance_key = token::balance_key(&token_addr, &owner);
+        // ... there should be no value yet.
+        let read_balance = RPC
+            .shell()
+            .storage_value(&client, None, None, false, &balance_key)
+            .await
+            .unwrap();
+        assert!(read_balance.data.is_empty());
+
+        // Request storage prefix iterator
+        let balance_prefix = token::balance_prefix(&token_addr);
+        let read_balances = RPC
+            .shell()
+            .storage_prefix(&client, None, None, false, &balance_prefix)
+            .await
+            .unwrap();
+        assert!(read_balances.data.is_empty());
+
+        // Request storage has key
+        let has_balance_key = RPC
+            .shell()
+            .storage_has_key(&client, &balance_key)
+            .await
+            .unwrap();
+        assert!(!has_balance_key);
+
+        // Then write some balance ...
+        let balance = token::Amount::native_whole(1000);
+        StorageWrite::write(&mut client.wl_storage, &balance_key, balance)?;
+        // It has to be committed to be visible in a query
+        client.wl_storage.commit_tx();
+        client.wl_storage.commit_block().unwrap();
+        // ... there should be the same value now
+        let read_balance = RPC
+            .shell()
+            .storage_value(&client, None, None, false, &balance_key)
+            .await
+            .unwrap();
+        assert_eq!(
+            balance,
+            token::Amount::try_from_slice(&read_balance.data).unwrap()
+        );
+
+        // Request storage prefix iterator
+        let balance_prefix = token::balance_prefix(&token_addr);
+        let read_balances = RPC
+            .shell()
+            .storage_prefix(&client, None, None, false, &balance_prefix)
+            .await
+            .unwrap();
+        assert_eq!(read_balances.data.len(), 1);
+
+        // Request storage has key
+        let has_balance_key = RPC
+            .shell()
+            .storage_has_key(&client, &balance_key)
+            .await
+            .unwrap();
+        assert!(has_balance_key);
+
+        Ok(())
     }
 }

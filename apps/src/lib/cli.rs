@@ -2517,7 +2517,6 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    pub use namada::sdk::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
@@ -2530,6 +2529,7 @@ pub mod args {
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::GasLimit;
+    pub use namada_sdk::args::*;
 
     use super::context::*;
     use super::utils::*;

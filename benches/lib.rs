@@ -63,20 +63,15 @@ use namada::ibc::core::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
+use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada::ledger::storage_api::StorageRead;
-use namada::ledger::NamadaImpl;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
-use namada::sdk::args::InputAmount;
-use namada::sdk::masp::{
-    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
-use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
@@ -101,6 +96,12 @@ use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
+use namada_sdk::args::InputAmount;
+use namada_sdk::masp::{
+    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
+use namada_sdk::wallet::Wallet;
+use namada_sdk::NamadaImpl;
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -670,8 +671,12 @@ impl Client for BenchShell {
             storage_read_past_height_limit: None,
         };
 
-        RPC.handle(ctx, &request)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
+        if request.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &request)
+        } else {
+            RPC.handle(ctx, &request)
+        }
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
     }
 
     async fn perform<R>(
@@ -727,7 +732,7 @@ impl Default for BenchShieldedCtx {
                     .fvk
                     .vk;
             let (div, _g_d) =
-                namada::sdk::masp::find_valid_diversifier(&mut OsRng);
+                namada_sdk::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = ctx
                 .wallet

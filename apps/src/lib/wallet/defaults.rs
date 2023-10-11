@@ -8,10 +8,10 @@ pub use dev::{
     validator_keys,
 };
 use namada::core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-use namada::ledger::{eth_bridge, governance, pgf, pos};
-use namada::sdk::wallet::alias::Alias;
+use namada::ledger::{governance, pgf, pos};
 use namada::types::address::Address;
 use namada::types::key::*;
+use namada_sdk::wallet::alias::Alias;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 
@@ -22,7 +22,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
         ("pos".into(), pos::ADDRESS),
         ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
         ("governance".into(), governance::ADDRESS),
-        ("eth_bridge".into(), eth_bridge::ADDRESS),
+        ("eth_bridge".into(), namada_sdk::eth_bridge::ADDRESS),
         ("bridge_pool".into(), BRIDGE_POOL_ADDRESS),
         ("pgf".into(), pgf::ADDRESS),
     ];
@@ -78,12 +78,12 @@ mod dev {
 
     use borsh::BorshDeserialize;
     use namada::ledger::{governance, pgf, pos};
-    use namada::sdk::wallet::alias::Alias;
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
+    use namada_sdk::wallet::alias::Alias;
 
     /// Generate a new protocol signing keypair, eth hot key and DKG session
     /// keypair

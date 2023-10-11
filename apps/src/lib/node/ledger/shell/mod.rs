@@ -30,7 +30,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::transaction::Transaction;
 use namada::core::hints;
 use namada::core::ledger::eth_bridge;
-use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
@@ -66,6 +65,7 @@ use namada::types::transaction::{
 use namada::types::{address, hash, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
+use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;

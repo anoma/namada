@@ -7,15 +7,15 @@ use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::sdk::masp::find_valid_diversifier;
-use namada::sdk::wallet::{
-    DecryptionError, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
-    WalletStorage,
-};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{MaspValue, PaymentAddress};
-use namada::{display, display_line, edisplay_line};
+use namada_sdk::masp::find_valid_diversifier;
+use namada_sdk::wallet::{
+    DecryptionError, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
+    WalletStorage,
+};
+use namada_sdk::{display, display_line, edisplay_line};
 use rand::RngCore;
 use rand_core::OsRng;
 

@@ -1,8 +1,8 @@
-use namada::sdk::queries::Client;
-use namada::sdk::rpc::wait_until_node_is_synched;
 use namada::tendermint_rpc::HttpClient;
 use namada::types::control_flow::Halt;
 use namada::types::io::Io;
+use namada_sdk::queries::Client;
+use namada_sdk::rpc::wait_until_node_is_synched;
 use tendermint_config::net::Address as TendermintAddress;
 
 use crate::client::utils;

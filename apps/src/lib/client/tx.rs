@@ -6,17 +6,16 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ledger::{pos, Namada};
+use namada::ledger::pos;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
-use namada::sdk::rpc::{TxBroadcastData, TxResponse};
-use namada::sdk::{error, signing, tx};
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
 use namada::types::io::Io;
 use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
-use namada::{display_line, edisplay_line};
+use namada_sdk::rpc::{TxBroadcastData, TxResponse};
+use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 
 use super::rpc;
 use crate::cli::{args, safe_exit};

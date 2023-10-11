@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use lazy_static::lazy_static;
+use namada::ledger::dry_run_tx;
 use namada::ledger::events::log::dumb_queries;
 use namada::ledger::queries::{
     EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
@@ -19,7 +20,6 @@ use namada::proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
-use namada::sdk::queries::Client;
 use namada::tendermint_proto::abci::VoteInfo;
 use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
@@ -27,6 +27,7 @@ use namada::types::hash::Hash;
 use namada::types::key::tm_consensus_key_raw_hash;
 use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
 use namada::types::time::DateTimeUtc;
+use namada_sdk::queries::Client;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -352,7 +353,12 @@ impl<'a> Client for &'a MockNode {
             tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
             storage_read_past_height_limit: None,
         };
-        rpc.handle(ctx, &request).map_err(Report::new)
+        if request.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &request)
+        } else {
+            rpc.handle(ctx, &request)
+        }
+        .map_err(Report::new)
     }
 
     async fn perform<R>(

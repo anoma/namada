@@ -4,10 +4,10 @@ use std::io::{self, Write};
 use borsh::BorshSerialize;
 use itertools::sorted;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::sdk::masp::find_valid_diversifier;
-use namada::sdk::wallet::{DecryptionError, FindKeyError, GenRestoreKeyError};
 use namada::types::key::{PublicKeyHash, RefTo};
 use namada::types::masp::{MaspValue, PaymentAddress};
+use namada_sdk::masp::find_valid_diversifier;
+use namada_sdk::wallet::{DecryptionError, FindKeyError, GenRestoreKeyError};
 use rand_core::OsRng;
 
 use crate::cli;

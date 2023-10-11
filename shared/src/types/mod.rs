@@ -1,8 +1,8 @@
 //! Types definitions.
 
-pub mod control_flow;
+pub use namada_sdk::control_flow;
 pub mod ibc;
-pub mod io;
+pub use namada_sdk::io;
 pub mod key;
 
 pub use namada_core::types::{

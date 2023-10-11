@@ -4036,6 +4036,7 @@ dependencies = [
  "namada_core",
  "namada_ethereum_bridge",
  "namada_proof_of_stake",
+ "namada_sdk",
  "namada_test_utils",
  "num256",
  "orion",
@@ -4117,6 +4118,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada",
+ "namada_sdk",
  "namada_test_utils",
  "num-derive",
  "num-rational 0.4.1",
@@ -4176,6 +4178,7 @@ dependencies = [
  "masp_proofs",
  "namada",
  "namada_apps",
+ "namada_sdk",
  "namada_test_utils",
  "prost",
  "rand 0.8.5",
@@ -4307,6 +4310,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_sdk"
+version = "0.23.0"
+dependencies = [
+ "assert_matches",
+ "async-trait",
+ "bimap",
+ "borsh 0.9.4",
+ "circular-queue",
+ "data-encoding",
+ "derivation-path",
+ "ethbridge-bridge-contract",
+ "ethers",
+ "fd-lock",
+ "futures",
+ "itertools",
+ "masp_primitives",
+ "masp_proofs",
+ "namada_core",
+ "namada_ethereum_bridge",
+ "namada_proof_of_stake",
+ "namada_test_utils",
+ "num256",
+ "orion",
+ "owo-colors 3.5.0",
+ "parse_duration",
+ "paste",
+ "prost",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "ripemd",
+ "serde 1.0.163",
+ "serde_json",
+ "sha2 0.9.9",
+ "slip10_ed25519",
+ "tempfile",
+ "tendermint-rpc",
+ "thiserror",
+ "tiny-bip39",
+ "tiny-hderive",
+ "tokio",
+ "toml 0.5.9",
+ "tracing 0.1.37",
+ "wasmtimer",
+ "zeroize",
+]
+
+[[package]]
 name = "namada_test_utils"
 version = "0.23.0"
 dependencies = [
@@ -4339,6 +4389,7 @@ dependencies = [
  "namada",
  "namada_apps",
  "namada_core",
+ "namada_sdk",
  "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",

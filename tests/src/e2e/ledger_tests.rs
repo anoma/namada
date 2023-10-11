@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::sdk::masp::fs::FsShieldedUtils;
 use namada::types::address::Address;
 use namada::types::storage::Epoch;
 use namada::types::token;
@@ -32,6 +31,7 @@ use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::ledger::governance::cli::onchain::{
     PgfFunding, PgfFundingTarget, StewardsUpdate,
 };
+use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
 use namada_vp_prelude::BTreeSet;
 use serde_json::json;
