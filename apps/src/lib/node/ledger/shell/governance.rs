@@ -74,6 +74,10 @@ where
         )?;
         let proposal_result =
             compute_proposal_result(votes, total_voting_power, tally_type);
+        let proposal_result_key = gov_storage::get_proposal_result_key(id);
+        shell
+            .wl_storage
+            .write(&proposal_result_key, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {

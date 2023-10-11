@@ -75,6 +75,7 @@ impl TallyType {
 }
 
 /// The result of a proposal
+#[derive(Copy, Clone, BorshSerialize, BorshDeserialize)]
 pub enum TallyResult {
     /// Proposal was accepted with the associated value
     Passed,
@@ -126,6 +127,7 @@ impl TallyResult {
 }
 
 /// The result with votes of a proposal
+#[derive(Clone, Copy, BorshDeserialize, BorshSerialize)]
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,
