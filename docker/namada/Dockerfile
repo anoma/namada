@@ -43,6 +43,9 @@ COPY --from=builder --chmod=0755 /app/target/release/namadaw /usr/local/bin
 COPY --from=builder --chmod=0755 /app/target/release/namadac /usr/local/bin
 COPY --from=tendermint-builder --chmod=0755 /app/cometbft/build/cometbft /usr/local/bin
 
+USER root
+RUN chmod -R 755 /usr/local/bin/cometbft
+
 EXPOSE 26656
 EXPOSE 26660
 EXPOSE 26659
