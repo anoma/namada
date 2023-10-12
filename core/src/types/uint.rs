@@ -167,14 +167,55 @@ impl Uint {
     /// Divide two [`Uint`]s with scaled to allow the `denom` number
     /// of decimal places.
     ///
+    /// N.B.
+    /// Not all of the decimal places might be calculable as it
+    /// would require doing division on a number with more than
+    /// 256 bits. As a result, the fixed precision number returned
+    /// here will be <= the actual result.
+    ///
     /// This method is checked and will return `None` if
-    ///  * `self` * 10^(`denom`) overflows 256 bits
-    ///  * `other` is  zero (`checked_div` will return `None`).
+    /// `other` is  zero (`checked_div` will return `None`).
     pub fn fixed_precision_div(&self, rhs: &Self, denom: u8) -> Option<Self> {
-        let lhs = Uint::from(10)
-            .checked_pow(Uint::from(denom))
-            .and_then(|res| res.checked_mul(*self))?;
-        lhs.checked_div(*rhs)
+        // function to reduce a fraction into its simplest form
+        // assumes `numer` is non-zero
+        let reduce = |numer: Uint, denominator: Uint| {
+            let gcd = numer.gcd(&denominator);
+            (numer / gcd, denominator / gcd)
+        };
+
+        // The below looping algorithm assumes left < right, so we simplify down
+        // to that case first.
+        let mut left = *self;
+        let mut right = *rhs;
+        let mut result = left.checked_div(right)?;
+        let rem = left - right * result;
+        result = result * Uint::from(10).checked_pow(Uint::from(denom)).unwrap();
+        if rem.is_zero() {
+            return Some(result);
+        }
+        let (red_left, red_right) = reduce(rem, right);
+        left = red_left;
+        right = red_right;
+
+        for place in 1..=denom {
+            if let Some(new_left) = Uint::from(10).checked_mul(left) {
+                left = new_left;
+            } else {
+                // we are unable to fetch anymore digits from the decimal expansion
+                // do to the limit of 256 bits
+                break
+            };
+            let (div, remainder) = left.div_mod(right);
+            result += div *  Uint::from(10).checked_pow(Uint::from(denom - place)).unwrap();
+            if remainder.is_zero() {
+                break;
+            }
+            let (red_left, red_right) = reduce(remainder, right);
+            left = red_left;
+            right = red_right;
+        }
+
+        Some(result)
     }
 
     /// Compute the two's complement of a number.
@@ -563,6 +604,8 @@ mod test_uint {
         let zero = Uint::zero();
         let two = Uint::from(2);
         let three = Uint::from(3);
+        let five = Uint::from(5);
+        let seven = Uint::from(7);
 
         assert_eq!(
             zero.fixed_precision_div(&two, 10).expect("Test failed"),
@@ -581,8 +624,10 @@ mod test_uint {
             two.fixed_precision_div(&three, 3).expect("Satan lives"),
             Uint::from(666)
         );
-        assert!(two.fixed_precision_div(&three, 77).is_none());
-        assert!(Uint::from(20).fixed_precision_div(&three, 76).is_none());
+        assert_eq!(
+            five.fixed_precision_div(&seven, 12).expect("Test failed"),
+            Uint::from_u64(714285714285)
+        )
     }
 
     /// Test that adding one to the max signed
