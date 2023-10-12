@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 
 use ark_serialize::{Read, Write};
 use fd_lock::RwLock;
-use namada::sdk::wallet::pre_genesis::{
+use namada::types::key::SchemeType;
+use namada_sdk::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
-use namada::sdk::wallet::{gen_key_to_store, WalletUtils};
-use namada::types::key::SchemeType;
+use namada_sdk::wallet::{gen_key_to_store, WalletIo};
 use zeroize::Zeroizing;
 
 use crate::wallet::store::gen_validator_keys;
@@ -75,7 +75,7 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
         || store.consensus_key.is_encrypted()
         || store.account_key.is_encrypted()
     {
-        Some(CliWalletUtils::read_decryption_password())
+        Some(CliWalletUtils::read_password(false))
     } else {
         None
     };

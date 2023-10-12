@@ -273,8 +273,6 @@ mod test_bp_vote_extensions {
     use borsh::BorshSerialize;
     #[cfg(not(feature = "abcipp"))]
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-    #[cfg(not(feature = "abcipp"))]
-    use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::types::{
@@ -297,6 +295,8 @@ mod test_bp_vote_extensions {
     use namada::types::vote_extensions::bridge_pool_roots;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    #[cfg(not(feature = "abcipp"))]
+    use namada_sdk::eth_bridge::EthBridgeQueries;
     #[cfg(feature = "abcipp")]
     use tendermint_proto_abcipp::abci::response_verify_vote_extension::VerifyStatus;
     #[cfg(feature = "abcipp")]

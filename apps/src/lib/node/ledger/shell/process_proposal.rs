@@ -4,7 +4,6 @@
 use data_encoding::HEXUPPER;
 use namada::core::hints;
 use namada::core::ledger::storage::WlStorage;
-use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::TempWlStorage;
@@ -15,6 +14,7 @@ use namada::types::transaction::protocol::{
 };
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
+use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
 use super::*;

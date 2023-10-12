@@ -311,7 +311,6 @@ mod test_vote_extensions {
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
-    use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
@@ -337,6 +336,7 @@ mod test_vote_extensions {
     use namada::types::vote_extensions::validator_set_update;
     #[cfg(feature = "abcipp")]
     use namada::types::vote_extensions::VoteExtension;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
 
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;

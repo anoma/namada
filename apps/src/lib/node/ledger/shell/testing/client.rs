@@ -47,9 +47,10 @@ pub fn run(
                     NamadaClient::WithoutContext(sub_cmd, global)
                 }
             };
-            rt.block_on(CliApi::<TestingIo>::handle_client_command(
+            rt.block_on(CliApi::handle_client_command(
                 Some(node),
                 cmd,
+                &TestingIo,
             ))
         }
         Bin::Wallet => {
@@ -60,7 +61,7 @@ pub fn run(
 
             let cmd = cmds::NamadaWallet::parse(&matches)
                 .expect("Could not parse wallet command");
-            CliApi::<TestingIo>::handle_wallet_command(cmd, ctx)
+            CliApi::handle_wallet_command(cmd, ctx, &TestingIo)
         }
         Bin::Relayer => {
             args.insert(0, "relayer");
@@ -82,9 +83,10 @@ pub fn run(
                     NamadaRelayer::ValidatorSet(sub_cmd)
                 }
             };
-            rt.block_on(CliApi::<TestingIo>::handle_relayer_command(
+            rt.block_on(CliApi::handle_relayer_command(
                 Some(node),
                 cmd,
+                &TestingIo,
             ))
         }
     }
@@ -96,7 +98,7 @@ impl<'a> CliClient for &'a MockNode {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 
-    async fn wait_until_node_is_synced<IO: Io>(&self) -> Halt<()> {
+    async fn wait_until_node_is_synced(&self, _io: &impl Io) -> Halt<()> {
         ControlFlow::Continue(())
     }
 }

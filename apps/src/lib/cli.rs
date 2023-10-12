@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada::types::io::DefaultIo;
+use namada::types::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -2517,7 +2517,6 @@ pub mod args {
     use std::str::FromStr;
 
     use namada::ibc::core::ics24_host::identifier::{ChannelId, PortId};
-    pub use namada::sdk::args::*;
     use namada::types::address::Address;
     use namada::types::chain::{ChainId, ChainIdPrefix};
     use namada::types::dec::Dec;
@@ -2530,10 +2529,12 @@ pub mod args {
     use namada::types::token;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::types::transaction::GasLimit;
+    pub use namada_sdk::args::*;
 
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
+    use crate::cli::context::FromContext;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_config::net::Address as TendermintAddress;
@@ -3525,8 +3526,8 @@ pub mod args {
                 target,
                 token,
                 amount,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
@@ -3881,8 +3882,8 @@ pub mod args {
                 validator,
                 amount,
                 source,
-                native_token: (),
                 tx_code_path,
+                native_token: (),
             }
         }
 
@@ -5799,7 +5800,7 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
                 cmds::EthBridgePool::WithContext(sub_cmd),
             ) => {
                 let global_args = args::Global::parse(&matches);
-                let context = Context::new::<DefaultIo>(global_args)?;
+                let context = Context::new::<StdIo>(global_args)?;
                 Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
                     sub_cmd, context,
                 ))))

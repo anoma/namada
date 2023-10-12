@@ -4,7 +4,6 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
-use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 #[cfg(feature = "abcipp")]
 use namada::ledger::pos::PosQueries;
 use namada::proto::{SignableEthMessage, Signed};
@@ -15,6 +14,7 @@ use namada::types::vote_extensions::VoteExtensionDigest;
 use namada::types::vote_extensions::{
     bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
 };
+use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::*;
 #[cfg(feature = "abcipp")]

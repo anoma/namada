@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use namada_core::ledger::governance::utils::TallyResult;
+use namada_sdk::events::{Event, EventLevel};
 use thiserror::Error;
 
 use crate::ledger::events::EventType;
@@ -32,6 +33,16 @@ pub struct ProposalEvent {
     pub event_type: String,
     /// Proposal event attributes
     pub attributes: HashMap<String, String>,
+}
+
+impl From<ProposalEvent> for Event {
+    fn from(proposal_event: ProposalEvent) -> Self {
+        Self {
+            event_type: EventType::Proposal,
+            level: EventLevel::Block,
+            attributes: proposal_event.attributes,
+        }
+    }
 }
 
 impl ProposalEvent {
