@@ -263,12 +263,14 @@ where
             new_normed_inflation =
                 normed_inflation * ((reward.0 / normed_inflation) / reward.1);
             println!("new_normed_inflation: {:?}", new_normed_inflation);
+            if new_normed_inflation < normed_inflation {
+                println!("!!!normed down!!!");
+            }
 
             // The reward for each reward.1 units of the current asset is
             // reward.0 units of the reward token
-            total_reward +=
-                (addr_bal * (new_normed_inflation, normed_inflation)).0
-                    - addr_bal;
+            println!("addr_bal: {:?}", addr_bal);
+            total_reward += (addr_bal * (new_normed_inflation,I256::from(1))).0 - addr_bal;
             // Save the new normed inflation
             _ = wl_storage
                 .storage
@@ -289,9 +291,11 @@ where
         }
 
         for denom in token::MaspDenom::iter() {
+            println!("multiplying for denom {:?}, total_reward {:?}", denom, total_reward);
             let total_reward_multiplier =
                 Uint::pow(2.into(), (denom as u64 * 64).into());
-            total_reward = total_reward * total_reward_multiplier;
+            println!("got total_reward_multiplier {:?}", total_reward_multiplier);
+            //total_reward = total_reward * total_reward_multiplier;
             // Provide an allowed conversion from previous timestamp. The
             // negative sign allows each instance of the old asset to be
             // cancelled out/replaced with the new asset

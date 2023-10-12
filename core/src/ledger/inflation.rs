@@ -96,6 +96,7 @@ impl RewardsController {
             .expect("Should not fail to convert token Amount to Dec");
         let epochs_py: Dec = epochs_per_year.into();
 
+        println!("pd controller: locked {:?}, total {:?}", locked, total);
         let locked_ratio = locked / total;
         let max_inflation = total * max_reward_rate / epochs_py;
         let p_gain = p_gain_nom * max_inflation;
