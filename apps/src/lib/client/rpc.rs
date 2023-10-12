@@ -46,8 +46,7 @@ use namada::types::{storage, token};
 use namada_sdk::error::{is_pinned_error, Error, PinnedBalanceError};
 use namada_sdk::masp::{Conversions, MaspAmount, MaspChange};
 use namada_sdk::rpc::{
-    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
-    TxResponse,
+    self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
@@ -158,7 +157,8 @@ pub async fn query_transfers<'a>(
             // transaction's reception
             let amt = shielded
                 .compute_exchanged_amount(
-                    context,
+                    context.client(),
+                    context.io(),
                     amt,
                     epoch,
                     Conversions::new(),
@@ -209,8 +209,7 @@ pub async fn query_transfers<'a>(
                     context.io(),
                     " {}{} {}",
                     sign,
-                    format_denominated_amount(context, asset, change.into(),)
-                        .await,
+                    context.format_amount(asset, change.into()).await,
                     token_alias
                 );
             }
@@ -233,12 +232,7 @@ pub async fn query_transfers<'a>(
                         context.io(),
                         " {}{} {}",
                         sign,
-                        format_denominated_amount(
-                            context,
-                            &token_addr,
-                            val.into(),
-                        )
-                        .await,
+                        context.format_amount(&token_addr, val.into()).await,
                         token_alias,
                     );
                 }
@@ -329,9 +323,7 @@ pub async fn query_transparent_balance<'a>(
             .await
             {
                 Ok(balance) => {
-                    let balance =
-                        format_denominated_amount(context, &token, balance)
-                            .await;
+                    let balance = context.format_amount(&token, balance).await;
                     display_line!(context.io(), "{}: {}", token_alias, balance);
                 }
                 Err(e) => {
@@ -351,9 +343,7 @@ pub async fn query_transparent_balance<'a>(
                 let balance =
                     get_token_balance(context.client(), &token, &owner).await;
                 if !balance.is_zero() {
-                    let balance =
-                        format_denominated_amount(context, &token, balance)
-                            .await;
+                    let balance = context.format_amount(&token, balance).await;
                     display_line!(context.io(), "{}: {}", token_alias, balance);
                 }
             }
@@ -481,12 +471,9 @@ pub async fn query_pinned_balance<'a>(
                         token_alias
                     );
                 } else {
-                    let formatted = format_denominated_amount(
-                        context,
-                        token,
-                        total_balance.into(),
-                    )
-                    .await;
+                    let formatted = context
+                        .format_amount(token, total_balance.into())
+                        .await;
                     display_line!(
                         context.io(),
                         "Payment address {} was consumed during epoch {}. \
@@ -515,12 +502,9 @@ pub async fn query_pinned_balance<'a>(
                         );
                         found_any = true;
                     }
-                    let formatted = format_denominated_amount(
-                        context,
-                        token_addr,
-                        (*value).into(),
-                    )
-                    .await;
+                    let formatted = context
+                        .format_amount(token_addr, (*value).into())
+                        .await;
                     let token_alias = tokens
                         .get(token_addr)
                         .map(|a| a.to_string())
@@ -567,7 +551,7 @@ async fn print_balances<'a>(
                 owner.clone(),
                 format!(
                     ": {}, owned by {}",
-                    format_denominated_amount(context, tok, balance).await,
+                    context.format_amount(tok, balance).await,
                     wallet.lookup_alias(owner)
                 ),
             ),
@@ -736,7 +720,12 @@ pub async fn query_shielded_balance<'a>(
                 context
                     .shielded_mut()
                     .await
-                    .compute_exchanged_balance(context, &viewing_key, epoch)
+                    .compute_exchanged_balance(
+                        context.client(),
+                        context.io(),
+                        &viewing_key,
+                        epoch,
+                    )
                     .await
                     .unwrap()
                     .expect("context should contain viewing key")
@@ -759,12 +748,12 @@ pub async fn query_shielded_balance<'a>(
                     context.io(),
                     "{}: {}",
                     token_alias,
-                    format_denominated_amount(
-                        context,
-                        &token,
-                        token::Amount::from(total_balance)
-                    )
-                    .await
+                    context
+                        .format_amount(
+                            &token,
+                            token::Amount::from(total_balance),
+                        )
+                        .await
                 );
             }
         }
@@ -790,7 +779,12 @@ pub async fn query_shielded_balance<'a>(
                     context
                         .shielded_mut()
                         .await
-                        .compute_exchanged_balance(context, &viewing_key, epoch)
+                        .compute_exchanged_balance(
+                            context.client(),
+                            context.io(),
+                            &viewing_key,
+                            epoch,
+                        )
                         .await
                         .unwrap()
                         .expect("context should contain viewing key")
@@ -830,12 +824,8 @@ pub async fn query_shielded_balance<'a>(
                     .map(|a| a.to_string())
                     .unwrap_or_else(|| token.to_string());
                 display_line!(context.io(), "Shielded Token {}:", alias);
-                let formatted = format_denominated_amount(
-                    context,
-                    &token,
-                    token_balance.into(),
-                )
-                .await;
+                let formatted =
+                    context.format_amount(&token, token_balance.into()).await;
                 display_line!(
                     context.io(),
                     "  {}, owned by {}",
@@ -879,7 +869,12 @@ pub async fn query_shielded_balance<'a>(
                     context
                         .shielded_mut()
                         .await
-                        .compute_exchanged_balance(context, &viewing_key, epoch)
+                        .compute_exchanged_balance(
+                            context.client(),
+                            context.io(),
+                            &viewing_key,
+                            epoch,
+                        )
                         .await
                         .unwrap()
                         .expect("context should contain viewing key")
@@ -889,12 +884,8 @@ pub async fn query_shielded_balance<'a>(
                     if !val.is_zero() {
                         found_any = true;
                     }
-                    let formatted = format_denominated_amount(
-                        context,
-                        address,
-                        (*val).into(),
-                    )
-                    .await;
+                    let formatted =
+                        context.format_amount(address, (*val).into()).await;
                     display_line!(
                         context.io(),
                         "  {}, owned by {}",
@@ -930,7 +921,12 @@ pub async fn query_shielded_balance<'a>(
                 let balance = context
                     .shielded_mut()
                     .await
-                    .compute_exchanged_balance(context, &viewing_key, epoch)
+                    .compute_exchanged_balance(
+                        context.client(),
+                        context.io(),
+                        &viewing_key,
+                        epoch,
+                    )
                     .await
                     .unwrap()
                     .expect("context should contain viewing key");
@@ -957,12 +953,7 @@ pub async fn print_decoded_balance<'a>(
                 context.io(),
                 "{} : {}",
                 context.wallet().await.lookup_alias(token_addr),
-                format_denominated_amount(
-                    context,
-                    token_addr,
-                    (*amount).into()
-                )
-                .await,
+                context.format_amount(token_addr, (*amount).into()).await,
             );
         }
     }
@@ -990,7 +981,7 @@ pub async fn print_decoded_balance_with_epoch<'a>(
             "{} | {} : {}",
             alias,
             epoch,
-            format_denominated_amount(context, token_addr, asset_value).await,
+            context.format_amount(token_addr, asset_value).await,
         );
     }
 }

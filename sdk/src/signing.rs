@@ -41,9 +41,7 @@ use crate::ibc_proto::google::protobuf::Any;
 use crate::io::*;
 use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
-use crate::rpc::{
-    format_denominated_amount, query_wasm_code_hash, validate_amount,
-};
+use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::tx::{
     TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
@@ -515,19 +513,12 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
             } else {
                 let token_addr = args.fee_token.clone();
                 if !args.force {
-                    let fee_amount = format_denominated_amount(
-                        context,
-                        &token_addr,
-                        total_fee,
-                    )
-                    .await;
+                    let fee_amount =
+                        context.format_amount(&token_addr, total_fee).await;
 
-                    let balance = format_denominated_amount(
-                        context,
-                        &token_addr,
-                        updated_balance,
-                    )
-                    .await;
+                    let balance = context
+                        .format_amount(&token_addr, updated_balance)
+                        .await;
                     return Err(Error::from(TxError::BalanceTooLowForFees(
                         fee_payer_address,
                         token_addr,
@@ -621,8 +612,7 @@ async fn make_ledger_amount_asset<'a>(
 ) {
     if let Some((token, _, _epoch)) = assets.get(token) {
         // If the AssetType can be decoded, then at least display Addressees
-        let formatted_amt =
-            format_denominated_amount(context, token, amount.into()).await;
+        let formatted_amt = context.format_amount(token, amount.into()).await;
         if let Some(token) = tokens.get(token) {
             output
                 .push(
@@ -1332,18 +1322,12 @@ pub async fn to_ledger_vector<'a>(
 
     if let Some(wrapper) = tx.header.wrapper() {
         let gas_token = wrapper.fee.token.clone();
-        let gas_limit = format_denominated_amount(
-            context,
-            &gas_token,
-            Amount::from(wrapper.gas_limit),
-        )
-        .await;
-        let fee_amount_per_gas_unit = format_denominated_amount(
-            context,
-            &gas_token,
-            wrapper.fee.amount_per_gas_unit,
-        )
-        .await;
+        let gas_limit = context
+            .format_amount(&gas_token, Amount::from(wrapper.gas_limit))
+            .await;
+        let fee_amount_per_gas_unit = context
+            .format_amount(&gas_token, wrapper.fee.amount_per_gas_unit)
+            .await;
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("PK : {}", wrapper.pk),

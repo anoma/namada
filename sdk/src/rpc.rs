@@ -1037,21 +1037,22 @@ pub async fn wait_until_node_is_synched<'a>(
 
 /// Look up the denomination of a token in order to make a correctly denominated
 /// amount.
-pub async fn denominate_amount<'a, N: Namada<'a>>(
-    context: &N,
+pub async fn denominate_amount<C: Client + Sync>(
+    client: &C,
+    io: &impl Io,
     token: &Address,
     amount: token::Amount,
 ) -> DenominatedAmount {
-    let denom = convert_response::<N::Client, Option<Denomination>>(
-        RPC.vp().token().denomination(context.client(), token).await,
+    let denom = convert_response::<C, Option<Denomination>>(
+        RPC.vp().token().denomination(client, token).await,
     )
     .unwrap_or_else(|t| {
-        display_line!(context.io(), "Error in querying for denomination: {t}");
+        display_line!(io, "Error in querying for denomination: {t}");
         None
     })
     .unwrap_or_else(|| {
         display_line!(
-            context.io(),
+            io,
             "No denomination found for token: {token}, defaulting to zero \
              decimal places"
         );
@@ -1062,10 +1063,13 @@ pub async fn denominate_amount<'a, N: Namada<'a>>(
 
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
-pub async fn format_denominated_amount<'a>(
-    context: &impl Namada<'a>,
+pub async fn format_denominated_amount(
+    client: &(impl Client + Sync),
+    io: &impl Io,
     token: &Address,
     amount: token::Amount,
 ) -> String {
-    denominate_amount(context, token, amount).await.to_string()
+    denominate_amount(client, io, token, amount)
+        .await
+        .to_string()
 }

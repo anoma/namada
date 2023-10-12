@@ -1030,19 +1030,20 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// context and express that value in terms of the currently timestamped
     /// asset types. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    pub async fn compute_exchanged_balance<'a>(
+    pub async fn compute_exchanged_balance(
         &mut self,
-        context: &impl Namada<'a>,
+        client: &(impl Client + Sync),
+        io: &impl Io,
         vk: &ViewingKey,
         target_epoch: Epoch,
     ) -> Result<Option<MaspAmount>, Error> {
         // First get the unexchanged balance
-        if let Some(balance) =
-            self.compute_shielded_balance(context.client(), vk).await?
+        if let Some(balance) = self.compute_shielded_balance(client, vk).await?
         {
             let exchanged_amount = self
                 .compute_exchanged_amount(
-                    context,
+                    client,
+                    io,
                     balance,
                     target_epoch,
                     BTreeMap::new(),
@@ -1051,8 +1052,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .0;
             // And then exchange balance into current asset types
             Ok(Some(
-                self.decode_all_amounts(context.client(), exchanged_amount)
-                    .await,
+                self.decode_all_amounts(client, exchanged_amount).await,
             ))
         } else {
             Ok(None)
@@ -1065,9 +1065,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     #[allow(clippy::too_many_arguments)]
-    async fn apply_conversion<'a>(
+    async fn apply_conversion(
         &mut self,
-        context: &impl Namada<'a>,
+        client: &(impl Client + Sync),
+        io: &impl Io,
         conv: AllowedConversion,
         asset_type: (Epoch, Address, MaspDenom),
         value: i128,
@@ -1087,7 +1088,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let threshold = -conv[&masp_asset];
         if threshold == 0 {
             edisplay_line!(
-                context.io(),
+                io,
                 "Asset threshold of selected conversion for asset type {} is \
                  0, this is a bug, please report it.",
                 masp_asset
@@ -1106,7 +1107,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
         *input += self
-            .decode_all_amounts(context.client(), conv.clone() * required)
+            .decode_all_amounts(client, conv.clone() * required)
             .await
             - trace.clone();
         *output += trace;
@@ -1117,9 +1118,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    pub async fn compute_exchanged_amount<'a>(
+    pub async fn compute_exchanged_amount(
         &mut self,
-        context: &impl Namada<'a>,
+        client: &(impl Client + Sync),
+        io: &impl Io,
         mut input: MaspAmount,
         target_epoch: Epoch,
         mut conversions: Conversions,
@@ -1141,13 +1143,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
 
                 let denom_value = denom.denominate_i128(&value);
                 self.query_allowed_conversion(
-                    context.client(),
+                    client,
                     target_asset_type,
                     &mut conversions,
                 )
                 .await;
                 self.query_allowed_conversion(
-                    context.client(),
+                    client,
                     asset_type,
                     &mut conversions,
                 )
@@ -1156,7 +1158,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     (conversions.get_mut(&asset_type), at_target_asset_type)
                 {
                     display_line!(
-                        context.io(),
+                        io,
                         "converting current asset type to latest asset type..."
                     );
                     // Not at the target asset type, not at the latest asset
@@ -1164,7 +1166,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // current asset type to the latest
                     // asset type.
                     self.apply_conversion(
-                        context,
+                        client,
+                        io,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1178,7 +1181,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     at_target_asset_type,
                 ) {
                     display_line!(
-                        context.io(),
+                        io,
                         "converting latest asset type to target asset type..."
                     );
                     // Not at the target asset type, yet at the latest asset
@@ -1186,7 +1189,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     // from latest asset type to the target
                     // asset type.
                     self.apply_conversion(
-                        context,
+                        client,
+                        io,
                         conv.clone(),
                         (asset_epoch, token_addr.clone(), denom),
                         denom_value,
@@ -1268,7 +1272,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                     self.decode_all_amounts(context.client(), pre_contr).await;
                 let (contr, proposed_convs) = self
                     .compute_exchanged_amount(
-                        context,
+                        context.client(),
+                        context.io(),
                         input,
                         target_epoch,
                         conversions.clone(),
@@ -1422,7 +1427,13 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         display_line!(context.io(), "Decoded pinned balance: {:?}", amount);
         // Finally, exchange the balance to the transaction's epoch
         let computed_amount = self
-            .compute_exchanged_amount(context, amount, ep, BTreeMap::new())
+            .compute_exchanged_amount(
+                context.client(),
+                context.io(),
+                amount,
+                ep,
+                BTreeMap::new(),
+            )
             .await?
             .0;
         display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);

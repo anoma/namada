@@ -58,8 +58,7 @@ use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
-    self, format_denominated_amount, query_wasm_code_hash, validate_amount,
-    TxBroadcastData, TxResponse,
+    self, query_wasm_code_hash, validate_amount, TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, SigningTxData, TxSourcePostBalance};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -2083,9 +2082,8 @@ async fn check_balance_too_low_err<'a, N: Namada<'a>>(
                          transfer is {} and the balance is {}.",
                         source,
                         token,
-                        format_denominated_amount(context, token, amount).await,
-                        format_denominated_amount(context, token, balance)
-                            .await,
+                        context.format_amount(token, amount).await,
+                        context.format_amount(token, balance).await,
                     );
                     Ok(token::Amount::default())
                 } else {

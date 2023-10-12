@@ -51,8 +51,11 @@ use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::io::Io;
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::proto::Tx;
-use crate::rpc::query_native_token;
+use crate::rpc::{
+    denominate_amount, format_denominated_amount, query_native_token,
+};
 use crate::signing::SigningTxData;
+use crate::token::DenominatedAmount;
 use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
@@ -394,6 +397,26 @@ pub trait Namada<'a>: Sized {
         args: &args::Tx,
     ) -> crate::error::Result<ProcessTxResponse> {
         tx::process_tx(self, args, tx).await
+    }
+
+    /// Look up the denomination of a token in order to make a correctly
+    /// denominated amount.
+    async fn denominate_amount(
+        &self,
+        token: &Address,
+        amount: token::Amount,
+    ) -> DenominatedAmount {
+        denominate_amount(self.client(), self.io(), token, amount).await
+    }
+
+    /// Look up the denomination of a token in order to format it correctly as a
+    /// string.
+    async fn format_amount(
+        &self,
+        token: &Address,
+        amount: token::Amount,
+    ) -> String {
+        format_denominated_amount(self.client(), self.io(), token, amount).await
     }
 }
 
