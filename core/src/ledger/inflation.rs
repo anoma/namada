@@ -151,15 +151,22 @@ impl RewardsController {
         let mut num_str = num.to_string();
         let mut den_str = den.to_string();
 
-        num_str.insert(num_str.len() - (POS_DECIMAL_PRECISION as usize), '.');
-        den_str.insert(den_str.len() - (POS_DECIMAL_PRECISION as usize), '.');
+        // Assumes that num < den always
+        if num_str.len() < (2 * POS_DECIMAL_PRECISION as usize) {
+            num / den
+        } else {
+            num_str
+                .insert(num_str.len() - (POS_DECIMAL_PRECISION as usize), '.');
+            den_str
+                .insert(den_str.len() - (POS_DECIMAL_PRECISION as usize), '.');
 
-        let num = Dec::from_str(&num_str)
-            .expect("Should not fail to convert back to Dec");
-        let den = Dec::from_str(&den_str)
-            .expect("Should not fail to convert back to Dec");
+            let num = Dec::from_str(&num_str)
+                .expect("Should not fail to convert back to Dec");
+            let den = Dec::from_str(&den_str)
+                .expect("Should not fail to convert back to Dec");
 
-        num / den
+            num / den
+        }
     }
 }
 
