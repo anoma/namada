@@ -258,7 +258,7 @@ where
 
     // If wrapper was succesful, write inner tx hash to storage
     let inner_hash_key = replay_protection::get_replay_protection_key(
-        &hash::Hash(tx.raw_header_hash().0),
+        &hash::Hash(tx.decrypted_header_hash().0),
     );
     shell_params
         .wl_storage

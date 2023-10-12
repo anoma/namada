@@ -246,7 +246,7 @@ where
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
             // Check replay protection
-            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage)
+            self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
             // Check fees
@@ -1279,7 +1279,7 @@ mod test_prepare_proposal {
             [(0, keypair)].into_iter().collect(),
             None,
         )));
-        let inner_unsigned_hash = wrapper.raw_header_hash();
+        let inner_unsigned_hash = wrapper.decrypted_header_hash();
 
         // Write inner hash to storage
         let hash_key =

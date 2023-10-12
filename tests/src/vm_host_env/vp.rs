@@ -68,7 +68,9 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let mut tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Decrypted(
+            namada_tx_prelude::transaction::DecryptedTx::Decrypted,
+        ));
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),

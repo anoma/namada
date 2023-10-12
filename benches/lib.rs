@@ -495,7 +495,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         .unwrap(),
     ));
     tx.add_section(Section::Signature(Signature::new(
-        tx.sechashes(),
+        vec![tx.decrypted_header_hash()],
         [(0, signer.clone())].into_iter().collect(),
         None,
     )));

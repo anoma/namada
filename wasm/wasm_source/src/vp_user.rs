@@ -393,7 +393,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -403,14 +403,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a PoS action that must be authorized is rejected without a
@@ -566,7 +562,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
         )));
@@ -576,14 +572,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a transfer on with accounts other than self is accepted.
@@ -695,56 +687,56 @@ mod tests {
     }
 
     proptest! {
-        /// Test that a signed tx that performs arbitrary storage writes or
-        /// deletes to the account is accepted.
-        #[test]
-        fn test_signed_arb_storage_write(
-            (vp_owner, storage_key) in arb_account_storage_subspace_key(),
-            // Generate bytes to write. If `None`, delete from the key instead
-            storage_value in any::<Option<Vec<u8>>>(),
-        ) {
-            // Initialize a tx environment
-            let mut tx_env = TestTxEnv::default();
+            /// Test that a signed tx that performs arbitrary storage writes or
+            /// deletes to the account is accepted.
+            #[test]
+            fn test_signed_arb_storage_write(
+                (vp_owner, storage_key) in arb_account_storage_subspace_key(),
+                // Generate bytes to write. If `None`, delete from the key instead
+                storage_value in any::<Option<Vec<u8>>>(),
+            ) {
+                // Initialize a tx environment
+                let mut tx_env = TestTxEnv::default();
 
-            let keypair = key::testing::keypair_1();
-            let public_key = keypair.ref_to();
+                let keypair = key::testing::keypair_1();
+                let public_key = keypair.ref_to();
 
-            // Spawn all the accounts in the storage key to be able to modify
-            // their storage
-            let storage_key_addresses = storage_key.find_addresses();
-            tx_env.spawn_accounts(storage_key_addresses);
-            tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+                // Spawn all the accounts in the storage key to be able to modify
+                // their storage
+                let storage_key_addresses = storage_key.find_addresses();
+                tx_env.spawn_accounts(storage_key_addresses);
+                tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
 
-            // Initialize VP environment from a transaction
-            vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
-                // Write or delete some data in the transaction
-                if let Some(value) = &storage_value {
-                    tx::ctx().write(&storage_key, value).unwrap();
-                } else {
-                    tx::ctx().delete(&storage_key).unwrap();
-                }
-            });
+                // Initialize VP environment from a transaction
+                vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
+                    // Write or delete some data in the transaction
+                    if let Some(value) = &storage_value {
+                        tx::ctx().write(&storage_key, value).unwrap();
+                    } else {
+                        tx::ctx().delete(&storage_key).unwrap();
+                    }
+                });
 
-            let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+                let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
-            let mut vp_env = vp_host_env::take();
-            let mut tx = vp_env.tx.clone();
-            tx.set_code(Code::new(vec![]));
-            tx.set_data(Data::new(vec![]));
-            tx.add_section(Section::Signature(Signature::new(
-                vec![tx.raw_header_hash()],
-                pks_map.index_secret_keys(vec![keypair]),
-                None,
-            )));
-            let signed_tx = tx.clone();
-            vp_env.tx = signed_tx.clone();
-            let keys_changed: BTreeSet<storage::Key> =
-            vp_env.all_touched_storage_keys();
-            let verifiers: BTreeSet<Address> = BTreeSet::default();
-            vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
+                let mut vp_env = vp_host_env::take();
+                let mut tx = vp_env.tx.clone();
+                tx.set_code(Code::new(vec![]));
+                tx.set_data(Data::new(vec![]));
+                tx.add_section(Section::Signature(Signature::new(
+    vec![                tx.decrypted_header_hash()],
+                    pks_map.index_secret_keys(vec![keypair]),
+                    None,
+                )));
+                let signed_tx = tx.clone();
+                vp_env.tx = signed_tx.clone();
+                let keys_changed: BTreeSet<storage::Key> =
+                vp_env.all_touched_storage_keys();
+                let verifiers: BTreeSet<Address> = BTreeSet::default();
+                vp_host_env::set(vp_env);
+                assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
+            }
         }
-    }
 
     /// Test that a validity predicate update without a valid signature is
     /// rejected.
@@ -819,7 +811,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -829,14 +821,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a validity predicate update is rejected if not whitelisted
@@ -878,7 +866,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -888,14 +876,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(!validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a validity predicate update is accepted if whitelisted
@@ -938,7 +922,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -948,14 +932,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     /// Test that a tx is rejected if not whitelisted
@@ -998,7 +978,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -1008,14 +988,10 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(!validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            !validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -1058,7 +1034,7 @@ mod tests {
         tx.set_code(Code::new(vec![]));
         tx.set_data(Data::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
+            vec![tx.decrypted_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -1068,13 +1044,9 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(validate_tx(
-            &CTX,
-            signed_tx,
-            vp_owner,
-            keys_changed,
-            verifiers
-        )
-        .unwrap());
+        assert!(
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
     }
 }
