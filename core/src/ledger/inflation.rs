@@ -91,15 +91,22 @@ impl RewardsController {
 
         // Token amounts must be expressed in terms of the raw amount (namnam)
         // to properly run the PD controller
-
+        let locked = Dec::try_from(locked_tokens.raw_amount())
+            .expect("Should not fail to convert token Amount to Dec");
         let total = Dec::try_from(total_tokens.raw_amount())
             .expect("Should not fail to convert token Amount to Dec");
         let epochs_py: Dec = epochs_per_year.into();
 
-        println!("pd controller: locked {:?}, total {:?}", locked_tokens, total);
-        let locked_ratio =
-            self.safe_large_token_ratio(locked_tokens, total_tokens);
-        let max_inflation = total * max_reward_rate / epochs_py;
+        println!(
+            "pd controller: locked {:?}, total {:?}",
+            locked_tokens, total
+        );
+        // let locked_ratio =
+        //     self.safe_large_token_ratio(locked_tokens, total_tokens);
+
+        let locked_ratio = locked / total;
+        let inv_max_reward_rate = Dec::one() / max_reward_rate;
+        let max_inflation = (total / inv_max_reward_rate) / epochs_py;
         let p_gain = p_gain_nom * max_inflation;
         let d_gain = d_gain_nom * max_inflation;
 
