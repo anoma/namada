@@ -482,16 +482,18 @@ where
         Ok(previous)
     }
 
-    /// Removes a key from the map, returning the value at the key if the key
-    /// was previously in the map.
+    /// Removes a key from the map if it's present, returning the value at the
+    /// key if the key was previously in the map.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<Option<V>>
     where
         S: StorageWrite + StorageRead,
     {
         let value = self.get(storage, key)?;
 
-        let data_key = self.get_data_key(key);
-        storage.delete(&data_key)?;
+        if value.is_some() {
+            let data_key = self.get_data_key(key);
+            storage.delete(&data_key)?;
+        }
 
         Ok(value)
     }
