@@ -50,11 +50,20 @@ use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 )]
 pub struct Erc20FlowControl {
     /// Whether the wrapped asset is whitelisted.
-    whitelisted: bool,
+    pub whitelisted: bool,
     /// Total minted supply of some wrapped asset.
-    supply: Amount,
+    pub supply: Amount,
     /// The token cap of some wrapped asset.
-    cap: Amount,
+    pub cap: Amount,
+}
+
+impl Erc20FlowControl {
+    /// Check if the `transferred_amount` exceeds the token caps of some ERC20
+    /// asset.
+    #[inline]
+    pub fn exceeds_token_caps(&self, transferred_amount: Amount) -> bool {
+        self.supply + transferred_amount > self.cap
+    }
 }
 
 /// Request data to pass to `generate_bridge_pool_proof`.

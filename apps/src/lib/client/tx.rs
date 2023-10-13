@@ -96,6 +96,26 @@ pub async fn submit_reveal_aux<'a>(
     Ok(())
 }
 
+pub async fn submit_bridge_pool_tx<'a, N: Namada<'a>>(
+    namada: &N,
+    args: args::EthereumBridgePool,
+) -> Result<(), error::Error> {
+    let tx_args = args.tx.clone();
+    let (mut tx, signing_data, _epoch) = args.clone().build(namada).await?;
+
+    signing::generate_test_vector(namada, &tx).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        submit_reveal_aux(namada, tx_args.clone(), &args.sender).await?;
+        namada.sign(&mut tx, &tx_args, signing_data).await?;
+        namada.submit(tx, &tx_args).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn submit_custom<'a, N: Namada<'a>>(
     namada: &N,
     args: args::TxCustom,
