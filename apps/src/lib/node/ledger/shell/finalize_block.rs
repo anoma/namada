@@ -2321,6 +2321,7 @@ mod test_finalize_block {
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&decrypted_tx.header_hash())
+                .unwrap_or_default()
         );
         // Check that the hash is present in the merkle tree
         assert!(
@@ -2472,24 +2473,28 @@ mod test_finalize_block {
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&invalid_wrapper_hash)
+                .unwrap_or_default()
         );
         assert!(
             !shell
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&decrypted_3_hash)
+                .unwrap_or_default()
         );
         assert!(
             !shell
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&decrypted_hash)
+                .unwrap_or_default()
         );
         assert!(
             shell
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&wrapper_hash)
+                .unwrap_or_default()
         );
         assert!(
             shell
@@ -2503,6 +2508,7 @@ mod test_finalize_block {
                 .wl_storage
                 .write_log
                 .has_replay_protection_entry(&wrapper_2_hash)
+                .unwrap_or_default()
         );
     }
 

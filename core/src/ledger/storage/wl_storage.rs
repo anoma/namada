@@ -62,8 +62,9 @@ where
         &self,
         hash: &Hash,
     ) -> Result<bool, super::Error> {
-        if self.write_log.has_replay_protection_entry(hash) {
-            return Ok(true);
+        if let Some(present) = self.write_log.has_replay_protection_entry(hash)
+        {
+            return Ok(present);
         }
 
         self.storage.has_replay_protection_entry(hash)

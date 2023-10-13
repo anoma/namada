@@ -666,12 +666,12 @@ impl WriteLog {
         PrefixIter { iter }
     }
 
-    /// Check if the given tx hash has already been processed
-    pub fn has_replay_protection_entry(&self, hash: &Hash) -> bool {
-        match self.replay_protection.get(hash) {
-            Some(v) => !matches!(v, ReProtStorageModification::Delete),
-            None => false,
-        }
+    /// Check if the given tx hash has already been processed. Returns `None` if
+    /// the key is not known.
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> Option<bool> {
+        self.replay_protection
+            .get(hash)
+            .map(|action| !matches!(action, ReProtStorageModification::Delete))
     }
 
     /// Write the transaction hash
@@ -714,7 +714,7 @@ impl WriteLog {
 
     /// Move the transaction hash of the previous block to the list of all
     /// blocks. This functions should be called at the beginning of the block
-    /// processing
+    /// processing, before any other replay protection operation is done
     pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
