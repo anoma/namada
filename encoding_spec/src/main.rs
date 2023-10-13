@@ -15,10 +15,12 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
+use std::iter::Extend;
 
-use borsh::{schema, BorshSchema};
+use borsh::schema::{BorshSchemaContainer, Declaration, Definition};
+use borsh::{schema, schema_container_of};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
@@ -56,179 +58,188 @@ lazy_static! {
         ]);
 }
 
+fn btree(b: &BorshSchemaContainer) -> BTreeMap<Declaration, Definition> {
+    b.definitions()
+        .map(|(x, y)| (x.clone(), y.clone()))
+        .collect()
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut file = std::fs::File::create(OUTPUT_PATH).unwrap();
 
     write_generated_code_notice(&mut file)?;
 
     // Top-level definitions are displayed at the top
-    let address_schema = Address::schema_container();
-    let token_amount_schema = token::Amount::schema_container();
-    let epoch_schema = Epoch::schema_container();
-    let parameters_schema = Parameters::schema_container();
+
+    let address_schema = schema_container_of::<Address>();
+    let token_amount_schema = schema_container_of::<token::Amount>();
+    let epoch_schema = schema_container_of::<Epoch>();
+    let parameters_schema = schema_container_of::<Parameters>();
     // TODO update after <https://github.com/anoma/namada/issues/225>
-    let public_key_schema = PublicKey::schema_container();
+    let public_key_schema = schema_container_of::<PublicKey>();
     // TODO update after <https://github.com/anoma/namada/issues/225>
-    let signature_schema = Signature::schema_container();
+    let signature_schema = schema_container_of::<Signature>();
     let init_account_schema =
-        transaction::account::InitAccount::schema_container();
+        schema_container_of::<transaction::account::InitAccount>();
     let init_validator_schema =
-        transaction::pos::InitValidator::schema_container();
-    let token_transfer_schema = token::Transfer::schema_container();
+        schema_container_of::<transaction::pos::InitValidator>();
+    let token_transfer_schema = schema_container_of::<token::Transfer>();
     let update_account =
-        transaction::account::UpdateAccount::schema_container();
-    let pos_bond_schema = pos::Bond::schema_container();
-    let pos_withdraw_schema = pos::Withdraw::schema_container();
-    let wrapper_tx_schema = transaction::WrapperTx::schema_container();
+        schema_container_of::<transaction::account::UpdateAccount>();
+    let pos_bond_schema = schema_container_of::<pos::Bond>();
+    let pos_withdraw_schema = schema_container_of::<pos::Withdraw>();
+    let wrapper_tx_schema = schema_container_of::<transaction::WrapperTx>();
     // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-    // let tx_result_schema = transaction::TxResult::schema_container();
-    let tx_type_schema = transaction::TxType::schema_container();
-    let prefix_value_schema = storage::PrefixValue::schema_container();
+    // let tx_result_schema = schema_container_of::<transaction::TxResult>();
+    let tx_type_schema = schema_container_of::<transaction::TxType>();
+    let prefix_value_schema = schema_container_of::<storage::PrefixValue>();
 
     // PoS
     // TODO add after <https://github.com/anoma/namada/issues/439>
     // TODO imported from `use namada::ledger::pos::Bonds;`
-    // let pos_bonds_schema = Bonds::schema_container();
+    // let pos_bonds_schema = schema_container_of::<Bonds>();
 
     // Merge type definitions
-    let mut definitions = address_schema.definitions;
+
+    let mut definitions = btree(&address_schema);
+
     // TODO check for conflicts (same name, different declaration)
-    definitions.extend(token_amount_schema.definitions);
-    definitions.extend(epoch_schema.definitions);
-    definitions.extend(parameters_schema.definitions);
-    definitions.extend(public_key_schema.definitions);
-    definitions.extend(signature_schema.definitions);
-    definitions.extend(init_account_schema.definitions);
-    definitions.extend(init_validator_schema.definitions);
-    definitions.extend(token_transfer_schema.definitions);
-    definitions.extend(update_account.definitions);
-    definitions.extend(pos_bond_schema.definitions);
-    definitions.extend(pos_withdraw_schema.definitions);
-    definitions.extend(wrapper_tx_schema.definitions);
-    // definitions.extend(tx_result_schema.definitions);
-    definitions.extend(tx_type_schema.definitions);
-    definitions.extend(prefix_value_schema.definitions);
-    // definitions.extend(pos_bonds_schema.definitions);
+    definitions.extend(btree(&token_amount_schema));
+    definitions.extend(btree(&epoch_schema));
+    definitions.extend(btree(&parameters_schema));
+    definitions.extend(btree(&public_key_schema));
+    definitions.extend(btree(&signature_schema));
+    definitions.extend(btree(&init_account_schema));
+    definitions.extend(btree(&init_validator_schema));
+    definitions.extend(btree(&token_transfer_schema));
+    definitions.extend(btree(&update_account));
+    definitions.extend(btree(&pos_bond_schema));
+    definitions.extend(btree(&pos_withdraw_schema));
+    definitions.extend(btree(&wrapper_tx_schema));
+    // definitions.extend(btree(&tx_result_schema));
+    definitions.extend(btree(&tx_type_schema));
+    definitions.extend(btree(&prefix_value_schema));
+    // definitions.extend(btree(&pos_bonds_schema));
     let mut tables: Vec<Table> = Vec::with_capacity(definitions.len());
 
     // Add the top-level definitions first
     let address_definition =
-        definitions.remove(&address_schema.declaration).unwrap();
+        definitions.remove(address_schema.declaration()).unwrap();
     let address_table =
-        definition_to_table(address_schema.declaration, address_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/address/enum.Address.html");
+        definition_to_table( address_schema.declaration(), address_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/address/enum.Address.html");
     tables.push(address_table);
 
     let token_amount_definition = definitions
-        .remove(&token_amount_schema.declaration)
+        .remove(token_amount_schema.declaration())
         .unwrap();
     let token_amount_table = definition_to_table(
-        token_amount_schema.declaration,
+        token_amount_schema.declaration(),
         token_amount_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Amount.html");
     tables.push(token_amount_table);
 
     let epoch_definition =
-        definitions.remove(&epoch_schema.declaration).unwrap();
+        definitions.remove(epoch_schema.declaration()).unwrap();
     let epoch_table =
-        definition_to_table(epoch_schema.declaration, epoch_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/storage/struct.Epoch.html");
+        definition_to_table(epoch_schema.declaration(), epoch_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/storage/struct.Epoch.html");
     tables.push(epoch_table);
 
     let parameters_definition =
-        definitions.remove(&parameters_schema.declaration).unwrap();
+        definitions.remove(parameters_schema.declaration()).unwrap();
     let parameters_table =
-        definition_to_table(parameters_schema.declaration, parameters_definition).with_rust_doc_link("file:///Users/tz/dev/namada/target/doc/namada/ledger/parameters/struct.Parameters.html");
+        definition_to_table(parameters_schema.declaration(), parameters_definition).with_rust_doc_link("file:///Users/tz/dev/namada/target/doc/namada/ledger/parameters/struct.Parameters.html");
     tables.push(parameters_table);
 
     let public_key_definition =
-        definitions.remove(&public_key_schema.declaration).unwrap();
+        definitions.remove(public_key_schema.declaration()).unwrap();
     let public_key_table =
-        definition_to_table(public_key_schema.declaration, public_key_definition).with_rust_doc_link(
+        definition_to_table(public_key_schema.declaration(), public_key_definition).with_rust_doc_link(
             // TODO update after <https://github.com/anoma/namada/issues/225>
             "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.PublicKey.html");
     tables.push(public_key_table);
 
     let signature_definition =
-        definitions.remove(&signature_schema.declaration).unwrap();
+        definitions.remove(signature_schema.declaration()).unwrap();
     let signature_table =
-        definition_to_table(signature_schema.declaration, signature_definition).with_rust_doc_link(
+        definition_to_table(signature_schema.declaration(), signature_definition).with_rust_doc_link(
             // TODO update after <https://github.com/anoma/namada/issues/225>
             "https://dev.namada.net/master/rustdoc/namada/types/key/ed25519/struct.Signature.html");
     tables.push(signature_table);
 
     let init_account_definition = definitions
-        .remove(&init_account_schema.declaration)
+        .remove(init_account_schema.declaration())
         .unwrap();
     let init_account_table = definition_to_table(
-        init_account_schema.declaration,
+        init_account_schema.declaration(),
         init_account_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.InitAccount.html");
     tables.push(init_account_table);
 
     let init_validator_definition = definitions
-        .remove(&init_validator_schema.declaration)
+        .remove(init_validator_schema.declaration())
         .unwrap();
     let init_validator_table = definition_to_table(
-        init_validator_schema.declaration,
+        init_validator_schema.declaration(),
         init_validator_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.InitValidator.html");
     tables.push(init_validator_table);
 
     let token_transfer_definition = definitions
-        .remove(&token_transfer_schema.declaration)
+        .remove(token_transfer_schema.declaration())
         .unwrap();
     let token_transfer_table = definition_to_table(
-        token_transfer_schema.declaration,
+        token_transfer_schema.declaration(),
         token_transfer_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Transfer.html");
     tables.push(token_transfer_table);
 
     let update_account_definition =
-        definitions.remove(&update_account.declaration).unwrap();
+        definitions.remove(update_account.declaration()).unwrap();
     let update_accoun_table =
-        definition_to_table(update_account.declaration, update_account_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.UpdateVp.html");
+        definition_to_table(update_account.declaration(), update_account_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.UpdateVp.html");
     tables.push(update_accoun_table);
 
     let pos_bond_definition =
-        definitions.remove(&pos_bond_schema.declaration).unwrap();
+        definitions.remove(pos_bond_schema.declaration()).unwrap();
     let pos_bond_table =
-        definition_to_table(pos_bond_schema.declaration, pos_bond_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/pos/struct.Bond.html");
+        definition_to_table(pos_bond_schema.declaration(), pos_bond_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/pos/struct.Bond.html");
     tables.push(pos_bond_table);
 
     let pos_withdraw_definition = definitions
-        .remove(&pos_withdraw_schema.declaration)
+        .remove(pos_withdraw_schema.declaration())
         .unwrap();
     let pos_withdraw_table = definition_to_table(
-        pos_withdraw_schema.declaration,
+        pos_withdraw_schema.declaration(),
         pos_withdraw_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/pos/struct.Withdraw.html");
     tables.push(pos_withdraw_table);
 
     let wrapper_tx_definition =
-        definitions.remove(&wrapper_tx_schema.declaration).unwrap();
+        definitions.remove(wrapper_tx_schema.declaration()).unwrap();
     let wrapper_tx_table = definition_to_table(
-        wrapper_tx_schema.declaration,
+        wrapper_tx_schema.declaration(),
         wrapper_tx_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/wrapper/wrapper_tx/struct.WrapperTx.html");
     tables.push(wrapper_tx_table);
 
     // let tx_result_definition =
-    //     definitions.remove(&tx_result_schema.declaration).unwrap();
+    //     definitions.remove(tx_result_schema.declaration()).unwrap();
     // let tx_result_table =
-    //     definition_to_table(tx_result_schema.declaration,
+    //     definition_to_table(tx_result_schema.declaration(),
     // tx_result_definition).with_rust_doc_link("TODO");
     // tables.push(tx_result_table);
 
     let tx_type_definition =
-        definitions.remove(&tx_type_schema.declaration).unwrap();
+        definitions.remove(tx_type_schema.declaration()).unwrap();
     let tx_type_table =
-        definition_to_table(tx_type_schema.declaration, tx_type_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/tx_types/enum.TxType.html");
+        definition_to_table(tx_type_schema.declaration(), tx_type_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/tx_types/enum.TxType.html");
     tables.push(tx_type_table);
 
     let prefix_value_definition = definitions
-        .remove(&prefix_value_schema.declaration)
+        .remove(prefix_value_schema.declaration())
         .unwrap();
     let prefix_value_table =
-        definition_to_table(prefix_value_schema.declaration, prefix_value_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/prefix_values/enum.TxType.html");
+        definition_to_table(prefix_value_schema.declaration(), prefix_value_definition).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/prefix_values/enum.TxType.html");
     tables.push(prefix_value_table);
 
     // Add PoS definitions
@@ -243,7 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into_iter()
         .sorted_by_key(|(key, _val)| key.clone())
     {
-        tables.push(definition_to_table(declaration, defition))
+        tables.push(definition_to_table(&declaration, defition))
     }
 
     // Print the tables to markdown
@@ -271,7 +282,7 @@ struct Table {
     rows: Option<madato::types::Table<String, String>>,
 }
 
-fn definition_to_table(name: String, def: schema::Definition) -> Table {
+fn definition_to_table(name: &Declaration, def: schema::Definition) -> Table {
     let (desc, rows) = match def {
         schema::Definition::Array { length, elements } => {
             let rows = None;
@@ -345,7 +356,11 @@ fn definition_to_table(name: String, def: schema::Definition) -> Table {
             }
         }
     };
-    Table { name, desc, rows }
+    Table {
+        name: name.to_string(),
+        desc,
+        rows,
+    }
 }
 
 /// Format a type to markdown. For internal types, adds anchors.

@@ -5,7 +5,7 @@ use std::ptr::NonNull;
 use std::str::Utf8Error;
 use std::sync::Arc;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::gas::VM_MEMORY_ACCESS_GAS_PER_BYTE;
 use thiserror::Error;
 use wasmer::{
@@ -86,7 +86,7 @@ pub fn write_tx_inputs(
     tx_data: &Tx,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
-    let tx_data_bytes = tx_data.try_to_vec().map_err(Error::EncodingError)?;
+    let tx_data_bytes = tx_data.serialize_to_vec();
     let tx_data_len = tx_data_bytes.len() as _;
 
     write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
@@ -129,20 +129,18 @@ pub fn write_vp_inputs(
     }: VpInput,
 ) -> Result<VpCallInput> {
     let addr_ptr = 0;
-    let addr_bytes = addr.try_to_vec().map_err(Error::EncodingError)?;
+    let addr_bytes = addr.serialize_to_vec();
     let addr_len = addr_bytes.len() as _;
 
-    let data_bytes = data.try_to_vec().map_err(Error::EncodingError)?;
+    let data_bytes = data.serialize_to_vec();
     let data_ptr = addr_ptr + addr_len;
     let data_len = data_bytes.len() as _;
 
-    let keys_changed_bytes =
-        keys_changed.try_to_vec().map_err(Error::EncodingError)?;
+    let keys_changed_bytes = keys_changed.serialize_to_vec();
     let keys_changed_ptr = data_ptr + data_len;
     let keys_changed_len = keys_changed_bytes.len() as _;
 
-    let verifiers_bytes =
-        verifiers.try_to_vec().map_err(Error::EncodingError)?;
+    let verifiers_bytes = verifiers.serialize_to_vec();
     let verifiers_ptr = keys_changed_ptr + keys_changed_len;
     let verifiers_len = verifiers_bytes.len() as _;
 

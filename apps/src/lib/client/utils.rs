@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -384,12 +384,12 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     match pk {
         common::PublicKey::Ed25519(_) => {
             let _pk: ed25519::PublicKey = pk.try_to_pk().unwrap();
-            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            let digest = Sha256::digest(_pk.serialize_to_vec().as_slice());
             bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
         }
         common::PublicKey::Secp256k1(_) => {
             let _pk: secp256k1::PublicKey = pk.try_to_pk().unwrap();
-            let digest = Sha256::digest(_pk.try_to_vec().unwrap().as_slice());
+            let digest = Sha256::digest(_pk.serialize_to_vec().as_slice());
             bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
         }
     }
@@ -723,7 +723,7 @@ pub fn init_network(
 
     // Generate the chain ID first
     let genesis = genesis_config::load_genesis_config(config_clean.clone());
-    let genesis_bytes = genesis.try_to_vec().unwrap();
+    let genesis_bytes = genesis.serialize_to_vec();
     let chain_id = ChainId::from_genesis(chain_id_prefix, genesis_bytes);
     let chain_dir = global_args.base_dir.join(chain_id.as_str());
     let genesis_path = global_args
@@ -1144,12 +1144,11 @@ pub fn write_tendermint_node_key(
     // but does not for secp256k1.
     let (node_keypair, key_str) = match node_sk {
         common::SecretKey::Ed25519(sk) => (
-            [sk.try_to_vec().unwrap(), sk.ref_to().try_to_vec().unwrap()]
-                .concat(),
+            [sk.serialize_to_vec(), sk.ref_to().serialize_to_vec()].concat(),
             "Ed25519",
         ),
         common::SecretKey::Secp256k1(sk) => {
-            (sk.try_to_vec().unwrap(), "Secp256k1")
+            (sk.serialize_to_vec(), "Secp256k1")
         }
     };
 

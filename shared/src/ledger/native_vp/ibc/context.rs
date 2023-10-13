@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::ibc::storage::is_ibc_key;
 use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::storage::write_log::StorageModification;
@@ -150,14 +150,8 @@ where
             .unwrap_or_default();
         dest_bal.receive(&amount.amount);
 
-        self.write(
-            &src_key,
-            src_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )?;
-        self.write(
-            &dest_key,
-            dest_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )
+        self.write(&src_key, src_bal.serialize_to_vec())?;
+        self.write(&dest_key, dest_bal.serialize_to_vec())
     }
 
     fn mint_token(
@@ -182,21 +176,13 @@ where
             .unwrap_or_default();
         minted_bal.receive(&amount.amount);
 
-        self.write(
-            &target_key,
-            target_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )?;
-        self.write(
-            &minted_key,
-            minted_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )?;
+        self.write(&target_key, target_bal.serialize_to_vec())?;
+        self.write(&minted_key, minted_bal.serialize_to_vec())?;
 
         let minter_key = token::minter_key(token);
         self.write(
             &minter_key,
-            Address::Internal(InternalAddress::Ibc)
-                .try_to_vec()
-                .expect("encoding shouldn't failed"),
+            Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         )
     }
 
@@ -222,14 +208,8 @@ where
             .unwrap_or_default();
         minted_bal.spend(&amount.amount);
 
-        self.write(
-            &target_key,
-            target_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )?;
-        self.write(
-            &minted_key,
-            minted_bal.try_to_vec().expect("encoding shouldn't failed"),
-        )
+        self.write(&target_key, target_bal.serialize_to_vec())?;
+        self.write(&minted_key, minted_bal.serialize_to_vec())
     }
 
     /// Get the current height of this chain

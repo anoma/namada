@@ -2,7 +2,7 @@
 use std::collections::BTreeSet;
 use std::panic;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::TxGasMeter;
@@ -510,12 +510,12 @@ where
                 Some(new_dest_balance) => {
                     wl_storage
                         .write_log_mut()
-                        .write(&src_key, new_src_balance.try_to_vec().unwrap())
+                        .write(&src_key, new_src_balance.serialize_to_vec())
                         .map_err(|e| Error::FeeError(e.to_string()))?;
-                    match wl_storage.write_log_mut().write(
-                        &dest_key,
-                        new_dest_balance.try_to_vec().unwrap(),
-                    ) {
+                    match wl_storage
+                        .write_log_mut()
+                        .write(&dest_key, new_dest_balance.serialize_to_vec())
+                    {
                         Ok(_) => Ok(()),
                         Err(e) => Err(Error::FeeError(e.to_string())),
                     }

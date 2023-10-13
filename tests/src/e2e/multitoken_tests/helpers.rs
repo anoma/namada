@@ -102,9 +102,9 @@ pub fn mint_red_tokens(
         test,
         TxWriteData {
             key: red_balance_key,
-            value: amount.try_to_vec()?,
+            value: amount.serialize_to_vec()?,
         }
-        .try_to_vec()?,
+        .serialize_to_vec()?,
     )?;
 
     let tx_data_path = tx_data_path.to_string_lossy().to_string();

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::types::account::AccountPublicKeysMap;
 use namada::core::types::address;
@@ -19,7 +19,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         key: None,
         shielded: None,
     };
-    let section = Section::Data(Data::new(transfer_data.try_to_vec().unwrap()));
+    let section = Section::Data(Data::new(transfer_data.serialize_to_vec()));
     let section_hash = section.get_hash();
 
     let pkim = AccountPublicKeysMap::from_iter([

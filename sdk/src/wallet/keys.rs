@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
@@ -201,9 +202,7 @@ impl<T: BorshSerialize + BorshDeserialize> EncryptedKeypair<T> {
         let salt = encryption_salt();
         let encryption_key = encryption_key(&salt, &password);
 
-        let data = keypair
-            .try_to_vec()
-            .expect("Serializing keypair shouldn't fail");
+        let data = keypair.serialize_to_vec();
 
         let encrypted_keypair = aead::seal(&encryption_key, &data)
             .expect("Encryption of data shouldn't fail");

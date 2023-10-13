@@ -85,7 +85,7 @@ use namada::types::token::{self, Amount, DenominatedAmount};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::ledger::gas::TxGasMeter;
 use namada_test_utils::TestWasms;
-use namada_tx_prelude::BorshSerialize;
+use namada_tx_prelude::borsh_ext::BorshSerializeExt;
 
 use crate::tx::*;
 
@@ -243,11 +243,11 @@ pub fn init_storage() -> (Address, Address) {
     tx_host_env::with(|env| {
         env.wl_storage
             .storage
-            .write(&denom_key, &token_denom.try_to_vec().unwrap())
+            .write(&denom_key, &token_denom.serialize_to_vec())
             .unwrap();
         env.wl_storage
             .storage
-            .write(&key, &init_bal.try_to_vec().unwrap())
+            .write(&key, &init_bal.serialize_to_vec())
             .unwrap();
     });
 
@@ -257,7 +257,7 @@ pub fn init_storage() -> (Address, Address) {
         min_num_of_blocks: 10,
         min_duration: DurationSecs(100),
     };
-    let bytes = epoch_duration.try_to_vec().unwrap();
+    let bytes = epoch_duration.serialize_to_vec();
     tx_host_env::with(|env| {
         env.wl_storage.storage.write(&key, &bytes).unwrap();
     });

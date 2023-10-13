@@ -14,6 +14,8 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use borsh_ext;
+use borsh_ext::BorshSerializeExt;
 pub use namada_core::ledger::governance::storage as gov_storage;
 pub use namada_core::ledger::parameters;
 pub use namada_core::ledger::pgf::storage as pgf_storage;
@@ -91,10 +93,10 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let targets = [*tx.data_sechash(), *tx.code_sechash()];
 
     // Serialize parameters
-    let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();
-    let public_keys_map = public_keys_index_map.try_to_vec().unwrap();
-    let targets = targets.try_to_vec().unwrap();
-    let signer = owner.try_to_vec().unwrap();
+    let max_signatures = max_signatures_per_transaction.serialize_to_vec();
+    let public_keys_map = public_keys_index_map.serialize_to_vec();
+    let targets = targets.serialize_to_vec();
+    let signer = owner.serialize_to_vec();
 
     let valid = unsafe {
         namada_vp_verify_tx_section_signature(
@@ -305,7 +307,7 @@ impl<'view> VpEnv<'view> for Ctx {
     }
 
     fn eval(&self, vp_code_hash: Hash, input_data: Tx) -> Result<bool, Error> {
-        let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
+        let input_data_bytes = borsh::to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
                 vp_code_hash.0.as_ptr() as _,

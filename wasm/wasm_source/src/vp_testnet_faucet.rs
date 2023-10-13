@@ -118,6 +118,7 @@ mod tests {
     use namada_tests::vp::*;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
+    use namada_vp_prelude::borsh_ext::BorshSerializeExt;
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
     use storage::testing::arb_account_storage_key_no_vp;
@@ -376,7 +377,7 @@ mod tests {
         // Construct a PoW solution like a client would
         let challenge = testnet_pow::Challenge::new(&mut tx_env.wl_storage, &vp_owner, target.clone()).unwrap();
         let solution = challenge.solve();
-        let solution_bytes = solution.try_to_vec().unwrap();
+        let solution_bytes = solution.serialize_to_vec();
 
         let amount = token::DenominatedAmount {
             amount,

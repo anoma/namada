@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
@@ -477,7 +477,7 @@ async fn construct_bridge_pool_proof<'a>(
         }
     }
 
-    let data = args.try_to_vec().unwrap();
+    let data = args.serialize_to_vec();
     let response = RPC
         .shell()
         .eth_bridge()

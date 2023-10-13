@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -494,9 +495,7 @@ impl EstablishedAddressGen {
         &mut self,
         rng_source: impl AsRef<[u8]>,
     ) -> Address {
-        let gen_bytes = self
-            .try_to_vec()
-            .expect("Encoding established addresses generator shouldn't fail");
+        let gen_bytes = self.serialize_to_vec();
         let bytes = [&gen_bytes, rng_source.as_ref()].concat();
         let full_hash = Sha256::digest(&bytes);
         // take first 20 bytes of the hash
@@ -753,7 +752,7 @@ pub mod tests {
         #[test]
         fn test_established_address_bytes_length(address in testing::arb_established_address()) {
             let address = Address::Established(address);
-            let bytes = address.try_to_vec().unwrap();
+            let bytes = address.serialize_to_vec();
             assert_eq!(bytes.len(), ESTABLISHED_ADDRESS_BYTES_LEN);
         }
     }

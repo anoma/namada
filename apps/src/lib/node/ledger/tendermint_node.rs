@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use namada::types::chain::ChainId;
 use namada::types::key::*;
 use namada::types::storage::BlockHeight;
@@ -24,7 +24,6 @@ use crate::facade::tendermint::{block, Genesis};
 use crate::facade::tendermint_config::{
     Error as TendermintError, TendermintConfig,
 };
-
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";
 
@@ -243,19 +242,17 @@ fn validator_key_to_json(
     let (id_str, pk_arr, kp_arr) = match sk {
         common::SecretKey::Ed25519(_) => {
             let sk_ed: ed25519::SecretKey = sk.try_to_sk().unwrap();
-            let keypair = [
-                sk_ed.try_to_vec().unwrap(),
-                sk_ed.ref_to().try_to_vec().unwrap(),
-            ]
-            .concat();
-            ("Ed25519", sk_ed.ref_to().try_to_vec().unwrap(), keypair)
+            let keypair =
+                [sk_ed.serialize_to_vec(), sk_ed.ref_to().serialize_to_vec()]
+                    .concat();
+            ("Ed25519", sk_ed.ref_to().serialize_to_vec(), keypair)
         }
         common::SecretKey::Secp256k1(_) => {
             let sk_sec: secp256k1::SecretKey = sk.try_to_sk().unwrap();
             (
                 "Secp256k1",
-                sk_sec.ref_to().try_to_vec().unwrap(),
-                sk_sec.try_to_vec().unwrap(),
+                sk_sec.ref_to().serialize_to_vec(),
+                sk_sec.serialize_to_vec(),
             )
         }
     };

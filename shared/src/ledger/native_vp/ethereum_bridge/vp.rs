@@ -164,7 +164,7 @@ mod tests {
     use std::default::Default;
     use std::env::temp_dir;
 
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::eth_bridge;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
@@ -220,8 +220,7 @@ mod tests {
             .write_bytes(
                 &balance_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE)
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -365,8 +364,7 @@ mod tests {
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -379,8 +377,7 @@ mod tests {
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
                 )
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -417,8 +414,7 @@ mod tests {
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -429,8 +425,7 @@ mod tests {
             .write(
                 &escrow_key,
                 Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -468,8 +463,7 @@ mod tests {
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
-                    .try_to_vec()
-                    .expect("Test failed"),
+                    .serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -482,8 +476,7 @@ mod tests {
                 Amount::from(
                     BRIDGE_POOL_ESCROW_INITIAL_BALANCE + ESCROW_AMOUNT,
                 )
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
             )
             .expect("Test failed");
 

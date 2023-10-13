@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
@@ -727,11 +728,10 @@ where
         tx_charge_gas(env, iter_gas + log_gas)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
-                let key_val = KeyVal {
+                let key_val = borsh::to_vec(&KeyVal {
                     key,
                     val: value.clone(),
-                }
-                .try_to_vec()
+                })
                 .map_err(TxRuntimeError::EncodingError)?;
                 let len: i64 = key_val
                     .len()
@@ -750,11 +750,10 @@ where
                 continue;
             }
             Some(write_log::StorageModification::Temp { ref value }) => {
-                let key_val = KeyVal {
+                let key_val = borsh::to_vec(&KeyVal {
                     key,
                     val: value.clone(),
-                }
-                .try_to_vec()
+                })
                 .map_err(TxRuntimeError::EncodingError)?;
                 let len: i64 = key_val
                     .len()
@@ -765,8 +764,7 @@ where
                 return Ok(len);
             }
             None => {
-                let key_val = KeyVal { key, val }
-                    .try_to_vec()
+                let key_val = borsh::to_vec(&KeyVal { key, val })
                     .map_err(TxRuntimeError::EncodingError)?;
                 let len: i64 = key_val
                     .len()
@@ -995,7 +993,7 @@ where
     for event in write_log.get_ibc_events() {
         if event.event_type == event_type {
             let value =
-                event.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+                borsh::to_vec(event).map_err(TxRuntimeError::EncodingError)?;
             let len: i64 = value
                 .len()
                 .try_into()
@@ -1341,8 +1339,7 @@ where
     if let Some(iter) = iterators.get_mut(iter_id) {
         let gas_meter = unsafe { env.ctx.gas_meter.get() };
         if let Some((key, val)) = vp_host_fns::iter_next(gas_meter, iter)? {
-            let key_val = KeyVal { key, val }
-                .try_to_vec()
+            let key_val = borsh::to_vec(&KeyVal { key, val })
                 .map_err(vp_host_fns::RuntimeError::EncodingError)?;
             let len: i64 = key_val
                 .len()
@@ -1452,8 +1449,7 @@ where
     let code_hash = Hash::try_from(&code_hash[..])
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
-    let addr_bytes =
-        addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+    let addr_bytes = addr.serialize_to_vec();
     tx_charge_gas(env, gas)?;
     let gas = env
         .memory
@@ -1616,8 +1612,7 @@ where
         .map_err(TxRuntimeError::StorageError)?;
     Ok(match header {
         Some(h) => {
-            let value =
-                h.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let value = h.serialize_to_vec();
             let len: i64 = value
                 .len()
                 .try_into()
@@ -1692,9 +1687,7 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
     Ok(match header {
         Some(h) => {
-            let value = h
-                .try_to_vec()
-                .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+            let value = h.serialize_to_vec();
             let len: i64 = value
                 .len()
                 .try_into()
@@ -2391,7 +2384,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    let bytes = val.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+    let bytes = borsh::to_vec(val).map_err(TxRuntimeError::EncodingError)?;
     namada_core::ledger::ibc::IbcStorageContext::write(ctx, key, bytes)?;
     Ok(())
 }

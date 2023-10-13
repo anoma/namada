@@ -3,7 +3,7 @@
 /// *Not wasm compatible*
 #[cfg(feature = "ferveo-tpke")]
 pub mod encrypted_tx {
-    use std::io::{Error, ErrorKind, Write};
+    use std::io::{Error, ErrorKind, Read, Write};
 
     use ark_ec::PairingEngine;
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -32,8 +32,10 @@ pub mod encrypted_tx {
     }
 
     impl borsh::de::BorshDeserialize for EncryptionKey {
-        fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-            let key: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+        fn deserialize_reader<R: Read>(
+            reader: &mut R,
+        ) -> std::io::Result<Self> {
+            let key: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
             Ok(EncryptionKey(
                 CanonicalDeserialize::deserialize(&*key)
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?,

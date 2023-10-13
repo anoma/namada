@@ -87,7 +87,7 @@ where
         _req: request::ExtendVote,
     ) -> response::ExtendVote {
         response::ExtendVote {
-            vote_extension: self.craft_extension().try_to_vec().unwrap(),
+            vote_extension: self.craft_extension().serialize_to_vec(),
         }
     }
 

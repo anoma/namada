@@ -1,6 +1,7 @@
 //! ExecutionContext implementation for IBC
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 
 use super::super::{IbcActions, IbcCommonContext};
 use crate::ibc::core::events::IbcEvent;
@@ -179,7 +180,7 @@ where
                 }))?
             }
         };
-        let bytes = list.try_to_vec().expect("encoding shouldn't fail");
+        let bytes = list.serialize_to_vec();
         self.ctx.borrow_mut().write(&key, bytes).map_err(|_| {
             ContextError::ConnectionError(ConnectionError::Other {
                 description: format!(

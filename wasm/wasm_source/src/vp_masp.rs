@@ -4,6 +4,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::I128Sum;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
+use namada_vp_prelude::borsh_ext::BorshSerializeExt;
 use namada_vp_prelude::storage::Epoch;
 use namada_vp_prelude::*;
 use ripemd::{Digest, Ripemd160};
@@ -16,9 +17,7 @@ fn asset_type_from_epoched_address(
     denom: token::MaspDenom,
 ) -> AssetType {
     // Timestamp the chosen token with the current epoch
-    let token_bytes = (token, denom, epoch.0)
-        .try_to_vec()
-        .expect("token should serialize");
+    let token_bytes = (token, denom, epoch.0).serialize_to_vec();
     // Generate the unique asset identifier from the unique token address
     AssetType::new(token_bytes.as_ref()).expect("unable to create asset type")
 }
@@ -208,10 +207,7 @@ fn validate_tx(
                 transparent_tx_pool -= transp_amt;
 
                 // Satisfies 4.
-                let target_enc = transfer
-                    .target
-                    .try_to_vec()
-                    .expect("target address encoding");
+                let target_enc = transfer.target.serialize_to_vec();
 
                 let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
@@ -267,7 +263,7 @@ fn validate_tx(
             _ => {}
         }
         // Do the expensive proof verification in the VM at the end.
-        ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
+        ctx.verify_masp(shielded_tx.serialize_to_vec())
     } else {
         reject()
     }
