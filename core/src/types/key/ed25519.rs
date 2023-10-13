@@ -10,7 +10,7 @@ use data_encoding::HEXLOWER;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
@@ -125,7 +125,7 @@ impl FromStr for PublicKey {
 }
 
 /// Ed25519 secret key
-#[derive(Debug, Serialize, Deserialize, Zeroize)]
+#[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey(pub Box<ed25519_consensus::SigningKey>);
 
 impl super::SecretKey for SecretKey {
@@ -220,12 +220,6 @@ impl FromStr for SecretKey {
             .map_err(ParseSecretKeyError::InvalidHex)?;
         BorshDeserialize::try_from_slice(&vec)
             .map_err(ParseSecretKeyError::InvalidEncoding)
-    }
-}
-
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        self.0.zeroize();
     }
 }
 
