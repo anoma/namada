@@ -3,7 +3,6 @@
 pub mod time;
 
 use std::future::Future;
-use std::ops::ControlFlow;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -11,109 +10,6 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 #[cfg(any(unix, windows))]
 use tokio::sync::oneshot;
-
-/// A [`ControlFlow`] to control the halt status
-/// of some execution context.
-///
-/// No return values are assumed to exist.
-pub type Halt<T> = ControlFlow<(), T>;
-
-/// Halt all execution.
-pub const fn halt<T>() -> Halt<T> {
-    ControlFlow::Break(())
-}
-
-/// Proceed execution.
-pub const fn proceed<T>(value: T) -> Halt<T> {
-    ControlFlow::Continue(value)
-}
-
-/// Convert from [`Halt`] to [`Result`].
-#[allow(missing_docs)]
-pub trait ProceedOrElse<T> {
-    fn proceed_or_else<F, E>(self, error: F) -> Result<T, E>
-    where
-        Self: Sized,
-        F: FnOnce() -> E;
-
-    #[inline]
-    fn proceed_or<E>(self, error: E) -> Result<T, E>
-    where
-        Self: Sized,
-    {
-        self.proceed_or_else(move || error)
-    }
-
-    #[inline]
-    fn proceed(self) -> T
-    where
-        Self: Sized,
-    {
-        self.proceed_or(()).expect("Halted execution")
-    }
-}
-
-impl<T> ProceedOrElse<T> for Halt<T> {
-    #[inline]
-    fn proceed_or_else<F, E>(self, error: F) -> Result<T, E>
-    where
-        Self: Sized,
-        F: FnOnce() -> E,
-    {
-        match self {
-            ControlFlow::Continue(x) => Ok(x),
-            ControlFlow::Break(()) => Err(error()),
-        }
-    }
-}
-
-/// Halting abstraction to obtain [`ControlFlow`] actions.
-pub trait TryHalt<T, E> {
-    /// Possibly exit from some context, if we encounter an
-    /// error. We may recover from said error.
-    fn try_halt_or_recover<F>(self, handle_err: F) -> Halt<T>
-    where
-        F: FnMut(E) -> Halt<T>;
-
-    /// Exit from some context, if we encounter an error.
-    #[inline]
-    fn try_halt<F>(self, mut handle_err: F) -> Halt<T>
-    where
-        Self: Sized,
-        F: FnMut(E),
-    {
-        self.try_halt_or_recover(|e| {
-            handle_err(e);
-            halt()
-        })
-    }
-}
-
-impl<T, E> TryHalt<T, E> for Result<T, E> {
-    #[inline]
-    fn try_halt_or_recover<F>(self, mut handle_err: F) -> Halt<T>
-    where
-        F: FnMut(E) -> Halt<T>,
-    {
-        match self {
-            Ok(x) => proceed(x),
-            Err(e) => handle_err(e),
-        }
-    }
-}
-
-impl<L, R> TryHalt<R, L> for itertools::Either<L, R> {
-    #[inline]
-    fn try_halt_or_recover<F>(self, mut handle_err: F) -> Halt<R>
-    where
-        F: FnMut(L) -> Halt<R>,
-    {
-        match self {
-            itertools::Either::Right(x) => proceed(x),
-            itertools::Either::Left(e) => handle_err(e),
-        }
-    }
-}
 
 /// A shutdown signal receiver.
 pub struct ShutdownSignal {

@@ -19,13 +19,14 @@ use namada_core::types::storage::Epoch;
 use namada_core::types::token::{Amount, DenominatedAmount};
 use namada_core::types::voting_power::FractionalVotingPower;
 use owo_colors::OwoColorize;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
+use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{Duration, Instant};
-use crate::control_flow::{self, install_shutdown_signal, Halt, TryHalt};
-use crate::error::Error;
+use crate::error::{EncodingError, Error, EthereumBridgeError, QueryError};
 use crate::eth_bridge::ethers::abi::AbiDecode;
+use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::{
@@ -35,7 +36,9 @@ use crate::queries::{
 use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
 use crate::tx::prepare_tx;
-use crate::{args, display, display_line, Namada, SigningTxData};
+use crate::{
+    args, display, display_line, edisplay_line, Namada, SigningTxData,
+};
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx<'a>(
@@ -100,11 +103,12 @@ pub async fn build_bridge_pool_tx<'a>(
     };
 
     let tx_code_hash =
-        query_wasm_code_hash(context, code_path.to_str().unwrap())
-            .await
-            .unwrap();
+        query_wasm_code_hash(context, code_path.to_string_lossy()).await?;
 
-    let chain_id = tx_args.chain_id.clone().unwrap();
+    let chain_id = tx_args
+        .chain_id
+        .clone()
+        .ok_or_else(|| Error::Other("No chain id available".into()))?;
     let mut tx = Tx::new(chain_id, tx_args.expiration);
     tx.add_code_from_hash(tx_code_hash).add_data(transfer);
 
@@ -124,9 +128,9 @@ pub async fn build_bridge_pool_tx<'a>(
 
 /// A json serializable representation of the Ethereum
 /// bridge pool.
-#[derive(Serialize, Deserialize)]
-struct BridgePoolResponse {
-    bridge_pool_contents: HashMap<String, PendingTransfer>,
+#[derive(Serialize)]
+struct BridgePoolResponse<'pool> {
+    bridge_pool_contents: &'pool HashMap<String, PendingTransfer>,
 }
 
 /// Query the contents of the Ethereum bridge pool.
@@ -134,25 +138,35 @@ struct BridgePoolResponse {
 pub async fn query_bridge_pool<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
-) {
+) -> Result<HashMap<String, PendingTransfer>, Error> {
     let response: Vec<PendingTransfer> = RPC
         .shell()
         .eth_bridge()
         .read_ethereum_bridge_pool(client)
         .await
-        .unwrap();
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::ReadBridgePool(
+                e.to_string(),
+            ))
+        })?;
     let pool_contents: HashMap<String, PendingTransfer> = response
         .into_iter()
         .map(|transfer| (transfer.keccak256().to_string(), transfer))
         .collect();
     if pool_contents.is_empty() {
         display_line!(io, "Bridge pool is empty.");
-        return;
+        return Ok(pool_contents);
     }
     let contents = BridgePoolResponse {
-        bridge_pool_contents: pool_contents,
+        bridge_pool_contents: &pool_contents,
     };
-    display_line!(io, "{}", serde_json::to_string_pretty(&contents).unwrap());
+    display_line!(
+        io,
+        "{}",
+        serde_json::to_string_pretty(&contents)
+            .map_err(|e| EncodingError::Serde(e.to_string()))?
+    );
+    Ok(pool_contents)
 }
 
 /// Query the contents of the Ethereum bridge pool that
@@ -161,26 +175,35 @@ pub async fn query_bridge_pool<'a>(
 pub async fn query_signed_bridge_pool<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
-) -> Halt<HashMap<String, PendingTransfer>> {
+) -> Result<HashMap<String, PendingTransfer>, Error> {
     let response: Vec<PendingTransfer> = RPC
         .shell()
         .eth_bridge()
         .read_signed_ethereum_bridge_pool(client)
         .await
-        .unwrap();
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::ReadSignedBridgePool(
+                e.to_string(),
+            ))
+        })?;
     let pool_contents: HashMap<String, PendingTransfer> = response
         .into_iter()
         .map(|transfer| (transfer.keccak256().to_string(), transfer))
         .collect();
     if pool_contents.is_empty() {
         display_line!(io, "Bridge pool is empty.");
-        return control_flow::halt();
+        return Ok(pool_contents);
     }
     let contents = BridgePoolResponse {
-        bridge_pool_contents: pool_contents.clone(),
+        bridge_pool_contents: &pool_contents,
     };
-    display_line!(io, "{}", serde_json::to_string_pretty(&contents).unwrap());
-    control_flow::proceed(pool_contents)
+    display_line!(
+        io,
+        "{}",
+        serde_json::to_string_pretty(&contents)
+            .map_err(|e| EncodingError::Serde(e.to_string()))?
+    );
+    Ok(pool_contents)
 }
 
 /// Iterates over all ethereum events
@@ -191,14 +214,24 @@ pub async fn query_signed_bridge_pool<'a>(
 pub async fn query_relay_progress<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
-) {
+) -> Result<(), Error> {
     let resp = RPC
         .shell()
         .eth_bridge()
         .transfer_to_ethereum_progress(client)
         .await
-        .unwrap();
-    display_line!(io, "{}", serde_json::to_string_pretty(&resp).unwrap());
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::TransferToEthProgress(
+                e.to_string(),
+            ))
+        })?;
+    display_line!(
+        io,
+        "{}",
+        serde_json::to_string_pretty(&resp)
+            .map_err(|e| EncodingError::Serde(e.to_string()))?
+    );
+    Ok(())
 }
 
 /// Internal methdod to construct a proof that a set of transfers are in the
@@ -207,13 +240,17 @@ async fn construct_bridge_pool_proof<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: GenBridgePoolProofReq<'_, '_>,
-) -> Halt<GenBridgePoolProofRsp> {
+) -> Result<GenBridgePoolProofRsp, Error> {
     let in_progress = RPC
         .shell()
         .eth_bridge()
         .transfer_to_ethereum_progress(client)
         .await
-        .unwrap();
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::TransferToEthProgress(
+                e.to_string(),
+            ))
+        })?;
 
     let warnings: Vec<_> = in_progress
         .into_iter()
@@ -242,15 +279,19 @@ async fn construct_bridge_pool_proof<'a>(
         display!(io, "\nDo you wish to proceed? (y/n): ");
         io.flush();
         loop {
-            let resp = io.read().await.try_halt(|e| {
-                display_line!(
+            let resp = io.read().await.map_err(|e| {
+                Error::Other(echo_error!(
                     io,
                     "Encountered error reading from STDIN: {e:?}"
-                );
+                ))
             })?;
             match resp.trim() {
                 "y" => break,
-                "n" => return control_flow::halt(),
+                "n" => {
+                    return Err(Error::Other(
+                        "Aborted generating Bridge pool proof".into(),
+                    ));
+                }
                 _ => {
                     display!(io, "Expected 'y' or 'n'. Please try again: ");
                     io.flush();
@@ -264,11 +305,19 @@ async fn construct_bridge_pool_proof<'a>(
         .shell()
         .eth_bridge()
         .generate_bridge_pool_proof(client, Some(data), None, false)
-        .await;
+        .await
+        .map_err(|e| {
+            edisplay_line!(
+                io,
+                "Encountered error constructing proof:\n{:?}",
+                e
+            );
+            Error::EthereumBridge(EthereumBridgeError::GenBridgePoolProof(
+                e.to_string(),
+            ))
+        })?;
 
-    response.map(|response| response.data).try_halt(|e| {
-        display_line!(io, "Encountered error constructing proof:\n{:?}", e);
-    })
+    Ok(response.data)
 }
 
 /// A response from construction a bridge pool proof.
@@ -287,7 +336,7 @@ pub async fn construct_proof<'a>(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: args::BridgePoolProof,
-) -> Halt<()> {
+) -> Result<(), Error> {
     let GenBridgePoolProofRsp {
         abi_encoded_args,
         appendices,
@@ -322,8 +371,13 @@ pub async fn construct_proof<'a>(
             .unwrap_or_default(),
         abi_encoded_args,
     };
-    display_line!(io, "{}", serde_json::to_string(&resp).unwrap());
-    control_flow::proceed(())
+    display_line!(
+        io,
+        "{}",
+        serde_json::to_string_pretty(&resp)
+            .map_err(|e| EncodingError::Serde(e.to_string()))?
+    );
+    Ok(())
 }
 
 /// Relay a validator set update, signed off for a given epoch.
@@ -332,7 +386,7 @@ pub async fn relay_bridge_pool_proof<'a, E>(
     client: &(impl Client + Sync),
     io: &impl Io,
     args: args::RelayBridgePoolProof,
-) -> Halt<()>
+) -> Result<(), Error>
 where
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
@@ -374,27 +428,34 @@ where
                 let error = error.blink();
                 display_line!(
                     io,
-                    "{error}: Failed to retrieve the Ethereum Bridge smart \
-                     contract address from storage with \
-                     reason:\n{err_msg}\n\nPerhaps the Ethereum bridge is not \
-                     active.",
+                    "Unable to decode the generated proof: {:?}",
+                    error
                 );
-                return control_flow::halt();
+                return Err(Error::EthereumBridge(
+                    EthereumBridgeError::RetrieveContract(err_msg.to_string()),
+                ));
             }
         };
 
     let (validator_set, signatures, bp_proof): TransferToErcArgs =
-        AbiDecode::decode(&abi_encoded_args).try_halt(|error| {
-            display_line!(
+        AbiDecode::decode(&abi_encoded_args).map_err(|error| {
+            EncodingError::Decoding(echo_error!(
                 io,
                 "Unable to decode the generated proof: {:?}",
                 error
-            );
+            ))
         })?;
 
     // NOTE: this operation costs no gas on Ethereum
-    let contract_nonce =
-        bridge.transfer_to_erc_20_nonce().call().await.unwrap();
+    let contract_nonce = bridge
+        .transfer_to_erc_20_nonce()
+        .call()
+        .await
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::ContractCall(
+                e.to_string(),
+            ))
+        })?;
 
     match bp_proof.batch_nonce.cmp(&contract_nonce) {
         Ordering::Equal => {}
@@ -410,7 +471,9 @@ where
                  has yet to be crafted in Namada.",
                 bp_proof.batch_nonce
             );
-            return control_flow::halt();
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::InvalidBpNonce,
+            ));
         }
         Ordering::Greater => {
             let error = "Error".on_red();
@@ -423,7 +486,9 @@ where
                  Somehow, Namada's nonce is ahead of the contract's nonce!",
                 bp_proof.batch_nonce
             );
-            return control_flow::halt();
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::InvalidBpNonce,
+            ));
         }
     }
 
@@ -439,14 +504,18 @@ where
         relay_op.tx.set_from(eth_addr.into());
     }
 
-    let pending_tx = relay_op.send().await.unwrap();
+    let pending_tx = relay_op.send().await.map_err(|e| {
+        Error::EthereumBridge(EthereumBridgeError::ContractCall(e.to_string()))
+    })?;
     let transf_result = pending_tx
         .confirmations(args.confirmations as usize)
         .await
-        .unwrap();
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::Rpc(e.to_string()))
+        })?;
 
     display_line!(io, "{transf_result:?}");
-    control_flow::proceed(())
+    Ok(())
 }
 
 mod recommendations {
@@ -547,7 +616,7 @@ mod recommendations {
     pub async fn recommend_batch<'a>(
         context: &impl Namada<'a>,
         args: args::RecommendBatch,
-    ) -> Halt<()> {
+    ) -> Result<(), Error> {
         // get transfers that can already been relayed but are awaiting a quorum
         // of backing votes.
         let in_progress = RPC
@@ -555,7 +624,11 @@ mod recommendations {
             .eth_bridge()
             .transfer_to_ethereum_progress(context.client())
             .await
-            .unwrap()
+            .map_err(|e| {
+                Error::EthereumBridge(
+                    EthereumBridgeError::TransferToEthProgress(e.to_string()),
+                )
+            })?
             .into_keys()
             .map(|pending| pending.keccak256().to_string())
             .collect::<BTreeSet<_>>();
@@ -573,19 +646,19 @@ mod recommendations {
                         &get_signed_root_key(),
                     )
                     .await
-                    .try_halt(|err| {
-                        edisplay_line!(
+                    .map_err(|err| {
+                        Error::Query(QueryError::General(echo_error!(
                             context.io(),
                             "Failed to query Bridge pool proof: {err}"
-                        );
+                        )))
                     })?
                     .data,
             )
-            .try_halt(|err| {
-                edisplay_line!(
+            .map_err(|err| {
+                Error::Encode(EncodingError::Decoding(echo_error!(
                     context.io(),
                     "Failed to decode Bridge pool proof: {err}"
-                );
+                )))
             })?;
 
         // get the latest bridge pool nonce
@@ -599,19 +672,19 @@ mod recommendations {
                     &get_nonce_key(),
                 )
                 .await
-                .try_halt(|err| {
-                    edisplay_line!(
+                .map_err(|err| {
+                    Error::Query(QueryError::General(echo_error!(
                         context.io(),
                         "Failed to query Bridge pool nonce: {err}"
-                    );
+                    )))
                 })?
                 .data,
         )
-        .try_halt(|err| {
-            edisplay_line!(
+        .map_err(|err| {
+            Error::Encode(EncodingError::Decoding(echo_error!(
                 context.io(),
                 "Failed to decode Bridge pool nonce: {err}"
-            );
+            )))
         })?;
 
         if latest_bp_nonce != bp_root.data.1 {
@@ -620,7 +693,9 @@ mod recommendations {
                 "The signed Bridge pool nonce is not up to date, repeat this \
                  query at a later time"
             );
-            return control_flow::halt();
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::InvalidBpNonce,
+            ));
         }
 
         // Get the voting powers of each of validator who signed
@@ -630,7 +705,11 @@ mod recommendations {
             .eth_bridge()
             .voting_powers_at_height(context.client(), &height)
             .await
-            .unwrap();
+            .map_err(|e| {
+                Error::EthereumBridge(EthereumBridgeError::QueryVotingPowers(
+                    e.to_string(),
+                ))
+            })?;
         let valset_size = Uint::from_u64(voting_powers.len() as u64);
 
         // This is the gas cost for hashing the validator set and
@@ -693,7 +772,7 @@ mod recommendations {
             );
         });
 
-        control_flow::proceed(())
+        Ok(())
     }
 
     /// Given an ordered list of signatures, figure out the size of the first
@@ -720,6 +799,9 @@ mod recommendations {
                             (*p).into(),
                             total_power.into(),
                         )
+                        // NB: this unwrap is infallible, since we calculate
+                        // the total voting power beforehand. the fraction's
+                        // value will never exceed 1.0
                         .unwrap();
                         true
                     } else {
@@ -736,7 +818,7 @@ mod recommendations {
         conversion_table: &HashMap<Address, args::BpConversionTableEntry>,
         in_progress: &BTreeSet<String>,
         signed_pool: HashMap<String, PendingTransfer>,
-    ) -> Halt<Vec<EligibleRecommendation>> {
+    ) -> Result<Vec<EligibleRecommendation>, Error> {
         let mut eligible: Vec<_> = signed_pool
             .into_iter()
             .filter_map(|(pending_hash, pending)| {
@@ -803,14 +885,16 @@ mod recommendations {
                 )
             })
             .collect::<Result<Vec<_>, _>>()
-            .try_halt(|err| {
-                tracing::debug!(%err, "Failed to calculate relaying cost");
+            .map_err(|err| {
+                Error::EthereumBridge(EthereumBridgeError::RelayCost(
+                    echo_error!(io, "Failed to calculate relaying cost: {err}"),
+                ))
             })?;
 
         // sort transfers in increasing amounts of profitability
         eligible.sort_by_key(|EligibleRecommendation { cost, .. }| *cost);
 
-        control_flow::proceed(eligible)
+        Ok(eligible)
     }
 
     /// Generates the actual recommendation from restrictions given by the
@@ -822,7 +906,7 @@ mod recommendations {
         validator_gas: Uint,
         max_gas: Uint,
         max_cost: I256,
-    ) -> Halt<Option<RecommendedBatch>> {
+    ) -> Result<Option<RecommendedBatch>, Error> {
         let mut state = AlgorithState {
             profitable: true,
             feasible_region: false,
@@ -835,8 +919,11 @@ mod recommendations {
         };
 
         let mut total_gas = validator_gas;
-        let mut total_cost = I256::try_from(validator_gas).try_halt(|err| {
-            tracing::debug!(%err, "Failed to convert value to I256");
+        let mut total_cost = I256::try_from(validator_gas).map_err(|err| {
+            Error::Encode(EncodingError::Conversion(echo_error!(
+                io,
+                "Failed to convert value to I256: {err}"
+            )))
         })?;
         let mut total_fees = HashMap::new();
         let mut recommendation = vec![];
@@ -875,23 +962,21 @@ mod recommendations {
             update_total_fees(&mut total_fees, transfer, conversion_table);
         }
 
-        control_flow::proceed(
-            if state.feasible_region && !recommendation.is_empty() {
-                Some(RecommendedBatch {
-                    transfer_hashes: recommendation,
-                    ethereum_gas_fees: total_gas,
-                    net_profit: -total_cost,
-                    bridge_pool_gas_fees: total_fees,
-                })
-            } else {
-                display_line!(
-                    io,
-                    "Unable to find a recommendation satisfying the input \
-                     parameters."
-                );
-                None
-            },
-        )
+        Ok(if state.feasible_region && !recommendation.is_empty() {
+            Some(RecommendedBatch {
+                transfer_hashes: recommendation,
+                ethereum_gas_fees: total_gas,
+                net_profit: -total_cost,
+                bridge_pool_gas_fees: total_fees,
+            })
+        } else {
+            edisplay_line!(
+                io,
+                "Unable to find a recommendation satisfying the input \
+                 parameters."
+            );
+            None
+        })
     }
 
     fn update_total_fees(
@@ -917,7 +1002,6 @@ mod recommendations {
         use namada_core::types::ethereum_events::EthAddress;
 
         use super::*;
-        use crate::control_flow::ProceedOrElse;
         use crate::io::StdIo;
 
         /// An established user address for testing & development
@@ -1026,7 +1110,7 @@ mod recommendations {
             });
             let eligible =
                 generate_eligible(&StdIo, &table, &in_progress, signed_pool)
-                    .proceed();
+                    .unwrap();
             assert_eq!(eligible, expected);
             eligible
         }
@@ -1124,7 +1208,7 @@ mod recommendations {
                 uint::MAX_VALUE,
                 I256::zero(),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed")
             .transfer_hashes;
             assert_eq!(recommendation, expected);
@@ -1144,7 +1228,7 @@ mod recommendations {
                 uint::MAX_VALUE,
                 I256::zero(),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed")
             .transfer_hashes;
             assert_eq!(recommendation, expected);
@@ -1163,7 +1247,7 @@ mod recommendations {
                 Uint::from_u64(150_000),
                 I256(uint::MAX_SIGNED_VALUE),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed")
             .transfer_hashes;
             assert_eq!(recommendation, expected);
@@ -1186,7 +1270,7 @@ mod recommendations {
                 uint::MAX_VALUE,
                 I256::from(20_000),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed")
             .transfer_hashes;
             assert_eq!(recommendation, expected);
@@ -1206,7 +1290,7 @@ mod recommendations {
                 Uint::from_u64(330_000),
                 I256::from(20_000),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed")
             .transfer_hashes;
             assert_eq!(recommendation, expected);
@@ -1223,7 +1307,7 @@ mod recommendations {
                 uint::MAX_VALUE,
                 I256::from(20_000),
             )
-            .proceed();
+            .unwrap();
             assert!(recommendation.is_none())
         }
 
@@ -1308,7 +1392,7 @@ mod recommendations {
                 // only profitable
                 I256::zero(),
             )
-            .proceed()
+            .unwrap()
             .expect("Test failed");
 
             assert_eq!(

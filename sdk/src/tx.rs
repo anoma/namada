@@ -50,7 +50,7 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 
 use crate::args::{self, InputAmount};
-use crate::control_flow::{time, ProceedOrElse};
+use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
@@ -374,9 +374,8 @@ pub async fn submit_tx<'a>(
 
     let parsed = {
         let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event = rpc::query_tx_status(context, wrapper_query, deadline)
-            .await
-            .proceed_or(TxError::AcceptTimeout)?;
+        let event =
+            rpc::query_tx_status(context, wrapper_query, deadline).await?;
         let parsed = TxResponse::from_event(event);
         let tx_to_str = |parsed| {
             serde_json::to_string_pretty(parsed).map_err(|err| {
@@ -397,8 +396,7 @@ pub async fn submit_tx<'a>(
                 rpc::TxEventQuery::Applied(decrypted_hash.as_str());
             let event =
                 rpc::query_tx_status(context, decrypted_query, deadline)
-                    .await
-                    .proceed_or(TxError::AppliedTimeout)?;
+                    .await?;
             let parsed = TxResponse::from_event(event);
             display_line!(
                 context.io(),
