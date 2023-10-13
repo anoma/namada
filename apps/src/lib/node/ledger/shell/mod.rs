@@ -929,9 +929,25 @@ where
     pub fn replay_protection_checks(
         &self,
         wrapper: &Tx,
-        tx_bytes: &[u8],
         temp_wl_storage: &mut TempWlStorage<D, H>,
     ) -> Result<()> {
+        let wrapper_hash = wrapper.header_hash();
+        if temp_wl_storage
+            .has_replay_protection_entry(&wrapper_hash)
+            .expect("Error while checking wrapper tx hash key in storage")
+        {
+            return Err(Error::ReplayAttempt(format!(
+                "Wrapper transaction hash {} already in storage",
+                wrapper_hash
+            )));
+        }
+
+        // Write wrapper hash to tx WAL
+        temp_wl_storage
+            .write_log
+            .write_tx_hash(wrapper_hash)
+            .map_err(|e| Error::ReplayAttempt(e.to_string()))?;
+
         let inner_tx_hash =
             wrapper.clone().update_header(TxType::Raw).header_hash();
         if temp_wl_storage
@@ -948,28 +964,7 @@ where
         temp_wl_storage
             .write_log
             .write_tx_hash(inner_tx_hash)
-            .expect("Couldn't write inner transaction hash to write log");
-
-        let tx =
-            Tx::try_from(tx_bytes).expect("Deserialization shouldn't fail");
-        let wrapper_hash = tx.header_hash();
-        if temp_wl_storage
-            .has_replay_protection_entry(&wrapper_hash)
-            .expect("Error while checking wrapper tx hash key in storage")
-        {
-            return Err(Error::ReplayAttempt(format!(
-                "Wrapper transaction hash {} already in storage",
-                wrapper_hash
-            )));
-        }
-
-        // Write wrapper hash to tx WAL
-        temp_wl_storage
-            .write_log
-            .write_tx_hash(wrapper_hash)
-            .expect("Couldn't write wrapper tx hash to write log");
-
-        Ok(())
+            .map_err(|e| Error::ReplayAttempt(e.to_string()))
     }
 
     /// If a handle to an Ethereum oracle was provided to the [`Shell`], attempt
