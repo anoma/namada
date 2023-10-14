@@ -173,6 +173,37 @@ impl PosParams {
         let end = infraction_epoch + self.cubic_slashing_window_length;
         (start, end)
     }
+
+    /// Get the redelegation end epoch from the start epoch
+    pub fn redelegation_end_epoch_from_start(&self, end: Epoch) -> Epoch {
+        end + self.pipeline_len
+    }
+
+    /// Get the redelegation start epoch from the end epoch
+    pub fn redelegation_start_epoch_from_end(&self, end: Epoch) -> Epoch {
+        end - self.pipeline_len
+    }
+
+    /// Determine if the infraction is in the lazy slashing window for a
+    /// redelegation source validator. Any source validator slashes that
+    /// were processed before redelegation was applied will be applied
+    /// eagerly on the redelegation amount, so this function will only return
+    /// `true` for applicable infractions that were processed after
+    /// the redelegation was applied.
+    ///
+    /// The `redel_start` is the epoch in which the redelegation was applied and
+    /// `redel_end` the epoch in which it no longer contributed to source
+    /// validator's stake.
+    pub fn in_redelegation_slashing_window(
+        &self,
+        infraction_epoch: Epoch,
+        redel_start: Epoch,
+        redel_end: Epoch,
+    ) -> bool {
+        let processing_epoch =
+            infraction_epoch + self.slash_processing_epoch_offset();
+        redel_start < processing_epoch && infraction_epoch < redel_end
+    }
 }
 
 #[cfg(test)]

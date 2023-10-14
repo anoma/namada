@@ -926,6 +926,33 @@ impl<C: NamadaTypes> Unbond<C> {
     }
 }
 
+/// Redelegation arguments
+#[derive(Clone, Debug)]
+pub struct Redelegate<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Source validator address
+    pub src_validator: C::Address,
+    /// Destination validator address
+    pub dest_validator: C::Address,
+    /// Owner of the bonds that are being redelegated
+    pub owner: C::Address,
+    /// The amount of tokens to redelegate
+    pub amount: token::Amount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl Redelegate {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData)> {
+        tx::build_redelegation(context, self).await
+    }
+}
+
 /// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {

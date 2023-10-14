@@ -23,12 +23,11 @@ use namada_proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_stake, read_validator_max_commission_rate_change,
     read_validator_stake, unbond_handle, validator_commission_rate_handle,
-    validator_slashes_handle, validator_state_handle,
+    validator_incoming_redelegations_handle, validator_slashes_handle,
+    validator_state_handle,
 };
 
 use crate::queries::types::RequestCtx;
-
-type AmountPair = (token::Amount, token::Amount);
 
 // PoS validity predicate queries
 router! {POS,
@@ -49,6 +48,9 @@ router! {POS,
 
         ( "state" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<ValidatorState> = validator_state,
+
+        ( "incoming_redelegation" / [src_validator: Address] / [delegator: Address] )
+            -> Option<Epoch> = validator_incoming_redelegation,
     },
 
     ( "validator_set" ) = {
@@ -79,7 +81,7 @@ router! {POS,
         -> token::Amount = bond,
 
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
-        -> AmountPair = bond_with_slashing,
+        -> token::Amount = bond_with_slashing,
 
     ( "unbond" / [source: Address] / [validator: Address] )
         -> HashMap<(Epoch, Epoch), token::Amount> = unbond,
@@ -264,7 +266,28 @@ where
 {
     let epoch = epoch.unwrap_or(ctx.wl_storage.storage.last_epoch);
     let params = read_pos_params(ctx.wl_storage)?;
-    read_validator_stake(ctx.wl_storage, &params, &validator, epoch)
+    if namada_proof_of_stake::is_validator(ctx.wl_storage, &validator)? {
+        let stake =
+            read_validator_stake(ctx.wl_storage, &params, &validator, epoch)?;
+        Ok(Some(stake))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Get the incoming redelegation epoch for a source validator - delegator pair,
+/// if there is any.
+fn validator_incoming_redelegation<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    src_validator: Address,
+    delegator: Address,
+) -> storage_api::Result<Option<Epoch>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let handle = validator_incoming_redelegations_handle(&src_validator);
+    handle.get(ctx.wl_storage, &delegator)
 }
 
 /// Get all the validator in the consensus set with their bonded stake.
@@ -314,7 +337,7 @@ fn bond_deltas<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     source: Address,
     validator: Address,
-) -> storage_api::Result<HashMap<Epoch, token::Change>>
+) -> storage_api::Result<HashMap<Epoch, token::Amount>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -341,7 +364,6 @@ where
     let handle = bond_handle(&source, &validator);
     handle
         .get_sum(ctx.wl_storage, epoch, &params)?
-        .map(token::Amount::from_change)
         .ok_or_err_msg("Cannot find bond")
 }
 
@@ -350,7 +372,7 @@ fn bond_with_slashing<D, H, V, T>(
     source: Address,
     validator: Address,
     epoch: Option<Epoch>,
-) -> storage_api::Result<AmountPair>
+) -> storage_api::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

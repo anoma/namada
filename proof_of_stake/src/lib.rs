@@ -12,7 +12,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod btree_set;
 pub mod epoched;
 pub mod parameters;
 pub mod pos_queries;
@@ -21,22 +20,22 @@ pub mod storage;
 pub mod types;
 // pub mod validation;
 
+mod error;
 #[cfg(test)]
 mod tests;
 
 use core::fmt::Debug;
 use std::cmp::{self, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
+pub use error::*;
 use namada_core::ledger::storage_api::collections::lazy_map::{
-    NestedSubKey, SubKey,
+    Collectable, LazyMap, NestedMap, NestedSubKey, SubKey,
 };
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
-use namada_core::ledger::storage_api::token::credit_tokens;
 use namada_core::ledger::storage_api::{
-    self, ResultExt, StorageRead, StorageWrite,
+    self, token, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
@@ -44,31 +43,33 @@ use namada_core::types::key::{
     common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
-use namada_core::types::token;
 use once_cell::unsync::Lazy;
-use parameters::PosParams;
+pub use parameters::PosParams;
 use rewards::PosRewardsCalculator;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
-    get_validator_address_from_bond, into_tm_voting_power, is_bond_key,
-    is_unbond_key, is_validator_slashes_key, last_block_proposer_key,
-    params_key, slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
+    get_validator_address_from_bond, is_bond_key, is_unbond_key,
+    is_validator_slashes_key, last_block_proposer_key, params_key,
+    slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
     validator_address_raw_hash_key, validator_last_slash_key,
-    validator_max_commission_rate_change_key, BondDetails,
-    BondsAndUnbondsDetail, BondsAndUnbondsDetails, EpochedSlashes,
-    ReverseOrdTokenAmount, RewardsAccumulator, SlashedAmount,
-    TotalConsensusStakes, UnbondDetails, ValidatorAddresses,
-    ValidatorUnbondRecords,
+    validator_max_commission_rate_change_key,
 };
-use thiserror::Error;
 use types::{
-    BelowCapacityValidatorSet, BelowCapacityValidatorSets, BondId, Bonds,
-    CommissionRates, ConsensusValidator, ConsensusValidatorSet,
-    ConsensusValidatorSets, GenesisValidator, Position, RewardsProducts, Slash,
-    SlashType, Slashes, TotalDeltas, Unbonds, ValidatorConsensusKeys,
-    ValidatorDeltas, ValidatorEthColdKeys, ValidatorEthHotKeys,
-    ValidatorPositionAddresses, ValidatorSetPositions, ValidatorSetUpdate,
-    ValidatorState, ValidatorStates, VoteInfo, WeightedValidator,
+    into_tm_voting_power, BelowCapacityValidatorSet,
+    BelowCapacityValidatorSets, BondDetails, BondId, Bonds,
+    BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionRates,
+    ConsensusValidator, ConsensusValidatorSet, ConsensusValidatorSets,
+    DelegatorRedelegatedBonded, DelegatorRedelegatedUnbonded,
+    EagerRedelegatedBondsMap, EpochedSlashes, GenesisValidator,
+    IncomingRedelegations, OutgoingRedelegations, Position,
+    RedelegatedBondsOrUnbonds, RedelegatedTokens, ReverseOrdTokenAmount,
+    RewardsAccumulator, RewardsProducts, Slash, SlashType, SlashedAmount,
+    Slashes, TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
+    TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
+    ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
+    ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorSetPositions,
+    ValidatorSetUpdate, ValidatorState, ValidatorStates,
+    ValidatorTotalUnbonded, VoteInfo, WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -89,160 +90,7 @@ pub fn staking_token_address(storage: &impl StorageRead) -> Address {
 /// stored
 const STORE_VALIDATOR_SETS_LEN: u64 = 2;
 
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum GenesisError {
-    #[error("Voting power overflow: {0}")]
-    VotingPowerOverflow(TryFromIntError),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum InflationError {
-    #[error("Error in calculating rewards: {0}")]
-    Rewards(rewards::RewardsError),
-    #[error("Expected validator {0} to be in consensus set but got: {1:?}")]
-    ExpectedValidatorInConsensus(Address, Option<ValidatorState>),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum BecomeValidatorError {
-    #[error("The given address {0} is already a validator")]
-    AlreadyValidator(Address),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum BondError {
-    #[error("The given address {0} is not a validator address")]
-    NotAValidator(Address),
-    #[error(
-        "The given source address {0} is a validator address. Validators may \
-         not delegate."
-    )]
-    SourceMustNotBeAValidator(Address),
-    #[error("The given validator address {0} is inactive")]
-    InactiveValidator(Address),
-    #[error("Voting power overflow: {0}")]
-    VotingPowerOverflow(TryFromIntError),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum UnbondError {
-    #[error("No bond could be found")]
-    NoBondFound,
-    #[error(
-        "Trying to withdraw more tokens ({0}) than the amount bonded ({0})"
-    )]
-    UnbondAmountGreaterThanBond(String, String),
-    #[error("No bonds found for the validator {0}")]
-    ValidatorHasNoBonds(Address),
-    #[error("Voting power not found for the validator {0}")]
-    ValidatorHasNoVotingPower(Address),
-    #[error("Voting power overflow: {0}")]
-    VotingPowerOverflow(TryFromIntError),
-    #[error("Trying to unbond from a frozen validator: {0}")]
-    ValidatorIsFrozen(Address),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum WithdrawError {
-    #[error("No unbond could be found for {0}")]
-    NoUnbondFound(BondId),
-    #[error("No unbond may be withdrawn yet for {0}")]
-    NoWithdrawableUnbond(BondId),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum SlashError {
-    #[error("The validator {0} has no total deltas value")]
-    ValidatorHasNoTotalDeltas(Address),
-    #[error("The validator {0} has no voting power")]
-    ValidatorHasNoVotingPower(Address),
-    #[error("Unexpected slash token change")]
-    InvalidSlashChange(i128),
-    #[error("Voting power overflow: {0}")]
-    VotingPowerOverflow(TryFromIntError),
-    #[error("Unexpected negative stake {0} for validator {1}")]
-    NegativeStake(i128, Address),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum CommissionRateChangeError {
-    #[error("Unexpected negative commission rate {0} for validator {1}")]
-    NegativeRate(Dec, Address),
-    #[error("Rate change of {0} is too large for validator {1}")]
-    RateChangeTooLarge(Dec, Address),
-    #[error(
-        "There is no maximum rate change written in storage for validator {0}"
-    )]
-    NoMaxSetInStorage(Address),
-    #[error("Cannot write to storage for validator {0}")]
-    CannotWrite(Address),
-    #[error("Cannot read storage for validator {0}")]
-    CannotRead(Address),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum UnjailValidatorError {
-    #[error("The given address {0} is not a validator address")]
-    NotAValidator(Address),
-    #[error("The given address {0} is not jailed in epoch {1}")]
-    NotJailed(Address, Epoch),
-    #[error(
-        "The given address {0} is not eligible for unnjailing until epoch \
-         {1}: current epoch is {2}"
-    )]
-    NotEligible(Address, Epoch, Epoch),
-}
-
-impl From<BecomeValidatorError> for storage_api::Error {
-    fn from(err: BecomeValidatorError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<BondError> for storage_api::Error {
-    fn from(err: BondError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<UnbondError> for storage_api::Error {
-    fn from(err: UnbondError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<WithdrawError> for storage_api::Error {
-    fn from(err: WithdrawError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<CommissionRateChangeError> for storage_api::Error {
-    fn from(err: CommissionRateChangeError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<InflationError> for storage_api::Error {
-    fn from(err: InflationError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<UnjailValidatorError> for storage_api::Error {
-    fn from(err: UnjailValidatorError) -> Self {
-        Self::new(err)
-    }
-}
+// ---- Storage handles ----
 
 /// Get the storage handle to the epoched consensus validator set
 pub fn consensus_validator_set_handle() -> ConsensusValidatorSets {
@@ -319,7 +167,8 @@ pub fn validator_commission_rate_handle(
     CommissionRates::open(key)
 }
 
-/// Get the storage handle to a bond
+/// Get the storage handle to a bond, which is dynamically updated with when
+/// unbonding
 pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
     let bond_id = BondId {
         source: source.clone(),
@@ -329,7 +178,8 @@ pub fn bond_handle(source: &Address, validator: &Address) -> Bonds {
     Bonds::open(key)
 }
 
-/// Get the storage handle to a validator's total bonds
+/// Get the storage handle to a validator's total bonds, which are not updated
+/// due to unbonding
 pub fn total_bonded_handle(validator: &Address) -> Bonds {
     let key = storage::validator_total_bonded_key(validator);
     Bonds::open(key)
@@ -346,9 +196,9 @@ pub fn unbond_handle(source: &Address, validator: &Address) -> Unbonds {
 }
 
 /// Get the storage handle to a validator's total-unbonded map
-pub fn unbond_records_handle(validator: &Address) -> ValidatorUnbondRecords {
+pub fn total_unbonded_handle(validator: &Address) -> ValidatorTotalUnbonded {
     let key = storage::validator_total_unbonded_key(validator);
-    ValidatorUnbondRecords::open(key)
+    ValidatorTotalUnbonded::open(key)
 }
 
 /// Get the storage handle to a PoS validator's deltas
@@ -394,6 +244,54 @@ pub fn delegator_rewards_products_handle(
     RewardsProducts::open(key)
 }
 
+/// Get the storage handle to a validator's incoming redelegations
+pub fn validator_incoming_redelegations_handle(
+    validator: &Address,
+) -> IncomingRedelegations {
+    let key = storage::validator_incoming_redelegations_key(validator);
+    IncomingRedelegations::open(key)
+}
+
+/// Get the storage handle to a validator's outgoing redelegations
+pub fn validator_outgoing_redelegations_handle(
+    validator: &Address,
+) -> OutgoingRedelegations {
+    let key: Key = storage::validator_outgoing_redelegations_key(validator);
+    OutgoingRedelegations::open(key)
+}
+
+/// Get the storage handle to a validator's total redelegated bonds
+pub fn validator_total_redelegated_bonded_handle(
+    validator: &Address,
+) -> TotalRedelegatedBonded {
+    let key: Key = storage::validator_total_redelegated_bonded_key(validator);
+    TotalRedelegatedBonded::open(key)
+}
+
+/// Get the storage handle to a validator's outgoing redelegations
+pub fn validator_total_redelegated_unbonded_handle(
+    validator: &Address,
+) -> TotalRedelegatedUnbonded {
+    let key: Key = storage::validator_total_redelegated_unbonded_key(validator);
+    TotalRedelegatedUnbonded::open(key)
+}
+
+/// Get the storage handle to a delegator's redelegated bonds information
+pub fn delegator_redelegated_bonds_handle(
+    delegator: &Address,
+) -> DelegatorRedelegatedBonded {
+    let key: Key = storage::delegator_redelegated_bonds_key(delegator);
+    DelegatorRedelegatedBonded::open(key)
+}
+
+/// Get the storage handle to a delegator's redelegated unbonds information
+pub fn delegator_redelegated_unbonds_handle(
+    delegator: &Address,
+) -> DelegatorRedelegatedUnbonded {
+    let key: Key = storage::delegator_redelegated_unbonds_key(delegator);
+    DelegatorRedelegatedUnbonded::open(key)
+}
+
 /// Init genesis
 pub fn init_genesis<S>(
     storage: &mut S,
@@ -407,7 +305,7 @@ where
     tracing::debug!("Initializing PoS genesis");
     write_pos_params(storage, params.clone())?;
 
-    let mut total_bonded = token::Amount::default();
+    let mut total_bonded = token::Amount::zero();
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
@@ -466,20 +364,19 @@ where
             eth_cold_key,
             current_epoch,
         )?;
-        let delta = token::Change::from(tokens);
         validator_deltas_handle(&address).init_at_genesis(
             storage,
-            delta,
+            tokens.change(),
             current_epoch,
         )?;
         bond_handle(&address, &address).init_at_genesis(
             storage,
-            delta,
+            tokens,
             current_epoch,
         )?;
         total_bonded_handle(&address).init_at_genesis(
             storage,
-            delta,
+            tokens,
             current_epoch,
         )?;
         validator_commission_rate_handle(&address).init_at_genesis(
@@ -501,7 +398,7 @@ where
 
     // Credit bonded token amount to the PoS account
     let staking_token = staking_token_address(storage);
-    credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
+    token::credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
         copy_validator_sets_and_positions(storage, current_epoch, epoch)?;
@@ -634,42 +531,44 @@ where
 }
 
 /// Read PoS validator's delta value.
-pub fn read_validator_delta_value<S>(
+pub fn read_validator_deltas_value<S>(
     storage: &S,
-    params: &PosParams,
     validator: &Address,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: &namada_core::types::storage::Epoch,
 ) -> storage_api::Result<Option<token::Change>>
 where
     S: StorageRead,
 {
     let handle = validator_deltas_handle(validator);
-    handle.get_delta_val(storage, epoch, params)
+    handle.get_delta_val(storage, *epoch)
 }
 
 /// Read PoS validator's stake (sum of deltas).
-/// Returns `None` when the given address is not a validator address. For a
-/// validator with `0` stake, this returns `Ok(token::Amount::default())`.
+/// For non-validators and validators with `0` stake, this returns the default -
+/// `token::Amount::zero()`.
 pub fn read_validator_stake<S>(
     storage: &S,
     params: &PosParams,
     validator: &Address,
     epoch: namada_core::types::storage::Epoch,
-) -> storage_api::Result<Option<token::Amount>>
+) -> storage_api::Result<token::Amount>
 where
     S: StorageRead,
 {
     let handle = validator_deltas_handle(validator);
     let amount = handle
         .get_sum(storage, epoch, params)?
-        .map(token::Amount::from_change);
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
     Ok(amount)
 }
 
 /// Add or remove PoS validator's stake delta value
 pub fn update_validator_deltas<S>(
     storage: &mut S,
-    params: &PosParams,
     validator: &Address,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
@@ -680,7 +579,7 @@ where
 {
     let handle = validator_deltas_handle(validator);
     let val = handle
-        .get_delta_val(storage, current_epoch + offset, params)?
+        .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
 }
@@ -697,7 +596,10 @@ where
     let handle = total_deltas_handle();
     let amnt = handle
         .get_sum(storage, epoch, params)?
-        .map(token::Amount::from_change)
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
         .unwrap_or_default();
     Ok(amnt)
 }
@@ -848,7 +750,6 @@ where
 /// Note: for EpochedDelta, write the value to change storage by
 pub fn update_total_deltas<S>(
     storage: &mut S,
-    params: &PosParams,
     delta: token::Change,
     current_epoch: namada_core::types::storage::Epoch,
     offset: u64,
@@ -858,7 +759,7 @@ where
 {
     let handle = total_deltas_handle();
     let val = handle
-        .get_delta_val(storage, current_epoch + offset, params)?
+        .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
     handle.set(storage, val + delta, current_epoch, offset)
 }
@@ -920,13 +821,18 @@ pub fn bond_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let amount = amount.change();
     tracing::debug!(
         "Bonding token amount {} at epoch {current_epoch}",
         amount.to_string_native()
     );
+    if amount.is_zero() {
+        return Ok(());
+    }
+
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Check that the source is not a validator
     if let Some(source) = source {
         if source != validator && is_validator(storage, source)? {
             return Err(
@@ -934,6 +840,8 @@ where
             );
         }
     }
+
+    // Check that the validator is actually a validator
     let validator_state_handle = validator_state_handle(validator);
     let state = validator_state_handle.get(storage, pipeline_epoch, &params)?;
     if state.is_none() {
@@ -942,6 +850,7 @@ where
 
     let source = source.unwrap_or(validator);
     tracing::debug!("Source {} --> Validator {}", source, validator);
+
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
 
@@ -955,52 +864,27 @@ where
         }
     }
 
-    tracing::debug!("\nBonds before incrementing:");
-    for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-        let delta = bond_handle
-            .get_delta_val(storage, ep, &params)?
-            .unwrap_or_default();
-        if !delta.is_zero() {
-            tracing::debug!(
-                "bond ∆ at epoch {}: {}",
-                ep,
-                delta.to_string_native()
-            );
-        }
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, source, validator)?;
+        tracing::debug!("\nBonds before incrementing: {bonds:#?}");
     }
 
     // Initialize or update the bond at the pipeline offset
-    let offset = params.pipeline_len;
-    let cur_remain = bond_handle
-        .get_delta_val(storage, current_epoch + offset, &params)?
-        .unwrap_or_default();
-    bond_handle.set(storage, cur_remain + amount, current_epoch, offset)?;
-    let cur_remain_global = total_bonded_handle
-        .get_delta_val(storage, current_epoch + offset, &params)?
-        .unwrap_or_default();
-    total_bonded_handle.set(
+    bond_handle.add(storage, amount, current_epoch, params.pipeline_len)?;
+    total_bonded_handle.add(
         storage,
-        cur_remain_global + amount,
+        amount,
         current_epoch,
-        offset,
+        params.pipeline_len,
     )?;
 
-    tracing::debug!("\nBonds after incrementing:");
-    for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-        let delta = bond_handle
-            .get_delta_val(storage, ep, &params)?
-            .unwrap_or_default();
-        if !delta.is_zero() {
-            tracing::debug!(
-                "bond ∆ at epoch {}: {}",
-                ep,
-                delta.to_string_native()
-            );
-        }
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, source, validator)?;
+        tracing::debug!("\nBonds after incrementing: {bonds:#?}");
     }
 
     // Update the validator set
-    // We allow bonding if the validator is jailed, however if jailed, there
+    // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
     let is_jailed_at_pipeline = matches!(
         validator_state_handle
@@ -1013,32 +897,30 @@ where
             storage,
             &params,
             validator,
-            amount,
-            current_epoch,
+            amount.change(),
+            pipeline_epoch,
         )?;
     }
 
     // Update the validator and total deltas
     update_validator_deltas(
         storage,
-        &params,
         validator,
-        amount,
+        amount.change(),
         current_epoch,
-        offset,
+        params.pipeline_len,
     )?;
 
-    update_total_deltas(storage, &params, amount, current_epoch, offset)?;
+    update_total_deltas(
+        storage,
+        amount.change(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
 
     // Transfer the bonded tokens from the source to PoS
     let staking_token = staking_token_address(storage);
-    transfer_tokens(
-        storage,
-        &staking_token,
-        token::Amount::from_change(amount),
-        source,
-        &ADDRESS,
-    )?;
+    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
 
     Ok(())
 }
@@ -1155,7 +1037,7 @@ fn update_validator_set<S>(
     params: &PosParams,
     validator: &Address,
     token_change: token::Change,
-    current_epoch: Epoch,
+    epoch: Epoch,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1163,26 +1045,23 @@ where
     if token_change.is_zero() {
         return Ok(());
     }
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    // let pipeline_epoch = current_epoch + params.pipeline_len;
     tracing::debug!(
-        "Update epoch for validator set: {pipeline_epoch}, validator: \
-         {validator}"
+        "Update epoch for validator set: {epoch}, validator: {validator}"
     );
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
 
     // Validator sets at the pipeline offset
-    let consensus_val_handle = consensus_validator_set.at(&pipeline_epoch);
-    let below_capacity_val_handle =
-        below_capacity_validator_set.at(&pipeline_epoch);
+    let consensus_val_handle = consensus_validator_set.at(&epoch);
+    let below_capacity_val_handle = below_capacity_validator_set.at(&epoch);
 
-    let tokens_pre =
-        read_validator_stake(storage, params, validator, pipeline_epoch)?
-            .unwrap_or_default();
+    let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
 
     // tracing::debug!("VALIDATOR STAKE BEFORE UPDATE: {}", tokens_pre);
 
     let tokens_post = tokens_pre.change() + token_change;
+    debug_assert!(tokens_post.non_negative());
     let tokens_post = token::Amount::from_change(tokens_post);
 
     // If token amounts both before and after the action are below the threshold
@@ -1195,12 +1074,8 @@ where
 
     // The position is only set when the validator is in consensus or
     // below_capacity set (not in below_threshold set)
-    let position = read_validator_set_position(
-        storage,
-        validator,
-        pipeline_epoch,
-        params,
-    )?;
+    let position =
+        read_validator_set_position(storage, validator, epoch, params)?;
     if let Some(position) = position {
         let consensus_vals_pre = consensus_val_handle.at(&tokens_pre);
 
@@ -1234,13 +1109,13 @@ where
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowThreshold,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
 
                 // Remove the validator's position from storage
                 validator_set_positions_handle()
-                    .at(&pipeline_epoch)
+                    .at(&epoch)
                     .remove(storage, validator)?;
 
                 // Promote the next below-cap validator if there is one
@@ -1265,14 +1140,14 @@ where
                     insert_validator_into_set(
                         &consensus_val_handle.at(&max_bc_amount),
                         storage,
-                        &pipeline_epoch,
+                        &epoch,
                         &removed_max_below_capacity,
                     )?;
                     validator_state_handle(&removed_max_below_capacity).set(
                         storage,
                         ValidatorState::Consensus,
-                        current_epoch,
-                        params.pipeline_len,
+                        epoch,
+                        0,
                     )?;
                 }
             } else if tokens_post < max_below_capacity_validator_amount {
@@ -1300,28 +1175,28 @@ where
                     &consensus_val_handle
                         .at(&max_below_capacity_validator_amount),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     &removed_max_below_capacity,
                 )?;
                 validator_state_handle(&removed_max_below_capacity).set(
                     storage,
                     ValidatorState::Consensus,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
 
                 // Insert the current validator into the below-capacity set
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
             } else {
                 tracing::debug!("Validator remains in consensus set");
@@ -1330,7 +1205,7 @@ where
                 insert_validator_into_set(
                     &consensus_val_handle.at(&tokens_post),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
             }
@@ -1361,11 +1236,10 @@ where
 
                 insert_into_consensus_and_demote_to_below_cap(
                     storage,
-                    params,
                     validator,
                     tokens_post,
                     min_consensus_validator_amount,
-                    current_epoch,
+                    epoch,
                     &consensus_val_handle,
                     &below_capacity_val_handle,
                 )?;
@@ -1375,14 +1249,14 @@ where
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
             } else {
                 // The current validator is demoted to the below-threshold set
@@ -1393,13 +1267,13 @@ where
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowThreshold,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
 
                 // Remove the validator's position from storage
                 validator_set_positions_handle()
-                    .at(&pipeline_epoch)
+                    .at(&epoch)
                     .remove(storage, validator)?;
             }
         }
@@ -1411,7 +1285,7 @@ where
 
         // Move the validator into the appropriate set
         let num_consensus_validators =
-            get_num_consensus_validators(storage, pipeline_epoch)?;
+            get_num_consensus_validators(storage, epoch)?;
         if num_consensus_validators < params.max_validator_slots {
             // Just insert into the consensus set
             tracing::debug!("Inserting validator into the consensus set");
@@ -1419,14 +1293,14 @@ where
             insert_validator_into_set(
                 &consensus_val_handle.at(&tokens_post),
                 storage,
-                &pipeline_epoch,
+                &epoch,
                 validator,
             )?;
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Consensus,
-                current_epoch,
-                params.pipeline_len,
+                epoch,
+                0,
             )?;
         } else {
             let min_consensus_validator_amount =
@@ -1444,11 +1318,10 @@ where
 
                 insert_into_consensus_and_demote_to_below_cap(
                     storage,
-                    params,
                     validator,
                     tokens_post,
                     min_consensus_validator_amount,
-                    current_epoch,
+                    epoch,
                     &consensus_val_handle,
                     &below_capacity_val_handle,
                 )?;
@@ -1461,14 +1334,14 @@ where
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
                     storage,
-                    &pipeline_epoch,
+                    &epoch,
                     validator,
                 )?;
                 validator_state_handle(validator).set(
                     storage,
                     ValidatorState::BelowCapacity,
-                    current_epoch,
-                    params.pipeline_len,
+                    epoch,
+                    0,
                 )?;
             }
         }
@@ -1480,11 +1353,10 @@ where
 #[allow(clippy::too_many_arguments)]
 fn insert_into_consensus_and_demote_to_below_cap<S>(
     storage: &mut S,
-    params: &PosParams,
     validator: &Address,
     tokens_post: token::Amount,
     min_consensus_amount: token::Amount,
-    current_epoch: Epoch,
+    epoch: Epoch,
     consensus_set: &ConsensusValidatorSet,
     below_capacity_set: &BelowCapacityValidatorSet,
 ) -> storage_api::Result<()>
@@ -1500,35 +1372,35 @@ where
         .remove(storage, &last_position_of_min_consensus_vals)?
         .expect("There must be always be at least 1 consensus validator");
 
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    // let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Insert the min consensus validator into the below-capacity
     // set
     insert_validator_into_set(
         &below_capacity_set.at(&min_consensus_amount.into()),
         storage,
-        &pipeline_epoch,
+        &epoch,
         &removed_min_consensus,
     )?;
     validator_state_handle(&removed_min_consensus).set(
         storage,
         ValidatorState::BelowCapacity,
-        current_epoch,
-        params.pipeline_len,
+        epoch,
+        0,
     )?;
 
     // Insert the current validator into the consensus set
     insert_validator_into_set(
         &consensus_set.at(&tokens_post),
         storage,
-        &pipeline_epoch,
+        &epoch,
         validator,
     )?;
     validator_state_handle(validator).set(
         storage,
         ValidatorState::Consensus,
-        current_epoch,
-        params.pipeline_len,
+        epoch,
+        0,
     )?;
     Ok(())
 }
@@ -1583,8 +1455,6 @@ where
         below_cap_in_mem.insert((stake, position), address);
     }
 
-    tracing::debug!("{consensus_in_mem:?}");
-
     for ((val_stake, val_position), val_address) in consensus_in_mem.into_iter()
     {
         consensus_validator_set
@@ -1592,11 +1462,6 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
-    tracing::debug!("New validator set should be inserted:");
-    tracing::debug!(
-        "{:?}",
-        read_consensus_validator_set_addresses(storage, target_epoch)?
-    );
 
     for ((val_stake, val_position), val_address) in below_cap_in_mem.into_iter()
     {
@@ -1842,23 +1707,42 @@ struct BondAndUnbondUpdates {
     unbond_value: token::Change,
 }
 
+/// Temp: In quint this is from `ResultUnbondTx` field `resultSlashing: {sum:
+/// int, epochMap: Epoch -> int}`
+#[derive(Debug, Default)]
+pub struct ResultSlashing {
+    /// The token amount unbonded from the validator stake after accounting for
+    /// slashes
+    pub sum: token::Amount,
+    /// Map from bond start epoch to token amount after slashing
+    pub epoch_map: BTreeMap<Epoch, token::Amount>,
+}
+
 /// Unbond tokens that are bonded between a validator and a source (self or
-/// delegator)
+/// delegator).
+///
+/// This fn is also called during redelegation for a source validator, in
+/// which case the `is_redelegation` param must be true.
 pub fn unbond_tokens<S>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
     amount: token::Amount,
     current_epoch: Epoch,
-) -> storage_api::Result<()>
+    is_redelegation: bool,
+) -> storage_api::Result<ResultSlashing>
 where
     S: StorageRead + StorageWrite,
 {
-    let amount = amount.change();
     tracing::debug!(
-        "Unbonding token amount {} at epoch {current_epoch}",
-        amount.to_string_native()
+        "Unbonding token amount {} at epoch {}",
+        amount.to_string_native(),
+        current_epoch
     );
+    if amount.is_zero() {
+        return Ok(ResultSlashing::default());
+    }
+
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
@@ -1879,35 +1763,10 @@ where
         return Err(UnbondError::ValidatorIsFrozen(validator.clone()).into());
     }
 
-    // Should be able to unbond inactive validators
-
-    // Check that validator is not inactive at anywhere between the current
-    // epoch and pipeline offset
-    // let validator_state_handle = validator_state_handle(validator);
-    // for epoch in current_epoch.iter_range(params.pipeline_len) {
-    //     if let Some(ValidatorState::Inactive) =
-    //         validator_state_handle.get(storage, epoch, &params)?
-    //     {
-    //         return
-    // Err(BondError::InactiveValidator(validator.clone()).into());     }
-    // }
+    // TODO: check that validator is not inactive (when implemented)!
 
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
-
-    tracing::debug!("\nBonds before decrementing:");
-    for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-        let delta = bonds_handle
-            .get_delta_val(storage, ep, &params)?
-            .unwrap_or_default();
-        if !delta.is_zero() {
-            tracing::debug!(
-                "bond ∆ at epoch {}: {}",
-                ep,
-                delta.to_string_native()
-            );
-        }
-    }
 
     // Make sure there are enough tokens left in the bond at the pipeline offset
     let remaining_at_pipeline = bonds_handle
@@ -1915,110 +1774,241 @@ where
         .unwrap_or_default();
     if amount > remaining_at_pipeline {
         return Err(UnbondError::UnbondAmountGreaterThanBond(
-            token::Amount::from_change(amount).to_string_native(),
-            token::Amount::from_change(remaining_at_pipeline)
-                .to_string_native(),
+            amount.to_string_native(),
+            remaining_at_pipeline.to_string_native(),
         )
         .into());
     }
 
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, source, validator)?;
+        tracing::debug!("\nBonds before decrementing: {bonds:#?}");
+    }
+
     let unbonds = unbond_handle(source, validator);
-    // TODO: think if this should be +1 or not!!!
     let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
 
-    let mut remaining = amount;
-    let mut amount_after_slashing = token::Change::default();
+    let redelegated_bonds =
+        delegator_redelegated_bonds_handle(source).at(validator);
 
-    // Iterate thru bonds, find non-zero delta entries starting from
-    // future-most, then decrement those values. For every val that
-    // gets decremented down to 0, need a unique unbond object.
-    // Read all matched bonds into memory to do reverse iteration
-    #[allow(clippy::needless_collect)]
-    let bonds: Vec<Result<_, _>> =
-        bonds_handle.get_data_handler().iter(storage)?.collect();
+    #[cfg(debug_assertions)]
+    let redel_bonds_pre = redelegated_bonds.collect_map(storage)?;
 
-    let mut bond_iter = bonds.into_iter().rev();
-    let mut new_bond_values = HashSet::<BondAndUnbondUpdates>::new();
+    // `resultUnbonding`
+    // Find the bonds to fully unbond (remove) and one to partially unbond, if
+    // necessary
+    let bonds_to_unbond = find_bonds_to_remove(
+        storage,
+        &bonds_handle.get_data_handler(),
+        amount,
+    )?;
 
-    while remaining > token::Change::default() {
-        let bond = bond_iter.next().transpose()?;
-        if bond.is_none() {
-            continue;
+    // `modifiedRedelegation`
+    // A bond may have both redelegated and non-redelegated tokens in it. If
+    // this is the case, compute the modified state of the redelegation.
+    let modified_redelegation = match bonds_to_unbond.new_entry {
+        Some((bond_epoch, new_bond_amount)) => {
+            if redelegated_bonds.contains(storage, &bond_epoch)? {
+                let cur_bond_amount = bonds_handle
+                    .get_delta_val(storage, bond_epoch)?
+                    .unwrap_or_default();
+                compute_modified_redelegation(
+                    storage,
+                    &redelegated_bonds.at(&bond_epoch),
+                    bond_epoch,
+                    cur_bond_amount - new_bond_amount,
+                )?
+            } else {
+                ModifiedRedelegation::default()
+            }
         }
-        let (bond_epoch, bond_amount) = bond.unwrap();
-        // println!("\nBond (epoch, amnt) = ({}, {})", bond_epoch, bond_amount);
-        // println!("remaining = {}", remaining);
+        None => ModifiedRedelegation::default(),
+    };
 
-        let to_unbond = cmp::min(bond_amount, remaining);
-        new_bond_values.insert(BondAndUnbondUpdates {
-            bond_start: bond_epoch,
-            new_bond_value: bond_amount - to_unbond,
-            unbond_value: to_unbond,
-        });
-        // println!("to_unbond (init) = {}", to_unbond);
+    // Compute the new unbonds eagerly
+    // `keysUnbonds`
+    // Get a set of epochs from which we're unbonding (fully and partially).
+    let bond_epochs_to_unbond =
+        if let Some((start_epoch, _)) = bonds_to_unbond.new_entry {
+            let mut to_remove = bonds_to_unbond.epochs.clone();
+            to_remove.insert(start_epoch);
+            to_remove
+        } else {
+            bonds_to_unbond.epochs.clone()
+        };
 
-        let slashes_for_this_bond =
-            find_slashes_in_range(storage, bond_epoch, None, validator)?;
+    // `newUnbonds`
+    // For each epoch we're unbonding, find the amount that's being unbonded.
+    // For full unbonds, this is the current bond value. For partial unbonds
+    // it is a difference between the current and new bond amount.
+    let new_unbonds_map = bond_epochs_to_unbond
+        .into_iter()
+        .map(|epoch| {
+            let cur_bond_value = bonds_handle
+                .get_delta_val(storage, epoch)
+                .unwrap()
+                .unwrap_or_default();
+            let value = if let Some((start_epoch, new_bond_amount)) =
+                bonds_to_unbond.new_entry
+            {
+                if start_epoch == epoch {
+                    cur_bond_value - new_bond_amount
+                } else {
+                    cur_bond_value
+                }
+            } else {
+                cur_bond_value
+            };
+            (epoch, value)
+        })
+        .collect::<BTreeMap<Epoch, token::Amount>>();
 
-        amount_after_slashing += get_slashed_amount(
-            &params,
-            token::Amount::from_change(to_unbond),
-            &slashes_for_this_bond,
-        )?;
-        // println!("Cur amnt after slashing = {}", &amount_after_slashing);
+    // `updatedBonded`
+    // Remove bonds for all the full unbonds.
+    for epoch in &bonds_to_unbond.epochs {
+        bonds_handle.get_data_handler().remove(storage, epoch)?;
+    }
+    // Replace bond amount for partial unbond, if any.
+    if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
+        bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
+    }
 
-        // Update the unbond records
-        let cur_amnt = unbond_records_handle(validator)
-            .at(&pipeline_epoch)
-            .get(storage, &bond_epoch)?
-            .unwrap_or_default();
-        unbond_records_handle(validator)
-            .at(&pipeline_epoch)
-            .insert(
+    // `updatedUnbonded`
+    // Update the unbonds in storage using the eager map computed above
+    if !is_redelegation {
+        for (start_epoch, &unbond_amount) in new_unbonds_map.iter() {
+            unbonds.at(start_epoch).update(
                 storage,
-                bond_epoch,
-                cur_amnt + token::Amount::from_change(to_unbond),
+                withdrawable_epoch,
+                |cur_val| cur_val.unwrap_or_default() + unbond_amount,
             )?;
-
-        remaining -= to_unbond;
-    }
-    drop(bond_iter);
-
-    // Write the in-memory bond and unbond values back to storage
-    for BondAndUnbondUpdates {
-        bond_start,
-        new_bond_value,
-        unbond_value,
-    } in new_bond_values.into_iter()
-    {
-        bonds_handle.set(storage, new_bond_value, bond_start, 0)?;
-        update_unbond(
-            &unbonds,
-            storage,
-            &withdrawable_epoch,
-            &bond_start,
-            token::Amount::from_change(unbond_value),
-        )?;
-    }
-
-    tracing::debug!("Bonds after decrementing:");
-    for ep in Epoch::default().iter_range(current_epoch.0 + 3) {
-        let delta = bonds_handle
-            .get_delta_val(storage, ep, &params)?
-            .unwrap_or_default();
-        if !delta.is_zero() {
-            tracing::debug!(
-                "bond ∆ at epoch {}: {}",
-                ep,
-                delta.to_string_native()
-            );
         }
     }
-    tracing::debug!(
-        "Token change including slashes on unbond = {}",
-        (-amount_after_slashing).to_string_native()
+
+    // `newRedelegatedUnbonds`
+    // This is what the delegator's redelegated unbonds would look like if this
+    // was the only unbond in the PoS system. We need to add these redelegated
+    // unbonds to the existing redelegated unbonds
+    let new_redelegated_unbonds = compute_new_redelegated_unbonds(
+        storage,
+        &redelegated_bonds,
+        &bonds_to_unbond.epochs,
+        &modified_redelegation,
+    )?;
+
+    // `updatedRedelegatedBonded`
+    // NOTE: for now put this here after redelegated unbonds calc bc that one
+    // uses the pre-modified redelegated bonds from storage!
+    // First remove redelegation entries in epochs with full unbonds.
+    for epoch_to_remove in &bonds_to_unbond.epochs {
+        redelegated_bonds.remove_all(storage, epoch_to_remove)?;
+    }
+    if let Some(epoch) = modified_redelegation.epoch {
+        tracing::debug!("\nIs modified redelegation");
+        if modified_redelegation.validators_to_remove.is_empty() {
+            redelegated_bonds.remove_all(storage, &epoch)?;
+        } else {
+            // Then update the redelegated bonds at this epoch
+            let rbonds = redelegated_bonds.at(&epoch);
+            update_redelegated_bonds(storage, &rbonds, &modified_redelegation)?;
+        }
+    }
+
+    if !is_redelegation {
+        // `val updatedRedelegatedUnbonded` with updates applied below
+        // Delegator's redelegated unbonds to this validator.
+        let delegator_redelegated_unbonded =
+            delegator_redelegated_unbonds_handle(source).at(validator);
+
+        // Quint `def updateRedelegatedUnbonded` with `val
+        // updatedRedelegatedUnbonded` together with last statement
+        // in `updatedDelegator.with("redelegatedUnbonded", ...` updated
+        // directly in storage
+        for (start, unbonds) in &new_redelegated_unbonds {
+            let this_redelegated_unbonded = delegator_redelegated_unbonded
+                .at(start)
+                .at(&withdrawable_epoch);
+
+            // Update the delegator's redelegated unbonds with the change
+            for (src_validator, redelegated_unbonds) in unbonds {
+                let redelegated_unbonded =
+                    this_redelegated_unbonded.at(src_validator);
+                for (&redelegation_epoch, &change) in redelegated_unbonds {
+                    redelegated_unbonded.update(
+                        storage,
+                        redelegation_epoch,
+                        |current| current.unwrap_or_default() + change,
+                    )?;
+                }
+            }
+        }
+    }
+    // all `val updatedDelegator` changes are applied at this point
+
+    // `val updatedTotalBonded` and `val updatedTotalUnbonded` with updates
+    // Update the validator's total bonded and unbonded amounts
+    let total_bonded = total_bonded_handle(validator).get_data_handler();
+    let total_unbonded = total_unbonded_handle(validator).at(&pipeline_epoch);
+    for (&start_epoch, &amount) in &new_unbonds_map {
+        total_bonded.update(storage, start_epoch, |current| {
+            current.unwrap_or_default() - amount
+        })?;
+        total_unbonded.update(storage, start_epoch, |current| {
+            current.unwrap_or_default() + amount
+        })?;
+    }
+
+    let total_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(validator);
+    let total_redelegated_unbonded =
+        validator_total_redelegated_unbonded_handle(validator);
+    for (redelegation_start_epoch, unbonds) in &new_redelegated_unbonds {
+        for (src_validator, changes) in unbonds {
+            for (bond_start_epoch, change) in changes {
+                // total redelegated bonded
+                let bonded_sub_map = total_redelegated_bonded
+                    .at(redelegation_start_epoch)
+                    .at(src_validator);
+                bonded_sub_map.update(
+                    storage,
+                    *bond_start_epoch,
+                    |current| current.unwrap_or_default() - *change,
+                )?;
+
+                // total redelegated unbonded
+                let unbonded_sub_map = total_redelegated_unbonded
+                    .at(&pipeline_epoch)
+                    .at(redelegation_start_epoch)
+                    .at(src_validator);
+                unbonded_sub_map.update(
+                    storage,
+                    *bond_start_epoch,
+                    |current| current.unwrap_or_default() + *change,
+                )?;
+            }
+        }
+    }
+
+    let slashes = find_validator_slashes(storage, validator)?;
+    // `val resultSlashing`
+    let result_slashing = compute_amount_after_slashing_unbond(
+        storage,
+        &params,
+        &new_unbonds_map,
+        &new_redelegated_unbonds,
+        slashes,
+    )?;
+    #[cfg(debug_assertions)]
+    let redel_bonds_post = redelegated_bonds.collect_map(storage)?;
+    debug_assert!(
+        result_slashing.sum <= amount,
+        "Amount after slashing ({}) must be <= requested amount to unbond \
+         ({}).",
+        result_slashing.sum.to_string_native(),
+        amount.to_string_native(),
     );
 
+    let change_after_slashing = -result_slashing.sum.change();
     // Update the validator set at the pipeline offset. Since unbonding from a
     // jailed validator who is no longer frozen is allowed, only update the
     // validator set if the validator is not jailed
@@ -2033,29 +2023,528 @@ where
             storage,
             &params,
             validator,
-            -amount_after_slashing,
-            current_epoch,
+            change_after_slashing,
+            pipeline_epoch,
         )?;
     }
 
     // Update the validator and total deltas at the pipeline offset
     update_validator_deltas(
         storage,
-        &params,
         validator,
-        -amount_after_slashing,
+        change_after_slashing,
         current_epoch,
         params.pipeline_len,
     )?;
     update_total_deltas(
         storage,
-        &params,
-        -amount_after_slashing,
+        change_after_slashing,
         current_epoch,
         params.pipeline_len,
     )?;
 
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, source, validator)?;
+        tracing::debug!("\nBonds after decrementing: {bonds:#?}");
+    }
+
+    // Invariant: in the affected epochs, the delta of bonds must be >= delta of
+    // redelegated bonds deltas sum
+    #[cfg(debug_assertions)]
+    {
+        let mut epochs = bonds_to_unbond.epochs.clone();
+        if let Some((epoch, _)) = bonds_to_unbond.new_entry {
+            epochs.insert(epoch);
+        }
+        for epoch in epochs {
+            let cur_bond = bonds_handle
+                .get_delta_val(storage, epoch)?
+                .unwrap_or_default();
+            let redelegated_deltas = redelegated_bonds
+                .at(&epoch)
+                // Sum of redelegations from any src validator
+                .collect_map(storage)?
+                .into_values()
+                .map(|redeleg| redeleg.into_values().sum())
+                .sum();
+            debug_assert!(
+                cur_bond >= redelegated_deltas,
+                "After unbonding, in epoch {epoch} the bond amount {} must be \
+                 >= redelegated deltas at pipeline {}.\n\nredelegated_bonds \
+                 pre: {redel_bonds_pre:#?}\nredelegated_bonds post: \
+                 {redel_bonds_post:#?},\nmodified_redelegation: \
+                 {modified_redelegation:#?},\nbonds_to_unbond: \
+                 {bonds_to_unbond:#?}",
+                cur_bond.to_string_native(),
+                redelegated_deltas.to_string_native()
+            );
+        }
+    }
+
+    Ok(result_slashing)
+}
+
+#[derive(Debug, Default, Eq, PartialEq)]
+struct FoldRedelegatedBondsResult {
+    total_redelegated: token::Amount,
+    total_after_slashing: token::Amount,
+}
+
+/// Iterates over a `redelegated_unbonds` and computes the both the sum of all
+/// redelegated tokens and how much is left after applying all relevant slashes.
+// `def foldAndSlashRedelegatedBondsMap`
+fn fold_and_slash_redelegated_bonds<S>(
+    storage: &S,
+    params: &PosParams,
+    redelegated_unbonds: &EagerRedelegatedBondsMap,
+    start_epoch: Epoch,
+    list_slashes: &[Slash],
+    slash_epoch_filter: impl Fn(Epoch) -> bool,
+) -> FoldRedelegatedBondsResult
+where
+    S: StorageRead,
+{
+    let mut result = FoldRedelegatedBondsResult::default();
+    for (src_validator, bonds_map) in redelegated_unbonds {
+        for (bond_start, &change) in bonds_map {
+            // Merge the two lists of slashes
+            let mut merged: Vec<Slash> =
+            // Look-up slashes for this validator ...
+                validator_slashes_handle(src_validator)
+                    .iter(storage)
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .filter(|slash| {
+                        params.in_redelegation_slashing_window(
+                            slash.epoch,
+                            params.redelegation_start_epoch_from_end(
+                                start_epoch,
+                            ),
+                            start_epoch,
+                        ) && *bond_start <= slash.epoch
+                            && slash_epoch_filter(slash.epoch)
+                    })
+                    // ... and add `list_slashes`
+                    .chain(list_slashes.iter().cloned())
+                    .collect();
+
+            // Sort slashes by epoch
+            merged.sort_by(|s1, s2| s1.epoch.partial_cmp(&s2.epoch).unwrap());
+
+            result.total_redelegated += change;
+            result.total_after_slashing +=
+                apply_list_slashes(params, &merged, change);
+        }
+    }
+    result
+}
+
+/// Computes how much remains from an amount of tokens after applying a list of
+/// slashes.
+///
+/// - `slashes` - a list of slashes ordered by misbehaving epoch.
+/// - `amount` - the amount of slashable tokens.
+// `def applyListSlashes`
+fn apply_list_slashes(
+    params: &PosParams,
+    slashes: &[Slash],
+    amount: token::Amount,
+) -> token::Amount {
+    let mut final_amount = amount;
+    let mut computed_slashes = BTreeMap::<Epoch, token::Amount>::new();
+    for slash in slashes {
+        let slashed_amount =
+            compute_slashable_amount(params, slash, amount, &computed_slashes);
+        final_amount =
+            final_amount.checked_sub(slashed_amount).unwrap_or_default();
+        computed_slashes.insert(slash.epoch, slashed_amount);
+    }
+    final_amount
+}
+
+/// Computes how much is left from a bond or unbond after applying a slash given
+/// that a set of slashes may have been previously applied.
+// `def computeSlashableAmount`
+fn compute_slashable_amount(
+    params: &PosParams,
+    slash: &Slash,
+    amount: token::Amount,
+    computed_slashes: &BTreeMap<Epoch, token::Amount>,
+) -> token::Amount {
+    let updated_amount = computed_slashes
+        .iter()
+        .filter(|(&epoch, _)| {
+            // Keep slashes that have been applied and processed before the
+            // current slash occurred. We use `<=` because slashes processed at
+            // `slash.epoch` (at the start of the epoch) are also processed
+            // before this slash occurred.
+            epoch + params.slash_processing_epoch_offset() <= slash.epoch
+        })
+        .fold(amount, |acc, (_, &amnt)| {
+            acc.checked_sub(amnt).unwrap_or_default()
+        });
+    updated_amount.mul_ceil(slash.rate)
+}
+
+/// Epochs for full and partial unbonds.
+#[derive(Debug, Default)]
+struct BondsForRemovalRes {
+    /// Full unbond epochs
+    pub epochs: BTreeSet<Epoch>,
+    /// Partial unbond epoch associated with the new bond amount
+    pub new_entry: Option<(Epoch, token::Amount)>,
+}
+
+/// In decreasing epoch order, decrement the non-zero bond amount entries until
+/// the full `amount` has been removed. Returns a `BondsForRemovalRes` object
+/// that contains the epochs for which the full bond amount is removed and
+/// additionally information for the one epoch whose bond amount is partially
+/// removed, if any.
+fn find_bonds_to_remove<S>(
+    storage: &S,
+    bonds_handle: &LazyMap<Epoch, token::Amount>,
+    amount: token::Amount,
+) -> storage_api::Result<BondsForRemovalRes>
+where
+    S: StorageRead,
+{
+    #[allow(clippy::needless_collect)]
+    let bonds: Vec<Result<_, _>> = bonds_handle.iter(storage)?.collect();
+
+    let mut bonds_for_removal = BondsForRemovalRes::default();
+    let mut remaining = amount;
+
+    for bond in bonds.into_iter().rev() {
+        let (bond_epoch, bond_amount) = bond?;
+        let to_unbond = cmp::min(bond_amount, remaining);
+        if to_unbond == bond_amount {
+            bonds_for_removal.epochs.insert(bond_epoch);
+        } else {
+            bonds_for_removal.new_entry =
+                Some((bond_epoch, bond_amount - to_unbond));
+        }
+        remaining -= to_unbond;
+        if remaining.is_zero() {
+            break;
+        }
+    }
+    Ok(bonds_for_removal)
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ModifiedRedelegation {
+    epoch: Option<Epoch>,
+    validators_to_remove: BTreeSet<Address>,
+    validator_to_modify: Option<Address>,
+    epochs_to_remove: BTreeSet<Epoch>,
+    epoch_to_modify: Option<Epoch>,
+    new_amount: Option<token::Amount>,
+}
+
+/// Used in `fn unbond_tokens` to compute the modified state of a redelegation
+/// if redelegated tokens are being unbonded.
+fn compute_modified_redelegation<S>(
+    storage: &S,
+    redelegated_bonds: &RedelegatedTokens,
+    start_epoch: Epoch,
+    amount_to_unbond: token::Amount,
+) -> storage_api::Result<ModifiedRedelegation>
+where
+    S: StorageRead,
+{
+    let mut modified_redelegation = ModifiedRedelegation::default();
+
+    let mut src_validators = BTreeSet::<Address>::new();
+    let mut total_redelegated = token::Amount::zero();
+    for rb in redelegated_bonds.iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: src_validator,
+                nested_sub_key: _,
+            },
+            amount,
+        ) = rb?;
+        total_redelegated += amount;
+        src_validators.insert(src_validator);
+    }
+
+    modified_redelegation.epoch = Some(start_epoch);
+
+    // If the total amount of redelegated bonds is less than the target amount,
+    // then all redelegated bonds must be unbonded.
+    if total_redelegated <= amount_to_unbond {
+        return Ok(modified_redelegation);
+    }
+
+    let mut remaining = amount_to_unbond;
+    for src_validator in src_validators.into_iter() {
+        if remaining.is_zero() {
+            break;
+        }
+        let rbonds = redelegated_bonds.at(&src_validator);
+        let total_src_val_amount = rbonds
+            .iter(storage)?
+            .map(|res| {
+                let (_, amount) = res?;
+                Ok(amount)
+            })
+            .sum::<storage_api::Result<token::Amount>>()?;
+
+        // TODO: move this into the `if total_redelegated <= remaining` branch
+        // below, then we don't have to remove it in `fn
+        // update_redelegated_bonds` when `validator_to_modify` is Some (and
+        // avoid `modified_redelegation.validators_to_remove.clone()`).
+        // It affects assumption 2. in `fn compute_new_redelegated_unbonds`, but
+        // that looks trivial to change.
+        // NOTE: not sure if this TODO is still relevant...
+        modified_redelegation
+            .validators_to_remove
+            .insert(src_validator.clone());
+        if total_src_val_amount <= remaining {
+            remaining -= total_src_val_amount;
+        } else {
+            let bonds_to_remove =
+                find_bonds_to_remove(storage, &rbonds, remaining)?;
+
+            remaining = token::Amount::zero();
+
+            // NOTE: When there are multiple `src_validators` from which we're
+            // unbonding, `validator_to_modify` cannot get overriden, because
+            // only one of them can be a partial unbond (`new_entry`
+            // is partial unbond)
+            if let Some((bond_epoch, new_bond_amount)) =
+                bonds_to_remove.new_entry
+            {
+                modified_redelegation.validator_to_modify = Some(src_validator);
+                modified_redelegation.epochs_to_remove = {
+                    let mut epochs = bonds_to_remove.epochs;
+                    // TODO: remove this insertion then we don't have to remove
+                    // it again in `fn update_redelegated_bonds`
+                    // when `epoch_to_modify` is Some (and avoid
+                    // `modified_redelegation.epochs_to_remove.clone`)
+                    // It affects assumption 3. in `fn
+                    // compute_new_redelegated_unbonds`, but that also looks
+                    // trivial to change.
+                    epochs.insert(bond_epoch);
+                    epochs
+                };
+                modified_redelegation.epoch_to_modify = Some(bond_epoch);
+                modified_redelegation.new_amount = Some(new_bond_amount);
+            } else {
+                modified_redelegation.validator_to_modify = Some(src_validator);
+                modified_redelegation.epochs_to_remove = bonds_to_remove.epochs;
+            }
+        }
+    }
+    Ok(modified_redelegation)
+}
+
+fn update_redelegated_bonds<S>(
+    storage: &mut S,
+    redelegated_bonds: &RedelegatedTokens,
+    modified_redelegation: &ModifiedRedelegation,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    if let Some(val_to_modify) = &modified_redelegation.validator_to_modify {
+        let mut updated_vals_to_remove =
+            modified_redelegation.validators_to_remove.clone();
+        updated_vals_to_remove.remove(val_to_modify);
+
+        // Remove the updated_vals_to_remove keys from the
+        // redelegated_bonds map
+        for val in &updated_vals_to_remove {
+            redelegated_bonds.remove_all(storage, val)?;
+        }
+
+        if let Some(epoch_to_modify) = modified_redelegation.epoch_to_modify {
+            let mut updated_epochs_to_remove =
+                modified_redelegation.epochs_to_remove.clone();
+            updated_epochs_to_remove.remove(&epoch_to_modify);
+            let val_bonds_to_modify = redelegated_bonds.at(val_to_modify);
+            for epoch in updated_epochs_to_remove {
+                val_bonds_to_modify.remove(storage, &epoch)?;
+            }
+            val_bonds_to_modify.insert(
+                storage,
+                epoch_to_modify,
+                modified_redelegation.new_amount.unwrap(),
+            )?;
+        } else {
+            // Then remove to epochs_to_remove from the redelegated bonds of the
+            // val_to_modify
+            let val_bonds_to_modify = redelegated_bonds.at(val_to_modify);
+            for epoch in &modified_redelegation.epochs_to_remove {
+                val_bonds_to_modify.remove(storage, epoch)?;
+            }
+        }
+    } else {
+        // Remove all validators in modified_redelegation.validators_to_remove
+        // from redelegated_bonds
+        for val in &modified_redelegation.validators_to_remove {
+            redelegated_bonds.remove_all(storage, val)?;
+        }
+    }
     Ok(())
+}
+
+/// Temp helper type to match quint model.
+/// Result of `compute_new_redelegated_unbonds` that contains a map of
+/// redelegated unbonds.
+/// The map keys from outside in are:
+///
+/// - redelegation end epoch where redeleg stops contributing to src validator
+/// - src validator address
+/// - src bond start epoch where it started contributing to src validator
+// TODO: refactor out
+type EagerRedelegatedUnbonds = BTreeMap<Epoch, EagerRedelegatedBondsMap>;
+
+/// Computes a map of redelegated unbonds from a set of redelegated bonds.
+///
+/// - `redelegated_bonds` - a map of redelegated bonds from epoch to
+///   `RedelegatedTokens`.
+/// - `epochs_to_remove` - a set of epochs that indicate the set of epochs
+///   unbonded.
+/// - `modified` record that represents a redelegated bond that it is only
+///   partially unbonded.
+///
+/// The function assumes that:
+///
+/// 1. `modified.epoch` is not in the `epochs_to_remove` set.
+/// 2. `modified.validator_to_modify` is in `modified.vals_to_remove`.
+/// 3. `modified.epoch_to_modify` is in in `modified.epochs_to_remove`.
+// TODO: try to optimize this by only writing to storage via Lazy!
+// `def computeNewRedelegatedUnbonds` from Quint
+fn compute_new_redelegated_unbonds<S>(
+    storage: &S,
+    redelegated_bonds: &RedelegatedBondsOrUnbonds,
+    epochs_to_remove: &BTreeSet<Epoch>,
+    modified: &ModifiedRedelegation,
+) -> storage_api::Result<EagerRedelegatedUnbonds>
+where
+    S: StorageRead + StorageWrite,
+{
+    let unbonded_epochs = if let Some(epoch) = modified.epoch {
+        debug_assert!(
+            !epochs_to_remove.contains(&epoch),
+            "1. assumption in `fn compute_new_redelegated_unbonds` doesn't \
+             hold"
+        );
+        let mut epochs = epochs_to_remove.clone();
+        epochs.insert(epoch);
+        epochs
+            .iter()
+            .cloned()
+            .filter(|e| redelegated_bonds.contains(storage, e).unwrap())
+            .collect::<BTreeSet<Epoch>>()
+    } else {
+        epochs_to_remove
+            .iter()
+            .cloned()
+            .filter(|e| redelegated_bonds.contains(storage, e).unwrap())
+            .collect::<BTreeSet<Epoch>>()
+    };
+    debug_assert!(
+        modified
+            .validator_to_modify
+            .as_ref()
+            .map(|validator| modified.validators_to_remove.contains(validator))
+            .unwrap_or(true),
+        "2. assumption in `fn compute_new_redelegated_unbonds` doesn't hold"
+    );
+    debug_assert!(
+        modified
+            .epoch_to_modify
+            .as_ref()
+            .map(|epoch| modified.epochs_to_remove.contains(epoch))
+            .unwrap_or(true),
+        "3. assumption in `fn compute_new_redelegated_unbonds` doesn't hold"
+    );
+
+    // quint `newRedelegatedUnbonds` returned from
+    // `computeNewRedelegatedUnbonds`
+    let new_redelegated_unbonds: EagerRedelegatedUnbonds = unbonded_epochs
+        .into_iter()
+        .map(|start| {
+            let mut rbonds = EagerRedelegatedBondsMap::default();
+            if modified
+                .epoch
+                .map(|redelegation_epoch| start != redelegation_epoch)
+                .unwrap_or(true)
+                || modified.validators_to_remove.is_empty()
+            {
+                for res in redelegated_bonds.at(&start).iter(storage).unwrap() {
+                    let (
+                        NestedSubKey::Data {
+                            key: validator,
+                            nested_sub_key: SubKey::Data(epoch),
+                        },
+                        amount,
+                    ) = res.unwrap();
+                    rbonds
+                        .entry(validator.clone())
+                        .or_default()
+                        .insert(epoch, amount);
+                }
+                (start, rbonds)
+            } else {
+                for src_validator in &modified.validators_to_remove {
+                    if modified
+                        .validator_to_modify
+                        .as_ref()
+                        .map(|validator| src_validator != validator)
+                        .unwrap_or(true)
+                    {
+                        let raw_bonds =
+                            redelegated_bonds.at(&start).at(src_validator);
+                        for res in raw_bonds.iter(storage).unwrap() {
+                            let (bond_epoch, bond_amount) = res.unwrap();
+                            rbonds
+                                .entry(src_validator.clone())
+                                .or_default()
+                                .insert(bond_epoch, bond_amount);
+                        }
+                    } else {
+                        for bond_start in &modified.epochs_to_remove {
+                            let cur_redel_bond_amount = redelegated_bonds
+                                .at(&start)
+                                .at(src_validator)
+                                .get(storage, bond_start)
+                                .unwrap()
+                                .unwrap_or_default();
+                            let raw_bonds = rbonds
+                                .entry(src_validator.clone())
+                                .or_default();
+                            if modified
+                                .epoch_to_modify
+                                .as_ref()
+                                .map(|epoch| bond_start != epoch)
+                                .unwrap_or(true)
+                            {
+                                raw_bonds
+                                    .insert(*bond_start, cur_redel_bond_amount);
+                            } else {
+                                raw_bonds.insert(
+                                    *bond_start,
+                                    cur_redel_bond_amount
+                                        - modified
+                                            .new_amount
+                                            // Safe unwrap - it shouldn't
+                                            // get to
+                                            // this if it's None
+                                            .unwrap(),
+                                );
+                            }
+                        }
+                    }
+                }
+                (start, rbonds)
+            }
+        })
+        .collect();
+
+    Ok(new_redelegated_unbonds)
 }
 
 /// Compute a token amount after slashing, given the initial amount and a set of
@@ -2065,22 +2554,17 @@ fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
     slashes: &BTreeMap<Epoch, Dec>,
-) -> storage_api::Result<token::Change> {
-    // println!("FN `get_slashed_amount`");
-
+) -> storage_api::Result<token::Amount> {
     let mut updated_amount = amount;
     let mut computed_amounts = Vec::<SlashedAmount>::new();
 
-    for (infraction_epoch, slash_rate) in slashes {
-        // println!("Slash epoch: {}, rate: {}", infraction_epoch, slash_rate);
+    for (&infraction_epoch, &slash_rate) in slashes {
         let mut computed_to_remove = BTreeSet::<Reverse<usize>>::new();
         for (ix, slashed_amount) in computed_amounts.iter().enumerate() {
             // Update amount with slashes that happened more than unbonding_len
             // epochs before this current slash
-            // TODO: understand this better (from Informal)
-            // TODO: do bounds of this need to be changed with a +/- 1??
             if slashed_amount.epoch + params.slash_processing_epoch_offset()
-                <= *infraction_epoch
+                <= infraction_epoch
             {
                 updated_amount = updated_amount
                     .checked_sub(slashed_amount.amount)
@@ -2095,13 +2579,10 @@ fn get_slashed_amount(
             computed_amounts.remove(item.0);
         }
         computed_amounts.push(SlashedAmount {
-            amount: *slash_rate * updated_amount,
-            epoch: *infraction_epoch,
+            amount: updated_amount.mul_ceil(slash_rate),
+            epoch: infraction_epoch,
         });
     }
-    // println!("Finished loop over slashes in `get_slashed_amount`");
-    // println!("Updated amount: {:?}", &updated_amount);
-    // println!("Computed amounts: {:?}", &computed_amounts);
 
     let total_computed_amounts = computed_amounts
         .into_iter()
@@ -2112,29 +2593,126 @@ fn get_slashed_amount(
         .checked_sub(total_computed_amounts)
         .unwrap_or_default();
 
-    Ok(final_amount.change())
+    Ok(final_amount)
 }
 
-fn update_unbond<S>(
-    handle: &Unbonds,
-    storage: &mut S,
-    withdraw_epoch: &Epoch,
-    start_epoch: &Epoch,
-    amount: token::Amount,
-) -> storage_api::Result<()>
+// `def computeAmountAfterSlashingUnbond`
+fn compute_amount_after_slashing_unbond<S>(
+    storage: &S,
+    params: &PosParams,
+    unbonds: &BTreeMap<Epoch, token::Amount>,
+    redelegated_unbonds: &EagerRedelegatedUnbonds,
+    slashes: Vec<Slash>,
+) -> storage_api::Result<ResultSlashing>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
-    let current = handle
-        .at(withdraw_epoch)
-        .get(storage, start_epoch)?
-        .unwrap_or_default();
-    handle.at(withdraw_epoch).insert(
-        storage,
-        *start_epoch,
-        current + amount,
-    )?;
-    Ok(())
+    let mut result_slashing = ResultSlashing::default();
+    for (&start_epoch, amount) in unbonds {
+        // `val listSlashes`
+        let list_slashes: Vec<Slash> = slashes
+            .iter()
+            .filter(|slash| slash.epoch >= start_epoch)
+            .cloned()
+            .collect();
+        // `val resultFold`
+        let result_fold = if let Some(redelegated_unbonds) =
+            redelegated_unbonds.get(&start_epoch)
+        {
+            fold_and_slash_redelegated_bonds(
+                storage,
+                params,
+                redelegated_unbonds,
+                start_epoch,
+                &list_slashes,
+                |_| true,
+            )
+        } else {
+            FoldRedelegatedBondsResult::default()
+        };
+        // `val totalNoRedelegated`
+        let total_not_redelegated = amount
+            .checked_sub(result_fold.total_redelegated)
+            .unwrap_or_default();
+        // `val afterNoRedelegated`
+        let after_not_redelegated =
+            apply_list_slashes(params, &list_slashes, total_not_redelegated);
+        // `val amountAfterSlashing`
+        let amount_after_slashing =
+            after_not_redelegated + result_fold.total_after_slashing;
+        // Accumulation step
+        result_slashing.sum += amount_after_slashing;
+        result_slashing
+            .epoch_map
+            .insert(start_epoch, amount_after_slashing);
+    }
+    Ok(result_slashing)
+}
+
+/// Compute from a set of unbonds (both redelegated and not) how much is left
+/// after applying all relevant slashes.
+// `def computeAmountAfterSlashingWithdraw`
+fn compute_amount_after_slashing_withdraw<S>(
+    storage: &S,
+    params: &PosParams,
+    unbonds_and_redelegated_unbonds: &BTreeMap<
+        (Epoch, Epoch),
+        (token::Amount, EagerRedelegatedBondsMap),
+    >,
+    slashes: Vec<Slash>,
+) -> storage_api::Result<ResultSlashing>
+where
+    S: StorageRead,
+{
+    let mut result_slashing = ResultSlashing::default();
+
+    for ((start_epoch, withdraw_epoch), (amount, redelegated_unbonds)) in
+        unbonds_and_redelegated_unbonds.iter()
+    {
+        // TODO: check if slashes in the same epoch can be
+        // folded into one effective slash
+        let end_epoch = *withdraw_epoch
+            - params.unbonding_len
+            - params.cubic_slashing_window_length;
+        // Find slashes that apply to `start_epoch..end_epoch`
+        let list_slashes = slashes
+            .iter()
+            .filter(|slash| {
+                // Started before the slash occurred
+                start_epoch <= &slash.epoch
+                    // Ends after the slash
+                    && end_epoch > slash.epoch
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        // Find the sum and the sum after slashing of the redelegated unbonds
+        let result_fold = fold_and_slash_redelegated_bonds(
+            storage,
+            params,
+            redelegated_unbonds,
+            *start_epoch,
+            &list_slashes,
+            |_| true,
+        );
+
+        // Unbond amount that didn't come from a redelegation
+        let total_not_redelegated = *amount - result_fold.total_redelegated;
+        // Find how much remains after slashing non-redelegated amount
+        let after_not_redelegated =
+            apply_list_slashes(params, &list_slashes, total_not_redelegated);
+
+        // Add back the unbond and redelegated unbond amount after slashing
+        let amount_after_slashing =
+            after_not_redelegated + result_fold.total_after_slashing;
+
+        result_slashing.sum += amount_after_slashing;
+        result_slashing
+            .epoch_map
+            .insert(*start_epoch, amount_after_slashing);
+    }
+
+    Ok(result_slashing)
 }
 
 /// Arguments to [`become_validator`].
@@ -2221,7 +2799,7 @@ where
     )?;
     validator_deltas_handle(address).set(
         storage,
-        token::Change::default(),
+        token::Change::zero(),
         current_epoch,
         params.pipeline_len,
     )?;
@@ -2248,12 +2826,17 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::debug!("Withdrawing tokens in epoch {current_epoch}");
     let params = read_pos_params(storage)?;
     let source = source.unwrap_or(validator);
+
+    tracing::debug!("Withdrawing tokens in epoch {current_epoch}");
     tracing::debug!("Source {} --> Validator {}", source, validator);
 
-    let unbond_handle = unbond_handle(source, validator);
+    let unbond_handle: Unbonds = unbond_handle(source, validator);
+    let redelegated_unbonds =
+        delegator_redelegated_unbonds_handle(source).at(validator);
+
+    // Check that there are unbonded tokens available for withdrawal
     if unbond_handle.is_empty(storage)? {
         return Err(WithdrawError::NoUnbondFound(BondId {
             source: source.clone(),
@@ -2262,84 +2845,109 @@ where
         .into());
     }
 
-    // let mut total_slashed = token::Amount::default();
-    let mut withdrawable_amount = token::Amount::default();
-    // (withdraw_epoch, start_epoch)
-    let mut unbonds_to_remove: Vec<(Epoch, Epoch)> = Vec::new();
+    let mut unbonds_and_redelegated_unbonds: BTreeMap<
+        (Epoch, Epoch),
+        (token::Amount, EagerRedelegatedBondsMap),
+    > = BTreeMap::new();
 
     for unbond in unbond_handle.iter(storage)? {
         let (
             NestedSubKey::Data {
-                key: withdraw_epoch,
-                nested_sub_key: SubKey::Data(start_epoch),
+                key: start_epoch,
+                nested_sub_key: SubKey::Data(withdraw_epoch),
             },
             amount,
         ) = unbond?;
 
+        // Logging
         tracing::debug!(
             "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}",
             amount.to_string_native()
         );
-
-        // TODO: adding slash rates in same epoch, applying cumulatively in dif
-        // epochs
         if withdraw_epoch > current_epoch {
             tracing::debug!(
                 "Not yet withdrawable until epoch {withdraw_epoch}"
             );
             continue;
         }
-        let slashes_for_this_unbond = find_slashes_in_range(
-            storage,
-            start_epoch,
-            Some(
-                withdraw_epoch
-                    - params.unbonding_len
-                    - params.cubic_slashing_window_length,
-            ),
-            validator,
-        )?;
 
-        let amount_after_slashing =
-            get_slashed_amount(&params, amount, &slashes_for_this_unbond)?;
+        let mut eager_redelegated_unbonds = EagerRedelegatedBondsMap::default();
+        let matching_redelegated_unbonds =
+            redelegated_unbonds.at(&start_epoch).at(&withdraw_epoch);
+        for ub in matching_redelegated_unbonds.iter(storage)? {
+            let (
+                NestedSubKey::Data {
+                    key: address,
+                    nested_sub_key: SubKey::Data(epoch),
+                },
+                amount,
+            ) = ub?;
+            eager_redelegated_unbonds
+                .entry(address)
+                .or_default()
+                .entry(epoch)
+                .or_insert(amount);
+        }
 
-        // total_slashed += amount - token::Amount::from(amount_after_slashing);
-        withdrawable_amount += token::Amount::from(amount_after_slashing);
-        unbonds_to_remove.push((withdraw_epoch, start_epoch));
+        unbonds_and_redelegated_unbonds.insert(
+            (start_epoch, withdraw_epoch),
+            (amount, eager_redelegated_unbonds),
+        );
     }
+    let slashes = find_validator_slashes(storage, validator)?;
+
+    // `val resultSlashing`
+    let result_slashing = compute_amount_after_slashing_withdraw(
+        storage,
+        &params,
+        &unbonds_and_redelegated_unbonds,
+        slashes,
+    )?;
+
+    let withdrawable_amount = result_slashing.sum;
     tracing::debug!(
         "Withdrawing total {}",
         withdrawable_amount.to_string_native()
     );
 
-    // Remove the unbond data from storage
-    for (withdraw_epoch, start_epoch) in unbonds_to_remove {
+    // `updateDelegator` with `unbonded` and `redelegeatedUnbonded`
+    for ((start_epoch, withdraw_epoch), _unbond_and_redelegations) in
+        unbonds_and_redelegated_unbonds
+    {
         tracing::debug!("Remove ({start_epoch}..{withdraw_epoch}) from unbond");
         unbond_handle
-            .at(&withdraw_epoch)
-            .remove(storage, &start_epoch)?;
-        // TODO: check if the `end_epoch` layer is now empty and remove it if
-        // so, may need to implement remove/delete for nested map
+            .at(&start_epoch)
+            .remove(storage, &withdraw_epoch)?;
+        redelegated_unbonds
+            .at(&start_epoch)
+            .remove_all(storage, &withdraw_epoch)?;
+
+        if unbond_handle.at(&start_epoch).is_empty(storage)? {
+            unbond_handle.remove_all(storage, &start_epoch)?;
+        }
+        if redelegated_unbonds.at(&start_epoch).is_empty(storage)? {
+            redelegated_unbonds.remove_all(storage, &start_epoch)?;
+        }
     }
 
     // Transfer the withdrawable tokens from the PoS address back to the source
     let staking_token = staking_token_address(storage);
-    transfer_tokens(
+    token::transfer(
         storage,
         &staking_token,
-        withdrawable_amount,
         &ADDRESS,
         source,
+        withdrawable_amount,
     )?;
 
     // TODO: Transfer the slashed tokens from the PoS address to the Slash Pool
     // address
-    // transfer_tokens(
+    // token::transfer(
     //     storage,
     //     &staking_token,
-    //     total_slashed,
     //     &ADDRESS,
     //     &SLASH_POOL_ADDRESS,
+    //     total_slashed,
     // )?;
 
     Ok(withdrawable_amount)
@@ -2405,53 +3013,6 @@ where
     commission_handle.set(storage, new_rate, current_epoch, params.pipeline_len)
 }
 
-/// Transfer tokens between accounts
-/// TODO: may want to move this into core crate
-pub fn transfer_tokens<S>(
-    storage: &mut S,
-    token: &Address,
-    amount: token::Amount,
-    src: &Address,
-    dest: &Address,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let src_key = token::balance_key(token, src);
-    let dest_key = token::balance_key(token, dest);
-    if let Some(mut src_balance) = storage.read::<token::Amount>(&src_key)? {
-        // let mut src_balance: token::Amount =
-        //     decode(src_balance).unwrap_or_default();
-        if src_balance < amount {
-            tracing::error!(
-                "PoS system transfer error, the source doesn't have \
-                 sufficient balance. It has {}, but {} is required",
-                src_balance.to_string_native(),
-                amount.to_string_native(),
-            );
-        }
-        src_balance.spend(&amount);
-        let mut dest_balance = storage
-            .read::<token::Amount>(&dest_key)?
-            .unwrap_or_default();
-
-        // let dest_balance = storage.read_bytes(&dest_key).unwrap_or_default();
-        // let mut dest_balance: token::Amount = dest_balance
-        //     .and_then(|b| decode(b).ok())
-        //     .unwrap_or_default();
-        dest_balance.receive(&amount);
-        storage
-            .write(&src_key, src_balance)
-            .expect("Unable to write token balance for PoS system");
-        storage
-            .write(&dest_key, dest_balance)
-            .expect("Unable to write token balance for PoS system");
-    } else {
-        tracing::error!("PoS system transfer error, the source has no balance");
-    }
-    Ok(())
-}
-
 /// Check if the given consensus key is already being used to ensure uniqueness.
 ///
 /// If it's not being used, it will be inserted into the set that's being used
@@ -2481,54 +3042,273 @@ where
 }
 
 /// Get the total bond amount, including slashes, for a given bond ID and epoch.
-/// Returns a two-element tuple of the raw bond amount and the post-slashed bond
-/// amount, respectively.
-///
-/// TODO: does epoch of discovery need to be considered for precise accuracy?
+/// Returns the bond amount after slashing. For future epochs the value is
+/// subject to change.
 pub fn bond_amount<S>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
-) -> storage_api::Result<(token::Amount, token::Amount)>
+) -> storage_api::Result<token::Amount>
 where
     S: StorageRead,
 {
-    // TODO: review this logic carefully, apply rewards
+    // TODO: our method of applying slashes is not correct! This needs review
+
+    println!("FN BOND AMOUNT");
+    let params = read_pos_params(storage)?;
+
+    // TODO: apply rewards
     let slashes = find_validator_slashes(storage, &bond_id.validator)?;
-    let slash_rates = slashes.into_iter().fold(
-        BTreeMap::<Epoch, Dec>::new(),
-        |mut map, slash| {
-            let tot_rate = map.entry(slash.epoch).or_default();
-            *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
-            map
-        },
-    );
+    dbg!(&slashes);
+    let slash_rates =
+        slashes
+            .iter()
+            .fold(BTreeMap::<Epoch, Dec>::new(), |mut map, slash| {
+                let tot_rate = map.entry(slash.epoch).or_default();
+                *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
+                map
+            });
+    dbg!(&slash_rates);
+
+    // Accumulate incoming redelegations slashes from source validator, if any.
+    // This ensures that if there're slashes on both src validator and dest
+    // validator, they're combined correctly.
+    let mut redelegation_slashes = BTreeMap::<Epoch, token::Amount>::new();
+    for res in delegator_redelegated_bonds_handle(&bond_id.source)
+        .at(&bond_id.validator)
+        .iter(storage)?
+    {
+        let (
+            NestedSubKey::Data {
+                key: redelegation_end,
+                nested_sub_key:
+                    NestedSubKey::Data {
+                        key: src_validator,
+                        nested_sub_key: SubKey::Data(start),
+                    },
+            },
+            delta,
+        ) = res?;
+
+        let list_slashes = validator_slashes_handle(&src_validator)
+            .iter(storage)?
+            .map(Result::unwrap)
+            .filter(|slash| {
+                let slash_processing_epoch =
+                    slash.epoch + params.slash_processing_epoch_offset();
+                start <= slash.epoch
+                    && redelegation_end > slash.epoch
+                    && slash_processing_epoch
+                        > redelegation_end - params.pipeline_len
+            })
+            .collect::<Vec<_>>();
+
+        let slashed_delta = apply_list_slashes(&params, &list_slashes, delta);
+
+        // let mut slashed_delta = delta;
+        // let slashes = find_slashes_in_range(
+        //     storage,
+        //     start,
+        //     Some(redelegation_end),
+        //     &src_validator,
+        // )?;
+        // for (slash_epoch, rate) in slashes {
+        //     let slash_processing_epoch =
+        //         slash_epoch + params.slash_processing_epoch_offset();
+        //     // If the slash was processed after redelegation was submitted
+        //     // it has to be slashed now
+        //     if slash_processing_epoch > redelegation_end -
+        // params.pipeline_len {         let slashed =
+        // slashed_delta.mul_ceil(rate);         slashed_delta -=
+        // slashed;     }
+        // }
+        *redelegation_slashes.entry(redelegation_end).or_default() +=
+            delta - slashed_delta;
+    }
+    dbg!(&redelegation_slashes);
 
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
-    let mut total = token::Amount::default();
-    let mut total_active = token::Amount::default();
+    let mut total_active = token::Amount::zero();
     for next in bonds.iter(storage)? {
-        let (bond_epoch, delta) = next?;
+        let (bond_epoch, delta) = dbg!(next?);
         if bond_epoch > epoch {
             continue;
         }
 
-        total += token::Amount::from(delta);
-        total_active += token::Amount::from(delta);
+        let list_slashes = slashes
+            .iter()
+            .filter(|slash| bond_epoch <= slash.epoch)
+            .cloned()
+            .collect::<Vec<_>>();
 
-        for (slash_epoch, rate) in &slash_rates {
-            if *slash_epoch < bond_epoch {
-                continue;
-            }
-            // TODO: think about truncation
-            let current_slashed = *rate * delta;
-            total_active
-                .checked_sub(token::Amount::from(current_slashed))
-                .unwrap_or_default();
+        let mut slashed_delta =
+            apply_list_slashes(&params, &list_slashes, delta);
+
+        // Deduct redelegation src validator slash, if any
+        if let Some(&redelegation_slash) = redelegation_slashes.get(&bond_epoch)
+        {
+            slashed_delta -= redelegation_slash;
+        }
+
+        // let list_slashes = slashes
+        //     .iter()
+        //     .map(Result::unwrap)
+        //     .filter(|slash| bond_epoch <= slash.epoch)
+        //     .collect::<Vec<_>>();
+
+        // for (&slash_epoch, &rate) in &slash_rates {
+        //     if slash_epoch < bond_epoch {
+        //         continue;
+        //     }
+        //     // TODO: think about truncation
+        //     let current_slash = slashed_delta.mul_ceil(rate);
+        //     slashed_delta -= current_slash;
+        // }
+        total_active += slashed_delta;
+    }
+    dbg!(&total_active);
+
+    // Add unbonds that are still contributing to stake
+    let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
+    for next in unbonds.iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: start,
+                nested_sub_key: SubKey::Data(withdrawable_epoch),
+            },
+            delta,
+        ) = next?;
+        let end = withdrawable_epoch - params.withdrawable_epoch_offset()
+            + params.pipeline_len;
+
+        if start <= epoch && end > epoch {
+            let list_slashes = slashes
+                .iter()
+                .filter(|slash| start <= slash.epoch && end > slash.epoch)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let slashed_delta =
+                apply_list_slashes(&params, &list_slashes, delta);
+
+            // let mut slashed_delta = delta;
+            // for (&slash_epoch, &rate) in &slash_rates {
+            //     if start <= slash_epoch && end > slash_epoch {
+            //         // TODO: think about truncation
+            //         let current_slash = slashed_delta.mul_ceil(rate);
+            //         slashed_delta -= current_slash;
+            //     }
+            // }
+            total_active += slashed_delta;
         }
     }
-    Ok((total, total_active))
+    dbg!(&total_active);
+
+    if bond_id.validator != bond_id.source {
+        // Add outgoing redelegations that are still contributing to the source
+        // validator's stake
+        let redelegated_bonds =
+            delegator_redelegated_bonds_handle(&bond_id.source);
+        for res in redelegated_bonds.iter(storage)? {
+            let (
+                NestedSubKey::Data {
+                    key: _dest_validator,
+                    nested_sub_key:
+                        NestedSubKey::Data {
+                            key: end,
+                            nested_sub_key:
+                                NestedSubKey::Data {
+                                    key: src_validator,
+                                    nested_sub_key: SubKey::Data(start),
+                                },
+                        },
+                },
+                delta,
+            ) = res?;
+            if src_validator == bond_id.validator
+                && start <= epoch
+                && end > epoch
+            {
+                let list_slashes = slashes
+                    .iter()
+                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let slashed_delta =
+                    apply_list_slashes(&params, &list_slashes, delta);
+
+                // let mut slashed_delta = delta;
+                // for (&slash_epoch, &rate) in &slash_rates {
+                //     if start <= slash_epoch && end > slash_epoch {
+                //         // TODO: think about truncation
+                //         let current_slash = delta.mul_ceil(rate);
+                //         slashed_delta -= current_slash;
+                //     }
+                // }
+                total_active += slashed_delta;
+            }
+        }
+        dbg!(&total_active);
+
+        // Add outgoing redelegation unbonds that are still contributing to
+        // the source validator's stake
+        let redelegated_unbonds =
+            delegator_redelegated_unbonds_handle(&bond_id.source);
+        for res in redelegated_unbonds.iter(storage)? {
+            let (
+                NestedSubKey::Data {
+                    key: _dest_validator,
+                    nested_sub_key:
+                        NestedSubKey::Data {
+                            key: redelegation_epoch,
+                            nested_sub_key:
+                                NestedSubKey::Data {
+                                    key: withdraw_epoch,
+                                    nested_sub_key:
+                                        NestedSubKey::Data {
+                                            key: src_validator,
+                                            nested_sub_key: SubKey::Data(start),
+                                        },
+                                },
+                        },
+                },
+                delta,
+            ) = res?;
+            let end = withdraw_epoch - params.withdrawable_epoch_offset()
+                + params.pipeline_len;
+            if src_validator == bond_id.validator
+                // If the unbonded bond was redelegated after this epoch ...
+                && redelegation_epoch > epoch
+                // ... the start was before or at this epoch ...
+                && start <= epoch
+                // ... and the end after this epoch
+                && end > epoch
+            {
+                let list_slashes = slashes
+                    .iter()
+                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
+                    .cloned()
+                    .collect::<Vec<_>>();
+
+                let slashed_delta =
+                    apply_list_slashes(&params, &list_slashes, delta);
+
+                // let mut slashed_delta = delta;
+                // for (&slash_epoch, &rate) in &slash_rates {
+                //     if start <= slash_epoch && end > slash_epoch {
+                //         let current_slash = delta.mul_ceil(rate);
+                //         slashed_delta -= current_slash;
+                //     }
+                // }
+                total_active += slashed_delta;
+            }
+        }
+    }
+    dbg!(&total_active);
+
+    Ok(total_active)
 }
 
 /// Get the genesis consensus validators stake and consensus key for Tendermint,
@@ -2618,8 +3398,7 @@ where
                         &address,
                         current_epoch,
                     )
-                    .unwrap()
-                    .unwrap_or_default();
+                    .unwrap();
                     into_tm_voting_power(
                         params.tm_votes_per_token,
                         prev_validator_stake,
@@ -2642,7 +3421,7 @@ where
                 }
                 // If both previous and current voting powers are 0, and the
                 // validator_stake_threshold is 0, skip update
-                if params.validator_stake_threshold == token::Amount::default()
+                if params.validator_stake_threshold.is_zero()
                     && *prev_tm_voting_power == 0
                     && *new_tm_voting_power == 0
                 {
@@ -2690,8 +3469,7 @@ where
                     &address,
                     current_epoch,
                 )
-                .unwrap()
-                .unwrap_or_default();
+                .unwrap();
                 into_tm_voting_power(
                     params.tm_votes_per_token,
                     prev_validator_stake,
@@ -2702,8 +3480,7 @@ where
             // it in the `new_consensus_validators` iterator above
             if matches!(new_state, Some(ValidatorState::Consensus)) {
                 return None;
-            } else if params.validator_stake_threshold
-                == token::Amount::default()
+            } else if params.validator_stake_threshold.is_zero()
                 && *prev_tm_voting_power == 0
             {
                 // If the new state is not Consensus but its prev voting power
@@ -2782,11 +3559,10 @@ where
                     "Delegation key should contain validator address.",
                 )
             })?;
-        let amount = bond_handle(owner, &validator_address)
+        let deltas_sum = bond_handle(owner, &validator_address)
             .get_sum(storage, *epoch, &params)?
             .unwrap_or_default();
-        delegations
-            .insert(validator_address, token::Amount::from_change(amount));
+        delegations.insert(validator_address, deltas_sum);
     }
     Ok(delegations)
 }
@@ -2807,7 +3583,7 @@ pub fn find_bonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> storage_api::Result<BTreeMap<Epoch, token::Change>>
+) -> storage_api::Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -2831,8 +3607,8 @@ where
         .map(|next_result| {
             let (
                 NestedSubKey::Data {
-                    key: withdraw_epoch,
-                    nested_sub_key: SubKey::Data(start_epoch),
+                    key: start_epoch,
+                    nested_sub_key: SubKey::Data(withdraw_epoch),
                 },
                 amount,
             ) = next_result?;
@@ -2976,7 +3752,7 @@ where
                     {
                         return None;
                     }
-                    let change: token::Change =
+                    let change: token::Amount =
                         BorshDeserialize::try_from_slice(&val_bytes).ok()?;
                     if change.is_zero() {
                         return None;
@@ -3101,12 +3877,12 @@ where
 
     let bonds = find_bonds(storage, &source, &validator)?
         .into_iter()
-        .filter(|(_start, change)| *change > token::Change::default())
-        .map(|(start, change)| {
+        .filter(|(_start, amount)| *amount > token::Amount::zero())
+        .map(|(start, amount)| {
             make_bond_details(
                 params,
                 &validator,
-                change,
+                amount,
                 start,
                 &slashes,
                 &mut applied_slashes,
@@ -3140,7 +3916,7 @@ where
 fn make_bond_details(
     params: &PosParams,
     validator: &Address,
-    change: token::Change,
+    deltas_sum: token::Amount,
     start: Epoch,
     slashes: &[Slash],
     applied_slashes: &mut HashMap<Address, Vec<Slash>>,
@@ -3150,7 +3926,7 @@ fn make_bond_details(
         .get(validator)
         .cloned()
         .unwrap_or_default();
-    let amount = token::Amount::from_change(change);
+
     let mut slash_rates_by_epoch = BTreeMap::<Epoch, Dec>::new();
 
     let validator_slashes =
@@ -3169,15 +3945,15 @@ fn make_bond_details(
     let slashed_amount = if slash_rates_by_epoch.is_empty() {
         None
     } else {
-        let amount_after_slashing = token::Amount::from_change(
-            get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap(),
-        );
-        Some(amount - amount_after_slashing)
+        let amount_after_slashing =
+            get_slashed_amount(params, deltas_sum, &slash_rates_by_epoch)
+                .unwrap();
+        Some(deltas_sum - amount_after_slashing)
     };
 
     BondDetails {
         start,
-        amount,
+        amount: deltas_sum,
         slashed_amount,
     }
 }
@@ -3221,9 +3997,8 @@ fn make_unbond_details(
     let slashed_amount = if slash_rates_by_epoch.is_empty() {
         None
     } else {
-        let amount_after_slashing = token::Amount::from_change(
-            get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap(),
-        );
+        let amount_after_slashing =
+            get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap();
         Some(amount - amount_after_slashing)
     };
 
@@ -3255,7 +4030,7 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    let mut total_consensus_stake = token::Amount::default();
+    let mut total_consensus_stake = token::Amount::zero();
     for validator in consensus_validators.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -3270,7 +4045,7 @@ where
     // Get set of signing validator addresses and the combined stake of
     // these signers
     let mut signer_set: HashSet<Address> = HashSet::new();
-    let mut total_signing_stake = token::Amount::default();
+    let mut total_signing_stake = token::Amount::zero();
     for VoteInfo {
         validator_address,
         validator_vp,
@@ -3291,8 +4066,7 @@ where
         }
 
         let stake_from_deltas =
-            read_validator_stake(storage, &params, &validator_address, epoch)?
-                .unwrap_or_default();
+            read_validator_stake(storage, &params, &validator_address, epoch)?;
 
         // Ensure TM stake updates properly with a debug_assert
         if cfg!(debug_assertions) {
@@ -3325,7 +4099,7 @@ where
         "PoS rewards coefficients {coeffs:?}, inputs: {rewards_calculator:?}."
     );
 
-    // println!(
+    // tracing::debug!(
     //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
     //     signing_stake
     // );
@@ -3348,13 +4122,13 @@ where
         // When below-threshold validator set is added, this shouldn't be needed
         // anymore since some minimal stake will be required to be in at least
         // the consensus set
-        if stake == token::Amount::default() {
+        if stake.is_zero() {
             continue;
         }
 
         let mut rewards_frac = Dec::zero();
         let stake_unscaled: Dec = stake.into();
-        // println!(
+        // tracing::debug!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake
         // );
@@ -3396,7 +4170,7 @@ pub fn compute_cubic_slash_rate<S>(
 where
     S: StorageRead,
 {
-    // println!("COMPUTING CUBIC SLASH RATE");
+    // tracing::debug!("COMPUTING CUBIC SLASH RATE");
     let mut sum_vp_fraction = Dec::zero();
     let (start_epoch, end_epoch) =
         params.cubic_slash_epoch_window(infraction_epoch);
@@ -3424,9 +4198,9 @@ where
                 ) = res?;
 
                 let validator_stake =
-                    read_validator_stake(storage, params, &validator, epoch)?
-                        .unwrap_or_default();
-                // println!("Val {} stake: {}", &validator, validator_stake);
+                    read_validator_stake(storage, params, &validator, epoch)?;
+                // tracing::debug!("Val {} stake: {}", &validator,
+                // validator_stake);
 
                 Ok(acc + Dec::from(validator_stake))
                 // TODO: does something more complex need to be done
@@ -3436,7 +4210,7 @@ where
         )?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
-    // println!("sum_vp_fraction: {}", sum_vp_fraction);
+    // tracing::debug!("sum_vp_fraction: {}", sum_vp_fraction);
     Ok(Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction)
 }
 
@@ -3495,16 +4269,15 @@ where
             .expect("Expected to find a valid validator.");
         match prev_state {
             ValidatorState::Consensus => {
-                let amount_pre = validator_deltas_handle(validator)
-                    .get_sum(storage, epoch, params)?
-                    .unwrap_or_default();
+                let amount_pre =
+                    read_validator_stake(storage, params, validator, epoch)?;
                 let val_position = validator_set_positions_handle()
                     .at(&epoch)
                     .get(storage, validator)?
                     .expect("Could not find validator's position in storage.");
                 let _ = consensus_validator_set_handle()
                     .at(&epoch)
-                    .at(&token::Amount::from_change(amount_pre))
+                    .at(&amount_pre)
                     .remove(storage, &val_position)?;
                 validator_set_positions_handle()
                     .at(&epoch)
@@ -3557,6 +4330,7 @@ where
                 let amount_pre = validator_deltas_handle(validator)
                     .get_sum(storage, epoch, params)?
                     .unwrap_or_default();
+                debug_assert!(amount_pre.non_negative());
                 let val_position = validator_set_positions_handle()
                     .at(&epoch)
                     .get(storage, validator)?
@@ -3570,10 +4344,10 @@ where
                     .remove(storage, validator)?;
             }
             ValidatorState::BelowThreshold => {
-                println!("Below-threshold");
+                tracing::debug!("Below-threshold");
             }
             ValidatorState::Inactive => {
-                println!("INACTIVE");
+                tracing::debug!("INACTIVE");
                 panic!(
                     "Shouldn't be here - haven't implemented inactive vals yet"
                 )
@@ -3604,11 +4378,7 @@ where
     Ok(())
 }
 
-/// Process slashes that have been queued up after discovery. Calculate the
-/// cubic slashing rate, store the finalized slashes, update the deltas, then
-/// transfer slashed tokens from PoS to the Slash Pool. This function is called
-/// at the beginning of the epoch that is `unbonding_length + 1 +
-/// cubic_slashing_window_length` epochs after the infraction epoch.
+/// Process slashes NEW
 pub fn process_slashes<S>(
     storage: &mut S,
     current_epoch: Epoch,
@@ -3641,8 +4411,11 @@ where
         compute_cubic_slash_rate(storage, &params, infraction_epoch)?;
 
     // Collect the enqueued slashes and update their rates
-    let mut validators_and_slashes: HashMap<Address, Vec<Slash>> =
-        HashMap::new();
+    let mut eager_validator_slashes: BTreeMap<Address, Vec<Slash>> =
+        BTreeMap::new(); // TODO: will need to update this in storage later
+    let mut eager_validator_slash_rates: HashMap<Address, Dec> = HashMap::new();
+
+    // `slashPerValidator` and `slashesMap` while also updating in storage
     for enqueued_slash in enqueued_slashes.iter(storage)? {
         let (
             NestedSubKey::Data {
@@ -3666,252 +4439,583 @@ where
             r#type: enqueued_slash.r#type,
             rate: slash_rate,
         };
-        tracing::debug!(
-            "Slash for validator {} committed in epoch {} has rate {}",
-            &validator,
-            enqueued_slash.epoch,
-            slash_rate
-        );
 
-        let cur_slashes = validators_and_slashes.entry(validator).or_default();
+        let cur_slashes = eager_validator_slashes
+            .entry(validator.clone())
+            .or_default();
         cur_slashes.push(updated_slash);
+        let cur_rate =
+            eager_validator_slash_rates.entry(validator).or_default();
+        *cur_rate = cmp::min(Dec::one(), *cur_rate + slash_rate);
     }
 
-    let mut deltas_for_update: HashMap<Address, Vec<(u64, token::Change)>> =
-        HashMap::new();
-
-    // Store the final processed slashes to their corresponding validators, then
-    // update the deltas
-    for (validator, enqueued_slashes) in validators_and_slashes.into_iter() {
-        let validator_stake_at_infraction = read_validator_stake(
+    // `resultSlashing`
+    let mut map_validator_slash: EagerRedelegatedBondsMap = BTreeMap::new();
+    for (validator, slash_rate) in eager_validator_slash_rates {
+        process_validator_slash(
             storage,
             &params,
             &validator,
-            infraction_epoch,
-        )?
-        .unwrap_or_default();
+            slash_rate,
+            current_epoch,
+            &mut map_validator_slash,
+        )?;
+    }
+    tracing::debug!("Slashed amounts for validators: {map_validator_slash:#?}");
 
-        tracing::debug!(
-            "Validator {} stake at infraction epoch {} = {}",
-            &validator,
-            infraction_epoch,
-            validator_stake_at_infraction.to_string_native()
-        );
+    // Now update the remaining parts of storage
 
-        let mut total_rate = Dec::zero();
-
-        for enqueued_slash in &enqueued_slashes {
-            // Add this slash to the list of validator's slashes in storage
-            validator_slashes_handle(&validator)
-                .push(storage, enqueued_slash.clone())?;
-
-            total_rate += enqueued_slash.rate;
-        }
-        total_rate = cmp::min(Dec::one(), total_rate);
-
-        // Find the total amount deducted from the deltas due to unbonds that
-        // became active after the infraction epoch, accounting for slashes
-        let mut total_unbonded = token::Amount::default();
-
-        let total_bonded_handle = total_bonded_handle(&validator);
-        let mut sum_post_bonds = token::Change::default();
-
-        // Start from after the infraction epoch up thru last epoch before
-        // processing
-        tracing::debug!("Iterating over unbonds after the infraction epoch");
-        for epoch in Epoch::iter_bounds_inclusive(
-            infraction_epoch.next(),
-            current_epoch.prev(),
-        ) {
-            tracing::debug!("Epoch {}", epoch);
-            let mut recent_unbonds = token::Change::default();
-            let unbonds = unbond_records_handle(&validator).at(&epoch);
-            for unbond in unbonds.iter(storage)? {
-                let (start, unbond_amount) = unbond?;
-                tracing::debug!(
-                    "UnbondRecord: amount = {}, start_epoch {}",
-                    unbond_amount.to_string_native(),
-                    &start
-                );
-                if start <= infraction_epoch {
-                    let prev_slashes = find_slashes_in_range(
-                        storage,
-                        start,
-                        Some(
-                            infraction_epoch
-                                .checked_sub(Epoch(
-                                    params.unbonding_len
-                                        + params.cubic_slashing_window_length,
-                                ))
-                                .unwrap_or_default(),
-                        ),
-                        &validator,
-                    )?;
-                    tracing::debug!(
-                        "Slashes for this unbond: {:?}",
-                        prev_slashes
-                    );
-
-                    total_unbonded +=
-                        token::Amount::from_change(get_slashed_amount(
-                            &params,
-                            unbond_amount,
-                            &prev_slashes,
-                        )?);
-                } else {
-                    recent_unbonds += unbond_amount.change();
-                }
-
-                tracing::debug!(
-                    "Total unbonded (epoch {}) w slashing = {}",
-                    epoch,
-                    total_unbonded.to_string_native()
-                );
-            }
-
-            sum_post_bonds += total_bonded_handle
-                .get_delta_val(storage, epoch, &params)?
-                .unwrap_or_default()
-                - recent_unbonds;
-        }
-
-        // Compute the adjusted validator deltas and slashed amounts from the
-        // current up until the pipeline epoch
-        let mut last_slash = token::Change::default();
-        for offset in 0..params.pipeline_len {
-            tracing::debug!(
-                "Epoch {}\nLast slash = {}",
-                current_epoch + offset,
-                last_slash.to_string_native()
-            );
-            let mut recent_unbonds = token::Change::default();
-            let unbonds =
-                unbond_records_handle(&validator).at(&(current_epoch + offset));
-
-            for unbond in unbonds.iter(storage)? {
-                let (start, unbond_amount) = unbond?;
-                tracing::debug!(
-                    "UnbondRecord: amount = {}, start_epoch {}",
-                    unbond_amount.to_string_native(),
-                    &start
-                );
-                if start <= infraction_epoch {
-                    let prev_slashes = find_slashes_in_range(
-                        storage,
-                        start,
-                        Some(
-                            infraction_epoch
-                                .checked_sub(Epoch(
-                                    params.unbonding_len
-                                        + params.cubic_slashing_window_length,
-                                ))
-                                .unwrap_or_default(),
-                        ),
-                        &validator,
-                    )?;
-                    tracing::debug!(
-                        "Slashes for this unbond: {:?}",
-                        prev_slashes
-                    );
-
-                    total_unbonded +=
-                        token::Amount::from_change(get_slashed_amount(
-                            &params,
-                            unbond_amount,
-                            &prev_slashes,
-                        )?);
-                } else {
-                    recent_unbonds += unbond_amount.change();
-                }
-
-                tracing::debug!(
-                    "Total unbonded (offset {}) w slashing = {}",
-                    offset,
-                    total_unbonded.to_string_native()
-                );
-            }
-
-            let this_slash = total_rate
-                * (validator_stake_at_infraction - total_unbonded).change();
-            let diff_slashed_amount = last_slash - this_slash;
-            last_slash = this_slash;
-            // println!("This slash = {}", this_slash);
-            // println!("Diff slashed amount = {}", diff_slashed_amount);
-            // total_slashed -= diff_slashed_amount;
-            // total_unbonded = token::Amount::default();
-
-            sum_post_bonds += total_bonded_handle
-                .get_delta_val(storage, current_epoch + offset, &params)?
-                .unwrap_or_default()
-                - recent_unbonds;
-
-            let validator_stake_at_offset = read_validator_stake(
-                storage,
-                &params,
-                &validator,
-                current_epoch + offset,
-            )?
-            .unwrap_or_default()
-            .change();
-            let slashable_stake_at_offset =
-                validator_stake_at_offset - sum_post_bonds;
-            assert!(slashable_stake_at_offset >= token::Change::default());
-
-            let change =
-                cmp::max(-slashable_stake_at_offset, diff_slashed_amount);
-
-            let val_updates =
-                deltas_for_update.entry(validator.clone()).or_default();
-            val_updates.push((offset, change));
+    // Write slashes themselves into storage
+    for (validator, slashes) in eager_validator_slashes {
+        let validator_slashes = validator_slashes_handle(&validator);
+        for slash in slashes {
+            validator_slashes.push(storage, slash)?;
         }
     }
-    // println!("\nUpdating deltas");
-    // Update the deltas in storage
-    // let mut total_slashed = token::Change::default();
-    for (validator, updates) in deltas_for_update {
-        for (offset, delta) in updates {
-            // println!("Val {}, offset {}, delta {}", &validator, offset,
-            // delta);
 
-            tracing::debug!(
-                "Deltas change = {} at offset {} for validator {}",
-                delta.to_string_native(),
-                offset,
-                &validator
-            );
-            // total_slashed -= change;
+    // Update the validator stakes
+    for (validator, slash_amounts) in map_validator_slash {
+        let mut slash_acc = token::Amount::zero();
+
+        // Update validator sets first because it needs to be able to read
+        // validator stake before we make any changes to it
+        for (&epoch, &slash_amount) in &slash_amounts {
+            let state = validator_state_handle(&validator)
+                .get(storage, epoch, &params)?
+                .unwrap();
+            if state != ValidatorState::Jailed {
+                update_validator_set(
+                    storage,
+                    &params,
+                    &validator,
+                    -slash_amount.change(),
+                    epoch,
+                )?;
+            }
+        }
+        // Then update validator and total deltas
+        for (epoch, slash_amount) in slash_amounts {
+            let slash_delta = slash_amount - slash_acc;
+            slash_acc += slash_delta;
 
             update_validator_deltas(
                 storage,
-                &params,
                 &validator,
-                delta,
-                current_epoch,
-                offset,
+                -slash_delta.change(),
+                epoch,
+                0,
             )?;
-            update_total_deltas(
+            update_total_deltas(storage, -slash_delta.change(), epoch, 0)?;
+        }
+
+        // TODO: should we clear some storage here as is done in Quint??
+        // Possibly make the `unbonded` LazyMaps epoched so that it is done
+        // automatically?
+    }
+
+    Ok(())
+}
+
+/// Process a slash by (i) slashing the misbehaving validator; and (ii) any
+/// validator to which it has redelegated some tokens and the slash misbehaving
+/// epoch is wihtin the redelegation slashing window.
+///
+/// `validator` - the misbehaving validator.
+/// `slash_rate` - the slash rate.
+/// `slashed_amounts_map` - a map from validator address to a map from epoch to
+/// already processed slash amounts.
+///
+/// Adds any newly processed slash amount of any involved validator to
+/// `slashed_amounts_map`.
+// Quint `processSlash`
+fn process_validator_slash<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validator: &Address,
+    slash_rate: Dec,
+    current_epoch: Epoch,
+    slashed_amount_map: &mut EagerRedelegatedBondsMap,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // `resultSlashValidator
+    let result_slash = slash_validator(
+        storage,
+        params,
+        validator,
+        slash_rate,
+        current_epoch,
+        &slashed_amount_map
+            .get(validator)
+            .cloned()
+            .unwrap_or_default(),
+    )?;
+
+    // `updatedSlashedAmountMap`
+    let validator_slashes =
+        slashed_amount_map.entry(validator.clone()).or_default();
+    for (epoch, slash) in result_slash {
+        *validator_slashes.entry(epoch).or_default() += slash;
+    }
+
+    // `outgoingRedelegation`
+    let outgoing_redelegations =
+        validator_outgoing_redelegations_handle(validator);
+
+    // Final loop in `processSlash`
+    let dest_validators = outgoing_redelegations
+        .iter(storage)?
+        .map(|res| {
+            let (
+                NestedSubKey::Data {
+                    key: dest_validator,
+                    nested_sub_key: _,
+                },
+                _redelegation,
+            ) = res?;
+            Ok(dest_validator)
+        })
+        .collect::<storage_api::Result<BTreeSet<_>>>()?;
+
+    for dest_validator in dest_validators {
+        let to_modify = slashed_amount_map
+            .entry(dest_validator.clone())
+            .or_default();
+
+        tracing::debug!(
+            "Slashing {} redelegation to {}",
+            validator,
+            &dest_validator
+        );
+
+        // `slashValidatorRedelegation`
+        slash_validator_redelegation(
+            storage,
+            params,
+            validator,
+            current_epoch,
+            &outgoing_redelegations.at(&dest_validator),
+            &validator_slashes_handle(validator),
+            &validator_total_redelegated_unbonded_handle(&dest_validator),
+            slash_rate,
+            to_modify,
+        )?;
+    }
+
+    Ok(())
+}
+
+/// In the context of a redelegation, the function computes how much a validator
+/// (the destination validator of the redelegation) should be slashed due to the
+/// misbehaving of a second validator (the source validator of the
+/// redelegation). The function computes how much the validator whould be
+/// slashed at all epochs between the current epoch (curEpoch) + 1 and the
+/// current epoch + 1 + PIPELINE_OFFSET, accounting for any tokens of the
+/// redelegation already unbonded.
+///
+/// - `src_validator` - the source validator
+/// - `outgoing_redelegations` - a map from pair of epochs to int that includes
+///   all the redelegations from the source validator to the destination
+///   validator.
+///     - The outer key is epoch at which the bond started at the source
+///       validator.
+///     - The inner key is epoch at which the redelegation started (the epoch at
+///       which was issued).
+/// - `slashes` a list of slashes of the source validator.
+/// - `dest_total_redelegated_unbonded` - a map of unbonded redelegated tokens
+///   at the destination validator.
+/// - `slash_rate` - the rate of the slash being processed.
+/// - `dest_slashed_amounts` - a map from epoch to already processed slash
+///   amounts.
+///
+/// Adds any newly processed slash amount to `dest_slashed_amounts`.
+#[allow(clippy::too_many_arguments)]
+fn slash_validator_redelegation<S>(
+    storage: &S,
+    params: &PosParams,
+    src_validator: &Address,
+    current_epoch: Epoch,
+    outgoing_redelegations: &NestedMap<Epoch, LazyMap<Epoch, token::Amount>>,
+    slashes: &Slashes,
+    dest_total_redelegated_unbonded: &TotalRedelegatedUnbonded,
+    slash_rate: Dec,
+    dest_slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
+) -> storage_api::Result<()>
+where
+    S: StorageRead,
+{
+    let infraction_epoch =
+        current_epoch - params.slash_processing_epoch_offset();
+
+    for res in outgoing_redelegations.iter(storage)? {
+        let (
+            NestedSubKey::Data {
+                key: bond_start,
+                nested_sub_key: SubKey::Data(redel_start),
+            },
+            amount,
+        ) = res?;
+
+        if params.in_redelegation_slashing_window(
+            infraction_epoch,
+            redel_start,
+            params.redelegation_end_epoch_from_start(redel_start),
+        ) && bond_start <= infraction_epoch
+        {
+            slash_redelegation(
                 storage,
-                &params,
-                delta,
+                params,
+                amount,
+                bond_start,
+                params.redelegation_end_epoch_from_start(redel_start),
+                src_validator,
                 current_epoch,
-                offset,
+                slashes,
+                dest_total_redelegated_unbonded,
+                slash_rate,
+                dest_slashed_amounts,
             )?;
         }
     }
 
-    // debug_assert!(total_slashed >= token::Change::default());
+    Ok(())
+}
 
-    // TODO: Transfer all slashed tokens from PoS account to Slash Pool address
-    // let staking_token = staking_token_address(storage);
-    // transfer_tokens(
-    //     storage,
-    //     &staking_token,
-    //     token::Amount::from_change(total_slashed),
-    //     &ADDRESS,
-    //     &SLASH_POOL_ADDRESS,
-    // )?;
+#[allow(clippy::too_many_arguments)]
+fn slash_redelegation<S>(
+    storage: &S,
+    params: &PosParams,
+    amount: token::Amount,
+    bond_start: Epoch,
+    redel_bond_start: Epoch,
+    src_validator: &Address,
+    current_epoch: Epoch,
+    slashes: &Slashes,
+    total_redelegated_unbonded: &TotalRedelegatedUnbonded,
+    slash_rate: Dec,
+    slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
+) -> storage_api::Result<()>
+where
+    S: StorageRead,
+{
+    tracing::debug!(
+        "\nSlashing redelegation amount {} - bond start {} and \
+         redel_bond_start {} - at rate {}\n",
+        amount.to_string_native(),
+        bond_start,
+        redel_bond_start,
+        slash_rate
+    );
+
+    let infraction_epoch =
+        current_epoch - params.slash_processing_epoch_offset();
+
+    // Slash redelegation destination validator from the next epoch only
+    // as they won't be jailed
+    let set_update_epoch = current_epoch.next();
+
+    let mut init_tot_unbonded =
+        Epoch::iter_bounds_inclusive(infraction_epoch.next(), set_update_epoch)
+            .map(|epoch| {
+                let redelegated_unbonded = total_redelegated_unbonded
+                    .at(&epoch)
+                    .at(&redel_bond_start)
+                    .at(src_validator)
+                    .get(storage, &bond_start)?
+                    .unwrap_or_default();
+                Ok(redelegated_unbonded)
+            })
+            .sum::<storage_api::Result<token::Amount>>()?;
+
+    for epoch in Epoch::iter_range(set_update_epoch, params.pipeline_len) {
+        let updated_total_unbonded = {
+            let redelegated_unbonded = total_redelegated_unbonded
+                .at(&epoch)
+                .at(&redel_bond_start)
+                .at(src_validator)
+                .get(storage, &bond_start)?
+                .unwrap_or_default();
+            init_tot_unbonded + redelegated_unbonded
+        };
+
+        let list_slashes = slashes
+            .iter(storage)?
+            .map(Result::unwrap)
+            .filter(|slash| {
+                params.in_redelegation_slashing_window(
+                    slash.epoch,
+                    params.redelegation_start_epoch_from_end(redel_bond_start),
+                    redel_bond_start,
+                ) && bond_start <= slash.epoch
+                    && slash.epoch + params.slash_processing_epoch_offset()
+                    // TODO this may need to be `<=` as in `fn compute_total_unbonded`
+                    //
+                    // NOTE(Tomas): Agreed and changed to `<=`. We're looking 
+                    // for slashes that were processed before or in the epoch
+                    // in which slashes that are currently being processed
+                    // occurred. Because we're slashing in the beginning of an
+                    // epoch, we're also taking slashes that were processed in
+                    // the infraction epoch as they would still be processed
+                    // before any infraction occurred.
+                        <= infraction_epoch
+            })
+            .collect::<Vec<_>>();
+
+        let slashable_amount = amount
+            .checked_sub(updated_total_unbonded)
+            .unwrap_or_default();
+
+        let slashed =
+            apply_list_slashes(params, &list_slashes, slashable_amount)
+                .mul_ceil(slash_rate);
+
+        let list_slashes = slashes
+            .iter(storage)?
+            .map(Result::unwrap)
+            .filter(|slash| {
+                params.in_redelegation_slashing_window(
+                    slash.epoch,
+                    params.redelegation_start_epoch_from_end(redel_bond_start),
+                    redel_bond_start,
+                ) && bond_start <= slash.epoch
+            })
+            .collect::<Vec<_>>();
+
+        let slashable_stake =
+            apply_list_slashes(params, &list_slashes, slashable_amount)
+                .mul_ceil(slash_rate);
+
+        init_tot_unbonded = updated_total_unbonded;
+        let to_slash = cmp::min(slashed, slashable_stake);
+        if !to_slash.is_zero() {
+            let map_value = slashed_amounts.entry(epoch).or_default();
+            *map_value += to_slash;
+        }
+    }
 
     Ok(())
+}
+
+/// Computes for a given validator and a slash how much should be slashed at all
+/// epochs between the currentå epoch (curEpoch) + 1 and the current epoch + 1 +
+/// PIPELINE_OFFSET, accounting for any tokens already unbonded.
+///
+/// - `validator` - the misbehaving validator.
+/// - `slash_rate` - the rate of the slash being processed.
+/// - `slashed_amounts_map` - a map from epoch to already processed slash
+///   amounts.
+///
+/// Returns a map that adds any newly processed slash amount to
+/// `slashed_amounts_map`.
+// `def slashValidator`
+fn slash_validator<S>(
+    storage: &S,
+    params: &PosParams,
+    validator: &Address,
+    slash_rate: Dec,
+    current_epoch: Epoch,
+    slashed_amounts_map: &BTreeMap<Epoch, token::Amount>,
+) -> storage_api::Result<BTreeMap<Epoch, token::Amount>>
+where
+    S: StorageRead,
+{
+    tracing::debug!("Slashing validator {} at rate {}", validator, slash_rate);
+    let infraction_epoch =
+        current_epoch - params.slash_processing_epoch_offset();
+
+    let total_unbonded = total_unbonded_handle(validator);
+    let total_redelegated_unbonded =
+        validator_total_redelegated_unbonded_handle(validator);
+    let total_bonded = total_bonded_handle(validator);
+    let total_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(validator);
+
+    let mut slashed_amounts = slashed_amounts_map.clone();
+
+    let mut tot_bonds = total_bonded
+        .get_data_handler()
+        .iter(storage)?
+        .map(Result::unwrap)
+        .filter(|&(epoch, bonded)| {
+            epoch <= infraction_epoch && bonded > 0.into()
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut redelegated_bonds = tot_bonds
+        .keys()
+        .filter(|&epoch| {
+            !total_redelegated_bonded
+                .at(epoch)
+                .is_empty(storage)
+                .unwrap()
+        })
+        .map(|epoch| {
+            let tot_redel_bonded = total_redelegated_bonded
+                .at(epoch)
+                .collect_map(storage)
+                .unwrap();
+            (*epoch, tot_redel_bonded)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut sum = token::Amount::zero();
+
+    let eps = current_epoch
+        .iter_range(params.pipeline_len)
+        .collect::<Vec<_>>();
+    for epoch in eps.into_iter().rev() {
+        let amount = tot_bonds.iter().fold(
+            token::Amount::zero(),
+            |acc, (bond_start, bond_amount)| {
+                acc + compute_slash_bond_at_epoch(
+                    storage,
+                    params,
+                    validator,
+                    epoch,
+                    infraction_epoch,
+                    *bond_start,
+                    *bond_amount,
+                    redelegated_bonds.get(bond_start),
+                    slash_rate,
+                )
+                .unwrap()
+            },
+        );
+
+        let new_bonds = total_unbonded.at(&epoch);
+        tot_bonds = new_bonds
+            .collect_map(storage)
+            .unwrap()
+            .into_iter()
+            .filter(|(ep, _)| *ep <= infraction_epoch)
+            .collect::<BTreeMap<_, _>>();
+
+        let new_redelegated_bonds = tot_bonds
+            .keys()
+            .filter(|&ep| {
+                !total_redelegated_unbonded.at(ep).is_empty(storage).unwrap()
+            })
+            .map(|ep| {
+                (
+                    *ep,
+                    total_redelegated_unbonded
+                        .at(&epoch)
+                        .at(ep)
+                        .collect_map(storage)
+                        .unwrap(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        redelegated_bonds = new_redelegated_bonds;
+
+        // `newSum`
+        sum += amount;
+
+        // `newSlashesMap`
+        let cur = slashed_amounts.entry(epoch).or_default();
+        *cur += sum;
+    }
+    // Hack - should this be done differently? (think this is safe)
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let last_amt = slashed_amounts
+        .get(&pipeline_epoch.prev())
+        .cloned()
+        .unwrap();
+    slashed_amounts.insert(pipeline_epoch, last_amt);
+
+    Ok(slashed_amounts)
+}
+
+/// Get the remaining token amount in a bond after applying a set of slashes.
+///
+/// - `validator` - the bond's validator
+/// - `epoch` - the latest slash epoch to consider.
+/// - `start` - the start epoch of the bond
+/// - `redelegated_bonds`
+fn compute_bond_at_epoch<S>(
+    storage: &S,
+    params: &PosParams,
+    validator: &Address,
+    epoch: Epoch,
+    start: Epoch,
+    amount: token::Amount,
+    redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let list_slashes = validator_slashes_handle(validator)
+        .iter(storage)?
+        .map(Result::unwrap)
+        .filter(|slash| {
+            // TODO: check bounds on second arg
+            start <= slash.epoch
+                && slash.epoch + params.slash_processing_epoch_offset() <= epoch
+        })
+        .collect::<Vec<_>>();
+
+    let slash_epoch_filter =
+        |e: Epoch| e + params.slash_processing_epoch_offset() <= epoch;
+
+    let result_fold = redelegated_bonds
+        .map(|redelegated_bonds| {
+            fold_and_slash_redelegated_bonds(
+                storage,
+                params,
+                redelegated_bonds,
+                start,
+                &list_slashes,
+                slash_epoch_filter,
+            )
+        })
+        .unwrap_or_default();
+
+    let total_not_redelegated = amount - result_fold.total_redelegated;
+    let after_not_redelegated =
+        apply_list_slashes(params, &list_slashes, total_not_redelegated);
+
+    Ok(after_not_redelegated + result_fold.total_after_slashing)
+}
+
+/// Uses `fn compute_bond_at_epoch` to compute the token amount to slash in
+/// order to prevent overslashing.
+#[allow(clippy::too_many_arguments)]
+fn compute_slash_bond_at_epoch<S>(
+    storage: &S,
+    params: &PosParams,
+    validator: &Address,
+    epoch: Epoch,
+    infraction_epoch: Epoch,
+    bond_start: Epoch,
+    bond_amount: token::Amount,
+    redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
+    slash_rate: Dec,
+) -> storage_api::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let amount_due = compute_bond_at_epoch(
+        storage,
+        params,
+        validator,
+        infraction_epoch,
+        bond_start,
+        bond_amount,
+        redelegated_bonds,
+    )?
+    .mul_ceil(slash_rate);
+    let slashable_amount = compute_bond_at_epoch(
+        storage,
+        params,
+        validator,
+        epoch,
+        bond_start,
+        bond_amount,
+        redelegated_bonds,
+    )?;
+    Ok(cmp::min(amount_due, slashable_amount))
 }
 
 /// Unjail a validator that is currently jailed
@@ -3963,8 +5067,7 @@ where
     // Re-insert the validator into the validator set and update its state
     let pipeline_epoch = current_epoch + params.pipeline_len;
     let stake =
-        read_validator_stake(storage, &params, validator, pipeline_epoch)?
-            .unwrap_or_default();
+        read_validator_stake(storage, &params, validator, pipeline_epoch)?;
 
     insert_validator_into_validator_set(
         storage,
@@ -4017,6 +5120,7 @@ where
 
 /// Find slashes applicable to a validator with inclusive `start` and exclusive
 /// `end` epoch.
+#[allow(dead_code)]
 fn find_slashes_in_range<S>(
     storage: &S,
     start: Epoch,
@@ -4032,13 +5136,215 @@ where
         if start <= slash.epoch
             && end.map(|end| slash.epoch < end).unwrap_or(true)
         {
-            // println!(
-            //     "Slash (epoch, rate) = ({}, {})",
-            //     &slash.epoch, &slash.rate
-            // );
             let cur_rate = slashes.entry(slash.epoch).or_default();
             *cur_rate = cmp::min(*cur_rate + slash.rate, Dec::one());
         }
     }
     Ok(slashes)
+}
+
+/// Redelegate bonded tokens from a source validator to a destination validator
+pub fn redelegate_tokens<S>(
+    storage: &mut S,
+    delegator: &Address,
+    src_validator: &Address,
+    dest_validator: &Address,
+    current_epoch: Epoch,
+    amount: token::Amount,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    tracing::debug!(
+        "Delegator {} redelegating {} tokens from {} to {}",
+        delegator,
+        amount.to_string_native(),
+        src_validator,
+        dest_validator
+    );
+    if amount.is_zero() {
+        return Ok(());
+    }
+
+    // The src and dest validators must be different
+    if src_validator == dest_validator {
+        return Err(RedelegationError::RedelegationSrcEqDest.into());
+    }
+
+    // The delegator must not be a validator
+    if is_validator(storage, delegator)? {
+        return Err(RedelegationError::DelegatorIsValidator.into());
+    }
+
+    // The src and dest validators must actually be validators
+    if !is_validator(storage, src_validator)? {
+        return Err(
+            RedelegationError::NotAValidator(src_validator.clone()).into()
+        );
+    }
+    if !is_validator(storage, dest_validator)? {
+        return Err(
+            RedelegationError::NotAValidator(dest_validator.clone()).into()
+        );
+    }
+
+    let params = read_pos_params(storage)?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let src_redel_end_epoch =
+        validator_incoming_redelegations_handle(src_validator)
+            .get(storage, delegator)?;
+
+    // Forbid chained redelegations. A redelegation is "chained" if:
+    // 1. the source validator holds bonded tokens that themselves were
+    // redelegated to the src validator
+    // 2. given the latest epoch at which the most recently redelegated tokens
+    // started contributing to the src validator's voting power, these tokens
+    // cannot be slashed anymore
+    let is_not_chained = if let Some(end_epoch) = src_redel_end_epoch {
+        // TODO: check bounds for correctness (> and presence of cubic offset)
+        let last_contrib_epoch = end_epoch.prev();
+        // If the source validator's slashes that would cause slash on
+        // redelegation are now outdated (would have to be processed before or
+        // on start of the current epoch), the redelegation can be redelegated
+        // again
+        last_contrib_epoch + params.slash_processing_epoch_offset()
+            <= current_epoch
+    } else {
+        true
+    };
+    if !is_not_chained {
+        return Err(RedelegationError::IsChainedRedelegation.into());
+    }
+
+    // Unbond the redelegated tokens from the src validator.
+    // `resultUnbond` in quint
+    let result_unbond = unbond_tokens(
+        storage,
+        Some(delegator),
+        src_validator,
+        amount,
+        current_epoch,
+        true,
+    )?;
+
+    // The unbonded amount after slashing is what is going to be redelegated.
+    // `amountAfterSlashing`
+    let amount_after_slashing = result_unbond.sum;
+    tracing::debug!(
+        "Redelegated amount after slashing: {}",
+        amount_after_slashing.to_string_native()
+    );
+
+    // Add incoming redelegated bonds to the dest validator.
+    // `updatedRedelegatedBonds` with updates to delegatorState
+    // `redelegatedBonded`
+    let redelegated_bonds = delegator_redelegated_bonds_handle(delegator)
+        .at(dest_validator)
+        .at(&pipeline_epoch)
+        .at(src_validator);
+    for (&epoch, &unbonded_amount) in result_unbond.epoch_map.iter() {
+        redelegated_bonds.update(storage, epoch, |current| {
+            current.unwrap_or_default() + unbonded_amount
+        })?;
+    }
+
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, delegator, dest_validator)?;
+        tracing::debug!("\nRedeleg dest bonds before incrementing: {bonds:#?}");
+    }
+
+    // Add a bond delta to the destination.
+    if !amount_after_slashing.is_zero() {
+        // `updatedDelegator` with updates to `bonded`
+        let bond_handle = bond_handle(delegator, dest_validator);
+        bond_handle.add(
+            storage,
+            amount_after_slashing,
+            current_epoch,
+            params.pipeline_len,
+        )?;
+        // `updatedDestValidator` --> `with("totalVBonded")`
+        // Add the amount to the dest validator total bonded
+        let dest_total_bonded = total_bonded_handle(dest_validator);
+        dest_total_bonded.add(
+            storage,
+            amount_after_slashing,
+            current_epoch,
+            params.pipeline_len,
+        )?;
+    }
+
+    if tracing::level_enabled!(tracing::Level::DEBUG) {
+        let bonds = find_bonds(storage, delegator, dest_validator)?;
+        tracing::debug!("\nRedeleg dest bonds after incrementing: {bonds:#?}");
+    }
+
+    // Add outgoing redelegation to the src validator.
+    // `updateOutgoingRedelegations` with `updatedSrcValidator`
+    let outgoing_redelegations =
+        validator_outgoing_redelegations_handle(src_validator)
+            .at(dest_validator);
+    for (start, &unbonded_amount) in result_unbond.epoch_map.iter() {
+        outgoing_redelegations.at(start).update(
+            storage,
+            current_epoch,
+            |current| current.unwrap_or_default() + unbonded_amount,
+        )?;
+    }
+
+    // Add the amount to the dest validator total redelegated bonds.
+    let dest_total_redelegated_bonded =
+        validator_total_redelegated_bonded_handle(dest_validator)
+            .at(&pipeline_epoch)
+            .at(src_validator);
+    for (&epoch, &amount) in &result_unbond.epoch_map {
+        dest_total_redelegated_bonded.update(storage, epoch, |current| {
+            current.unwrap_or_default() + amount
+        })?;
+    }
+
+    // Set the epoch of the validator incoming redelegation from this delegator
+    let dest_incoming_redelegations =
+        validator_incoming_redelegations_handle(dest_validator);
+    dest_incoming_redelegations.insert(
+        storage,
+        delegator.clone(),
+        pipeline_epoch,
+    )?;
+
+    // Update validator set for dest validator
+    let is_jailed_at_pipeline = matches!(
+        validator_state_handle(dest_validator).get(
+            storage,
+            pipeline_epoch,
+            &params
+        )?,
+        Some(ValidatorState::Jailed)
+    );
+    if !is_jailed_at_pipeline {
+        update_validator_set(
+            storage,
+            &params,
+            dest_validator,
+            amount_after_slashing.change(),
+            pipeline_epoch,
+        )?;
+    }
+
+    // Update deltas
+    update_validator_deltas(
+        storage,
+        dest_validator,
+        amount_after_slashing.change(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    update_total_deltas(
+        storage,
+        amount_after_slashing.change(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+
+    Ok(())
 }

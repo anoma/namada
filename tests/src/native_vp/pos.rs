@@ -97,7 +97,7 @@
 
 use namada::ledger::pos::namada_proof_of_stake::init_genesis;
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::GenesisValidator;
+use namada::proof_of_stake::types::GenesisValidator;
 use namada::types::storage::Epoch;
 
 use crate::tx::tx_host_env;
@@ -572,8 +572,7 @@ pub mod testing {
     use namada::proof_of_stake::epoched::DynEpochOffset;
     use namada::proof_of_stake::parameters::testing::arb_rate;
     use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::BondId;
-    use namada::proof_of_stake::types::ValidatorState;
+    use namada::proof_of_stake::types::{BondId, ValidatorState};
     use namada::proof_of_stake::{
         get_num_consensus_validators, read_pos_params, unbond_handle,
         ADDRESS as POS_ADDRESS,
@@ -1033,7 +1032,7 @@ pub mod testing {
                     //             .sum()
                     //     })
                     //     .unwrap_or_default();
-                    let token_delta = token::Change::default();
+                    let token_delta = token::Change::zero();
 
                     vec![
                         PosStorageChange::WithdrawUnbond { owner, validator },
@@ -1150,7 +1149,7 @@ pub mod testing {
                 // last // update, until we unbond the full
                 // amount let mut bond_epoch =
                 //     u64::from(bonds.last_update()) + params.unbonding_len;
-                // 'outer: while to_unbond != token::Amount::default()
+                // 'outer: while to_unbond != token::Amount::zero()
                 //     && bond_epoch >= bonds.last_update().into()
                 // {
                 //     if let Some(bond) = bonds.get_delta_at_epoch(bond_epoch)

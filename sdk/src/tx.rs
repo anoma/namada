@@ -806,6 +806,160 @@ pub async fn build_unjail_validator<'a>(
     .map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
+/// Redelegate bonded tokens from one validator to another
+pub async fn build_redelegation<'a>(
+    context: &impl Namada<'a>,
+    args::Redelegate {
+        tx: tx_args,
+        src_validator,
+        dest_validator,
+        owner,
+        amount: redel_amount,
+        tx_code_path,
+    }: &args::Redelegate,
+) -> Result<(Tx, SigningTxData)> {
+    // Require a positive amount of tokens to be redelegated
+    if redel_amount.is_zero() {
+        edisplay_line!(
+            context.io(),
+            "The requested redelegation amount is 0. A positive amount must \
+             be requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationIsZero));
+        }
+    }
+
+    // The src and dest validators must actually be validators
+    let src_validator =
+        known_validator_or_err(src_validator.clone(), tx_args.force, context)
+            .await?;
+    let dest_validator =
+        known_validator_or_err(dest_validator.clone(), tx_args.force, context)
+            .await?;
+
+    // The delegator (owner) must exist on-chain and must not be a validator
+    let owner =
+        source_exists_or_err(owner.clone(), tx_args.force, context).await?;
+    if rpc::is_validator(context.client(), &owner).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {} is a validator. A validator is prohibited \
+             from redelegating its own bonds.",
+            &owner
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegatorIsValidator(
+                owner.clone(),
+            )));
+        }
+    }
+
+    // Prohibit redelegation to the same validator
+    if src_validator == dest_validator {
+        edisplay_line!(
+            context.io(),
+            "The provided source and destination validators are the same. \
+             Redelegation is not allowed to the same validator."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationSrcEqDest));
+        }
+    }
+
+    // Prohibit chained redelegations
+    let params = rpc::get_pos_params(context.client()).await?;
+    let incoming_redel_epoch = rpc::query_incoming_redelegations(
+        context.client(),
+        &src_validator,
+        &owner,
+    )
+    .await?;
+    let current_epoch = rpc::query_epoch(context.client()).await?;
+    let is_not_chained = if let Some(redel_end_epoch) = incoming_redel_epoch {
+        let last_contrib_epoch = redel_end_epoch.prev();
+        last_contrib_epoch + params.slash_processing_epoch_offset()
+            <= current_epoch
+    } else {
+        true
+    };
+    if !is_not_chained {
+        edisplay_line!(
+            context.io(),
+            "The source validator {} has an incoming redelegation from the \
+             delegator {} that may still be subject to future slashing. \
+             Redelegation is not allowed until this is no longer the case.",
+            &src_validator,
+            &owner
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::IncomingRedelIsStillSlashable(
+                src_validator.clone(),
+                owner.clone(),
+            )));
+        }
+    }
+
+    // There must be at least as many tokens in the bond as the requested
+    // redelegation amount
+    let bond_amount =
+        rpc::query_bond(context.client(), &owner, &src_validator, None).await?;
+    if *redel_amount > bond_amount {
+        edisplay_line!(
+            context.io(),
+            "There are not enough tokens available for the desired \
+             redelegation at the current epoch {}. Requested to redelegate {} \
+             tokens but only {} tokens are available.",
+            current_epoch,
+            redel_amount.to_string_native(),
+            bond_amount.to_string_native()
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::RedelegationAmountTooLarge(
+                redel_amount.to_string_native(),
+                bond_amount.to_string_native(),
+            )));
+        }
+    } else {
+        display_line!(
+            context.io(),
+            "{} NAM tokens available for redelegation. Submitting \
+             redelegation transaction for {} tokens...",
+            bond_amount.to_string_native(),
+            redel_amount.to_string_native()
+        );
+    }
+
+    let default_address = owner.clone();
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(default_address),
+        default_signer,
+    )
+    .await?;
+
+    let data = pos::Redelegation {
+        src_validator,
+        dest_validator,
+        owner,
+        amount: *redel_amount,
+    };
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    )
+    .await
+    .map(|(tx, _epoch)| (tx, signing_data))
+}
+
 /// Submit transaction to withdraw an unbond
 pub async fn build_withdraw<'a>(
     context: &impl Namada<'a>,
@@ -898,6 +1052,31 @@ pub async fn build_unbond<'a>(
     Option<Epoch>,
     Option<(Epoch, token::Amount)>,
 )> {
+    // Require a positive amount of tokens to be bonded
+    if amount.is_zero() {
+        edisplay_line!(
+            context.io(),
+            "The requested bond amount is 0. A positive amount must be \
+             requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::BondIsZero));
+        }
+    }
+
+    // The validator must actually be a validator
+    let validator =
+        known_validator_or_err(validator.clone(), tx_args.force, context)
+            .await?;
+
+    // Check that the source address exists on chain
+    let source = match source.clone() {
+        Some(source) => source_exists_or_err(source, tx_args.force, context)
+            .await
+            .map(Some),
+        None => Ok(source.clone()),
+    }?;
+
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());
     let signing_data = signing::aux_signing_data(
@@ -908,48 +1087,34 @@ pub async fn build_unbond<'a>(
     )
     .await?;
 
-    let source = source.clone();
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
 
-    if !tx_args.force {
-        known_validator_or_err(validator.clone(), tx_args.force, context)
+    let bond_amount =
+        rpc::query_bond(context.client(), &bond_source, &validator, None)
             .await?;
+    display_line!(
+        context.io(),
+        "Bond amount available for unbonding: {} NAM",
+        bond_amount.to_string_native()
+    );
 
-        let bond_amount =
-            rpc::query_bond(context.client(), &bond_source, validator, None)
-                .await?;
-        display_line!(
+    if *amount > bond_amount {
+        edisplay_line!(
             context.io(),
-            "Bond amount available for unbonding: {} NAM",
-            bond_amount.to_string_native()
+            "The total bonds of the source {} is lower than the amount to be \
+             unbonded. Amount to unbond is {} and the total bonds is {}.",
+            bond_source,
+            amount.to_string_native(),
+            bond_amount.to_string_native(),
         );
-
-        if *amount > bond_amount {
-            edisplay_line!(
-                context.io(),
-                "The total bonds of the source {} is lower than the amount to \
-                 be unbonded. Amount to unbond is {} and the total bonds is \
-                 {}.",
-                bond_source,
-                amount.to_string_native(),
-                bond_amount.to_string_native()
-            );
-            if !tx_args.force {
-                return Err(Error::from(TxError::LowerBondThanUnbond(
-                    bond_source,
-                    amount.to_string_native(),
-                    bond_amount.to_string_native(),
-                )));
-            }
-        }
     }
 
     // Query the unbonds before submitting the tx
     let unbonds = rpc::query_unbond_with_slashing(
         context.client(),
         &bond_source,
-        validator,
+        &validator,
     )
     .await?;
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
@@ -1061,16 +1226,19 @@ pub async fn build_bond<'a>(
         tx_code_path,
     }: &args::Bond,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
-    let default_address = source.clone().unwrap_or(validator.clone());
-    let default_signer = Some(default_address.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        tx_args,
-        Some(default_address.clone()),
-        default_signer,
-    )
-    .await?;
+    // Require a positive amount of tokens to be bonded
+    if amount.is_zero() {
+        edisplay_line!(
+            context.io(),
+            "The requested bond amount is 0. A positive amount must be \
+             requested."
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::BondIsZero));
+        }
+    }
 
+    // The validator must actually be a validator
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, context)
             .await?;
@@ -1082,6 +1250,17 @@ pub async fn build_bond<'a>(
             .map(Some),
         None => Ok(source.clone()),
     }?;
+
+    let default_address = source.clone().unwrap_or(validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(default_address.clone()),
+        default_signer,
+    )
+    .await?;
+
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
@@ -1660,7 +1839,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     // This has no side-effect because transaction is to self.
     let (_amount, token) = if source == masp_addr && target == masp_addr {
         // TODO Refactor me, we shouldn't rely on any specific token here.
-        (token::Amount::default(), args.native_token.clone())
+        (token::Amount::zero(), args.native_token.clone())
     } else {
         (validated_amount.amount, token)
     };
@@ -2083,7 +2262,7 @@ async fn check_balance_too_low_err<'a, N: Namada<'a>>(
                         context.format_amount(token, amount).await,
                         context.format_amount(token, balance).await,
                     );
-                    Ok(token::Amount::default())
+                    Ok(token::Amount::zero())
                 } else {
                     Err(Error::from(TxError::BalanceTooLow(
                         source.clone(),
@@ -2104,7 +2283,7 @@ async fn check_balance_too_low_err<'a, N: Namada<'a>>(
                     source,
                     token
                 );
-                Ok(token::Amount::default())
+                Ok(token::Amount::zero())
             } else {
                 Err(Error::from(TxError::NoBalanceForToken(
                     source.clone(),
