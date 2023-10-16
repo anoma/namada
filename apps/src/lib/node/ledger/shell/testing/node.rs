@@ -59,6 +59,112 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::storage;
 
+/// Mock Ethereum oracle used for testing purposes.
+struct MockEthOracle {
+    /// The inner oracle.
+    oracle: TestOracle,
+    /// The inner oracle's configuration.
+    config: OracleConfig,
+    /// The inner oracle's next block to process.
+    next_block_to_process: tokio::sync::RwLock<ethereum_structs::BlockHeight>,
+}
+
+impl MockEthOracle {
+    /// Updates the state of the Ethereum oracle.
+    ///
+    /// This includes sending any confirmed Ethereum events to
+    /// the shell and updating the height of the next Ethereum
+    /// block to process. Upon a successfully processed block,
+    /// this functions returns `true`.
+    async fn drive(&self) -> bool {
+        try_process_eth_events(
+            &self.oracle,
+            &self.config,
+            &*self.next_block_to_process.read().await,
+        )
+        .await
+        .process_new_block()
+    }
+}
+
+/// Services mocking the operation of the ledger's various async tasks.
+pub struct MockServices {
+    /// Receives transactions that are supposed to be broadcasted
+    /// to the network.
+    tx_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Vec<u8>>>,
+    /// Mock Ethereum oracle, that processes blocks from Ethereum
+    /// in order to find events emitted by a transaction to vote on.
+    ethereum_oracle: MockEthOracle,
+}
+
+/// Actions to be performed by the mock node, as a result
+/// of driving [`MockServices`].
+pub enum MockServiceAction {
+    /// The ledger should broadcast new transactions.
+    BroadcastTxs(Vec<Vec<u8>>),
+    /// Progress to the next Ethereum block to process.
+    IncrementEthHeight,
+}
+
+impl MockServices {
+    /// Drive the internal state machine of the mock node's services.
+    async fn drive(&self) -> Vec<MockServiceAction> {
+        let mut actions = vec![];
+
+        // process new eth events
+        // NOTE: this may result in a deadlock, if the events
+        // sent to the shell exceed the capacity of the oracle's
+        // events channel!
+        if self.ethereum_oracle.drive().await {
+            actions.push(MockServiceAction::IncrementEthHeight);
+        }
+
+        // receive txs from the broadcaster
+        let txs = {
+            let mut txs = vec![];
+            let mut tx_receiver = self.tx_receiver.lock().await;
+
+            while let Some(tx) = poll_fn(|cx| match tx_receiver.poll_recv(cx) {
+                Poll::Pending => Poll::Ready(None),
+                poll => poll,
+            })
+            .await
+            {
+                txs.push(tx);
+            }
+
+            txs
+        };
+        if !txs.is_empty() {
+            actions.push(MockServiceAction::BroadcastTxs(txs));
+        }
+
+        actions
+    }
+}
+
+/// Controller of various mock node services.
+pub struct MockServicesController {
+    /// Ethereum oracle controller.
+    pub eth_oracle: Web3Controller,
+    /// Handler to the Ethereum oracle sender channel.
+    ///
+    /// Bypasses the Ethereum oracle service and sends
+    /// events directly to the [`Shell`].
+    pub eth_events: mpsc::Sender<EthereumEvent>,
+    /// Transaction broadcaster handle.
+    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
+}
+
+/// Service handlers to be passed to a [`Shell`], when building
+/// a mock node.
+pub struct MockServiceShellHandlers {
+    /// Transaction broadcaster handle.
+    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
+    /// Ethereum oracle channel handlers.
+    pub eth_oracle_channels: Option<EthereumOracleChannels>,
+}
+
 /// Mock services data returned by [`mock_services`].
 pub struct MockServicesPackage {
     /// Whether to automatically drive mock services or not.
@@ -123,112 +229,6 @@ pub fn mock_services(cfg: MockServicesCfg) -> MockServicesPackage {
             eth_events: eth_sender,
             tx_broadcaster,
         },
-    }
-}
-
-/// Controller of various mock node services.
-pub struct MockServicesController {
-    /// Ethereum oracle controller.
-    pub eth_oracle: Web3Controller,
-    /// Handler to the Ethereum oracle sender channel.
-    ///
-    /// Bypasses the Ethereum oracle service and sends
-    /// events directly to the [`Shell`].
-    pub eth_events: mpsc::Sender<EthereumEvent>,
-    /// Transaction broadcaster handle.
-    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
-}
-
-/// Service handlers to be passed to a [`Shell`], when building
-/// a mock node.
-pub struct MockServiceShellHandlers {
-    /// Transaction broadcaster handle.
-    pub tx_broadcaster: mpsc::UnboundedSender<Vec<u8>>,
-    /// Ethereum oracle channel handlers.
-    pub eth_oracle_channels: Option<EthereumOracleChannels>,
-}
-
-/// Services mocking the operation of the ledger's various async tasks.
-pub struct MockServices {
-    /// Receives transactions that are supposed to be broadcasted
-    /// to the network.
-    tx_receiver: tokio::sync::Mutex<mpsc::UnboundedReceiver<Vec<u8>>>,
-    /// Mock Ethereum oracle, that processes blocks from Ethereum
-    /// in order to find events emitted by a transaction to vote on.
-    ethereum_oracle: MockEthOracle,
-}
-
-/// Actions to be performed by the mock node, as a result
-/// of driving [`MockServices`].
-pub enum MockServiceAction {
-    /// The ledger should broadcast new transactions.
-    BroadcastTxs(Vec<Vec<u8>>),
-    /// Progress to the next Ethereum block to process.
-    IncrementEthHeight,
-}
-
-impl MockServices {
-    /// Drive the internal state machine of the mock node's services.
-    async fn drive(&self) -> Vec<MockServiceAction> {
-        let mut actions = vec![];
-
-        // process new eth events
-        // NOTE: this may result in a deadlock, if the events
-        // sent to the shell exceed the capacity of the oracle's
-        // events channel!
-        if self.ethereum_oracle.drive().await {
-            actions.push(MockServiceAction::IncrementEthHeight);
-        }
-
-        // receive txs from the broadcaster
-        let txs = {
-            let mut txs = vec![];
-            let mut tx_receiver = self.tx_receiver.lock().await;
-
-            while let Some(tx) = poll_fn(|cx| match tx_receiver.poll_recv(cx) {
-                Poll::Pending => Poll::Ready(None),
-                poll => poll,
-            })
-            .await
-            {
-                txs.push(tx);
-            }
-
-            txs
-        };
-        if !txs.is_empty() {
-            actions.push(MockServiceAction::BroadcastTxs(txs));
-        }
-
-        actions
-    }
-}
-
-/// Mock Ethereum oracle used for testing purposes.
-struct MockEthOracle {
-    /// The inner oracle.
-    oracle: TestOracle,
-    /// The inner oracle's configuration.
-    config: OracleConfig,
-    /// The inner oracle's next block to process.
-    next_block_to_process: tokio::sync::RwLock<ethereum_structs::BlockHeight>,
-}
-
-impl MockEthOracle {
-    /// Updates the state of the Ethereum oracle.
-    ///
-    /// This includes sending any confirmed Ethereum events to
-    /// the shell and updating the height of the next Ethereum
-    /// block to process. Upon a successfully processed block,
-    /// this functions returns `true`.
-    async fn drive(&self) -> bool {
-        try_process_eth_events(
-            &self.oracle,
-            &self.config,
-            &*self.next_block_to_process.read().await,
-        )
-        .await
-        .process_new_block()
     }
 }
 
