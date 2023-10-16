@@ -28,6 +28,7 @@ pub use wrapper::*;
 
 use crate::ledger::gas::{Gas, VpsGas};
 use crate::types::address::Address;
+use crate::types::ethereum_structs::EthBridgeEvent;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
@@ -53,6 +54,8 @@ pub struct TxResult {
     pub initialized_accounts: Vec<Address>,
     /// IBC events emitted by the transaction
     pub ibc_events: BTreeSet<IbcEvent>,
+    /// Ethereum bridge events emitted by the transaction
+    pub eth_bridge_events: BTreeSet<EthBridgeEvent>,
 }
 
 impl TxResult {
