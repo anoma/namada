@@ -24,7 +24,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
     use namada::proof_of_stake::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
@@ -70,10 +70,10 @@ mod tests {
         initial_stake: token::Amount,
         unbond: transaction::pos::Unbond,
         key: key::common::SecretKey,
-        pos_params: PosParams,
+        pos_params: OwnedPosParams,
     ) -> TxResult {
         // Remove the validator stake threshold for simplicity
-        let pos_params = PosParams {
+        let pos_params = OwnedPosParams {
             validator_stake_threshold: token::Amount::zero(),
             ..pos_params
         };
@@ -83,6 +83,8 @@ mod tests {
             &unbond.source, Some(source) if *source != unbond.validator);
 
         let consensus_key = key::testing::keypair_1().ref_to();
+        let protocol_key = key::testing::keypair_2().ref_to();
+
         let eth_cold_key = key::testing::keypair_3().ref_to();
         let eth_hot_key = key::testing::keypair_4().ref_to();
         let commission_rate = Dec::new(5, 2).expect("Cannot fail");
@@ -98,13 +100,15 @@ mod tests {
                 initial_stake
             },
             consensus_key,
+            protocol_key,
             eth_cold_key,
             eth_hot_key,
             commission_rate,
             max_commission_rate_change,
         }];
 
-        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+        let pos_params =
+            init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
             let native_token = tx_env.wl_storage.storage.native_token.clone();

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops;
+use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ledger::storage_api;
@@ -26,7 +26,7 @@ pub const LAST_UPDATE_SUB_KEY: &str = "last_update";
 pub const OLDEST_EPOCH_SUB_KEY: &str = "oldest_epoch";
 
 /// Default number of past epochs to keep.
-const DEFAULT_NUM_PAST_EPOCHS: u64 = 2;
+pub const DEFAULT_NUM_PAST_EPOCHS: u64 = 2;
 
 /// Discrete epoched data handle
 pub struct Epoched<Data, FutureEpochs, PastEpochs, SON = collections::Simple> {
@@ -168,7 +168,7 @@ where
     /// kept is dropped. If the oldest stored epoch is not already
     /// associated with some value, the latest value from the dropped
     /// values, if any, is associated with it.
-    fn update_data<S>(
+    pub fn update_data<S>(
         &self,
         storage: &mut S,
         params: &PosParams,
@@ -183,11 +183,10 @@ where
             (last_update, oldest_epoch)
         {
             let oldest_to_keep = current_epoch
-                .0
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
-            if oldest_epoch.0 < oldest_to_keep {
-                let diff = oldest_to_keep - oldest_epoch.0;
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
@@ -266,12 +265,9 @@ where
     }
 
     fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
-        Epoch(
-            epoch
-                .0
-                .checked_sub(PastEpochs::value(params))
-                .unwrap_or_default(),
-        )
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
@@ -325,7 +321,7 @@ where
         NestedMap::open(key)
     }
 
-    /// Initialize new nested data at the given epoch offset.
+    /// Initialize new nested data at the given epoch.
     pub fn init<S>(
         &self,
         storage: &mut S,
@@ -335,7 +331,8 @@ where
         S: StorageWrite + StorageRead,
     {
         let key = self.get_last_update_storage_key();
-        storage.write(&key, epoch)
+        storage.write(&key, epoch)?;
+        self.set_oldest_epoch(storage, epoch)
     }
 
     fn get_last_update_storage_key(&self) -> storage::Key {
@@ -367,6 +364,100 @@ where
     {
         let key = self.get_last_update_storage_key();
         storage.write(&key, current_epoch)
+    }
+
+    fn get_oldest_epoch_storage_key(&self) -> storage::Key {
+        self.storage_prefix
+            .push(&OLDEST_EPOCH_SUB_KEY.to_owned())
+            .unwrap()
+    }
+
+    fn get_oldest_epoch<S>(
+        &self,
+        storage: &S,
+    ) -> storage_api::Result<Option<Epoch>>
+    where
+        S: StorageRead,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.read(&key)
+    }
+
+    fn set_oldest_epoch<S>(
+        &self,
+        storage: &mut S,
+        new_oldest_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let key = self.get_oldest_epoch_storage_key();
+        storage.write(&key, new_oldest_epoch)
+    }
+
+    fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
+    }
+
+    /// Update data by removing old epochs
+    // TODO: should we consider more complex handling of empty epochs in the
+    // data below?
+    pub fn update_data<S>(
+        &self,
+        storage: &mut S,
+        params: &PosParams,
+        current_epoch: Epoch,
+    ) -> storage_api::Result<()>
+    where
+        S: StorageRead + StorageWrite,
+    {
+        let last_update = self.get_last_update(storage)?;
+        let oldest_epoch = self.get_oldest_epoch(storage)?;
+        if let (Some(last_update), Some(oldest_epoch)) =
+            (last_update, oldest_epoch)
+        {
+            let oldest_to_keep = current_epoch
+                .checked_sub(PastEpochs::value(params))
+                .unwrap_or_default();
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
+                // Go through the epochs before the expected oldest epoch and
+                // keep the latest one
+                tracing::debug!(
+                    "Trimming nested epoched data in epoch {current_epoch}, \
+                     last updated at {last_update}."
+                );
+                let data_handler = self.get_data_handler();
+                // Remove data before the new oldest epoch, keep the latest
+                // value
+                for epoch in oldest_epoch.iter_range(diff) {
+                    let was_data = data_handler.remove_all(storage, &epoch)?;
+                    if was_data {
+                        tracing::debug!(
+                            "Removed inner map data at epoch {epoch}"
+                        );
+                    } else {
+                        tracing::debug!("WARNING: was no data in {epoch}");
+                    }
+                }
+                let new_oldest_epoch =
+                    Self::sub_past_epochs(params, current_epoch);
+
+                // if !data_handler.contains(storage, &new_oldest_epoch)? {
+                //     panic!("WARNING: no data existing in
+                // {new_oldest_epoch}"); }
+                self.set_oldest_epoch(storage, new_oldest_epoch)?;
+
+                // Update the epoch of the last update to the current epoch
+                let key = self.get_last_update_storage_key();
+                storage.write(&key, current_epoch)?;
+                return Ok(());
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -531,11 +622,10 @@ where
             (last_update, oldest_epoch)
         {
             let oldest_to_keep = current_epoch
-                .0
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
-            if oldest_epoch.0 < oldest_to_keep {
-                let diff = oldest_to_keep - oldest_epoch.0;
+            if oldest_epoch < oldest_to_keep {
+                let diff = u64::from(oldest_to_keep - oldest_epoch);
                 // Go through the epochs before the expected oldest epoch and
                 // sum them into it
                 tracing::debug!(
@@ -634,12 +724,9 @@ where
     }
 
     fn sub_past_epochs(params: &PosParams, epoch: Epoch) -> Epoch {
-        Epoch(
-            epoch
-                .0
-                .checked_sub(PastEpochs::value(params))
-                .unwrap_or_default(),
-        )
+        epoch
+            .checked_sub(PastEpochs::value(params))
+            .unwrap_or_default()
     }
 
     fn get_oldest_epoch_storage_key(&self) -> storage::Key {
@@ -810,6 +897,29 @@ impl EpochOffset for OffsetSlashProcessingLen {
     }
 }
 
+/// Offset at the slash processing delay plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetSlashProcessingLenPlus;
+impl EpochOffset for OffsetSlashProcessingLenPlus {
+    fn value(params: &PosParams) -> u64 {
+        params.slash_processing_epoch_offset() + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::SlashProcessingLenPlus
+    }
+}
+
 /// Maximum offset.
 #[derive(
     Debug,
@@ -833,6 +943,106 @@ impl EpochOffset for OffsetMaxU64 {
     }
 }
 
+/// Offset at max proposal period.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriod;
+impl EpochOffset for OffsetMaxProposalPeriod {
+    fn value(params: &PosParams) -> u64 {
+        params.max_proposal_period
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriod
+    }
+}
+
+/// Offset at the max proposal period, plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodPlus;
+impl EpochOffset for OffsetMaxProposalPeriodPlus {
+    fn value(params: &PosParams) -> u64 {
+        params.max_proposal_period + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodPlus
+    }
+}
+
+/// Offset at the larger of the slash processing length and the max proposal
+/// period.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodOrSlashProcessingLen;
+impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLen {
+    fn value(params: &PosParams) -> u64 {
+        cmp::max(
+            params.slash_processing_epoch_offset(),
+            params.max_proposal_period,
+        )
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodOrSlashProcessingLen
+    }
+}
+
+/// Offset at the larger of the slash processing length and the max proposal
+/// period, plus the default num past epochs.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub struct OffsetMaxProposalPeriodOrSlashProcessingLenPlus;
+impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLenPlus {
+    fn value(params: &PosParams) -> u64 {
+        cmp::max(
+            params.slash_processing_epoch_offset(),
+            params.max_proposal_period,
+        ) + DEFAULT_NUM_PAST_EPOCHS
+    }
+
+    fn dyn_offset() -> DynEpochOffset {
+        DynEpochOffset::MaxProposalPeriodOrSlashProcessingLenPlus
+    }
+}
+
 /// Offset length dynamic choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DynEpochOffset {
@@ -851,6 +1061,17 @@ pub enum DynEpochOffset {
     /// Offset at slash processing delay (unbonding +
     /// cubic_slashing_window + 1).
     SlashProcessingLen,
+    /// Offset at slash processing delay plus the defaul num past epochs
+    SlashProcessingLenPlus,
+    /// Offset at the max proposal period
+    MaxProposalPeriod,
+    /// Offset at the max proposal period plus the default num past epochs
+    MaxProposalPeriodPlus,
+    /// Offset at the larger of max proposal period or slash processing delay
+    MaxProposalPeriodOrSlashProcessingLen,
+    /// Offset at the larger of max proposal period or slash processing delay,
+    /// plus the default num past epochs
+    MaxProposalPeriodOrSlashProcessingLenPlus,
     /// Offset of the max u64 value
     MaxU64,
 }
@@ -860,7 +1081,7 @@ pub enum DynEpochOffset {
 pub trait EpochOffset:
     Debug + Clone + BorshDeserialize + BorshSerialize + BorshSchema
 {
-    /// Find the value of a given offset from PoS parameters.
+    /// Find the value of a given offset from PoS and Gov parameters.
     fn value(params: &PosParams) -> u64;
     /// Convert to [`DynEpochOffset`]
     fn dyn_offset() -> DynEpochOffset;
@@ -1176,6 +1397,8 @@ mod test {
 
     fn init_storage() -> storage_api::Result<TestWlStorage> {
         let mut s = TestWlStorage::default();
+        let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+        gov_params.init_storage(&mut s)?;
         crate::init_genesis(
             &mut s,
             &PosParams::default(),
@@ -1183,6 +1406,7 @@ mod test {
                 address: established_address_1(),
                 tokens: token::Amount::native_whole(1_000),
                 consensus_key: key::testing::keypair_1().to_public(),
+                protocol_key: key::testing::keypair_2().to_public(),
                 eth_hot_key: key::testing::keypair_3().to_public(),
                 eth_cold_key: key::testing::keypair_3().to_public(),
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),

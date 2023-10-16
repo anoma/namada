@@ -274,7 +274,6 @@ mod test_bp_vote_extensions {
     #[cfg(not(feature = "abcipp"))]
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
-    use namada::ledger::storage_api::StorageWrite;
     use namada::proof_of_stake::types::{
         Position as ValidatorPosition, WeightedValidator,
     };
@@ -321,18 +320,12 @@ mod test_bp_vote_extensions {
             )
             .expect("Test failed");
 
-        // register Bertha's protocol key
-        let pk_key = protocol_pk_key(&bertha_address());
-        shell
-            .wl_storage
-            .write_bytes(&pk_key, bertha_keypair().ref_to().serialize_to_vec())
-            .expect("Test failed.");
-
         // change pipeline length to 1
         let mut params = shell.wl_storage.pos_queries().get_pos_params();
-        params.pipeline_len = 1;
+        params.owned.pipeline_len = 1;
 
         let consensus_key = gen_keypair();
+        let protocol_key = bertha_keypair();
         let hot_key = gen_secp256k1_keypair();
         let cold_key = gen_secp256k1_keypair();
 
@@ -341,6 +334,7 @@ mod test_bp_vote_extensions {
             params: &params,
             address: &bertha_address(),
             consensus_key: &consensus_key.ref_to(),
+            protocol_key: &protocol_key.ref_to(),
             eth_hot_key: &hot_key.ref_to(),
             eth_cold_key: &cold_key.ref_to(),
             current_epoch: 0.into(),

@@ -245,9 +245,7 @@ where
     let min_proposal_voting_period: u64 =
         storage.read(&key)?.expect("Parameter should be definied.");
 
-    let key = governance_keys::get_max_proposal_period_key();
-    let max_proposal_period: u64 =
-        storage.read(&key)?.expect("Parameter should be definied.");
+    let max_proposal_period: u64 = get_max_proposal_period(storage)?;
 
     Ok(GovernanceParameters {
         min_proposal_fund,
@@ -257,4 +255,15 @@ where
         max_proposal_content_size,
         min_proposal_grace_epochs,
     })
+}
+
+/// Get governance "max_proposal_period" parameter
+pub fn get_max_proposal_period<S>(storage: &S) -> storage_api::Result<u64>
+where
+    S: storage_api::StorageRead,
+{
+    let key = governance_keys::get_max_proposal_period_key();
+    let max_proposal_period: u64 =
+        storage.read(&key)?.expect("Parameter should be defined.");
+    Ok(max_proposal_period)
 }
