@@ -675,7 +675,7 @@ impl WriteLog {
     }
 
     /// Write the transaction hash
-    pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
+    pub(crate) fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
             .insert(hash, ReProtStorageModification::Write)
@@ -692,7 +692,7 @@ impl WriteLog {
     }
 
     /// Remove the transaction hash
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
         match self
             .replay_protection
             .insert(hash, ReProtStorageModification::Delete)

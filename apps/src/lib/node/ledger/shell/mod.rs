@@ -42,6 +42,7 @@ use namada::ledger::protocol::{
     apply_wasm_tx, get_fee_unshielding_transaction,
     get_transfer_hash_from_storage, ShellParams,
 };
+use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
@@ -944,7 +945,6 @@ where
 
         // Write wrapper hash to tx WAL
         temp_wl_storage
-            .write_log
             .write_tx_hash(wrapper_hash)
             .map_err(|e| Error::ReplayAttempt(e.to_string()))?;
 
@@ -962,7 +962,6 @@ where
 
         // Write inner hash to tx WAL
         temp_wl_storage
-            .write_log
             .write_tx_hash(inner_tx_hash)
             .map_err(|e| Error::ReplayAttempt(e.to_string()))
     }

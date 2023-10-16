@@ -247,7 +247,6 @@ where
     // If wrapper was succesful, write inner tx hash to storage
     shell_params
         .wl_storage
-        .write_log_mut()
         .write_tx_hash(tx.update_header(TxType::Raw).header_hash())
         .expect("Error while writing tx hash to storage");
     changed_keys.insert(replay_protection::get_replay_protection_last_key(

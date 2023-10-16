@@ -8,6 +8,7 @@ use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
 use namada::ledger::parameters::storage as params_storage;
 use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
+use namada::ledger::storage::wl_storage::WriteLogAndStorage;
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
@@ -518,7 +519,6 @@ where
                         // hash to storage to prevent
                         // replay
                         self.wl_storage
-                            .write_log
                             .write_tx_hash(wrapper.header_hash())
                             .expect("Error while writing tx hash to storage");
                     }
@@ -963,12 +963,10 @@ where
     // corresponding wrapper transaction to avoid replay of that in the process
     fn allow_tx_replay(&mut self, mut wrapper_tx: Tx) {
         self.wl_storage
-            .write_log
             .write_tx_hash(wrapper_tx.header_hash())
             .expect("Error while deleting tx hash from storage");
 
         self.wl_storage
-            .write_log
             .delete_tx_hash(wrapper_tx.update_header(TxType::Raw).header_hash())
             .expect("Error while deleting tx hash from storage");
     }
