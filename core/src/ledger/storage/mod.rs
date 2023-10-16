@@ -26,7 +26,9 @@ pub use wl_storage::{
 
 #[cfg(feature = "wasm-runtime")]
 pub use self::masp_conversions::update_allowed_conversions;
-pub use self::masp_conversions::{encode_asset_type, ConversionState};
+pub use self::masp_conversions::{
+    calculate_masp_rewards, encode_asset_type, ConversionState,
+};
 use super::replay_protection::is_replay_protection_key;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{

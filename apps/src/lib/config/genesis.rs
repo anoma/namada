@@ -213,6 +213,8 @@ pub mod genesis_config {
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
         pub balances: Option<HashMap<String, token::Amount>>,
+        // Token parameters
+        pub parameters: Option<token::Parameters>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -404,6 +406,9 @@ pub mod genesis_config {
         implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
         TokenAccount {
+            last_locked_ratio: Dec::zero(),
+            last_inflation: token::Amount::zero(),
+            parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
             balances: config
@@ -818,6 +823,12 @@ pub struct TokenAccount {
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
+    /// Token parameters
+    pub parameters: token::Parameters,
+    /// Token inflation from the last epoch (read + write for every epoch)
+    pub last_inflation: token::Amount,
+    /// Token shielded ratio from the last epoch (read + write for every epoch)
+    pub last_locked_ratio: Dec,
 }
 
 #[derive(
@@ -1100,6 +1111,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .into_iter()
                 .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
                 .collect(),
+            parameters: token::Parameters::default(),
+            last_inflation: token::Amount::zero(),
+            last_locked_ratio: Dec::zero(),
         })
         .collect();
     Genesis {

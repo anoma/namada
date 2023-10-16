@@ -13,8 +13,9 @@ use thiserror::Error;
 
 use super::dec::POS_DECIMAL_PRECISION;
 use crate::ibc::applications::transfer::Amount as IbcAmount;
+use crate::ledger::storage as ledger_storage;
 use crate::ledger::storage_api::token::read_denom;
-use crate::ledger::storage_api::{self, StorageRead};
+use crate::ledger::storage_api::{self, StorageRead, StorageWrite};
 use crate::types::address::{
     masp, Address, DecodeError as AddressError, InternalAddress,
 };
@@ -814,6 +815,31 @@ pub const TX_KEY_PREFIX: &str = "tx-";
 pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
+/// Last calculated inflation value handed out
+pub const MASP_LAST_INFLATION: &str = "last_inflation";
+/// The last locked ratio
+pub const MASP_LAST_LOCKED_RATIO: &str = "last_locked_ratio";
+/// The key for the nominal proportional gain of a shielded pool for a given
+/// asset
+pub const MASP_KP_GAIN_KEY: &str = "proptional_gain";
+/// The key for the nominal derivative gain of a shielded pool for a given asset
+pub const MASP_KD_GAIN_KEY: &str = "derivative_gain";
+/// The key for the locked ratio target for a given asset
+pub const MASP_LOCKED_RATIO_TARGET_KEY: &str = "locked_ratio_target";
+/// The key for the max reward rate for a given asset
+pub const MASP_MAX_REWARD_RATE: &str = "max_reward_rate";
+
+/// Gets the key for the given token address, error with the given
+/// message to expect if the key is not in the address
+pub fn key_of_token(
+    token_addr: &Address,
+    specific_key: &str,
+    expect_message: &str,
+) -> Key {
+    Key::from(token_addr.to_db_key())
+        .push(&specific_key.to_owned())
+        .expect(expect_message)
+}
 
 /// Obtain a storage key for user's balance.
 pub fn balance_key(token_addr: &Address, owner: &Address) -> Key {
@@ -845,6 +871,98 @@ pub fn minted_balance_key(token_addr: &Address) -> Key {
     balance_prefix(token_addr)
         .push(&MINTED_STORAGE_KEY.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Obtain the nominal proportional key for the given token
+pub fn masp_kp_gain(token_addr: &Address) -> Key {
+    key_of_token(token_addr, MASP_KP_GAIN_KEY, "nominal proproitonal gains")
+}
+
+/// Obtain the nominal derivative key for the given token
+pub fn masp_kd_gain(token_addr: &Address) -> Key {
+    key_of_token(token_addr, MASP_KD_GAIN_KEY, "nominal proproitonal gains")
+}
+
+/// The max reward rate key for the given token
+pub fn masp_max_reward_rate(token_addr: &Address) -> Key {
+    key_of_token(token_addr, MASP_MAX_REWARD_RATE, "max reward rate")
+}
+
+/// Obtain the locked target ratio key for the given token
+pub fn masp_locked_ratio_target(token_addr: &Address) -> Key {
+    key_of_token(
+        token_addr,
+        MASP_LOCKED_RATIO_TARGET_KEY,
+        "nominal proproitonal gains",
+    )
+}
+
+/// Token parameters for each kind of asset held on chain
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Deserialize,
+    Serialize,
+)]
+pub struct Parameters {
+    /// Maximum reward rate
+    pub max_reward_rate: Dec,
+    /// Shielded Pool nominal derivative gain
+    pub kd_gain_nom: Dec,
+    /// Shielded Pool nominal proportional gain for the given token
+    pub kp_gain_nom: Dec,
+    /// Locked ratio for the given token
+    pub locked_ratio_target_key: Dec,
+}
+
+impl Parameters {
+    /// Initialize parameters for the token in storage during the genesis block.
+    pub fn init_storage<DB, H>(
+        &self,
+        address: &Address,
+        wl_storage: &mut ledger_storage::WlStorage<DB, H>,
+    ) where
+        DB: ledger_storage::DB + for<'iter> ledger_storage::DBIter<'iter>,
+        H: ledger_storage::StorageHasher,
+    {
+        let Self {
+            max_reward_rate: max_rate,
+            kd_gain_nom,
+            kp_gain_nom,
+            locked_ratio_target_key: locked_target,
+        } = self;
+        wl_storage
+            .write(&masp_max_reward_rate(address), max_rate)
+            .expect("max reward rate for the given asset must be initialized");
+        wl_storage
+            .write(&masp_locked_ratio_target(address), locked_target)
+            .expect("locked ratio must be initialized");
+        wl_storage
+            .write(&masp_kp_gain(address), kp_gain_nom)
+            .expect("The nominal proportional gain must be initialized");
+        wl_storage
+            .write(&masp_kd_gain(address), kd_gain_nom)
+            .expect("The nominal derivative gain must be initialized");
+    }
+}
+
+impl Default for Parameters {
+    fn default() -> Self {
+        Self {
+            max_reward_rate: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.1").unwrap(),
+            kd_gain_nom: Dec::from_str("0.1").unwrap(),
+            locked_ratio_target_key: Dec::from_str("0.1").unwrap(),
+        }
+    }
 }
 
 /// Check if the given storage key is balance key for the given token. If it is,
@@ -912,6 +1030,24 @@ pub fn is_masp_key(key: &Key) -> bool {
                 && (key == HEAD_TX_KEY
                     || key.starts_with(TX_KEY_PREFIX)
                     || key.starts_with(PIN_KEY_PREFIX)))
+}
+
+/// The last locked ratio of a token
+pub fn masp_last_locked_ratio(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        MASP_LAST_LOCKED_RATIO,
+        "cannot obtain storage key for the last locked ratio",
+    )
+}
+
+/// The last inflation of a token
+pub fn masp_last_inflation(token_address: &Address) -> Key {
+    key_of_token(
+        token_address,
+        MASP_LAST_INFLATION,
+        "cannot obtain storage key for the last inflation rate",
+    )
 }
 
 /// Check if the given storage key is for a minter of a unspecified token.
@@ -1184,5 +1320,51 @@ pub mod testing {
         max: u64,
     ) -> impl Strategy<Value = Amount> {
         (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
+    }
+
+    /// init_token_storage is useful when the initialization of the network is
+    /// not properly made. This properly sets up the storage such that
+    /// inflation calculations can be ran on the token addresses. We assume
+    /// a total supply that may not be real
+    pub fn init_token_storage<D, H>(
+        wl_storage: &mut ledger_storage::WlStorage<D, H>,
+        epochs_per_year: u64,
+    ) where
+        D: 'static
+            + ledger_storage::DB
+            + for<'iter> ledger_storage::DBIter<'iter>,
+        H: 'static + ledger_storage::StorageHasher,
+    {
+        use crate::ledger::parameters::storage::get_epochs_per_year_key;
+        use crate::types::address::masp_rewards;
+
+        let masp_rewards = masp_rewards();
+        let masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
+
+        wl_storage
+            .write(&get_epochs_per_year_key(), epochs_per_year)
+            .unwrap();
+        let params = Parameters {
+            max_reward_rate: Dec::from_str("0.1").unwrap(),
+            kd_gain_nom: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.1").unwrap(),
+            locked_ratio_target_key: Dec::zero(),
+        };
+
+        for address in masp_reward_keys {
+            params.init_storage(address, wl_storage);
+            wl_storage
+                .write(
+                    &minted_balance_key(address),
+                    Amount::native_whole(5), // arbitrary amount
+                )
+                .unwrap();
+            wl_storage
+                .write(&masp_last_inflation(address), Amount::zero())
+                .expect("inflation ought to be written");
+            wl_storage
+                .write(&masp_last_locked_ratio(address), Dec::zero())
+                .expect("last locked set default");
+        }
     }
 }

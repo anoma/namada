@@ -2,8 +2,7 @@
 //! proof-of-stake, providing liquity to shielded asset pools, and public goods
 //! funding.
 
-use namada_core::types::dec::Dec;
-
+use crate::types::dec::Dec;
 use crate::types::token;
 
 /// The domains of inflation
@@ -30,6 +29,8 @@ pub struct RewardsController {
     pub locked_tokens: token::Amount,
     /// Total token supply
     pub total_tokens: token::Amount,
+    /// Total native token supply
+    pub total_native_tokens: token::Amount,
     /// PD target locked ratio
     pub locked_ratio_target: Dec,
     /// PD last locked ratio
@@ -52,6 +53,7 @@ impl RewardsController {
         let Self {
             locked_tokens,
             total_tokens,
+            total_native_tokens,
             locked_ratio_target,
             locked_ratio_last,
             max_reward_rate,
@@ -67,10 +69,12 @@ impl RewardsController {
             .expect("Should not fail to convert token Amount to Dec");
         let total = Dec::try_from(total_tokens.raw_amount())
             .expect("Should not fail to convert token Amount to Dec");
+        let total_native = Dec::try_from(total_native_tokens.raw_amount())
+            .expect("Should not fail to convert token Amount to Dec");
         let epochs_py: Dec = epochs_per_year.into();
 
         let locked_ratio = locked / total;
-        let max_inflation = total * max_reward_rate / epochs_py;
+        let max_inflation = total_native * max_reward_rate / epochs_py;
         let p_gain = p_gain_nom * max_inflation;
         let d_gain = d_gain_nom * max_inflation;
 
@@ -114,9 +118,8 @@ impl RewardsController {
 mod test {
     use std::str::FromStr;
 
-    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
-
     use super::*;
+    use crate::types::token::NATIVE_MAX_DECIMAL_PLACES;
 
     #[test]
     fn test_inflation_calc_up() {
@@ -127,6 +130,11 @@ mod test {
             )
             .unwrap(),
             total_tokens: token::Amount::from_uint(
+                4_000,
+                NATIVE_MAX_DECIMAL_PLACES,
+            )
+            .unwrap(),
+            total_native_tokens: token::Amount::from_uint(
                 4_000,
                 NATIVE_MAX_DECIMAL_PLACES,
             )
@@ -198,6 +206,11 @@ mod test {
             )
             .unwrap(),
             total_tokens: token::Amount::from_uint(
+                1_000,
+                NATIVE_MAX_DECIMAL_PLACES,
+            )
+            .unwrap(),
+            total_native_tokens: token::Amount::from_uint(
                 1_000,
                 NATIVE_MAX_DECIMAL_PLACES,
             )

@@ -1980,6 +1980,7 @@ mod test_utils {
 
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
     /// on startup it is read successfully
+    #[cfg(feature = "testing")]
     #[test]
     fn test_tx_queue_persistence() {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
@@ -2017,6 +2018,7 @@ mod test_utils {
             .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
+        token::testing::init_token_storage(&mut shell.wl_storage, 60);
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let mut wrapper =

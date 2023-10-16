@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::inflation;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -11,7 +12,7 @@ use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
-use namada::ledger::{inflation, protocol, replay_protection};
+use namada::ledger::{protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -665,6 +666,7 @@ where
         let pos_controller = inflation::RewardsController {
             locked_tokens: pos_locked_supply,
             total_tokens,
+            total_native_tokens: total_tokens,
             locked_ratio_target: pos_locked_ratio_target,
             locked_ratio_last: pos_last_staked_ratio,
             max_reward_rate: pos_max_inflation_rate,
@@ -676,6 +678,7 @@ where
         let _masp_controller = inflation::RewardsController {
             locked_tokens: masp_locked_supply,
             total_tokens,
+            total_native_tokens: total_tokens,
             locked_ratio_target: masp_locked_ratio_target,
             locked_ratio_last: masp_locked_ratio_last,
             max_reward_rate: masp_max_inflation_rate,
