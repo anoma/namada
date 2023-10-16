@@ -1709,6 +1709,132 @@ mod test_ethbridge_router {
             Ok(f) if f.supply == supply_amount && f.cap == cap_amount
         );
     }
+
+    /// Test that querying the status of the Bridge pool
+    /// returns the expected keccak hashes.
+    #[tokio::test]
+    async fn test_bridge_pool_status() {
+        let mut client = TestClient::new(RPC);
+
+        // write a transfer into the bridge pool
+        let transfer = PendingTransfer {
+            transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
+                asset: EthAddress([0; 20]),
+                recipient: EthAddress([0; 20]),
+                sender: bertha_address(),
+                amount: 0.into(),
+            },
+            gas_fee: GasFee {
+                token: nam(),
+                amount: 0.into(),
+                payer: bertha_address(),
+            },
+        };
+        client
+            .wl_storage
+            .write_bytes(
+                &get_pending_key(&transfer),
+                transfer.serialize_to_vec(),
+            )
+            .expect("Test failed");
+
+        // write transfers into the event log
+        let mut transfer2 = transfer.clone();
+        transfer2.transfer.amount = 1.into();
+        let mut transfer3 = transfer.clone();
+        transfer3.transfer.amount = 2.into();
+        client.event_log.log_events(vec![
+            ethereum_structs::EthBridgeEvent::BridgePool {
+                tx_hash: transfer2.keccak256(),
+                status: ethereum_structs::BpTransferStatus::Expired,
+            }
+            .into(),
+            ethereum_structs::EthBridgeEvent::BridgePool {
+                tx_hash: transfer3.keccak256(),
+                status: ethereum_structs::BpTransferStatus::Relayed,
+            }
+            .into(),
+        ]);
+
+        // some arbitrary transfer - since it's neither in the
+        // Bridge pool nor in the event log, it is assumed it has
+        // either been relayed or that it has expired
+        let mut transfer4 = transfer.clone();
+        transfer4.transfer.amount = 3.into();
+
+        // change block height
+        client.wl_storage.storage.block.height = 1.into();
+
+        // write bridge pool signed root
+        {
+            let signed_root = BridgePoolRootProof {
+                signatures: Default::default(),
+                data: (KeccakHash([0; 32]), 0.into()),
+            };
+            let written_height = client.wl_storage.storage.block.height;
+            client
+                .wl_storage
+                .write_bytes(
+                    &get_signed_root_key(),
+                    (signed_root, written_height).serialize_to_vec(),
+                )
+                .expect("Test failed");
+            client
+                .wl_storage
+                .storage
+                .commit_block(MockDBWriteBatch)
+                .expect("Test failed");
+        }
+
+        // commit storage changes
+        client.wl_storage.commit_block().expect("Test failed");
+
+        // check transfer statuses
+        let status = RPC
+            .shell()
+            .eth_bridge()
+            .pending_eth_transfer_status(
+                &client,
+                Some(
+                    {
+                        let mut req = HashSet::new();
+                        req.insert(transfer.keccak256());
+                        req.insert(transfer2.keccak256());
+                        req.insert(transfer3.keccak256());
+                        req.insert(transfer4.keccak256());
+                        req
+                    }
+                    .serialize_to_vec(),
+                ),
+                None,
+                false,
+            )
+            .await
+            .unwrap()
+            .data;
+
+        assert_eq!(
+            status.pending,
+            HashSet::from([transfer.keccak256()]),
+            "unexpected pending transfers"
+        );
+        assert_eq!(
+            status.expired,
+            HashSet::from([transfer2.keccak256()]),
+            "unexpected expired transfers"
+        );
+        assert_eq!(
+            status.relayed,
+            HashSet::from([transfer3.keccak256()]),
+            "unexpected relayed transfers"
+        );
+        assert_eq!(
+            status.unrecognized,
+            HashSet::from([transfer4.keccak256()]),
+            "unexpected unrecognized transfers"
+        );
+    }
 }
 
 #[cfg(any(feature = "testing", test))]
