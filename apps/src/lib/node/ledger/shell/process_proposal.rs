@@ -1699,8 +1699,9 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient transparent balance to pay \
-                 fees"
+                 transaction's fees: Transparent balance of wrapper's signer \
+                 was insufficient to pay fee. All the available transparent \
+                 funds have been moved to the block proposer"
             )
         );
     }
@@ -1764,8 +1765,9 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient transparent balance to pay \
-                 fees"
+                 transaction's fees: Transparent balance of wrapper's signer \
+                 was insufficient to pay fee. All the available transparent \
+                 funds have been moved to the block proposer"
             )
         );
     }
