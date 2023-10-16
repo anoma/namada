@@ -3315,6 +3315,8 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
         .unwrap();
     println!("\n{res}\n");
+    // Wait to commit a block
+    validator_1.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_validator_1 = validator_1.background();
 
     let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
@@ -3324,9 +3326,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         + 1u64;
 
     // Query slashes
-    // let tx_args = ["slashes", "--node", &validator_one_rpc];
-    // let client = run!(test, Bin::Client, tx_args, Some(40))?;
-
     let mut client = run!(
         test,
         Bin::Client,
