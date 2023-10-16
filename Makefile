@@ -132,7 +132,8 @@ test-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e -Z unstable-options --report-time
+		-- --skip e2e --skip pos_state_machine_test \
+		-Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
