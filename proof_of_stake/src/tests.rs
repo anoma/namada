@@ -38,8 +38,9 @@ use proptest::test_runner::Config;
 // `tracing` logs from tests
 use test_log::test;
 
+use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
-use crate::parameters::PosParams;
+use crate::parameters::{OwnedPosParams, PosParams};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, EagerRedelegatedBondsMap, GenesisValidator, Position,
@@ -57,40 +58,40 @@ use crate::{
     delegator_redelegated_bonds_handle, delegator_redelegated_unbonds_handle,
     find_bonds_to_remove, find_validator_by_raw_hash,
     fold_and_slash_redelegated_bonds, get_num_consensus_validators,
-    init_genesis, insert_validator_into_validator_set, is_validator,
-    process_slashes, purge_validator_sets_for_old_epoch,
+    insert_validator_into_validator_set, is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, read_validator_stake, slash,
     slash_redelegation, slash_validator, slash_validator_redelegation,
-    staking_token_address, store_total_consensus_stake, total_bonded_handle,
-    total_deltas_handle, total_unbonded_handle, unbond_handle, unbond_tokens,
-    unjail_validator, update_validator_deltas, update_validator_set,
-    validator_consensus_key_handle, validator_incoming_redelegations_handle,
+    staking_token_address, store_total_consensus_stake, test_init_genesis,
+    total_bonded_handle, total_deltas_handle, total_unbonded_handle,
+    unbond_handle, unbond_tokens, unjail_validator, update_validator_deltas,
+    update_validator_set, validator_consensus_key_handle,
+    validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
     validator_state_handle, validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, withdraw_tokens,
-    write_validator_address_raw_hash, BecomeValidator, EagerRedelegatedUnbonds,
-    FoldRedelegatedBondsResult, ModifiedRedelegation, RedelegationError,
-    STORE_VALIDATOR_SETS_LEN,
+    write_pos_params, write_validator_address_raw_hash, BecomeValidator,
+    EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, ModifiedRedelegation,
+    RedelegationError,
 };
 
 proptest! {
-    // Generate arb valid input for `test_init_genesis_aux`
+    // Generate arb valid input for `test_test_init_genesis_aux`
     #![proptest_config(Config {
         cases: 100,
         .. Config::default()
     })]
     #[test]
-    fn test_init_genesis(
+    fn test_test_init_genesis(
 
     (pos_params, genesis_validators) in arb_params_and_genesis_validators(Some(5), 1..10),
     start_epoch in (0_u64..1000).prop_map(Epoch),
 
     ) {
-        test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
+        test_test_init_genesis_aux(pos_params, start_epoch, genesis_validators)
     }
 }
 
@@ -230,7 +231,7 @@ proptest! {
 fn arb_params_and_genesis_validators(
     num_max_validator_slots: Option<u64>,
     val_size: Range<usize>,
-) -> impl Strategy<Value = (PosParams, Vec<GenesisValidator>)> {
+) -> impl Strategy<Value = (OwnedPosParams, Vec<GenesisValidator>)> {
     let params = arb_pos_params(num_max_validator_slots);
     params.prop_flat_map(move |params| {
         let validators = arb_genesis_validators(
@@ -242,7 +243,7 @@ fn arb_params_and_genesis_validators(
 }
 
 fn test_slashes_with_unbonding_params()
--> impl Strategy<Value = (PosParams, Vec<GenesisValidator>, u64)> {
+-> impl Strategy<Value = (OwnedPosParams, Vec<GenesisValidator>, u64)> {
     let params = arb_pos_params(Some(5));
     params.prop_flat_map(|params| {
         let unbond_delay = 0..(params.slash_processing_epoch_offset() * 2);
@@ -254,8 +255,8 @@ fn test_slashes_with_unbonding_params()
 }
 
 /// Test genesis initialization
-fn test_init_genesis_aux(
-    params: PosParams,
+fn test_test_init_genesis_aux(
+    params: OwnedPosParams,
     start_epoch: Epoch,
     mut validators: Vec<GenesisValidator>,
 ) {
@@ -267,8 +268,13 @@ fn test_init_genesis_aux(
     s.storage.block.epoch = start_epoch;
 
     validators.sort_by(|a, b| b.tokens.cmp(&a.tokens));
-    init_genesis(&mut s, &params, validators.clone().into_iter(), start_epoch)
-        .unwrap();
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        validators.clone().into_iter(),
+        start_epoch,
+    )
+    .unwrap();
 
     let mut bond_details = bonds_and_unbonds(&s, None, None).unwrap();
     assert!(bond_details.iter().all(|(_id, details)| {
@@ -336,7 +342,7 @@ fn test_init_genesis_aux(
 
 /// Test bonding
 /// NOTE: copy validator sets each time we advance the epoch
-fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
+fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     // This can be useful for debugging:
     // params.pipeline_len = 2;
     // params.unbonding_len = 4;
@@ -346,9 +352,9 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
     // Genesis
     let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -876,7 +882,7 @@ fn test_bonds_aux(params: PosParams, validators: Vec<GenesisValidator>) {
 
 /// Test validator initialization.
 fn test_become_validator_aux(
-    params: PosParams,
+    params: OwnedPosParams,
     new_validator: Address,
     new_validator_consensus_key: SecretKey,
     validators: Vec<GenesisValidator>,
@@ -889,10 +895,10 @@ fn test_become_validator_aux(
     let mut s = TestWlStorage::default();
 
     // Genesis
-    let mut current_epoch = dbg!(s.storage.block.epoch);
-    init_genesis(
+    let mut current_epoch = s.storage.block.epoch;
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -923,6 +929,8 @@ fn test_become_validator_aux(
 
     // Initialize the validator account
     let consensus_key = new_validator_consensus_key.to_public();
+    let protocol_sk = common_sk_from_simple_seed(0);
+    let protocol_key = protocol_sk.to_public();
     let eth_hot_key = key::common::PublicKey::Secp256k1(
         key::testing::gen_keypair::<key::secp256k1::SigScheme>().ref_to(),
     );
@@ -934,6 +942,7 @@ fn test_become_validator_aux(
         params: &params,
         address: &new_validator,
         consensus_key: &consensus_key,
+        protocol_key: &protocol_key,
         eth_cold_key: &eth_cold_key,
         eth_hot_key: &eth_hot_key,
         current_epoch,
@@ -1023,7 +1032,7 @@ fn test_become_validator_aux(
 }
 
 fn test_slashes_with_unbonding_aux(
-    mut params: PosParams,
+    mut params: OwnedPosParams,
     validators: Vec<GenesisValidator>,
     unbond_delay: u64,
 ) {
@@ -1049,9 +1058,9 @@ fn test_slashes_with_unbonding_aux(
     // Genesis
     // let start_epoch = s.storage.block.epoch;
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -1203,7 +1212,7 @@ fn test_validator_raw_hash() {
 fn test_validator_sets() {
     let mut s = TestWlStorage::default();
     // Only 3 consensus validator slots
-    let params = PosParams {
+    let params = OwnedPosParams {
         max_validator_slots: 3,
         ..Default::default()
     };
@@ -1219,6 +1228,79 @@ fn test_validator_sets() {
         sk_seed += 1;
         res
     };
+
+    // Create genesis validators
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::native_whole(10));
+    let ((val4, pk4), stake4) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val5, pk5), stake5) =
+        (gen_validator(), token::Amount::native_whole(100));
+    let ((val6, pk6), stake6) =
+        (gen_validator(), token::Amount::native_whole(1));
+    let ((val7, pk7), stake7) =
+        (gen_validator(), token::Amount::native_whole(1));
+    println!("\nval1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
+    println!("val4: {val4}, {pk4}, {}", stake4.to_string_native());
+    println!("val5: {val5}, {pk5}, {}", stake5.to_string_native());
+    println!("val6: {val6}, {pk6}, {}", stake6.to_string_native());
+    println!("val7: {val7}, {pk7}, {}", stake7.to_string_native());
+
+    let start_epoch = Epoch::default();
+    let epoch = start_epoch;
+
+    let protocol_sk_1 = common_sk_from_simple_seed(0);
+    let protocol_sk_2 = common_sk_from_simple_seed(1);
+
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        [
+            GenesisValidator {
+                address: val1.clone(),
+                tokens: stake1,
+                consensus_key: pk1.clone(),
+                protocol_key: protocol_sk_1.to_public(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
+            },
+            GenesisValidator {
+                address: val2.clone(),
+                tokens: stake2,
+                consensus_key: pk2.clone(),
+                protocol_key: protocol_sk_2.to_public(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
+            },
+        ]
+        .into_iter(),
+        epoch,
+    )
+    .unwrap();
 
     // A helper to insert a non-genesis validator
     let insert_validator = |s: &mut TestWlStorage,
@@ -1251,74 +1333,6 @@ fn test_validator_sets() {
             .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
-
-    // Create genesis validators
-    let ((val1, pk1), stake1) =
-        (gen_validator(), token::Amount::native_whole(1));
-    let ((val2, pk2), stake2) =
-        (gen_validator(), token::Amount::native_whole(1));
-    let ((val3, pk3), stake3) =
-        (gen_validator(), token::Amount::native_whole(10));
-    let ((val4, pk4), stake4) =
-        (gen_validator(), token::Amount::native_whole(1));
-    let ((val5, pk5), stake5) =
-        (gen_validator(), token::Amount::native_whole(100));
-    let ((val6, pk6), stake6) =
-        (gen_validator(), token::Amount::native_whole(1));
-    let ((val7, pk7), stake7) =
-        (gen_validator(), token::Amount::native_whole(1));
-    println!("\nval1: {val1}, {pk1}, {}", stake1.to_string_native());
-    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
-    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
-    println!("val4: {val4}, {pk4}, {}", stake4.to_string_native());
-    println!("val5: {val5}, {pk5}, {}", stake5.to_string_native());
-    println!("val6: {val6}, {pk6}, {}", stake6.to_string_native());
-    println!("val7: {val7}, {pk7}, {}", stake7.to_string_native());
-
-    let start_epoch = Epoch::default();
-    let epoch = start_epoch;
-
-    init_genesis(
-        &mut s,
-        &params,
-        [
-            GenesisValidator {
-                address: val1.clone(),
-                tokens: stake1,
-                consensus_key: pk1.clone(),
-                eth_hot_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                eth_cold_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
-                max_commission_rate_change: Dec::new(1, 1)
-                    .expect("Dec creation failed"),
-            },
-            GenesisValidator {
-                address: val2.clone(),
-                tokens: stake2,
-                consensus_key: pk2.clone(),
-                eth_hot_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                eth_cold_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
-                max_commission_rate_change: Dec::new(1, 1)
-                    .expect("Dec creation failed"),
-            },
-        ]
-        .into_iter(),
-        epoch,
-    )
-    .unwrap();
 
     // Advance to EPOCH 1
     //
@@ -1850,16 +1864,17 @@ fn test_validator_sets() {
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk4));
 
-    // Check that the validator sets were purged for the old epochs
+    // Check that the below-capacity validator set was purged for the old epochs
+    // but that the consensus_validator_set was not
     let last_epoch = epoch;
     for e in Epoch::iter_bounds_inclusive(
         start_epoch,
         last_epoch
-            .sub_or_default(Epoch(STORE_VALIDATOR_SETS_LEN))
+            .sub_or_default(Epoch(DEFAULT_NUM_PAST_EPOCHS))
             .sub_or_default(Epoch(1)),
     ) {
         assert!(
-            consensus_validator_set_handle()
+            !consensus_validator_set_handle()
                 .at(&e)
                 .is_empty(&s)
                 .unwrap()
@@ -1883,7 +1898,7 @@ fn test_validator_sets() {
 fn test_validator_sets_swap() {
     let mut s = TestWlStorage::default();
     // Only 2 consensus validator slots
-    let params = PosParams {
+    let params = OwnedPosParams {
         max_validator_slots: 2,
         // Set the stake threshold to 0 so no validators are in the
         // below-threshold set
@@ -1892,6 +1907,7 @@ fn test_validator_sets_swap() {
         tm_votes_per_token: Dec::new(1, 1).expect("Dec creation failed"),
         ..Default::default()
     };
+
     let addr_seed = "seed";
     let mut address_gen = EstablishedAddressGen::new(addr_seed);
     let mut sk_seed = 0;
@@ -1904,6 +1920,68 @@ fn test_validator_sets_swap() {
         sk_seed += 1;
         res
     };
+
+    // Start with two genesis validators, one with 1 voting power and other 0
+    let epoch = Epoch::default();
+    // 1M voting power
+    let ((val1, pk1), stake1) =
+        (gen_validator(), token::Amount::native_whole(10));
+    // 0 voting power
+    let ((val2, pk2), stake2) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    // 0 voting power
+    let ((val3, pk3), stake3) =
+        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
+    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
+    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
+    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
+
+    let protocol_sk_1 = common_sk_from_simple_seed(0);
+    let protocol_sk_2 = common_sk_from_simple_seed(1);
+
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        [
+            GenesisValidator {
+                address: val1,
+                tokens: stake1,
+                consensus_key: pk1,
+                protocol_key: protocol_sk_1.to_public(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
+            },
+            GenesisValidator {
+                address: val2.clone(),
+                tokens: stake2,
+                consensus_key: pk2,
+                protocol_key: protocol_sk_2.to_public(),
+                eth_hot_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                eth_cold_key: key::common::PublicKey::Secp256k1(
+                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                        .ref_to(),
+                ),
+                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
+                max_commission_rate_change: Dec::new(1, 1)
+                    .expect("Dec creation failed"),
+            },
+        ]
+        .into_iter(),
+        epoch,
+    )
+    .unwrap();
 
     // A helper to insert a non-genesis validator
     let insert_validator = |s: &mut TestWlStorage,
@@ -1936,63 +2014,6 @@ fn test_validator_sets_swap() {
             .set(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
-
-    // Start with two genesis validators, one with 1 voting power and other 0
-    let epoch = Epoch::default();
-    // 1M voting power
-    let ((val1, pk1), stake1) =
-        (gen_validator(), token::Amount::native_whole(10));
-    // 0 voting power
-    let ((val2, pk2), stake2) =
-        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
-    // 0 voting power
-    let ((val3, pk3), stake3) =
-        (gen_validator(), token::Amount::from_uint(5, 0).unwrap());
-    println!("val1: {val1}, {pk1}, {}", stake1.to_string_native());
-    println!("val2: {val2}, {pk2}, {}", stake2.to_string_native());
-    println!("val3: {val3}, {pk3}, {}", stake3.to_string_native());
-
-    init_genesis(
-        &mut s,
-        &params,
-        [
-            GenesisValidator {
-                address: val1,
-                tokens: stake1,
-                consensus_key: pk1,
-                eth_hot_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                eth_cold_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
-                max_commission_rate_change: Dec::new(1, 1)
-                    .expect("Dec creation failed"),
-            },
-            GenesisValidator {
-                address: val2.clone(),
-                tokens: stake2,
-                consensus_key: pk2,
-                eth_hot_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                eth_cold_key: key::common::PublicKey::Secp256k1(
-                    key::testing::gen_keypair::<key::secp256k1::SigScheme>()
-                        .ref_to(),
-                ),
-                commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
-                max_commission_rate_change: Dec::new(1, 1)
-                    .expect("Dec creation failed"),
-            },
-        ]
-        .into_iter(),
-        epoch,
-    )
-    .unwrap();
 
     // Advance to EPOCH 1
     let epoch = advance_epoch(&mut s, &params);
@@ -2147,11 +2168,12 @@ fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
     store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,
+        params,
         current_epoch,
         current_epoch + params.pipeline_len,
     )
     .unwrap();
-    purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();
+    // purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();
     // process_slashes(s, current_epoch).unwrap();
     // dbg!(current_epoch);
     current_epoch
@@ -2188,6 +2210,9 @@ fn arb_genesis_validators(
                     let consensus_sk = common_sk_from_simple_seed(seed);
                     let consensus_key = consensus_sk.to_public();
 
+                    let protocol_sk = common_sk_from_simple_seed(seed);
+                    let protocol_key = protocol_sk.to_public();
+
                     let eth_hot_key = key::common::PublicKey::Secp256k1(
                         key::testing::gen_keypair::<key::secp256k1::SigScheme>(
                         )
@@ -2206,6 +2231,7 @@ fn arb_genesis_validators(
                         address,
                         tokens,
                         consensus_key,
+                        protocol_key,
                         eth_hot_key,
                         eth_cold_key,
                         commission_rate,
@@ -2224,7 +2250,7 @@ fn arb_genesis_validators(
 }
 
 fn test_unjail_validator_aux(
-    params: PosParams,
+    params: OwnedPosParams,
     mut validators: Vec<GenesisValidator>,
 ) {
     println!("\nTest inputs: {params:?}, genesis validators: {validators:#?}");
@@ -2246,9 +2272,9 @@ fn test_unjail_validator_aux(
 
     // Genesis
     let mut current_epoch = s.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut s,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -2351,6 +2377,10 @@ fn test_unjail_validator_aux(
 #[test]
 fn test_find_bonds_to_remove() {
     let mut storage = TestWlStorage::default();
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(&mut storage).unwrap();
+    write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
+
     let source = established_address_1();
     let validator = established_address_2();
     let bond_handle = bond_handle(&source, &validator);
@@ -2605,7 +2635,7 @@ fn test_compute_modified_redelegation() {
 #[test]
 fn test_compute_bond_at_epoch() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         pipeline_len: 2,
         unbonding_len: 4,
         cubic_slashing_window_length: 1,
@@ -2755,7 +2785,7 @@ fn test_compute_bond_at_epoch() {
 #[test]
 fn test_compute_slash_bond_at_epoch() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         pipeline_len: 2,
         unbonding_len: 4,
         cubic_slashing_window_length: 1,
@@ -3018,7 +3048,7 @@ fn test_compute_new_redelegated_unbonds() {
 #[test]
 fn test_apply_list_slashes() {
     let init_epoch = Epoch(2);
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -3066,7 +3096,7 @@ fn test_apply_list_slashes() {
 #[test]
 fn test_compute_slashable_amount() {
     let init_epoch = Epoch(2);
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -3123,7 +3153,7 @@ fn test_compute_slashable_amount() {
 #[test]
 fn test_fold_and_slash_redelegated_bonds() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -3222,7 +3252,7 @@ fn test_fold_and_slash_redelegated_bonds() {
 #[test]
 fn test_slash_redelegation() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -3410,10 +3440,14 @@ fn test_slash_redelegation() {
 #[test]
 fn test_slash_validator_redelegation() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(&mut storage).unwrap();
+    write_pos_params(&mut storage, &params).unwrap();
+
     let alice = established_address_1();
     let bob = established_address_2();
 
@@ -3587,10 +3621,14 @@ fn test_slash_validator_redelegation() {
 #[test]
 fn test_slash_validator() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(&mut storage).unwrap();
+    write_pos_params(&mut storage, &params).unwrap();
+
     let alice = established_address_1();
     let bob = established_address_2();
 
@@ -3996,7 +4034,7 @@ fn test_slash_validator() {
 #[test]
 fn compute_amount_after_slashing_unbond_test() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -4114,7 +4152,7 @@ fn compute_amount_after_slashing_unbond_test() {
 #[test]
 fn compute_amount_after_slashing_withdraw_test() {
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -4275,16 +4313,16 @@ fn test_simple_redelegation_aux(
     let dest_validator = validators[1].address.clone();
 
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
 
     // Genesis
     let mut current_epoch = storage.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut storage,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -4686,7 +4724,7 @@ fn test_redelegation_with_slashing_aux(
     let dest_validator = validators[1].address.clone();
 
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         // Avoid empty consensus set by removing the threshold
         validator_stake_threshold: token::Amount::zero(),
@@ -4695,9 +4733,9 @@ fn test_redelegation_with_slashing_aux(
 
     // Genesis
     let mut current_epoch = storage.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut storage,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -5094,16 +5132,16 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     let _init_stake_dest_2 = validators[2].tokens;
 
     let mut storage = TestWlStorage::default();
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
 
     // Genesis
     let mut current_epoch = storage.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut storage,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )
@@ -5450,6 +5488,10 @@ fn test_from_sm_case_1() {
     use namada_core::types::address::testing::established_address_4;
 
     let mut storage = TestWlStorage::default();
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(&mut storage).unwrap();
+    write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
+
     let validator = established_address_1();
     let redeleg_src_1 = established_address_2();
     let redeleg_src_2 = established_address_3();
@@ -5556,7 +5598,7 @@ fn test_from_sm_case_1() {
 fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     assert_eq!(validators.len(), 4);
 
-    let params = PosParams {
+    let params = OwnedPosParams {
         unbonding_len: 4,
         ..Default::default()
     };
@@ -5578,9 +5620,9 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     // Genesis
     let mut current_epoch = storage.storage.block.epoch;
-    init_genesis(
+    let params = test_init_genesis(
         &mut storage,
-        &params,
+        params,
         validators.clone().into_iter(),
         current_epoch,
     )

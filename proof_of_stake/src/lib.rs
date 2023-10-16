@@ -35,16 +35,16 @@ use namada_core::ledger::storage_api::collections::lazy_map::{
 };
 use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::{
-    self, token, ResultExt, StorageRead, StorageWrite,
+    self, governance, token, ResultExt, StorageRead, StorageWrite,
 };
 use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::{
-    common, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
+    common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
 };
 pub use namada_core::types::storage::{Epoch, Key, KeySeg};
 use once_cell::unsync::Lazy;
-pub use parameters::PosParams;
+pub use parameters::{OwnedPosParams, PosParams};
 use rewards::PosRewardsCalculator;
 use storage::{
     bonds_for_source_prefix, bonds_prefix, consensus_keys_key,
@@ -67,8 +67,8 @@ use types::{
     Slashes, TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
     TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
     ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
-    ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorSetPositions,
-    ValidatorSetUpdate, ValidatorState, ValidatorStates,
+    ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorProtocolKeys,
+    ValidatorSetPositions, ValidatorSetUpdate, ValidatorState, ValidatorStates,
     ValidatorTotalUnbonded, VoteInfo, WeightedValidator,
 };
 
@@ -85,12 +85,6 @@ pub fn staking_token_address(storage: &impl StorageRead) -> Address {
         .get_native_token()
         .expect("Must be able to read native token address")
 }
-
-/// Number of epochs below the current epoch for which full validator sets are
-/// stored
-const STORE_VALIDATOR_SETS_LEN: u64 = 2;
-
-// ---- Storage handles ----
 
 /// Get the storage handle to the epoched consensus validator set
 pub fn consensus_validator_set_handle() -> ConsensusValidatorSets {
@@ -111,6 +105,14 @@ pub fn validator_consensus_key_handle(
 ) -> ValidatorConsensusKeys {
     let key = storage::validator_consensus_key_key(validator);
     ValidatorConsensusKeys::open(key)
+}
+
+/// Get the storage handle to a PoS validator's protocol key key.
+pub fn validator_protocol_key_handle(
+    validator: &Address,
+) -> ValidatorProtocolKeys {
+    let key = protocol_pk_key(validator);
+    ValidatorProtocolKeys::open(key)
 }
 
 /// Get the storage handle to a PoS validator's eth hot key.
@@ -292,10 +294,10 @@ pub fn delegator_redelegated_unbonds_handle(
     DelegatorRedelegatedUnbonded::open(key)
 }
 
-/// Init genesis
+/// Init genesis. Requires that the governance parameters are initialized.
 pub fn init_genesis<S>(
     storage: &mut S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: namada_core::types::storage::Epoch,
 ) -> storage_api::Result<()>
@@ -303,7 +305,8 @@ where
     S: StorageRead + StorageWrite,
 {
     tracing::debug!("Initializing PoS genesis");
-    write_pos_params(storage, params.clone())?;
+    write_pos_params(storage, params)?;
+    let params = read_non_pos_owned_params(storage, params.clone())?;
 
     let mut total_bonded = token::Amount::zero();
     consensus_validator_set_handle().init(storage, current_epoch)?;
@@ -315,6 +318,7 @@ where
         address,
         tokens,
         consensus_key,
+        protocol_key,
         eth_cold_key,
         eth_hot_key,
         commission_rate,
@@ -331,7 +335,7 @@ where
         // validator data
         insert_validator_into_validator_set(
             storage,
-            params,
+            &params,
             &address,
             tokens,
             current_epoch,
@@ -352,6 +356,11 @@ where
         validator_consensus_key_handle(&address).init_at_genesis(
             storage,
             consensus_key,
+            current_epoch,
+        )?;
+        validator_protocol_key_handle(&address).init_at_genesis(
+            storage,
+            protocol_key,
             current_epoch,
         )?;
         validator_eth_hot_key_handle(&address).init_at_genesis(
@@ -401,7 +410,12 @@ where
     token::credit_tokens(storage, &staking_token, &ADDRESS, total_bonded)?;
     // Copy the genesis validator set into the pipeline epoch as well
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
-        copy_validator_sets_and_positions(storage, current_epoch, epoch)?;
+        copy_validator_sets_and_positions(
+            storage,
+            &params,
+            current_epoch,
+            epoch,
+        )?;
     }
 
     tracing::debug!("Genesis initialized");
@@ -414,16 +428,33 @@ pub fn read_pos_params<S>(storage: &S) -> storage_api::Result<PosParams>
 where
     S: StorageRead,
 {
-    storage
+    let params = storage
         .read(&params_key())
         .transpose()
-        .expect("PosParams should always exist in storage after genesis")
+        .expect("PosParams should always exist in storage after genesis")?;
+    read_non_pos_owned_params(storage, params)
+}
+
+/// Read non-PoS-owned parameters to add them to `OwnedPosParams` to construct
+/// `PosParams`.
+pub fn read_non_pos_owned_params<S>(
+    storage: &S,
+    owned: OwnedPosParams,
+) -> storage_api::Result<PosParams>
+where
+    S: StorageRead,
+{
+    let max_proposal_period = governance::get_max_proposal_period(storage)?;
+    Ok(PosParams {
+        owned,
+        max_proposal_period,
+    })
 }
 
 /// Write PoS parameters
 pub fn write_pos_params<S>(
     storage: &mut S,
-    params: PosParams,
+    params: &OwnedPosParams,
 ) -> storage_api::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -1408,6 +1439,7 @@ where
 /// Validator sets and positions copying into a future epoch
 pub fn copy_validator_sets_and_positions<S>(
     storage: &mut S,
+    params: &PosParams,
     current_epoch: Epoch,
     target_epoch: Epoch,
 ) -> storage_api::Result<()>
@@ -1470,6 +1502,9 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
+    // Purge consensus and below-capacity validator sets
+    consensus_validator_set.update_data(storage, params, current_epoch)?;
+    below_capacity_validator_set.update_data(storage, params, current_epoch)?;
 
     // Copy validator positions
     let mut positions = HashMap::<Address, Position>::default();
@@ -1488,6 +1523,13 @@ where
     }
     validator_set_positions_handle.set_last_update(storage, current_epoch)?;
 
+    // Purge old epochs of validator positions
+    validator_set_positions_handle.update_data(
+        storage,
+        params,
+        current_epoch,
+    )?;
+
     // Copy set of all validator addresses
     let mut all_validators = HashSet::<Address>::default();
     let validator_addresses_handle = validator_addresses_handle();
@@ -1502,6 +1544,9 @@ where
         let was_in = new_all_validators_handle.insert(storage, validator)?;
         debug_assert!(!was_in);
     }
+
+    // Purge old epochs of all validator addresses
+    validator_addresses_handle.update_data(storage, params, current_epoch)?;
 
     Ok(())
 }
@@ -1545,27 +1590,6 @@ where
         total.to_string_native()
     );
     total_consensus_stake_key_handle().set(storage, total, epoch, 0)
-}
-
-/// Purge the validator sets from the epochs older than the current epoch minus
-/// `STORE_VALIDATOR_SETS_LEN`
-pub fn purge_validator_sets_for_old_epoch<S>(
-    storage: &mut S,
-    epoch: Epoch,
-) -> storage_api::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    if Epoch(STORE_VALIDATOR_SETS_LEN) < epoch {
-        let old_epoch = epoch - STORE_VALIDATOR_SETS_LEN - 1;
-        consensus_validator_set_handle()
-            .get_data_handler()
-            .remove_all(storage, &old_epoch)?;
-        below_capacity_validator_set_handle()
-            .get_data_handler()
-            .remove_all(storage, &old_epoch)?;
-    }
-    Ok(())
 }
 
 /// Read the position of the validator in the subset of validators that have the
@@ -2095,7 +2119,7 @@ struct FoldRedelegatedBondsResult {
 // `def foldAndSlashRedelegatedBondsMap`
 fn fold_and_slash_redelegated_bonds<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     redelegated_unbonds: &EagerRedelegatedBondsMap,
     start_epoch: Epoch,
     list_slashes: &[Slash],
@@ -2146,7 +2170,7 @@ where
 /// - `amount` - the amount of slashable tokens.
 // `def applyListSlashes`
 fn apply_list_slashes(
-    params: &PosParams,
+    params: &OwnedPosParams,
     slashes: &[Slash],
     amount: token::Amount,
 ) -> token::Amount {
@@ -2166,7 +2190,7 @@ fn apply_list_slashes(
 /// that a set of slashes may have been previously applied.
 // `def computeSlashableAmount`
 fn compute_slashable_amount(
-    params: &PosParams,
+    params: &OwnedPosParams,
     slash: &Slash,
     amount: token::Amount,
     computed_slashes: &BTreeMap<Epoch, token::Amount>,
@@ -2599,7 +2623,7 @@ fn get_slashed_amount(
 // `def computeAmountAfterSlashingUnbond`
 fn compute_amount_after_slashing_unbond<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     unbonds: &BTreeMap<Epoch, token::Amount>,
     redelegated_unbonds: &EagerRedelegatedUnbonds,
     slashes: Vec<Slash>,
@@ -2654,7 +2678,7 @@ where
 // `def computeAmountAfterSlashingWithdraw`
 fn compute_amount_after_slashing_withdraw<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     unbonds_and_redelegated_unbonds: &BTreeMap<
         (Epoch, Epoch),
         (token::Amount, EagerRedelegatedBondsMap),
@@ -2725,6 +2749,8 @@ pub struct BecomeValidator<'a, S> {
     pub address: &'a Address,
     /// The validator's consensus key, used by Tendermint.
     pub consensus_key: &'a common::PublicKey,
+    /// The validator's protocol key.
+    pub protocol_key: &'a common::PublicKey,
     /// The validator's Ethereum bridge cold key.
     pub eth_cold_key: &'a common::PublicKey,
     /// The validator's Ethereum bridge hot key.
@@ -2749,6 +2775,7 @@ where
         params,
         address,
         consensus_key,
+        protocol_key,
         eth_cold_key,
         eth_hot_key,
         current_epoch,
@@ -2776,6 +2803,12 @@ where
     validator_consensus_key_handle(address).set(
         storage,
         consensus_key.clone(),
+        current_epoch,
+        params.pipeline_len,
+    )?;
+    validator_protocol_key_handle(address).set(
+        storage,
+        protocol_key.clone(),
         current_epoch,
         params.pipeline_len,
     )?;
@@ -3979,10 +4012,10 @@ fn make_unbond_details(
         if slash.epoch >= start
             && slash.epoch
                 < withdraw
-                    .checked_sub(Epoch(
+                    .checked_sub(
                         params.unbonding_len
                             + params.cubic_slashing_window_length,
-                    ))
+                    )
                     .unwrap_or_default()
         {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
@@ -4449,6 +4482,9 @@ where
         *cur_rate = cmp::min(Dec::one(), *cur_rate + slash_rate);
     }
 
+    // Update the epochs of enqueued slashes in storage
+    enqueued_slashes_handle().update_data(storage, &params, current_epoch)?;
+
     // `resultSlashing`
     let mut map_validator_slash: EagerRedelegatedBondsMap = BTreeMap::new();
     for (validator, slash_rate) in eager_validator_slash_rates {
@@ -4633,7 +4669,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn slash_validator_redelegation<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     src_validator: &Address,
     current_epoch: Epoch,
     outgoing_redelegations: &NestedMap<Epoch, LazyMap<Epoch, token::Amount>>,
@@ -4685,7 +4721,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn slash_redelegation<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     amount: token::Amount,
     bond_start: Epoch,
     redel_bond_start: Epoch,
@@ -4811,7 +4847,7 @@ where
 // `def slashValidator`
 fn slash_validator<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validator: &Address,
     slash_rate: Dec,
     current_epoch: Epoch,
@@ -4936,7 +4972,7 @@ where
 /// - `redelegated_bonds`
 fn compute_bond_at_epoch<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validator: &Address,
     epoch: Epoch,
     start: Epoch,
@@ -4984,7 +5020,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn compute_slash_bond_at_epoch<S>(
     storage: &S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validator: &Address,
     epoch: Epoch,
     infraction_epoch: Epoch,
@@ -5347,4 +5383,22 @@ where
     )?;
 
     Ok(())
+}
+
+/// Init PoS genesis wrapper helper that also initializes gov params that are
+/// used in PoS with default values.
+#[cfg(any(test, feature = "testing"))]
+pub fn test_init_genesis<S>(
+    storage: &mut S,
+    owned: OwnedPosParams,
+    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    current_epoch: namada_core::types::storage::Epoch,
+) -> storage_api::Result<PosParams>
+where
+    S: StorageRead + StorageWrite,
+{
+    let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
+    gov_params.init_storage(storage)?;
+    crate::init_genesis(storage, &owned, validators, current_epoch)?;
+    crate::read_non_pos_owned_params(storage, owned)
 }
