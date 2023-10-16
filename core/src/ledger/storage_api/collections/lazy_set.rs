@@ -183,7 +183,7 @@ where
         storage.write(&key, ())
     }
 
-    /// Removes a key from the set, returning `true` if the key
+    /// Removes a key from the set if it's present, returning `true` if the key
     /// was in the set.
     pub fn remove<S>(&self, storage: &mut S, key: &K) -> Result<bool>
     where
@@ -191,8 +191,10 @@ where
     {
         let present = self.contains(storage, key)?;
 
-        let key = self.get_key(key);
-        storage.delete(&key)?;
+        if present {
+            let key = self.get_key(key);
+            storage.delete(&key)?;
+        }
 
         Ok(present)
     }
