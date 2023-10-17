@@ -489,6 +489,24 @@ impl CliApi {
                         let namada = ctx.to_sdk(&client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
+                    Sub::GenIbcShieldedTransafer(GenIbcShieldedTransafer(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::gen_ibc_shielded_transfer::<_, IO>(
+                            &client, &mut ctx, args,
+                        )
+                        .await?;
+                    }
                 }
             }
             cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

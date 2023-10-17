@@ -46,19 +46,22 @@ pub fn read_denom<S>(
 where
     S: StorageRead,
 {
-    let (key, nut) = match token {
+    let (key, is_default_zero) = match token {
         Address::Internal(InternalAddress::Nut(erc20)) => {
             let token = Address::Internal(InternalAddress::Erc20(*erc20));
+            // NB: always use the equivalent ERC20's smallest
+            // denomination to specify amounts, if we cannot
+            // find a denom in storage
             (token::denom_key(&token), true)
+        }
+        Address::Internal(InternalAddress::IbcToken(_)) => {
+            (token::denom_key(token), true)
         }
         token => (token::denom_key(token), false),
     };
     storage.read(&key).map(|opt_denom| {
         Some(opt_denom.unwrap_or_else(|| {
-            if nut {
-                // NB: always use the equivalent ERC20's smallest
-                // denomination to specify amounts, if we cannot
-                // find a denom in storage
+            if is_default_zero {
                 0u8.into()
             } else {
                 // FIXME: perhaps when we take this branch, we should

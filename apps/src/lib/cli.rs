@@ -256,6 +256,7 @@ pub mod cmds {
                 .subcommand(QueryValidatorState::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
+                .subcommand(GenIbcShieldedTransafer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -315,6 +316,8 @@ pub mod cmds {
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
+            let gen_ibc_shielded =
+                Self::parse_with_ctx(matches, GenIbcShieldedTransafer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -353,6 +356,7 @@ pub mod cmds {
                 .or(query_validator_state)
                 .or(query_account)
                 .or(sign_tx)
+                .or(gen_ibc_shielded)
                 .or(utils)
         }
     }
@@ -428,6 +432,7 @@ pub mod cmds {
         QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
         SignTx(SignTx),
+        GenIbcShieldedTransafer(GenIbcShieldedTransafer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1900,6 +1905,29 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct GenIbcShieldedTransafer(
+        pub args::GenIbcShieldedTransafer<args::CliTypes>,
+    );
+
+    impl SubCmd for GenIbcShieldedTransafer {
+        const CMD: &'static str = "ibc-gen-shielded";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                GenIbcShieldedTransafer(args::GenIbcShieldedTransafer::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generate shielded transfer for IBC.")
+                .add_args::<args::GenIbcShieldedTransafer<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct EpochSleep(pub args::Query<args::CliTypes>);
 
     impl SubCmd for EpochSleep {
@@ -2688,7 +2716,7 @@ pub mod args {
     pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
         HD_WALLET_DERIVATION_PATH.opt();
     pub const HISTORIC: ArgFlag = flag("historic");
-    pub const IBC_TRANSFER_MEMO: ArgOpt<String> = arg_opt("memo");
+    pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.";
@@ -2742,6 +2770,7 @@ pub mod args {
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
+    pub const SENDER: Arg<String> = arg("sender");
     pub const SIGNING_KEYS: ArgMulti<WalletKeypair> = arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
@@ -3604,7 +3633,10 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
-            let memo = IBC_TRANSFER_MEMO.parse(matches);
+            let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
+                std::fs::read_to_string(path)
+                    .expect("Expected a file at given path")
+            });
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -3641,9 +3673,9 @@ pub mod args {
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
                 .arg(
-                    IBC_TRANSFER_MEMO
+                    IBC_TRANSFER_MEMO_PATH
                         .def()
-                        .help("Memo field of ICS20 transfer."),
+                        .help("The path for the memo field of ICS20 transfer."),
                 )
         }
     }
@@ -4815,6 +4847,66 @@ pub mod args {
                     ),
                 )
                 .arg(OWNER.def().help("The address of the account owner"))
+        }
+    }
+
+    impl CliToSdk<GenIbcShieldedTransafer<SdkTypes>>
+        for GenIbcShieldedTransafer<CliTypes>
+    {
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> GenIbcShieldedTransafer<SdkTypes> {
+            GenIbcShieldedTransafer::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                output_folder: self.output_folder,
+                target: ctx.get(&self.target),
+                token: ctx.get(&self.token),
+                amount: self.amount,
+                port_id: self.port_id,
+                channel_id: self.channel_id,
+            }
+        }
+    }
+
+    impl Args for GenIbcShieldedTransafer<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
+            let target = TRANSFER_TARGET.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let port_id = PORT_ID.parse(matches);
+            let channel_id = CHANNEL_ID.parse(matches);
+            Self {
+                query,
+                output_folder,
+                target,
+                token,
+                amount,
+                port_id,
+                channel_id,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(OUTPUT_FOLDER_PATH.def().help(
+                    "The output folder path where the artifact will be stored.",
+                ))
+                .arg(TRANSFER_TARGET.def().help("The target address."))
+                .arg(TOKEN.def().help("The transfer token."))
+                .arg(AMOUNT.def().help("The amount to transfer in decimal."))
+                .arg(
+                    PORT_ID
+                        .def()
+                        .help("The port ID via which the token is received."),
+                )
+                .arg(
+                    CHANNEL_ID.def().help(
+                        "The channel ID via which the token is received.",
+                    ),
+                )
         }
     }
 

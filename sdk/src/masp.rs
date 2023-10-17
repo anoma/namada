@@ -81,6 +81,7 @@ use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
 use crate::{args, display_line, edisplay_line, rpc, Namada};
+use namada_core::types::masp::{TransferSource, TransferTarget};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1507,7 +1508,10 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     #[cfg(feature = "masp-tx-gen")]
     pub async fn gen_shielded_transfer<'a>(
         context: &impl Namada<'a>,
-        args: &args::TxTransfer,
+        source: &TransferSource,
+        target: &TransferTarget,
+        token: &Address,
+        amount: token::DenominatedAmount,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
@@ -1517,8 +1521,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         use rand::rngs::StdRng;
         use rand_core::SeedableRng;
 
-        let spending_key = args.source.spending_key();
-        let payment_address = args.target.payment_address();
+        let spending_key = source.spending_key();
+        let payment_address = target.payment_address();
         // No shielded components are needed when neither source nor
         // destination are shielded
         if spending_key.is_none() && payment_address.is_none() {
@@ -1568,14 +1572,9 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         let mut builder =
             Builder::<TestNetwork, _>::new_with_rng(NETWORK, 1.into(), rng);
 
-        // break up a transfer into a number of transfers with suitable
-        // denominations
-        let InputAmount::Validated(amt) = args.amount else {
-            unreachable!("The function `gen_shielded_transfer` is only called by `submit_tx` which validates amounts.")
-        };
         // Convert transaction amount into MASP types
-        let (asset_types, amount) =
-            convert_amount(epoch, &args.token, amt.amount)?;
+        let (asset_types, masp_amount) =
+            convert_amount(epoch, token, amount.amount)?;
 
         // If there are shielded inputs
         if let Some(sk) = spending_key {
@@ -1586,7 +1585,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 .collect_unspent_notes(
                     context,
                     &to_viewing_key(&sk).vk,
-                    I128Sum::from_sum(amount),
+                    I128Sum::from_sum(masp_amount),
                     epoch,
                 )
                 .await?;
@@ -1612,8 +1611,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
-            let source_enc = args
-                .source
+            let source_enc = source
                 .address()
                 .ok_or_else(|| {
                     Error::Other(
@@ -1631,7 +1629,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                 builder
                     .add_transparent_input(TxOut {
                         asset_type: *asset_type,
-                        value: denom.denominate(&amt),
+                        value: denom.denominate(&amount),
                         address: script,
                     })
                     .map_err(builder::Error::TransparentBuild)?;
@@ -1649,7 +1647,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         ovk_opt,
                         pa.into(),
                         *asset_type,
-                        denom.denominate(&amt),
+                        denom.denominate(&amount),
                         memo.clone(),
                     )
                     .map_err(builder::Error::SaplingBuild)?;
@@ -1657,8 +1655,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         } else {
             // Embed the transparent target address into the shielded
             // transaction so that it can be signed
-            let target_enc = args
-                .target
+            let target_enc = target
                 .address()
                 .ok_or_else(|| {
                     Error::Other(
@@ -1671,7 +1668,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             ));
             for (denom, asset_type) in MaspDenom::iter().zip(asset_types.iter())
             {
-                let vout = denom.denominate(&amt);
+                let vout = denom.denominate(&amount);
                 if vout != 0 {
                     builder
                         .add_transparent_output(
