@@ -83,8 +83,9 @@ where
     pub header: Option<Header>,
     /// The most recently committed block, if any.
     pub last_block: Option<LastBlock>,
-    /// The epoch of the most recently committed block. If it is `Epoch(0)`,
-    /// then no block may have been committed for this chain yet.
+    /// The epoch of the most recently committed block. If it is
+    /// `Epoch::sentinel()`, then no block may have been committed for this
+    /// chain yet.
     pub last_epoch: Epoch,
     /// Minimum block height at which the next epoch may start
     pub next_epoch_min_start_height: BlockHeight,
@@ -146,9 +147,10 @@ pub struct BlockStorage<H: StorageHasher> {
     /// (0) if no block has been committed yet.
     pub height: BlockHeight,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
-    /// height of the block that is going to be committed. Otherwise it is the
-    /// epoch of the most recently committed block, or `Epoch(0)` if no block
-    /// has been committed yet.
+    /// epoch of the block that is going to be committed. Otherwise it is the
+    /// epoch of the most recently committed block, or `Epoch::sentinel` (0) if
+    /// no block has been committed yet and chain has not been initialized, or
+    /// `Epoch::first` (1) on `InitChain`.
     pub epoch: Epoch,
     /// Results of applying transactions
     pub results: BlockResults,
@@ -398,7 +400,7 @@ where
             tree: MerkleTree::default(),
             hash: BlockHash::default(),
             height: BlockHeight::default(),
-            epoch: Epoch::default(),
+            epoch: Epoch::sentinel(),
             pred_epochs: Epochs::default(),
             results: BlockResults::default(),
         };
@@ -408,7 +410,7 @@ where
             block,
             header: None,
             last_block: None,
-            last_epoch: Epoch::default(),
+            last_epoch: Epoch::sentinel(),
             next_epoch_min_start_height: BlockHeight::default(),
             next_epoch_min_start_time: DateTimeUtc::now(),
             address_gen: EstablishedAddressGen::new(
@@ -961,6 +963,7 @@ where
             min_num_of_blocks,
             min_duration,
         } = parameters.epoch_duration;
+        self.block.epoch = Epoch::first();
         self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
         self.next_epoch_min_start_time = genesis_time + min_duration;
         // The default start height in `Epochs` is set to 1, we override it
@@ -1100,7 +1103,7 @@ where
 
             let min_height = (self.get_last_block_height().0 - limit).into();
             if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
-                if epoch.0 == 0 {
+                if epoch == Epoch::first() {
                     return Ok(());
                 } else {
                     // get the start height of the previous epoch because the
@@ -1160,7 +1163,7 @@ pub mod testing {
                 tree,
                 hash: BlockHash::default(),
                 height: BlockHeight::default(),
-                epoch: Epoch::default(),
+                epoch: Epoch::sentinel(),
                 pred_epochs: Epochs::default(),
                 results: BlockResults::default(),
             };
@@ -1170,7 +1173,7 @@ pub mod testing {
                 block,
                 header: None,
                 last_block: None,
-                last_epoch: Epoch::default(),
+                last_epoch: Epoch::sentinel(),
                 next_epoch_min_start_height: BlockHeight::default(),
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(

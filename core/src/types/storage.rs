@@ -984,11 +984,11 @@ impl KeySeg for common::PublicKey {
     }
 }
 
-/// Epoch identifier. Epochs are identified by consecutive numbers.
+/// Epoch identifier. Epochs are identified by consecutive numbers. The
+/// `default` value is the [`Epoch::first`].
 #[derive(
     Clone,
     Copy,
-    Default,
     Debug,
     PartialEq,
     Eq,
@@ -1002,6 +1002,12 @@ impl KeySeg for common::PublicKey {
     Deserialize,
 )]
 pub struct Epoch(pub u64);
+
+impl Default for Epoch {
+    fn default() -> Self {
+        Self::first()
+    }
+}
 
 impl Display for Epoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1019,7 +1025,19 @@ impl FromStr for Epoch {
 }
 
 impl Epoch {
+    /// The first epoch of a chain is 1.
+    pub fn first() -> Epoch {
+        Self(1)
+    }
+
+    /// Sentinel epoch 0 may be used before any blocks are created and before a
+    /// chain is initialized.
+    pub fn sentinel() -> Epoch {
+        Self(0)
+    }
+
     /// Change to the next epoch
+    #[must_use]
     pub fn next(&self) -> Self {
         Self(self.0 + 1)
     }
@@ -1201,7 +1219,7 @@ impl Epochs {
         if let Some((_first_known_epoch_height, rest)) =
             self.first_block_heights.split_first()
         {
-            let mut epoch = Epoch::default();
+            let mut epoch = Epoch::first();
             for next_block_height in rest {
                 if block_height < *next_block_height {
                     return Some(epoch);
@@ -1228,15 +1246,15 @@ impl Epochs {
         None
     }
 
-    /// Look up the starting block height of the given epoch
+    /// Look up the starting block height of the given epoch. Returns `None` for
+    /// `Epoch::sentinel`.
     pub fn get_start_height_of_epoch(
         &self,
         epoch: Epoch,
     ) -> Option<BlockHeight> {
-        if epoch.0 > self.first_block_heights.len() as u64 {
-            return None;
-        }
-        self.first_block_heights.get(epoch.0 as usize).copied()
+        // Sub 1 because epochs start at 1.
+        let ix = epoch.0.checked_sub(1)? as usize;
+        self.first_block_heights.get(ix).copied()
     }
 
     /// Return all starting block heights for each successive Epoch.
