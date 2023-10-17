@@ -3311,7 +3311,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3370,7 +3370,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "ethers",
@@ -3443,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3452,7 +3452,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "data-encoding",
@@ -3466,7 +3466,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3475,7 +3475,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3505,7 +3505,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3519,7 +3519,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "masp_primitives",
@@ -3528,7 +3528,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "namada_core",
@@ -3541,7 +3541,7 @@ dependencies = [
 
 [[package]]
 name = "namada_wasm"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -5765,7 +5765,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tx_template"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",
@@ -5888,7 +5888,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_template"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "borsh 0.9.4",
  "getrandom 0.2.9",

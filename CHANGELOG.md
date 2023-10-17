@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.23.1
+
+Namada 0.23.1 is a patch release fixing a potential ledger crash on the pgf module.
+
+### BUG FIXES
+
+- Fixed a bug that would cause the ledger to crash on a failed PGF payment.
+  ([\#1991](https://github.com/anoma/namada/pull/1991))
+
 ## v0.23.0
 
 Namada is a minor release that improves the ethereum bridge, the IBC mechanism, and fixes some general protocol bugs.
