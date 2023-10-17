@@ -155,9 +155,9 @@ impl BlockResults {
     }
 }
 
-/// Height of a block, i.e. the level.
+/// Height of a block, i.e. the level. The `default` is the
+/// [`BlockHeight::sentinel`] value, which doesn't correspond to any block.
 #[derive(
-    Default,
     Clone,
     Copy,
     BorshSerialize,
@@ -173,6 +173,12 @@ impl BlockResults {
     Deserialize,
 )]
 pub struct BlockHeight(pub u64);
+
+impl Default for BlockHeight {
+    fn default() -> Self {
+        Self::sentinel()
+    }
+}
 
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -267,6 +273,17 @@ impl TryFrom<i64> for BlockHeight {
     }
 }
 impl BlockHeight {
+    /// The first block height 1.
+    pub const fn first() -> Self {
+        Self(1)
+    }
+
+    /// A sentinel value block height 0 may be used before any block is
+    /// committed or in queries to read from the latest committed block.
+    pub const fn sentinel() -> Self {
+        Self(0)
+    }
+
     /// Get the height of the next block
     pub fn next_height(&self) -> BlockHeight {
         BlockHeight(self.0 + 1)

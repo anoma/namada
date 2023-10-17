@@ -142,8 +142,8 @@ pub struct BlockStorage<H: StorageHasher> {
     pub hash: BlockHash,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise, it is the
-    /// height of the most recently committed block, or `BlockHeight(0)` if no
-    /// block has been committed yet.
+    /// height of the most recently committed block, or `BlockHeight::sentinel`
+    /// (0) if no block has been committed yet.
     pub height: BlockHeight,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise it is the
