@@ -12,6 +12,7 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::ethereum_structs::EthBridgeEvent;
 use namada_core::types::internal::ExpiredTx;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::token::Amount;
@@ -77,14 +78,13 @@ where
 
     let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
-    changed_keys.append(&mut apply_updates(
-        wl_storage,
-        updates,
-        voting_powers,
-    )?);
+    let (mut apply_updates_keys, eth_bridge_events) =
+        apply_updates(wl_storage, updates, voting_powers)?;
+    changed_keys.append(&mut apply_updates_keys);
 
     Ok(TxResult {
         changed_keys,
+        eth_bridge_events,
         ..Default::default()
     })
 }
@@ -98,7 +98,7 @@ pub(super) fn apply_updates<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     updates: HashSet<EthMsgUpdate>,
     voting_powers: HashMap<(Address, BlockHeight), Amount>,
-) -> Result<ChangedKeys>
+) -> Result<(ChangedKeys, BTreeSet<EthBridgeEvent>)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -110,6 +110,7 @@ where
     );
 
     let mut changed_keys = BTreeSet::default();
+    let mut tx_events = BTreeSet::default();
     let mut confirmed = vec![];
     for update in updates {
         // The order in which updates are applied to storage does not matter.
@@ -123,17 +124,19 @@ where
     }
     if confirmed.is_empty() {
         tracing::debug!("No events were newly confirmed");
-        return Ok(changed_keys);
+        return Ok((changed_keys, tx_events));
     }
     tracing::debug!(n = confirmed.len(), "Events were newly confirmed",);
 
     // Right now, the order in which events are acted on does not matter.
     // For `TransfersToNamada` events, they can happen in any order.
     for event in confirmed {
-        let mut changed = events::act_on(wl_storage, event)?;
+        let (mut changed, mut new_tx_events) =
+            events::act_on(wl_storage, event)?;
         changed_keys.append(&mut changed);
+        tx_events.append(&mut new_tx_events);
     }
-    Ok(changed_keys)
+    Ok((changed_keys, tx_events))
 }
 
 /// Apply an [`EthMsgUpdate`] to storage. Returns any keys changed and whether
@@ -366,7 +369,7 @@ mod tests {
             )],
         );
 
-        let changed_keys =
+        let (changed_keys, _) =
             apply_updates(&mut wl_storage, updates, voting_powers)?;
 
         let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
