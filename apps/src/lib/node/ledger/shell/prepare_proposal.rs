@@ -243,7 +243,7 @@ where
         if let TxType::Wrapper(wrapper) = tx.header().tx_type {
             // Check tx gas limit for tx size
             let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-            tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
+            tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
             // Check replay protection, safe to do here. Even if the tx is a
             // replay attempt, we can leave its hashes in the write log since,
