@@ -1161,13 +1161,12 @@ pub struct Epochs {
     /// Invariant: the values must be sorted in ascending order.
     pub first_block_heights: Vec<BlockHeight>,
 }
-
 impl Default for Epochs {
-    /// Initialize predecessor epochs, assuming starting on the epoch 0 and
-    /// block height 0.
+    /// Initialize predecessor epochs, assuming start of the first epoch at
+    /// block height 1.
     fn default() -> Self {
         Self {
-            first_block_heights: vec![BlockHeight::default()],
+            first_block_heights: vec![BlockHeight(1)],
         }
     }
 }
@@ -1618,7 +1617,7 @@ mod tests {
         println!("epochs {:#?}", epochs);
         assert_eq!(
             epochs.get_start_height_of_epoch(Epoch(0)),
-            Some(BlockHeight(0))
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
 
