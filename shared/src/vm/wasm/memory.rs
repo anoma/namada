@@ -6,7 +6,7 @@ use std::str::Utf8Error;
 use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
-use namada_core::ledger::gas::VM_MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_core::ledger::gas::DATA_ACCESS_GAS_PER_BYTE;
 use thiserror::Error;
 use wasmer::{
     vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
@@ -256,13 +256,16 @@ impl VmMemory for WasmMemory {
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let bytes = read_memory_bytes(memory, offset, len)?;
-        let gas = bytes.len() as u64 * VM_MEMORY_ACCESS_GAS_PER_BYTE;
+        let gas = bytes.len() as u64 * DATA_ACCESS_GAS_PER_BYTE;
         Ok((bytes, gas))
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
     fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
-        let gas = bytes.as_ref().len() as u64 * VM_MEMORY_ACCESS_GAS_PER_BYTE;
+        // No need for a separate gas multiplier for writes since we are only
+        // writing to memory and we already charge gas for every memory page
+        // allocated
+        let gas = bytes.as_ref().len() as u64 * DATA_ACCESS_GAS_PER_BYTE;
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         write_memory_bytes(memory, offset, bytes)?;
         Ok(gas)

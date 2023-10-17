@@ -8,7 +8,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
+use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::types::internal::KeyVal;
+use namada_core::types::storage::TX_INDEX_LENGTH;
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -16,7 +18,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, VpGasMeter, STORAGE_ACCESS_GAS_PER_BYTE};
+use crate::ledger::gas::{self, VpGasMeter, DATA_ACCESS_GAS_PER_BYTE};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -1378,10 +1380,12 @@ where
     let addr = Address::decode(&addr).map_err(TxRuntimeError::AddressError)?;
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
-    verifiers.insert(addr);
     // This is not a storage write, use the same multiplier used for a storage
     // read
-    tx_charge_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
+    tx_charge_gas(env, addr_len * DATA_ACCESS_GAS_PER_BYTE)?;
+    verifiers.insert(addr);
+
+    Ok(())
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
@@ -1511,8 +1515,8 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_charge_gas(env, TX_INDEX_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE)?;
     let tx_index = unsafe { env.ctx.tx_index.get() };
-    tx_charge_gas(env, crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(tx_index.0)
 }
 
@@ -1586,8 +1590,12 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
+    // Gas for getting the native token address from storage
+    tx_charge_gas(
+        env,
+        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * DATA_ACCESS_GAS_PER_BYTE,
+    )?;
     let storage = unsafe { env.ctx.storage.get() };
-    tx_charge_gas(env, STORAGE_ACCESS_GAS_PER_BYTE)?;
     let native_token = storage.native_token.clone();
     let native_token_string = native_token.encode();
     let gas = env
@@ -1612,6 +1620,7 @@ where
     let (header, gas) = storage
         .get_block_header(Some(BlockHeight(height)))
         .map_err(TxRuntimeError::StorageError)?;
+    tx_charge_gas(env, gas)?;
     Ok(match header {
         Some(h) => {
             let value = h.serialize_to_vec();
@@ -1621,7 +1630,6 @@ where
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
-            tx_charge_gas(env, gas)?;
             len
         }
         None => HostEnvResult::Fail.to_i64(),
