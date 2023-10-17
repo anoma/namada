@@ -1640,14 +1640,15 @@ mod tests {
             Some(BlockHeight(10))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch_start_height(BlockHeight(0)), None);
         assert_eq!(
-            epochs.get_epoch_start_height(BlockHeight(0)),
-            Some(BlockHeight(0))
+            epochs.get_epoch_start_height(BlockHeight(1)),
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(
             epochs.get_epoch_start_height(BlockHeight(9)),
-            Some(BlockHeight(0))
+            Some(BlockHeight(1))
         );
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
         assert_eq!(
