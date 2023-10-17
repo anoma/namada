@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
@@ -36,7 +36,7 @@ use crate::io::Io;
 use crate::proto::Tx;
 use crate::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
-    RPC,
+    TransferToEthereumStatus, RPC,
 };
 use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
@@ -698,6 +698,37 @@ where
 
     display_line!(io, "{transf_result:?}");
     Ok(())
+}
+
+/// Query the status of a set of transfers to Ethreum, indexed
+/// by their keccak hash.
+///
+/// Any unrecognized hashes (i.e. not pertaining to transfers
+/// in Namada's event log nor the Bridge pool) will be flagged
+/// as such. Unrecognized transfers could have been relayed to
+/// Ethereum, or could have expired from the Bridge pool. If
+/// these scenarios verify, it should be possible to retrieve
+/// the status of these transfers by querying CometBFT's block
+/// data.
+pub async fn query_eth_transfer_status<C, T>(
+    client: &C,
+    transfers: T,
+) -> Result<TransferToEthereumStatus, Error>
+where
+    C: Client + Sync,
+    T: Into<HashSet<KeccakHash>>,
+{
+    RPC.shell()
+        .eth_bridge()
+        .pending_eth_transfer_status(
+            client,
+            Some(transfers.into().serialize_to_vec()),
+            None,
+            false,
+        )
+        .await
+        .map_err(|e| Error::Query(QueryError::General(e.to_string())))
+        .map(|result| result.data)
 }
 
 mod recommendations {
