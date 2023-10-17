@@ -1012,8 +1012,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_vp_code_path: vp_implicit_path.into(),
         implicit_vp_sha256: Default::default(),
         max_signatures_per_transaction: 15,
-        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (60 = min_duration) */
+        epochs_per_year: 365, /* seconds in yr (60*60*24*365) div seconds
+                               * per epoch (60 = min_duration) */
         pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),

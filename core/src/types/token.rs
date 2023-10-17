@@ -598,6 +598,20 @@ impl Mul<Amount> for Amount {
 
 /// A combination of Euclidean division and fractions:
 /// x*(a,b) = (a*(x//b), x%b).
+impl Mul<(u128, u128)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (u128, u128)) -> Self::Output {
+        let amt = Amount {
+            raw: (self.raw / rhs.1) * Uint::from(rhs.0),
+        };
+        self.raw %= rhs.1;
+        (amt, self)
+    }
+}
+
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b).
 impl Mul<(u64, u64)> for Amount {
     type Output = (Amount, Amount);
 
@@ -816,18 +830,18 @@ pub const CONVERSION_KEY_PREFIX: &str = "conv";
 /// Key segment prefix for pinned shielded transactions
 pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Last calculated inflation value handed out
-pub const MASP_LAST_INFLATION: &str = "last_inflation";
+pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
 /// The last locked ratio
-pub const MASP_LAST_LOCKED_RATIO: &str = "last_locked_ratio";
+pub const MASP_LAST_LOCKED_RATIO_KEY: &str = "last_locked_ratio";
 /// The key for the nominal proportional gain of a shielded pool for a given
 /// asset
-pub const MASP_KP_GAIN_KEY: &str = "proptional_gain";
+pub const MASP_KP_GAIN_KEY: &str = "proportional_gain";
 /// The key for the nominal derivative gain of a shielded pool for a given asset
 pub const MASP_KD_GAIN_KEY: &str = "derivative_gain";
 /// The key for the locked ratio target for a given asset
 pub const MASP_LOCKED_RATIO_TARGET_KEY: &str = "locked_ratio_target";
 /// The key for the max reward rate for a given asset
-pub const MASP_MAX_REWARD_RATE: &str = "max_reward_rate";
+pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 
 /// Gets the key for the given token address, error with the given
 /// message to expect if the key is not in the address
@@ -874,22 +888,22 @@ pub fn minted_balance_key(token_addr: &Address) -> Key {
 }
 
 /// Obtain the nominal proportional key for the given token
-pub fn masp_kp_gain(token_addr: &Address) -> Key {
+pub fn masp_kp_gain_key(token_addr: &Address) -> Key {
     key_of_token(token_addr, MASP_KP_GAIN_KEY, "nominal proproitonal gains")
 }
 
 /// Obtain the nominal derivative key for the given token
-pub fn masp_kd_gain(token_addr: &Address) -> Key {
+pub fn masp_kd_gain_key(token_addr: &Address) -> Key {
     key_of_token(token_addr, MASP_KD_GAIN_KEY, "nominal proproitonal gains")
 }
 
 /// The max reward rate key for the given token
-pub fn masp_max_reward_rate(token_addr: &Address) -> Key {
-    key_of_token(token_addr, MASP_MAX_REWARD_RATE, "max reward rate")
+pub fn masp_max_reward_rate_key(token_addr: &Address) -> Key {
+    key_of_token(token_addr, MASP_MAX_REWARD_RATE_KEY, "max reward rate")
 }
 
 /// Obtain the locked target ratio key for the given token
-pub fn masp_locked_ratio_target(token_addr: &Address) -> Key {
+pub fn masp_locked_ratio_target_key(token_addr: &Address) -> Key {
     key_of_token(
         token_addr,
         MASP_LOCKED_RATIO_TARGET_KEY,
@@ -920,7 +934,7 @@ pub struct Parameters {
     /// Shielded Pool nominal proportional gain for the given token
     pub kp_gain_nom: Dec,
     /// Locked ratio for the given token
-    pub locked_ratio_target_key: Dec,
+    pub locked_ratio_target: Dec,
 }
 
 impl Parameters {
@@ -937,19 +951,19 @@ impl Parameters {
             max_reward_rate: max_rate,
             kd_gain_nom,
             kp_gain_nom,
-            locked_ratio_target_key: locked_target,
+            locked_ratio_target: locked_target,
         } = self;
         wl_storage
-            .write(&masp_max_reward_rate(address), max_rate)
+            .write(&masp_max_reward_rate_key(address), max_rate)
             .expect("max reward rate for the given asset must be initialized");
         wl_storage
-            .write(&masp_locked_ratio_target(address), locked_target)
+            .write(&masp_locked_ratio_target_key(address), locked_target)
             .expect("locked ratio must be initialized");
         wl_storage
-            .write(&masp_kp_gain(address), kp_gain_nom)
+            .write(&masp_kp_gain_key(address), kp_gain_nom)
             .expect("The nominal proportional gain must be initialized");
         wl_storage
-            .write(&masp_kd_gain(address), kd_gain_nom)
+            .write(&masp_kd_gain_key(address), kd_gain_nom)
             .expect("The nominal derivative gain must be initialized");
     }
 }
@@ -960,7 +974,7 @@ impl Default for Parameters {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.1").unwrap(),
             kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_ratio_target_key: Dec::from_str("0.1").unwrap(),
+            locked_ratio_target: Dec::from_str("0.1").unwrap(),
         }
     }
 }
@@ -1032,20 +1046,20 @@ pub fn is_masp_key(key: &Key) -> bool {
                     || key.starts_with(PIN_KEY_PREFIX)))
 }
 
-/// The last locked ratio of a token
-pub fn masp_last_locked_ratio(token_address: &Address) -> Key {
+/// Obtain the storage key for the last locked ratio of a token
+pub fn masp_last_locked_ratio_key(token_address: &Address) -> Key {
     key_of_token(
         token_address,
-        MASP_LAST_LOCKED_RATIO,
+        MASP_LAST_LOCKED_RATIO_KEY,
         "cannot obtain storage key for the last locked ratio",
     )
 }
 
-/// The last inflation of a token
-pub fn masp_last_inflation(token_address: &Address) -> Key {
+/// Obtain the storage key for the last inflation of a token
+pub fn masp_last_inflation_key(token_address: &Address) -> Key {
     key_of_token(
         token_address,
-        MASP_LAST_INFLATION,
+        MASP_LAST_INFLATION_KEY,
         "cannot obtain storage key for the last inflation rate",
     )
 }
@@ -1336,10 +1350,10 @@ pub mod testing {
         H: 'static + ledger_storage::StorageHasher,
     {
         use crate::ledger::parameters::storage::get_epochs_per_year_key;
-        use crate::types::address::masp_rewards;
+        use crate::types::address::tokens;
 
-        let masp_rewards = masp_rewards();
-        let masp_reward_keys: Vec<_> = masp_rewards.keys().collect();
+        let tokens = tokens();
+        let masp_reward_keys: Vec<_> = tokens.keys().collect();
 
         wl_storage
             .write(&get_epochs_per_year_key(), epochs_per_year)
@@ -1348,7 +1362,7 @@ pub mod testing {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kd_gain_nom: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_ratio_target_key: Dec::zero(),
+            locked_ratio_target: Dec::zero(),
         };
 
         for address in masp_reward_keys {
@@ -1360,10 +1374,10 @@ pub mod testing {
                 )
                 .unwrap();
             wl_storage
-                .write(&masp_last_inflation(address), Amount::zero())
+                .write(&masp_last_inflation_key(address), Amount::zero())
                 .expect("inflation ought to be written");
             wl_storage
-                .write(&masp_last_locked_ratio(address), Dec::zero())
+                .write(&masp_last_locked_ratio_key(address), Dec::zero())
                 .expect("last locked set default");
         }
     }

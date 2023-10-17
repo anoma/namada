@@ -618,10 +618,8 @@ where
     /// with respect to the previous epoch.
     fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch.prev();
-        // Get input values needed for the PD controller for PoS and MASP.
+        // Get input values needed for the PD controller for PoS.
         // Run the PD controllers to calculate new rates.
-        //
-        // MASP is included below just for some completeness.
 
         let params = read_pos_params(&self.wl_storage)?;
 
@@ -653,15 +651,6 @@ where
         let pos_locked_ratio_target = params.target_staked_ratio;
         let pos_max_inflation_rate = params.max_inflation_rate;
 
-        // TODO: properly fetch these values (arbitrary for now)
-        let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Dec::new(5, 1).expect("Cannot fail");
-        let masp_locked_ratio_last = Dec::new(5, 1).expect("Cannot fail");
-        let masp_max_inflation_rate = Dec::new(2, 1).expect("Cannot fail");
-        let masp_last_inflation_rate = Dec::new(12, 2).expect("Cannot fail");
-        let masp_p_gain = Dec::new(1, 1).expect("Cannot fail");
-        let masp_d_gain = Dec::new(1, 1).expect("Cannot fail");
-
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
             locked_tokens: pos_locked_supply,
@@ -675,27 +664,12 @@ where
             d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
         };
-        let _masp_controller = inflation::RewardsController {
-            locked_tokens: masp_locked_supply,
-            total_tokens,
-            total_native_tokens: total_tokens,
-            locked_ratio_target: masp_locked_ratio_target,
-            locked_ratio_last: masp_locked_ratio_last,
-            max_reward_rate: masp_max_inflation_rate,
-            last_inflation_amount: token::Amount::from(
-                masp_last_inflation_rate,
-            ),
-            p_gain_nom: masp_p_gain,
-            d_gain_nom: masp_d_gain,
-            epochs_per_year,
-        };
 
         // Run the rewards controllers
         let inflation::ValsToUpdate {
             locked_ratio,
             inflation,
         } = pos_controller.run();
-        // let new_masp_vals = _masp_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self

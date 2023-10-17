@@ -10,6 +10,7 @@ use masp_primitives::sapling::Node;
 
 use crate::ledger::inflation::{RewardsController, ValsToUpdate};
 use crate::ledger::parameters;
+use crate::ledger::storage_api::token::read_denom;
 use crate::ledger::storage_api::{StorageRead, StorageWrite};
 use crate::types::address::Address;
 use crate::types::dec::Dec;
@@ -17,18 +18,11 @@ use crate::types::storage::Epoch;
 use crate::types::token::MaspDenom;
 use crate::types::{address, token};
 
-/// Inflation is implicitly denominated by this value. The lower this figure,
-/// the less precise inflation computations are. The higher this figure, the
-/// larger the fixed-width types that are required to carry out inflation
-/// computations. This value should be fixed constant for each asset type - here
-/// we have simplified it and made it constant across asset types.
-const PRECISION: u64 = 100;
-
 /// A representation of the conversion state
 #[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct ConversionState {
     /// The last amount of the native token distributed
-    pub normed_inflation: Option<u32>,
+    pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -44,11 +38,20 @@ pub struct ConversionState {
 pub fn calculate_masp_rewards<D, H>(
     wl_storage: &mut super::WlStorage<D, H>,
     addr: &Address,
-) -> crate::ledger::storage_api::Result<(u32, u32)>
+) -> crate::ledger::storage_api::Result<(u128, u128)>
 where
     D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
     H: 'static + super::StorageHasher,
 {
+    let denomination = read_denom(wl_storage, addr).unwrap().unwrap();
+    // Inflation is implicitly denominated by this value. The lower this
+    // figure, the less precise inflation computations are. This is especially
+    // problematic when inflation is coming from a token with much higher
+    // denomination than the native token. The higher this figure, the higher
+    // the threshold of holdings required in order to receive non-zero rewards.
+    // This value should be fixed constant for each asset type.
+    let precision = 10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3);
+
     let masp_addr = address::masp();
     // Query the storage for information
 
@@ -69,38 +72,33 @@ where
 
     let epochs_per_year: u64 = wl_storage
         .read(&parameters::storage::get_epochs_per_year_key())?
-        .expect("");
+        .expect("epochs per year should properly decode");
 
     //// Values from the last epoch
     let last_inflation: token::Amount = wl_storage
-        .read(&token::masp_last_inflation(addr))
-        .expect("failure to read last inflation")
-        .expect("");
+        .read(&token::masp_last_inflation_key(addr))?
+        .expect("failure to read last inflation");
 
     let last_locked_ratio: Dec = wl_storage
-        .read(&token::masp_last_locked_ratio(addr))
-        .expect("failure to read last inflation")
-        .expect("");
+        .read(&token::masp_last_locked_ratio_key(addr))?
+        .expect("failure to read last inflation");
 
     //// Parameters for each token
     let max_reward_rate: Dec = wl_storage
-        .read(&token::masp_max_reward_rate(addr))
-        .expect("max reward should properly decode")
-        .expect("");
+        .read(&token::masp_max_reward_rate_key(addr))?
+        .expect("max reward should properly decode");
 
     let kp_gain_nom: Dec = wl_storage
-        .read(&token::masp_kp_gain(addr))
-        .expect("kp_gain_nom reward should properly decode")
-        .expect("");
+        .read(&token::masp_kp_gain_key(addr))?
+        .expect("kp_gain_nom reward should properly decode");
 
     let kd_gain_nom: Dec = wl_storage
-        .read(&token::masp_kd_gain(addr))
-        .expect("kd_gain_nom reward should properly decode")
-        .expect("");
+        .read(&token::masp_kd_gain_key(addr))?
+        .expect("kd_gain_nom reward should properly decode");
 
     let locked_target_ratio: Dec = wl_storage
-        .read(&token::masp_locked_ratio_target(addr))?
-        .expect("");
+        .read(&token::masp_locked_ratio_target_key(addr))?
+        .expect("locked ratio target should properly decode");
 
     // Creating the PD controller for handing out tokens
     let controller = RewardsController {
@@ -126,10 +124,11 @@ where
     // Since we must put the notes in a compatible format with the
     // note format, we must make the inflation amount discrete.
     let noterized_inflation = if total_token_in_masp.is_zero() {
-        0u32
+        0u128
     } else {
         crate::types::uint::Uint::try_into(
-            (inflation.raw_amount() * PRECISION)
+            (inflation.raw_amount()
+                * crate::types::uint::Uint::from(precision))
                 / total_token_in_masp.raw_amount(),
         )
         .unwrap()
@@ -163,24 +162,21 @@ where
     // otherwise we will have an inaccurate view of inflation
     wl_storage
         .write(
-            &token::masp_last_inflation(addr),
-            (total_token_in_masp / PRECISION) * u64::from(noterized_inflation),
+            &token::masp_last_inflation_key(addr),
+            token::Amount::from_uint(
+                (total_token_in_masp.raw_amount() / precision)
+                    * crate::types::uint::Uint::from(noterized_inflation),
+                0,
+            )
+            .unwrap(),
         )
         .expect("unable to encode new inflation rate (Decimal)");
 
     wl_storage
-        .write(&token::masp_last_locked_ratio(addr), locked_ratio)
+        .write(&token::masp_last_locked_ratio_key(addr), locked_ratio)
         .expect("unable to encode new locked ratio (Decimal)");
 
-    // to make it conform with the expected output, we need to
-    // move it to a ratio of x/100 to match the masp_rewards
-    // function This may be unneeded, as we could describe it as a
-    // ratio of x/1
-
-    Ok((
-        noterized_inflation,
-        PRECISION.try_into().expect("inflation precision too large"),
-    ))
+    Ok((noterized_inflation, precision))
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -196,7 +192,7 @@ where
     use std::cmp::Ordering;
 
     use masp_primitives::ff::PrimeField;
-    use masp_primitives::transaction::components::I32Sum as MaspAmount;
+    use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
@@ -288,12 +284,12 @@ where
                     (addr.clone(), denom),
                     (MaspAmount::from_pair(
                         old_asset,
-                        -(*normed_inflation as i32),
+                        -(*normed_inflation as i128),
                     )
                     .unwrap()
                         + MaspAmount::from_pair(
                             new_asset,
-                            new_normed_inflation as i32,
+                            new_normed_inflation as i128,
                         )
                         .unwrap())
                     .into(),
@@ -320,13 +316,13 @@ where
                 // intermediate tokens cancel/ telescope out
                 current_convs.insert(
                     (addr.clone(), denom),
-                    (MaspAmount::from_pair(old_asset, -(reward.1 as i32))
+                    (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
                         .unwrap()
-                        + MaspAmount::from_pair(new_asset, reward.1 as i32)
+                        + MaspAmount::from_pair(new_asset, reward.1 as i128)
                             .unwrap()
                         + MaspAmount::from_pair(
                             reward_assets[denom as usize],
-                            real_reward as i32,
+                            real_reward as i128,
                         )
                         .unwrap())
                     .into(),

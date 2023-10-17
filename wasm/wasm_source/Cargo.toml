@@ -43,7 +43,7 @@ once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "50acc5028fbcd52a05970fe7991c7850ab04358e", optional = true }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "1345b463e8fa3b3a6fa13e4a43fb1c410690ad62", optional = true }
 ripemd = "0.1"
 
 [dev-dependencies]

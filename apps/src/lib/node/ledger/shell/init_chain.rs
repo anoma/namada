@@ -338,11 +338,14 @@ where
             // Init token parameters and last inflation and caching rates
             parameters.init_storage(&address, &mut self.wl_storage);
             self.wl_storage
-                .write(&token::masp_last_inflation(&address), last_inflation)
+                .write(
+                    &token::masp_last_inflation_key(&address),
+                    last_inflation,
+                )
                 .unwrap();
             self.wl_storage
                 .write(
-                    &token::masp_last_locked_ratio(&address),
+                    &token::masp_last_locked_ratio_key(&address),
                     last_locked_ratio,
                 )
                 .unwrap();
