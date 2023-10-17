@@ -503,14 +503,19 @@ mod test {
     use std::collections::BTreeMap;
 
     use namada::ledger::storage::DBIter;
+    use namada::types::chain::ChainId;
+    use namada::types::storage::BlockHeight;
 
-    use crate::node::ledger::shell::test_utils::{self, TestShell};
+    use crate::facade::tendermint_proto::abci::RequestInitChain;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::shell::test_utils::TestShell;
 
     /// Test that the init-chain handler never commits changes directly to the
     /// DB.
     #[test]
     fn test_init_chain_doesnt_commit_db() {
-        let (shell, _recv, _, _) = test_utils::setup();
+        let (mut shell, _recv, _eth_receiver, _control_receiver) =
+            TestShell::new_at_height(BlockHeight::default());
 
         // Collect all storage key-vals into a sorted map
         let store_block_state = |shell: &TestShell| -> BTreeMap<_, _> {
@@ -526,6 +531,19 @@ mod test {
         // Store the full state in sorted map
         let initial_storage_state: std::collections::BTreeMap<String, Vec<u8>> =
             store_block_state(&shell);
+
+        // Initialize the chain
+        shell.init_chain(
+            RequestInitChain {
+                time: Some(Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                chain_id: ChainId::default().to_string(),
+                ..Default::default()
+            },
+            1,
+        );
 
         // Store the full state again
         let storage_state: std::collections::BTreeMap<String, Vec<u8>> =
