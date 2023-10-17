@@ -3087,12 +3087,11 @@ where
 {
     // TODO: our method of applying slashes is not correct! This needs review
 
-    println!("FN BOND AMOUNT");
     let params = read_pos_params(storage)?;
 
     // TODO: apply rewards
     let slashes = find_validator_slashes(storage, &bond_id.validator)?;
-    dbg!(&slashes);
+    // dbg!(&slashes);
     let slash_rates =
         slashes
             .iter()
@@ -3101,7 +3100,7 @@ where
                 *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
                 map
             });
-    dbg!(&slash_rates);
+    // dbg!(&slash_rates);
 
     // Accumulate incoming redelegations slashes from source validator, if any.
     // This ensures that if there're slashes on both src validator and dest
@@ -3158,13 +3157,13 @@ where
         *redelegation_slashes.entry(redelegation_end).or_default() +=
             delta - slashed_delta;
     }
-    dbg!(&redelegation_slashes);
+    // dbg!(&redelegation_slashes);
 
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
     let mut total_active = token::Amount::zero();
     for next in bonds.iter(storage)? {
-        let (bond_epoch, delta) = dbg!(next?);
+        let (bond_epoch, delta) = next?;
         if bond_epoch > epoch {
             continue;
         }
@@ -3200,7 +3199,7 @@ where
         // }
         total_active += slashed_delta;
     }
-    dbg!(&total_active);
+    // dbg!(&total_active);
 
     // Add unbonds that are still contributing to stake
     let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
@@ -3236,7 +3235,7 @@ where
             total_active += slashed_delta;
         }
     }
-    dbg!(&total_active);
+    // dbg!(&total_active);
 
     if bond_id.validator != bond_id.source {
         // Add outgoing redelegations that are still contributing to the source
@@ -3283,7 +3282,7 @@ where
                 total_active += slashed_delta;
             }
         }
-        dbg!(&total_active);
+        // dbg!(&total_active);
 
         // Add outgoing redelegation unbonds that are still contributing to
         // the source validator's stake
@@ -3339,7 +3338,7 @@ where
             }
         }
     }
-    dbg!(&total_active);
+    // dbg!(&total_active);
 
     Ok(total_active)
 }
