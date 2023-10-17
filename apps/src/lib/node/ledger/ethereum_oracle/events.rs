@@ -3,20 +3,16 @@ pub mod eth_events {
     use std::str::FromStr;
 
     use ethbridge_bridge_events::{
-        BridgeEvents, TransferToErcFilter, TransferToNamadaFilter,
+        BridgeEvents, TransferToChainFilter, TransferToErcFilter,
+        ValidatorSetUpdateFilter,
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
-    use ethbridge_governance_events::{
-        GovernanceEvents, NewContractFilter, UpdateBridgeWhitelistFilter,
-        UpgradedContractFilter, ValidatorSetUpdateFilter,
-    };
     use namada::core::types::ethereum_structs;
-    use namada::eth_bridge::ethers::contract::EthEvent;
     use namada::types::address::Address;
     use namada::types::ethereum_events::{
-        EthAddress, EthereumEvent, TokenWhitelist, TransferToEthereum,
-        TransferToNamada, Uint,
+        EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada, Uint,
     };
+    use namada::types::hash::Hash;
     use namada::types::keccak::KeccakHash;
     use namada::types::token::Amount;
     use num256::Uint256;
@@ -70,20 +66,17 @@ pub mod eth_events {
                     TransferToErcFilter {
                         nonce,
                         transfers,
-                        valid_map,
                         relayer_address,
                     },
                 )) => EthereumEvent::TransfersToEthereum {
                     nonce: nonce.parse_uint256()?,
                     transfers: transfers.parse_transfer_to_eth_array()?,
-                    valid_transfers_map: valid_map,
                     relayer: relayer_address.parse_address()?,
                 },
-                RawEvents::Bridge(BridgeEvents::TransferToNamadaFilter(
-                    TransferToNamadaFilter {
+                RawEvents::Bridge(BridgeEvents::TransferToChainFilter(
+                    TransferToChainFilter {
                         nonce,
                         transfers,
-                        valid_map,
                         confirmations: requested_confirmations,
                     },
                 )) => {
@@ -96,59 +89,15 @@ pub mod eth_events {
                         nonce: nonce.parse_uint256()?,
                         transfers: transfers
                             .parse_transfer_to_namada_array()?,
-                        valid_transfers_map: valid_map,
                     }
                 }
-                RawEvents::Governance(GovernanceEvents::NewContractFilter(
-                    NewContractFilter { name: _, addr: _ },
-                )) => {
-                    return Err(Error::NotInUse(
-                        NewContractFilter::name().into(),
-                    ));
-                }
-                RawEvents::Governance(
-                    GovernanceEvents::UpdateBridgeWhitelistFilter(
-                        UpdateBridgeWhitelistFilter {
-                            nonce,
-                            tokens,
-                            token_cap,
-                        },
-                    ),
-                ) => {
-                    let mut whitelist = vec![];
-
-                    for (token, cap) in
-                        tokens.into_iter().zip(token_cap.into_iter())
-                    {
-                        whitelist.push(TokenWhitelist {
-                            token: token.parse_eth_address()?,
-                            cap: cap.parse_amount()?,
-                        });
-                    }
-
-                    EthereumEvent::UpdateBridgeWhitelist {
-                        nonce: nonce.parse_uint256()?,
-                        whitelist,
-                    }
-                }
-                RawEvents::Governance(
-                    GovernanceEvents::UpgradedContractFilter(
-                        UpgradedContractFilter { name: _, addr: _ },
-                    ),
-                ) => {
-                    return Err(Error::NotInUse(
-                        UpgradedContractFilter::name().into(),
-                    ));
-                }
-                RawEvents::Governance(
-                    GovernanceEvents::ValidatorSetUpdateFilter(
-                        ValidatorSetUpdateFilter {
-                            validator_set_nonce,
-                            bridge_validator_set_hash,
-                            governance_validator_set_hash,
-                        },
-                    ),
-                ) => EthereumEvent::ValidatorSetUpdate {
+                RawEvents::Bridge(BridgeEvents::ValidatorSetUpdateFilter(
+                    ValidatorSetUpdateFilter {
+                        validator_set_nonce,
+                        bridge_validator_set_hash,
+                        governance_validator_set_hash,
+                    },
+                )) => EthereumEvent::ValidatorSetUpdate {
                     nonce: validator_set_nonce.into(),
                     bridge_validator_hash: bridge_validator_set_hash
                         .parse_keccak()?,
@@ -178,24 +127,33 @@ pub mod eth_events {
         };
     }
 
-    /// Trait to add parsing methods to foreign types.
-    trait Parse: Sized {
-        parse_method! { parse_eth_address -> EthAddress }
-        parse_method! { parse_address -> Address }
-        parse_method! { parse_amount -> Amount }
-        parse_method! { parse_u32 -> u32 }
-        parse_method! { parse_uint256 -> Uint }
-        parse_method! { parse_bool -> bool }
-        parse_method! { parse_string -> String }
-        parse_method! { parse_keccak -> KeccakHash }
-        parse_method! { parse_amount_array -> Vec<Amount> }
-        parse_method! { parse_eth_address_array -> Vec<EthAddress> }
-        parse_method! { parse_address_array -> Vec<Address> }
-        parse_method! { parse_string_array -> Vec<String> }
-        parse_method! { parse_transfer_to_namada_array -> Vec<TransferToNamada> }
-        parse_method! { parse_transfer_to_namada -> TransferToNamada }
-        parse_method! { parse_transfer_to_eth_array -> Vec<TransferToEthereum> }
-        parse_method! { parse_transfer_to_eth -> TransferToEthereum }
+    macro_rules! trait_parse_def {
+        ($($name:ident -> $type:ty;)*) => {
+            /// Trait to add parsing methods to foreign types.
+            trait Parse: Sized {
+                $( parse_method!($name -> $type); )*
+            }
+        }
+    }
+
+    trait_parse_def! {
+        parse_address -> Address;
+        parse_address_array -> Vec<Address>;
+        parse_amount -> Amount;
+        parse_amount_array -> Vec<Amount>;
+        parse_bool -> bool;
+        parse_eth_address -> EthAddress;
+        parse_eth_address_array -> Vec<EthAddress>;
+        parse_hash -> Hash;
+        parse_keccak -> KeccakHash;
+        parse_string -> String;
+        parse_string_array -> Vec<String>;
+        parse_transfer_to_eth -> TransferToEthereum;
+        parse_transfer_to_eth_array -> Vec<TransferToEthereum>;
+        parse_transfer_to_namada -> TransferToNamada;
+        parse_transfer_to_namada_array -> Vec<TransferToNamada>;
+        parse_u32 -> u32;
+        parse_uint256 -> Uint;
     }
 
     impl Parse for ethabi::Address {
@@ -217,7 +175,13 @@ pub mod eth_events {
 
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
-            Ok(Amount::from(self.as_u64()))
+            let uint = {
+                use namada::core::types::uint::Uint as NamadaUint;
+                let mut num_buf = [0; 32];
+                self.to_little_endian(&mut num_buf);
+                NamadaUint::from_little_endian(&num_buf)
+            };
+            Amount::from_uint(uint, 0).map_err(|e| Error::Decode(e.to_string()))
         }
 
         fn parse_u32(self) -> Result<u32> {
@@ -239,6 +203,10 @@ pub mod eth_events {
         fn parse_keccak(self) -> Result<KeccakHash> {
             Ok(KeccakHash(self))
         }
+
+        fn parse_hash(self) -> Result<Hash> {
+            Ok(Hash(self))
+        }
     }
 
     impl Parse for Vec<ethabi::Uint> {
@@ -259,7 +227,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for Vec<ethereum_structs::NamadaTransfer> {
+    impl Parse for Vec<ethereum_structs::ChainTransfer> {
         fn parse_transfer_to_namada_array(
             self,
         ) -> Result<Vec<TransferToNamada>> {
@@ -270,7 +238,7 @@ pub mod eth_events {
         }
     }
 
-    impl Parse for ethereum_structs::NamadaTransfer {
+    impl Parse for ethereum_structs::ChainTransfer {
         fn parse_transfer_to_namada(self) -> Result<TransferToNamada> {
             let asset = self.from.parse_eth_address()?;
             let amount = self.amount.parse_amount()?;
@@ -298,17 +266,13 @@ pub mod eth_events {
         fn parse_transfer_to_eth(self) -> Result<TransferToEthereum> {
             let asset = self.from.parse_eth_address()?;
             let receiver = self.to.parse_eth_address()?;
-            let sender = self.sender.parse_address()?;
             let amount = self.amount.parse_amount()?;
-            let gas_payer = self.fee_from.parse_address()?;
-            let gas_amount = self.fee.parse_amount()?;
+            let checksum = self.data_digest.parse_hash()?;
             Ok(TransferToEthereum {
                 asset,
                 amount,
-                sender,
                 receiver,
-                gas_amount,
-                gas_payer,
+                checksum,
             })
         }
     }
@@ -331,12 +295,13 @@ pub mod eth_events {
         use assert_matches::assert_matches;
         use ethabi::ethereum_types::{H160, U256};
         use ethbridge_events::{
-            TRANSFER_TO_ERC_CODEC, TRANSFER_TO_NAMADA_CODEC,
-            UPDATE_BRIDGE_WHITELIST_CODEC, VALIDATOR_SET_UPDATE_CODEC,
+            TRANSFER_TO_CHAIN_CODEC, TRANSFER_TO_ERC_CODEC,
+            VALIDATOR_SET_UPDATE_CODEC,
         };
-        use namada::eth_bridge::ethers::abi::AbiEncode;
+        use namada::eth_bridge::ethers::contract::EthEvent;
 
         use super::*;
+        use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the
@@ -349,10 +314,9 @@ pub mod eth_events {
             let lower_than_min_confirmations = 5u64;
 
             let (codec, event) = (
-                TRANSFER_TO_NAMADA_CODEC,
-                TransferToNamadaFilter {
+                TRANSFER_TO_CHAIN_CODEC,
+                TransferToChainFilter {
                     transfers: vec![],
-                    valid_map: vec![],
                     nonce: 0.into(),
                     confirmations: lower_than_min_confirmations.into(),
                 },
@@ -360,7 +324,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations.clone(),
             )?;
 
@@ -373,48 +337,47 @@ pub mod eth_events {
             Ok(())
         }
 
-        /// Test decoding a [`TransferToNamadaFilter`] Ethereum event.
+        /// Test decoding a "Transfer to Namada" Ethereum event.
         #[test]
         fn test_transfer_to_namada_decode() {
             let data = vec![
+                170, 156, 23, 249, 166, 216, 156, 37, 67, 204, 150, 161, 103,
+                163, 161, 122, 243, 66, 109, 149, 141, 194, 27, 80, 238, 109,
+                40, 128, 254, 233, 54, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 96, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 160, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 95, 189, 178, 49, 86,
+                120, 175, 236, 179, 103, 240, 50, 217, 63, 100, 47, 100, 24,
+                10, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 95, 189,
-                178, 49, 86, 120, 175, 236, 179, 103, 240, 50, 217, 63, 100,
-                47, 100, 24, 10, 163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 84,
-                97, 116, 101, 115, 116, 49, 118, 52, 101, 104, 103, 119, 51,
-                54, 120, 117, 117, 110, 119, 100, 54, 57, 56, 57, 112, 114,
-                119, 100, 102, 107, 120, 113, 109, 110, 118, 115, 102, 106,
-                120, 115, 54, 110, 118, 118, 54, 120, 120, 117, 99, 114, 115,
-                51, 102, 51, 120, 99, 109, 110, 115, 51, 102, 99, 120, 100,
-                122, 114, 118, 118, 122, 57, 120, 118, 101, 114, 122, 118, 122,
-                114, 53, 54, 108, 101, 56, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 1,
+                0, 0, 0, 84, 97, 116, 101, 115, 116, 49, 118, 52, 101, 104,
+                103, 119, 51, 54, 120, 117, 117, 110, 119, 100, 54, 57, 56, 57,
+                112, 114, 119, 100, 102, 107, 120, 113, 109, 110, 118, 115,
+                102, 106, 120, 115, 54, 110, 118, 118, 54, 120, 120, 117, 99,
+                114, 115, 51, 102, 51, 120, 99, 109, 110, 115, 51, 102, 99,
+                120, 100, 122, 114, 118, 118, 122, 57, 120, 118, 101, 114, 122,
+                118, 122, 114, 53, 54, 108, 101, 56, 102, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
             ];
 
-            let raw: TransferToNamadaFilter = TRANSFER_TO_NAMADA_CODEC
-                .decode(&get_log(data))
+            let raw: TransferToChainFilter = TRANSFER_TO_CHAIN_CODEC
+                .decode(&ethabi::RawLog {
+                    topics: vec![TransferToChainFilter::signature()],
+                    data,
+                })
                 .expect("Test failed")
                 .try_into()
                 .expect("Test failed");
 
             assert_eq!(
                 raw.transfers,
-                vec![ethereum_structs::NamadaTransfer {
+                vec![ethereum_structs::ChainTransfer {
                     amount: 100u64.into(),
                     from: ethabi::Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
                     to: "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f".into(),
@@ -432,10 +395,9 @@ pub mod eth_events {
             let higher_than_min_confirmations = 200u64;
 
             let (codec, event) = (
-                TRANSFER_TO_NAMADA_CODEC,
-                TransferToNamadaFilter {
+                TRANSFER_TO_CHAIN_CODEC,
+                TransferToChainFilter {
                     transfers: vec![],
-                    valid_map: vec![],
                     nonce: 0u64.into(),
                     confirmations: higher_than_min_confirmations.into(),
                 },
@@ -443,7 +405,7 @@ pub mod eth_events {
             let pending_event = PendingEvent::decode(
                 codec,
                 arbitrary_block_height,
-                &get_log(event.encode()),
+                &event.get_log(),
                 min_confirmations,
             )
             .unwrap();
@@ -508,16 +470,15 @@ pub mod eth_events {
             let address: String =
                 "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
                     .into();
-            let nam_transfers = TransferToNamadaFilter {
+            let nam_transfers = TransferToChainFilter {
                 transfers: vec![
-                    ethereum_structs::NamadaTransfer {
+                    ethereum_structs::ChainTransfer {
                         amount: 0u64.into(),
                         from: H160([0; 20]),
                         to: address.clone(),
                     };
                     2
                 ],
-                valid_map: vec![true; 2],
                 nonce: 0u64.into(),
                 confirmations: 0u64.into(),
             };
@@ -526,14 +487,11 @@ pub mod eth_events {
                     ethereum_structs::Erc20Transfer {
                         from: H160([1; 20]),
                         to: H160([2; 20]),
-                        sender: address.clone(),
                         amount: 0u64.into(),
-                        fee_from: address.clone(),
-                        fee: 0u64.into(),
+                        data_digest: [0; 32],
                     };
                     2
                 ],
-                valid_map: vec![true; 2],
                 nonce: 0u64.into(),
                 relayer_address: address,
             };
@@ -542,16 +500,11 @@ pub mod eth_events {
                 bridge_validator_set_hash: [1; 32],
                 governance_validator_set_hash: [2; 32],
             };
-            let whitelist = UpdateBridgeWhitelistFilter {
-                nonce: 0u64.into(),
-                tokens: vec![H160([0; 20]); 2],
-                token_cap: vec![0u64.into(); 2],
-            };
             assert_eq!(
                 {
-                    let decoded: TransferToNamadaFilter =
-                        TRANSFER_TO_NAMADA_CODEC
-                            .decode(&get_log(nam_transfers.clone().encode()))
+                    let decoded: TransferToChainFilter =
+                        TRANSFER_TO_CHAIN_CODEC
+                            .decode(&nam_transfers.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -562,7 +515,7 @@ pub mod eth_events {
             assert_eq!(
                 {
                     let decoded: TransferToErcFilter = TRANSFER_TO_ERC_CODEC
-                        .decode(&get_log(eth_transfers.clone().encode()))
+                        .decode(&eth_transfers.clone().get_log())
                         .expect("Test failed")
                         .try_into()
                         .expect("Test failed");
@@ -574,7 +527,7 @@ pub mod eth_events {
                 {
                     let decoded: ValidatorSetUpdateFilter =
                         VALIDATOR_SET_UPDATE_CODEC
-                            .decode(&get_log(update.clone().encode()))
+                            .decode(&update.clone().get_log())
                             .expect("Test failed")
                             .try_into()
                             .expect("Test failed");
@@ -582,27 +535,6 @@ pub mod eth_events {
                 },
                 update
             );
-            assert_eq!(
-                {
-                    let decoded: UpdateBridgeWhitelistFilter =
-                        UPDATE_BRIDGE_WHITELIST_CODEC
-                            .decode(&get_log(whitelist.clone().encode()))
-                            .expect("Test failed")
-                            .try_into()
-                            .expect("Test failed");
-                    decoded
-                },
-                whitelist
-            );
-        }
-
-        /// Return an Ethereum events log, from the given encoded event
-        /// data.
-        fn get_log(data: Vec<u8>) -> ethabi::RawLog {
-            ethabi::RawLog {
-                data,
-                topics: vec![],
-            }
         }
     }
 }

@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use ethabi::ethereum_types as ethereum;
 
 use crate::proto::Signed;
 use crate::types::address::Address;
@@ -165,16 +164,16 @@ pub trait VotingPowersMapExt {
     /// sorted in descending order by voting power, as this is more efficient to
     /// deal with on the Ethereum side when working out if there is enough
     /// voting power for a given validator set update.
-    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>, Vec<Token>) {
+    fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>) {
         let sorted = self.get_sorted();
 
         let total_voting_power: token::Amount =
             sorted.iter().map(|&(_, &voting_power)| voting_power).sum();
 
-        // split the vec into three portions
-        sorted.into_iter().fold(
-            Default::default(),
-            |accum, (addr_book, &voting_power)| {
+        // split the vec into two portions
+        sorted
+            .into_iter()
+            .map(|(addr_book, &voting_power)| {
                 let voting_power: EthBridgeVotingPower =
                     FractionalVotingPower::new(
                         voting_power.into(),
@@ -186,22 +185,23 @@ pub trait VotingPowersMapExt {
                     )
                     .into();
 
-                let (mut hot_key_addrs, mut cold_key_addrs, mut voting_powers) =
-                    accum;
                 let &EthAddrBook {
-                    hot_key_addr: EthAddress(hot_key_addr),
-                    cold_key_addr: EthAddress(cold_key_addr),
+                    hot_key_addr,
+                    cold_key_addr,
                 } = addr_book;
 
-                hot_key_addrs
-                    .push(Token::Address(ethereum::H160(hot_key_addr)));
-                cold_key_addrs
-                    .push(Token::Address(ethereum::H160(cold_key_addr)));
-                voting_powers.push(Token::Uint(voting_power.into()));
-
-                (hot_key_addrs, cold_key_addrs, voting_powers)
-            },
-        )
+                (
+                    Token::FixedBytes(
+                        encode_validator_data(hot_key_addr, voting_power)
+                            .into(),
+                    ),
+                    Token::FixedBytes(
+                        encode_validator_data(cold_key_addr, voting_power)
+                            .into(),
+                    ),
+                )
+            })
+            .unzip()
     }
 
     /// Returns the bridge and governance keccak hashes of
@@ -211,13 +211,11 @@ pub trait VotingPowersMapExt {
         &self,
         next_epoch: Epoch,
     ) -> (KeccakHash, KeccakHash) {
-        let (hot_key_addrs, cold_key_addrs, voting_powers) =
-            self.get_abi_encoded();
+        let (bridge_validators, governance_validators) = self.get_abi_encoded();
         valset_upd_toks_to_hashes(
             next_epoch,
-            hot_key_addrs,
-            cold_key_addrs,
-            voting_powers,
+            bridge_validators,
+            governance_validators,
         )
     }
 }
@@ -227,23 +225,20 @@ pub trait VotingPowersMapExt {
 /// voting powers, normalized to `2^32`.
 pub fn valset_upd_toks_to_hashes(
     next_epoch: Epoch,
-    hot_key_addrs: Vec<Token>,
-    cold_key_addrs: Vec<Token>,
-    voting_powers: Vec<Token>,
+    bridge_validators: Vec<Token>,
+    governance_validators: Vec<Token>,
 ) -> (KeccakHash, KeccakHash) {
     let bridge_hash = compute_hash(
         next_epoch,
         BRIDGE_CONTRACT_VERSION,
         BRIDGE_CONTRACT_NAMESPACE,
-        hot_key_addrs,
-        voting_powers.clone(),
+        bridge_validators,
     );
     let governance_hash = compute_hash(
         next_epoch,
         GOVERNANCE_CONTRACT_VERSION,
         GOVERNANCE_CONTRACT_NAMESPACE,
-        cold_key_addrs,
-        voting_powers,
+        governance_validators,
     );
     (bridge_hash, governance_hash)
 }
@@ -286,21 +281,46 @@ fn compute_hash(
     contract_version: u8,
     contract_namespace: &str,
     validators: Vec<Token>,
-    voting_powers: Vec<Token>,
 ) -> KeccakHash {
     AbiEncode::keccak256(&[
         Token::Uint(contract_version.into()),
         Token::String(contract_namespace.into()),
         Token::Array(validators),
-        Token::Array(voting_powers),
         epoch_to_token(next_epoch),
     ])
+}
+
+/// Given a validator's [`EthAddress`] and its respective
+/// [`EthBridgeVotingPower`], return an encoded representation
+/// of this data, understood by the smart contract.
+#[inline]
+fn encode_validator_data(
+    address: EthAddress,
+    voting_power: EthBridgeVotingPower,
+) -> [u8; 32] {
+    let address = address.0;
+    let voting_power = u128::from(voting_power).to_be_bytes();
+
+    let mut buffer = [0u8; 32];
+    buffer[..20].copy_from_slice(&address);
+    buffer[20..].copy_from_slice(&voting_power[4..]);
+
+    buffer
 }
 
 /// Struct for serializing validator set
 /// arguments with ABI for Ethereum smart
 /// contracts.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
 // TODO: find a new home for this type
 pub struct ValidatorSetArgs {
     /// Ethereum addresses of the validators.
@@ -322,13 +342,10 @@ impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
             epoch,
         } = valset;
         ethbridge_structs::ValidatorSetArgs {
-            validators: validators
+            validator_set: validators
                 .into_iter()
-                .map(|addr| addr.0.into())
-                .collect(),
-            powers: voting_powers
-                .into_iter()
-                .map(|power| u64::from(power).into())
+                .zip(voting_powers.into_iter())
+                .map(|(addr, power)| encode_validator_data(addr, power))
                 .collect(),
             nonce: epoch.0.into(),
         }
@@ -337,20 +354,17 @@ impl From<ValidatorSetArgs> for ethbridge_structs::ValidatorSetArgs {
 
 impl Encode<1> for ValidatorSetArgs {
     fn tokenize(&self) -> [Token; 1] {
-        let addrs = Token::Array(
+        let validator_set = Token::Array(
             self.validators
                 .iter()
-                .map(|addr| Token::Address(addr.0.into()))
-                .collect(),
-        );
-        let powers = Token::Array(
-            self.voting_powers
-                .iter()
-                .map(|&power| Token::Uint(power.into()))
+                .zip(self.voting_powers.iter())
+                .map(|(&addr, &power)| {
+                    Token::FixedBytes(encode_validator_data(addr, power).into())
+                })
                 .collect(),
         );
         let nonce = Token::Uint(self.epoch.0.into());
-        [Token::Tuple(vec![addrs, powers, nonce])]
+        [Token::Tuple(vec![validator_set, nonce])]
     }
 }
 
@@ -384,7 +398,7 @@ mod tag {
                 ext.voting_powers.get_bridge_and_gov_hashes(next_epoch);
             AbiEncode::signable_keccak256(&[
                 Token::Uint(GOVERNANCE_CONTRACT_VERSION.into()),
-                Token::String("updateValidatorsSet".into()),
+                Token::String("updateValidatorSet".into()),
                 Token::FixedBytes(bridge_hash.to_vec()),
                 Token::FixedBytes(gov_hash.to_vec()),
                 epoch_to_token(next_epoch),
@@ -409,11 +423,11 @@ mod tests {
         // const ethers = require('ethers');
         // const keccak256 = require('keccak256')
         //
-        // const abiEncoder = new ethers.utils.AbiCoder();
+        // const abiEncoder = new ethers.AbiCoder();
         //
         // const output = abiEncoder.encode(
-        //     ['uint256', 'string', 'address[]', 'uint256[]', 'uint256'],
-        //     [1, 'bridge', [], [], 1],
+        //     ['uint256', 'string', 'bytes32[]', 'uint256'],
+        //     [1, 'bridge', [], 1],
         // );
         //
         // const hash = keccak256(output).toString('hex');
@@ -421,13 +435,12 @@ mod tests {
         // console.log(hash);
         // ```
         const EXPECTED: &str =
-            "b8da710845ad3b9e8a9dec6639a0b1a60c90441037cc0845c4b45d5aed19ec59";
+            "b97454f4c266c0d223651a52a705d76f3be337ace04be4590d9aedab9818dabc";
 
         let KeccakHash(got) = compute_hash(
             1u64.into(),
             BRIDGE_CONTRACT_VERSION,
             BRIDGE_CONTRACT_NAMESPACE,
-            vec![],
             vec![],
         );
 

@@ -1,17 +1,21 @@
 //! The templates for balances, parameters and VPs used for a chain's genesis.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::ledger::testnet_pow;
 use namada::core::types::key::common;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::core::types::{ethereum_structs, token};
-use namada::eth_bridge::parameters::{Contracts, MinimumConfirmations};
+use namada::eth_bridge::parameters::{
+    Contracts, Erc20WhitelistEntry, MinimumConfirmations,
+};
 use namada::types::chain::ProposalBytes;
 use namada::types::dec::Dec;
-use namada::types::token::{Amount, Denomination, NATIVE_MAX_DECIMAL_PLACES};
+use namada::types::token::{
+    Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
+};
 use serde::{Deserialize, Serialize};
 
 use super::toml_utils::{read_toml, write_toml};
@@ -35,7 +39,7 @@ pub fn read_balances(path: &Path) -> eyre::Result<UndenominatedBalances> {
     read_toml(path, "Balances")
 }
 
-pub fn read_parameters(path: &Path) -> eyre::Result<Parameters> {
+pub fn read_parameters(path: &Path) -> eyre::Result<Parameters<Unvalidated>> {
     read_toml(path, "Parameters")
 }
 
@@ -218,10 +222,11 @@ pub struct TokenConfig {
     PartialEq,
     Eq,
 )]
-pub struct Parameters {
-    pub parameters: ChainParams,
+pub struct Parameters<T: TemplateValidation> {
+    pub parameters: ChainParams<T>,
     pub pos_params: PosParams,
     pub gov_params: GovernanceParams,
+    pub pgf_params: PgfParams<T>,
     pub eth_bridge_params: Option<EthBridgeParams>,
 }
 
@@ -235,7 +240,7 @@ pub struct Parameters {
     PartialEq,
     Eq,
 )]
-pub struct ChainParams {
+pub struct ChainParams<T: TemplateValidation> {
     /// Name of the native token - this must one of the tokens from
     /// `tokens.toml` file
     pub native_token: Alias,
@@ -272,15 +277,87 @@ pub struct ChainParams {
     pub pos_gain_p: Dec,
     /// PoS gain d
     pub pos_gain_d: Dec,
-    #[cfg(not(feature = "mainnet"))]
-    /// Fix wrapper tx fees
-    pub wrapper_tx_fees: Option<token::Amount>,
-    #[cfg(not(feature = "mainnet"))]
-    /// Testnet faucet PoW difficulty - defaults to `0` when not set
-    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
-    #[cfg(not(feature = "mainnet"))]
-    /// Testnet faucet withdrawal limit - defaults to 1000 NAM when not set
-    pub faucet_withdrawal_limit: Option<token::Amount>,
+    /// Maximum number of signature per transaction
+    pub max_signatures_per_transaction: u8,
+    /// Max gas for block
+    pub max_block_gas: u64,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
+    /// Map of the cost per gas unit for every token allowed for fee payment
+    pub minimum_gas_price: T::GasMinimums,
+}
+
+impl ChainParams<Unvalidated> {
+    pub fn denominate(
+        self,
+        tokens: &Tokens,
+    ) -> eyre::Result<ChainParams<Validated>> {
+        let ChainParams {
+            native_token,
+            min_num_of_blocks,
+            max_expected_time_per_block,
+            max_proposal_bytes,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            max_signatures_per_transaction,
+            max_block_gas,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
+            minimum_gas_price,
+        } = self;
+        let mut min_gas_prices = BTreeMap::default();
+        for (token, amount) in minimum_gas_price.into_iter() {
+            let denom = if let Some(TokenConfig { denom, .. }) =
+                tokens.token.get(&token)
+            {
+                *denom
+            } else {
+                eprintln!(
+                    "Genesis files contained minimum gas amount  of token {}, \
+                     which is not in the `tokens.toml` file",
+                    token
+                );
+                return Err(eyre::eyre!(
+                    "Genesis files contained minimum gas amount of token {}, \
+                     which is not in the `tokens.toml` file",
+                    token
+                ));
+            };
+            let amount = amount.increase_precision(denom).map_err(|e| {
+                eprintln!(
+                    "A minimum gas amount in the parameters.toml file was \
+                     incorrectly formatted:\n{}",
+                    e.to_string()
+                );
+                e
+            })?;
+            min_gas_prices.insert(token, amount);
+        }
+
+        Ok(ChainParams {
+            native_token,
+            min_num_of_blocks,
+            max_expected_time_per_block,
+            max_proposal_bytes,
+            vp_whitelist,
+            tx_whitelist,
+            implicit_vp,
+            epochs_per_year,
+            pos_gain_p,
+            pos_gain_d,
+            max_signatures_per_transaction,
+            max_block_gas,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
+            minimum_gas_price: min_gas_prices,
+        })
+    }
 }
 
 #[derive(
@@ -340,13 +417,40 @@ pub struct GovernanceParams {
     /// Maximum size of proposal in kibibytes (KiB)
     pub max_proposal_code_size: u64,
     /// Minimum proposal period length in epochs
-    pub min_proposal_period: u64,
+    pub min_proposal_voting_period: u64,
     /// Maximum proposal period length in epochs
     pub max_proposal_period: u64,
     /// Maximum number of characters in the proposal content
     pub max_proposal_content_size: u64,
     /// Minimum number of epoch between end and grace epoch
     pub min_proposal_grace_epochs: u64,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct PgfParams<T: TemplateValidation> {
+    /// The set of stewards
+    pub stewards: BTreeSet<Alias>,
+    /// The pgf funding inflation rate
+    pub pgf_inflation_rate: Dec,
+    /// The pgf stewards inflation rate
+    pub stewards_inflation_rate: Dec,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(test)]
+    pub valid: PhantomData<T>,
+    #[serde(default)]
+    #[serde(skip_serializing)]
+    #[cfg(not(test))]
+    valid: PhantomData<T>,
 }
 
 #[derive(
@@ -368,6 +472,8 @@ pub struct EthBridgeParams {
     /// The addresses of the Ethereum contracts that need to be directly known
     /// by validators.
     pub contracts: Contracts,
+    /// List of ERC20 token types whitelisted at genesis time.
+    pub erc20_whitelist: Vec<Erc20WhitelistEntry>,
 }
 
 impl TokenBalances {
@@ -400,7 +506,15 @@ pub struct Unvalidated {}
 )]
 pub struct Validated {}
 
-pub trait TemplateValidation {
+pub trait TemplateValidation: Serialize {
+    type Amount: for<'a> Deserialize<'a>
+        + Serialize
+        + Clone
+        + std::fmt::Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + PartialEq
+        + Eq;
     type Balances: for<'a> Deserialize<'a>
         + Serialize
         + Clone
@@ -425,15 +539,29 @@ pub trait TemplateValidation {
         + BorshDeserialize
         + PartialEq
         + Eq;
+    type GasMinimums: for<'a> Deserialize<'a>
+        + Serialize
+        + Clone
+        + std::fmt::Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + PartialEq
+        + Eq;
 }
+
 impl TemplateValidation for Unvalidated {
+    type Amount = token::DenominatedAmount;
     type Balances = UndenominatedBalances;
     type BondTx = SignedBondTx;
+    type GasMinimums = BTreeMap<Alias, DenominatedAmount>;
     type TransferTx = SignedTransferTx;
 }
+
 impl TemplateValidation for Validated {
+    type Amount = token::DenominatedAmount;
     type Balances = DenominatedBalances;
     type BondTx = BondTx<Validated>;
+    type GasMinimums = BTreeMap<Alias, DenominatedAmount>;
     type TransferTx = TransferTx<Validated>;
 }
 
@@ -451,7 +579,7 @@ pub struct All<T: TemplateValidation> {
     pub vps: ValidityPredicates,
     pub tokens: Tokens,
     pub balances: T::Balances,
-    pub parameters: Parameters,
+    pub parameters: Parameters<T>,
     pub transactions: Transactions<T>,
 }
 
@@ -589,6 +717,17 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
         }
     }
 
+    let parameters = parameters.and_then(|params| {
+        let params =
+            validate_parameters(params, &tokens, &transactions, vps.as_ref());
+        if params.is_some() {
+            println!("Parameters file is valid.");
+        } else {
+            is_valid = false
+        }
+        params
+    });
+
     let balances = if let Some(tokens) = tokens.as_ref() {
         if tokens.token.is_empty() {
             is_valid = false;
@@ -610,14 +749,6 @@ pub fn load_and_validate(templates_dir: &Path) -> Option<All<Validated>> {
     };
     if balances.is_none() {
         is_valid = false;
-    }
-
-    if let Some(parameters) = parameters.as_ref() {
-        if validate_parameters(parameters, vps.as_ref()) {
-            println!("Parameters file is valid.");
-        } else {
-            is_valid = false;
-        }
     }
 
     let txs = if let Some(tokens) = tokens.as_ref() {
@@ -668,9 +799,13 @@ pub fn validate_vps(vps: &ValidityPredicates) -> bool {
 }
 
 pub fn validate_parameters(
-    parameters: &Parameters,
+    parameters: Parameters<Unvalidated>,
+    tokens: &Option<Tokens>,
+    transactions: &Option<Transactions<Unvalidated>>,
     vps: Option<&ValidityPredicates>,
-) -> bool {
+) -> Option<Parameters<Validated>> {
+    let tokens = tokens.as_ref()?;
+    let txs = transactions.as_ref()?;
     let mut is_valid = true;
     let implicit_vp = &parameters.parameters.implicit_vp;
     if !vps
@@ -683,7 +818,54 @@ pub fn validate_parameters(
         );
         is_valid = false;
     }
-    is_valid
+    // check that each PGF steward has an established account
+    for steward in &parameters.pgf_params.stewards {
+        let mut found_steward = false;
+        if let Some(accs) = &txs.established_account {
+            if accs.iter().any(|acct| acct.alias == *steward) {
+                found_steward = true;
+            }
+        }
+
+        if let Some(accs) = &txs.validator_account {
+            if accs.iter().any(|acct| acct.alias == *steward) {
+                found_steward = true;
+            }
+        }
+        is_valid = found_steward && is_valid;
+        if !is_valid {
+            eprintln!(
+                "Could not find an established or validator account \
+                 associated with the PGF steward {}",
+                steward
+            );
+        }
+    }
+    let Parameters {
+        parameters,
+        pos_params,
+        gov_params,
+        pgf_params,
+        eth_bridge_params,
+    } = parameters;
+    match parameters.denominate(tokens) {
+        Err(e) => {
+            eprintln!("{}", e);
+            None
+        }
+        Ok(parameters) => is_valid.then(|| Parameters {
+            parameters,
+            pos_params,
+            gov_params,
+            pgf_params: PgfParams {
+                stewards: pgf_params.stewards,
+                pgf_inflation_rate: pgf_params.pgf_inflation_rate,
+                stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+                valid: Default::default(),
+            },
+            eth_bridge_params,
+        }),
+    }
 }
 
 pub fn validate_balances(

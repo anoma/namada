@@ -57,7 +57,8 @@ mainnet = [
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std"]
 # for integration tests and test utilies
 testing = []
-
+benches = ["testing"]
+integration = []
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
@@ -86,9 +87,8 @@ derivative.workspace = true
 directories.workspace = true
 ed25519-consensus.workspace = true
 ethabi.workspace = true
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
-ethbridge-governance-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.18.0"}
+ethbridge-bridge-events.workspace = true
+ethbridge-events.workspace = true
 eyre.workspace = true
 fd-lock.workspace = true
 ferveo-common.workspace = true

@@ -52,7 +52,9 @@ mod ibc_rs_conversion {
     use thiserror::Error;
 
     use super::IbcEvent;
-    use crate::ibc::events::{Error as IbcEventError, IbcEvent as RawIbcEvent};
+    use crate::ibc::core::events::{
+        Error as IbcEventError, IbcEvent as RawIbcEvent,
+    };
     use crate::tendermint_proto::abci::Event as AbciEvent;
 
     #[allow(missing_docs)]
@@ -69,7 +71,7 @@ mod ibc_rs_conversion {
         type Error = Error;
 
         fn try_from(e: RawIbcEvent) -> Result<Self> {
-            let event_type = e.event_type().as_str().to_string();
+            let event_type = e.event_type().to_string();
             let abci_event = AbciEvent::try_from(e).map_err(Error::IbcEvent)?;
             let attributes: HashMap<_, _> = abci_event
                 .attributes

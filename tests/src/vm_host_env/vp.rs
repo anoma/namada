@@ -12,6 +12,7 @@ use namada::types::transaction::TxType;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
+use namada_core::ledger::gas::TxGasMeter;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
@@ -51,8 +52,6 @@ pub struct TestVpEnv {
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
-    #[cfg(not(feature = "mainnet"))]
-    pub has_valid_pow: bool,
 }
 
 impl Default for TestVpEnv {
@@ -69,13 +68,15 @@ impl Default for TestVpEnv {
             storage: TestStorage::default(),
             write_log: WriteLog::default(),
         };
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = wl_storage.storage.chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
             wl_storage,
             iterators: PrefixIterators::default(),
-            gas_meter: VpGasMeter::default(),
+            gas_meter: VpGasMeter::new_from_tx_meter(
+                &TxGasMeter::new_from_sub_limit(10_000_000.into()),
+            ),
             tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
@@ -84,8 +85,6 @@ impl Default for TestVpEnv {
             result_buffer: None,
             vp_wasm_cache,
             vp_cache_dir,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: false,
         }
     }
 }
@@ -235,7 +234,7 @@ mod native_vp_host_env {
         fn eval(
             &self,
             _ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
-            _vp_code: Vec<u8>,
+            _vp_code_hash: Vec<u8>,
             _input_data: Vec<u8>,
         ) -> namada::types::internal::HostEnvResult {
             unimplemented!(
@@ -267,8 +266,6 @@ mod native_vp_host_env {
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -284,8 +281,6 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
-                                #[cfg(not(feature = "mainnet"))]
-                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -314,8 +309,6 @@ mod native_vp_host_env {
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
-                                #[cfg(not(feature = "mainnet"))]
-                                has_valid_pow,
                             }: &mut TestVpEnv| {
 
                             let env = vm::host_env::testing::vp_env(
@@ -331,8 +324,6 @@ mod native_vp_host_env {
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
-                                #[cfg(not(feature = "mainnet"))]
-                                *has_valid_pow,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -369,6 +360,18 @@ mod native_vp_host_env {
             input_data_ptr: u64,
             input_data_len: u64,
         ) -> i64);
-    native_host_fn!(vp_has_valid_pow() -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
+    native_host_fn!(vp_verify_tx_section_signature(
+            hash_list_ptr: u64,
+            hash_list_len: u64,
+            public_keys_map_ptr: u64,
+            public_keys_map_len: u64,
+            signer_ptr: u64,
+            signer_len: u64,
+            threshold: u8,
+            max_signatures_ptr: u64,
+            max_signatures_len: u64,)
+        -> i64
+    );
+    native_host_fn!(vp_charge_gas(used_gas: u64));
 }

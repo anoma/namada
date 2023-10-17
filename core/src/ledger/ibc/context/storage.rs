@@ -9,7 +9,7 @@ use crate::ledger::storage_api;
 use crate::types::address::Address;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage::{BlockHeight, Header, Key};
-use crate::types::token::Amount;
+use crate::types::token::DenominatedAmount;
 
 // This is needed to use `ibc::Handler::Error` with `IbcActions` in
 // `tx_prelude/src/ibc.rs`
@@ -30,6 +30,9 @@ pub trait IbcStorageContext {
 
     /// Read IBC-related data
     fn read(&self, key: &Key) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    /// Check if the given key is present
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error>;
 
     /// Read IBC-related data with a prefix
     fn iter_prefix<'iter>(
@@ -52,13 +55,19 @@ pub trait IbcStorageContext {
     /// Emit an IBC event
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Self::Error>;
 
+    /// Get an IBC event
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error>;
+
     /// Transfer token
     fn transfer_token(
         &mut self,
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error>;
 
     /// Mint token
@@ -66,7 +75,7 @@ pub trait IbcStorageContext {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error>;
 
     /// Burn token
@@ -74,7 +83,7 @@ pub trait IbcStorageContext {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: Amount,
+        amount: DenominatedAmount,
     ) -> Result<(), Self::Error>;
 
     /// Get the current height of this chain

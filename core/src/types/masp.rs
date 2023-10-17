@@ -55,8 +55,10 @@ impl string_encoding::Format for ExtendedViewingKey {
         self.to_bytes()
     }
 
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
-        Self::decode_bytes(bytes)
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        Self::decode_bytes(bytes).map_err(DecodeError::InvalidBytes)
     }
 }
 
@@ -69,7 +71,9 @@ impl string_encoding::Format for PaymentAddress {
         self.to_bytes()
     }
 
-    fn decode_bytes(_bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn decode_bytes(
+        _bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
         unimplemented!(
             "Cannot determine if the PaymentAddress is pinned from bytes. Use \
              `PaymentAddress::decode_bytes(bytes, is_pinned)` instead."
@@ -281,9 +285,12 @@ impl string_encoding::Format for ExtendedSpendingKey {
         bytes.to_vec()
     }
 
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
         masp_primitives::zip32::ExtendedSpendingKey::read(&mut &bytes[..])
             .map(Self)
+            .map_err(DecodeError::InvalidBytes)
     }
 }
 

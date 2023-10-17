@@ -1,10 +1,11 @@
-mod eth_bridge;
+pub(super) mod eth_bridge;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_core::ledger::storage::LastBlock;
+use namada_core::types::account::{Account, AccountPublicKeysMap};
 use namada_core::types::address::Address;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::{BlockHeight, BlockResults, KeySeg};
@@ -29,7 +30,7 @@ type Conversion = (
     Address,
     MaspDenom,
     Epoch,
-    masp_primitives::transaction::components::Amount,
+    masp_primitives::transaction::components::I32Sum,
     MerklePath<Node>,
 );
 
@@ -75,6 +76,12 @@ router! {SHELL,
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
 
+    // Query account subspace
+    ( "account" / [owner: Address] ) -> Option<Account> = account,
+
+    // Query public key revealad
+    ( "revealed" / [owner: Address] ) -> bool = revealed,
+
     // IBC UpdateClient event
     ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
 
@@ -93,32 +100,94 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
+    use namada_core::ledger::storage::TempWlStorage;
+    use namada_core::types::transaction::DecryptedTx;
+
     use crate::ledger::protocol::{self, ShellParams};
     use crate::proto::Tx;
     use crate::types::storage::TxIndex;
-    use crate::types::transaction::decrypted::DecryptedTx;
-    use crate::types::transaction::TxType;
+    use crate::types::transaction::wrapper::wrapper_tx::PairingEngine;
+    use crate::types::transaction::{AffineCurve, EllipticCurve, TxType};
 
     let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-    tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        // To be able to dry-run testnet faucet withdrawal, pretend
-        // that we got a valid PoW
-        has_valid_pow: true,
-    }));
-    let data = protocol::apply_wasm_tx(
+    tx.validate_tx().into_storage_result()?;
+
+    let mut temp_wl_storage = TempWlStorage::new(&ctx.wl_storage.storage);
+    let mut cumulated_gas = Gas::default();
+
+    // Wrapper dry run to allow estimating the gas cost of a transaction
+    let mut tx_gas_meter = match tx.header().tx_type {
+        TxType::Wrapper(wrapper) => {
+            let mut tx_gas_meter =
+                TxGasMeter::new(wrapper.gas_limit.to_owned());
+            protocol::apply_wrapper_tx(
+                &wrapper,
+                None,
+                &request.data,
+                ShellParams::new(
+                    &mut tx_gas_meter,
+                    &mut temp_wl_storage,
+                    &mut ctx.vp_wasm_cache,
+                    &mut ctx.tx_wasm_cache,
+                ),
+                None,
+            )
+            .into_storage_result()?;
+
+            temp_wl_storage.write_log.commit_tx();
+            cumulated_gas = tx_gas_meter.get_tx_consumed_gas();
+
+            // NOTE: the encryption key for a dry-run should always be an
+            // hardcoded, dummy one
+            let _privkey =
+            <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+            TxGasMeter::new_from_sub_limit(tx_gas_meter.get_available_gas())
+        }
+        TxType::Protocol(_) | TxType::Decrypted(_) => {
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
+            TxGasMeter::new(
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
+            )
+        }
+        TxType::Raw => {
+            // Cast tx to a decrypted for execution
+            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+
+            // If dry run only the inner tx, use the max block gas as the gas
+            // limit
+            TxGasMeter::new(
+                namada_core::ledger::gas::get_max_block_gas(ctx.wl_storage)
+                    .unwrap()
+                    .into(),
+            )
+        }
+    };
+
+    let mut data = protocol::apply_wasm_tx(
         tx,
-        request.data.len(),
         &TxIndex(0),
-        ShellParams::DryRun {
-            storage: &ctx.wl_storage.storage,
-            vp_wasm_cache: &mut ctx.vp_wasm_cache,
-            tx_wasm_cache: &mut ctx.tx_wasm_cache,
-        },
-        #[cfg(not(feature = "mainnet"))]
-        true,
+        ShellParams::new(
+            &mut tx_gas_meter,
+            &mut temp_wl_storage,
+            &mut ctx.vp_wasm_cache,
+            &mut ctx.tx_wasm_cache,
+        ),
     )
     .into_storage_result()?;
+    cumulated_gas = cumulated_gas
+        .checked_add(tx_gas_meter.get_tx_consumed_gas())
+        .ok_or(namada_core::ledger::storage_api::Error::SimpleMessage(
+            "Overflow in gas",
+        ))?;
+    // Account gas for both inner and wrapper (if available)
+    data.gas_used = cumulated_gas;
+    // NOTE: the keys changed by the wrapper transaction (if any) are not
+    // returned from this function
     let data = data.try_to_vec().into_storage_result()?;
     Ok(EncodedResponseQuery {
         data,
@@ -140,15 +209,27 @@ where
         BlockResults::default();
         ctx.wl_storage.storage.block.height.0 as usize + 1
     ];
-    iter.for_each(|(key, value, _gas)| {
-        let key = u64::parse(key).expect("expected integer for block height");
-        let value = BlockResults::try_from_slice(&value)
-            .expect("expected BlockResults bytes");
-        let idx: usize = key
-            .try_into()
-            .expect("expected block height to fit into usize");
+    for (key, value, _gas) in iter {
+        let key = u64::parse(key.clone()).map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("expected integer for block height {}", key),
+            ))
+        })?;
+        let value = BlockResults::try_from_slice(&value).map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "expected BlockResults bytes",
+            ))
+        })?;
+        let idx: usize = key.try_into().map_err(|_| {
+            storage_api::Error::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "expected block height to fit into usize",
+            ))
+        })?;
         results[idx] = value;
-    });
+    }
     Ok(results)
 }
 
@@ -173,7 +254,7 @@ where
             addr.clone(),
             *denom,
             *epoch,
-            Into::<masp_primitives::transaction::components::Amount>::into(
+            Into::<masp_primitives::transaction::components::I32Sum>::into(
                 conv.clone(),
             ),
             ctx.wl_storage.storage.conversion_state.tree.path(*pos),
@@ -438,10 +519,49 @@ where
         .cloned())
 }
 
+fn account<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    owner: Address,
+) -> storage_api::Result<Option<Account>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let account_exists = storage_api::account::exists(ctx.wl_storage, &owner)?;
+
+    if account_exists {
+        let public_keys =
+            storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+        let threshold =
+            storage_api::account::threshold(ctx.wl_storage, &owner)?;
+
+        Ok(Some(Account {
+            public_keys_map: AccountPublicKeysMap::from_iter(public_keys),
+            address: owner,
+            threshold: threshold.unwrap_or(1),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+fn revealed<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    owner: Address,
+) -> storage_api::Result<bool>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let public_keys =
+        storage_api::account::public_keys(ctx.wl_storage, &owner)?;
+
+    Ok(!public_keys.is_empty())
+}
+
 #[cfg(test)]
 mod test {
-
-    use borsh::BorshDeserialize;
+    use borsh::{BorshDeserialize, BorshSerialize};
     use namada_test_utils::TestWasms;
 
     use crate::ledger::queries::testing::TestClient;
@@ -484,7 +604,13 @@ mod test {
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
         let tx_hash = Hash::sha256(&tx_no_op);
         let key = Key::wasm_code(&tx_hash);
+        let len_key = Key::wasm_code_len(&tx_hash);
         client.wl_storage.storage.write(&key, &tx_no_op).unwrap();
+        client
+            .wl_storage
+            .storage
+            .write(&len_key, (tx_no_op.len() as u64).try_to_vec().unwrap())
+            .unwrap();
 
         // Request last committed epoch
         let read_epoch = RPC.shell().epoch(&client).await.unwrap();
@@ -492,12 +618,8 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let mut outer_tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            // To be able to dry-run testnet faucet withdrawal, pretend
-            // that we got a valid PoW
-            has_valid_pow: true,
-        }));
+        let mut outer_tx =
+            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         outer_tx.header.chain_id = client.wl_storage.storage.chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash));
         outer_tx.set_data(Data::new(vec![]));

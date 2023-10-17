@@ -65,6 +65,10 @@ pub const RESERVED_VP_KEY: &str = "?";
 pub const WASM_KEY_PREFIX: &str = "wasm";
 /// The reserved storage key prefix for wasm codes
 pub const WASM_CODE_PREFIX: &str = "code";
+/// The reserved storage key prefix for wasm codes' name
+pub const WASM_CODE_NAME_PREFIX: &str = "name";
+/// The reserved storage key prefix for wasm codes' length
+pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
@@ -493,6 +497,14 @@ impl Key {
         Ok(Key { segments })
     }
 
+    /// Takes ownership of the key, appends a new segment to it,
+    /// and returns the modified key.
+    #[must_use]
+    pub fn with_segment<T: KeySeg>(mut self, other: T) -> Self {
+        self.segments.push(other.to_db_key());
+        self
+    }
+
     /// Returns a new key with segments of `Self` and the given key
     pub fn join(&self, other: &Key) -> Self {
         let mut segments = self.segments.clone();
@@ -503,14 +515,17 @@ impl Key {
 
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
-        let mut addresses = Vec::new();
-        for s in &self.segments {
-            match s {
-                DbKeySeg::AddressSeg(addr) => addresses.push(addr.clone()),
-                _ => continue,
-            }
-        }
-        addresses
+        self.iter_addresses().cloned().collect()
+    }
+
+    /// Iterates over all addresses in the key segments
+    pub fn iter_addresses<'k, 'this: 'k>(
+        &'this self,
+    ) -> impl Iterator<Item = &'_ Address> + 'k {
+        self.segments.iter().filter_map(|s| match s {
+            DbKeySeg::AddressSeg(addr) => Some(addr),
+            _ => None,
+        })
     }
 
     /// Return the segment at the index parameter
@@ -550,6 +565,24 @@ impl Key {
         let mut segments =
             Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
         segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key of wasm code's hash of the given name
+    pub fn wasm_code_name(code_name: String) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_NAME_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_name));
+        Key { segments }
+    }
+
+    /// Returns a key of the wasm code's length of the given hash
+    pub fn wasm_code_len(code_hash: &Hash) -> Self {
+        let mut segments =
+            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_CODE_LEN_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
         Key { segments }
     }
@@ -1124,8 +1157,6 @@ impl Mul for Epoch {
     BorshDeserialize,
 )]
 pub struct Epochs {
-    /// The oldest epoch we can look-up.
-    first_known_epoch: Epoch,
     /// The block heights of the first block of each known epoch.
     /// Invariant: the values must be sorted in ascending order.
     pub first_block_heights: Vec<BlockHeight>,
@@ -1136,48 +1167,25 @@ impl Default for Epochs {
     /// block height 0.
     fn default() -> Self {
         Self {
-            first_known_epoch: Epoch::default(),
             first_block_heights: vec![BlockHeight::default()],
         }
     }
 }
 
 impl Epochs {
-    /// Record start of a new epoch at the given block height and trim any
-    /// epochs that ended more than `max_age_num_blocks` ago.
-    pub fn new_epoch(
-        &mut self,
-        block_height: BlockHeight,
-        max_age_num_blocks: u64,
-    ) {
-        let min_block_height_to_keep = (block_height.0 + 1)
-            .checked_sub(max_age_num_blocks)
-            .unwrap_or_default();
-        // trim off any epochs whose last block is before the limit
-        while let Some((_first_known_epoch_height, rest)) =
-            self.first_block_heights.split_first()
-        {
-            if let Some(second_known_epoch_height) = rest.first() {
-                if second_known_epoch_height.0 < min_block_height_to_keep {
-                    self.first_known_epoch = self.first_known_epoch.next();
-                    self.first_block_heights = rest.to_vec();
-                    continue;
-                }
-            }
-            break;
-        }
+    /// Record start of a new epoch at the given block height
+    pub fn new_epoch(&mut self, block_height: BlockHeight) {
         self.first_block_heights.push(block_height);
     }
 
-    /// Look-up the epoch of a given block height.
+    /// Look up the epoch of a given block height. If the given height is
+    /// greater than the current height, the current epoch will be returned even
+    /// though an epoch for a future block cannot be determined.
     pub fn get_epoch(&self, block_height: BlockHeight) -> Option<Epoch> {
-        if let Some((first_known_epoch_height, rest)) =
+        if let Some((_first_known_epoch_height, rest)) =
             self.first_block_heights.split_first()
         {
-            if block_height < *first_known_epoch_height {
-                return None;
-            }
-            let mut epoch = self.first_known_epoch;
+            let mut epoch = Epoch::default();
             for next_block_height in rest {
                 if block_height < *next_block_height {
                     return Some(epoch);
@@ -1190,7 +1198,7 @@ impl Epochs {
         None
     }
 
-    /// Look-up the starting block height of an epoch at or before a given
+    /// Look up the starting block height of an epoch at or before a given
     /// height.
     pub fn get_epoch_start_height(
         &self,
@@ -1204,32 +1212,15 @@ impl Epochs {
         None
     }
 
-    /// Look-up the starting block height of the given epoch
+    /// Look up the starting block height of the given epoch
     pub fn get_start_height_of_epoch(
         &self,
         epoch: Epoch,
     ) -> Option<BlockHeight> {
-        if epoch < self.first_known_epoch {
+        if epoch.0 > self.first_block_heights.len() as u64 {
             return None;
         }
-
-        let mut cur_epoch = self.first_known_epoch;
-        for height in &self.first_block_heights {
-            if epoch == cur_epoch {
-                return Some(*height);
-            } else {
-                cur_epoch = cur_epoch.next();
-            }
-        }
-        None
-    }
-
-    /// Look-up the block height of a given epoch.
-    pub fn get_height(&self, epoch: Epoch) -> Option<BlockHeight> {
-        // the given epoch should be greater than or equal to the
-        // first known epoch
-        let index = epoch.0.checked_sub(self.first_known_epoch.0)? as usize;
-        self.first_block_heights.get(index).copied()
+        self.first_block_heights.get(epoch.0 as usize).copied()
     }
 
     /// Return all starting block heights for each successive Epoch.
@@ -1254,7 +1245,6 @@ pub struct PrefixValue {
 pub struct EthEventsQueue {
     /// Queue of transfer to Namada events.
     pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
-    // TODO: add queue of update whitelist events
 }
 
 /// A queue of confirmed Ethereum events of type `E`.
@@ -1458,7 +1448,6 @@ mod tests {
         let mut queue = EthEventsQueue::default();
         queue.transfers_to_namada.next_nonce_to_process = 2u64.into();
         let new_event = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
@@ -1478,7 +1467,6 @@ mod tests {
         let mut queue = EthEventsQueue::default();
         queue.transfers_to_namada.next_nonce_to_process = 3u64.into();
         let new_event = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
@@ -1493,27 +1481,22 @@ mod tests {
         queue.transfers_to_namada.next_nonce_to_process = 1u64.into();
 
         let new_event_1 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 1u64.into(),
         };
         let new_event_2 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 2u64.into(),
         };
         let new_event_3 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 3u64.into(),
         };
         let new_event_4 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 4u64.into(),
         };
         let new_event_7 = TransfersToNamada {
-            valid_transfers_map: vec![],
             transfers: vec![],
             nonce: 7u64.into(),
         };
@@ -1633,14 +1616,19 @@ mod tests {
     fn test_predecessor_epochs_and_heights() {
         let mut epochs = Epochs::default();
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(0)), Some(BlockHeight(0)));
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(0)),
+            Some(BlockHeight(0))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
-        let mut max_age_num_blocks = 100;
 
         // epoch 1
-        epochs.new_epoch(BlockHeight(10), max_age_num_blocks);
+        epochs.new_epoch(BlockHeight(10));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(1)), Some(BlockHeight(10)));
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(1)),
+            Some(BlockHeight(10))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
         assert_eq!(
             epochs.get_epoch_start_height(BlockHeight(0)),
@@ -1668,9 +1656,12 @@ mod tests {
         );
 
         // epoch 2
-        epochs.new_epoch(BlockHeight(20), max_age_num_blocks);
+        epochs.new_epoch(BlockHeight(20));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(2)), Some(BlockHeight(20)));
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(2)),
+            Some(BlockHeight(20))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
         assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
@@ -1690,14 +1681,17 @@ mod tests {
             Some(BlockHeight(20))
         );
 
-        // epoch 3, epoch 0 and 1 should be trimmed
-        epochs.new_epoch(BlockHeight(200), max_age_num_blocks);
+        // epoch 3
+        epochs.new_epoch(BlockHeight(200));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(3)), Some(BlockHeight(200)));
-        assert_eq!(epochs.get_epoch(BlockHeight(0)), None);
-        assert_eq!(epochs.get_epoch(BlockHeight(9)), None);
-        assert_eq!(epochs.get_epoch(BlockHeight(10)), None);
-        assert_eq!(epochs.get_epoch(BlockHeight(11)), None);
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(3)),
+            Some(BlockHeight(200))
+        );
+        assert_eq!(epochs.get_epoch(BlockHeight(0)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(9)), Some(Epoch(0)));
+        assert_eq!(epochs.get_epoch(BlockHeight(10)), Some(Epoch(1)));
+        assert_eq!(epochs.get_epoch(BlockHeight(11)), Some(Epoch(1)));
         assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
         assert_eq!(
@@ -1710,62 +1704,77 @@ mod tests {
             Some(BlockHeight(200))
         );
 
-        // increase the limit
-        max_age_num_blocks = 200;
-
         // epoch 4
-        epochs.new_epoch(BlockHeight(300), max_age_num_blocks);
+        epochs.new_epoch(BlockHeight(300));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(4)), Some(BlockHeight(300)));
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(4)),
+            Some(BlockHeight(300))
+        );
         assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
         assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
 
-        // epoch 5, epoch 2 should be trimmed
-        epochs.new_epoch(BlockHeight(499), max_age_num_blocks);
+        // epoch 5
+        epochs.new_epoch(BlockHeight(499));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(5)), Some(BlockHeight(499)));
-        assert_eq!(epochs.get_epoch(BlockHeight(20)), None);
-        assert_eq!(epochs.get_epoch(BlockHeight(100)), None);
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(5)),
+            Some(BlockHeight(499))
+        );
+        assert_eq!(epochs.get_epoch(BlockHeight(20)), Some(Epoch(2)));
+        assert_eq!(epochs.get_epoch(BlockHeight(100)), Some(Epoch(2)));
         assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
         assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
         assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
 
-        // epoch 6, epoch 3 should be trimmed
-        epochs.new_epoch(BlockHeight(500), max_age_num_blocks);
+        // epoch 6
+        epochs.new_epoch(BlockHeight(500));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(6)), Some(BlockHeight(500)));
-        assert_eq!(epochs.get_epoch(BlockHeight(200)), None);
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(6)),
+            Some(BlockHeight(500))
+        );
+        assert_eq!(epochs.get_epoch(BlockHeight(200)), Some(Epoch(3)));
         assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
         assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
         assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
 
-        // decrease the limit
-        max_age_num_blocks = 50;
-
-        // epoch 7, epoch 4 and 5 should be trimmed
-        epochs.new_epoch(BlockHeight(550), max_age_num_blocks);
+        // epoch 7
+        epochs.new_epoch(BlockHeight(550));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(7)), Some(BlockHeight(550)));
-        assert_eq!(epochs.get_epoch(BlockHeight(300)), None);
-        assert_eq!(epochs.get_epoch(BlockHeight(499)), None);
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(7)),
+            Some(BlockHeight(550))
+        );
+        assert_eq!(epochs.get_epoch(BlockHeight(300)), Some(Epoch(4)));
+        assert_eq!(epochs.get_epoch(BlockHeight(499)), Some(Epoch(5)));
         assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
         assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
 
-        // epoch 8, epoch 6 should be trimmed
-        epochs.new_epoch(BlockHeight(600), max_age_num_blocks);
+        // epoch 8
+        epochs.new_epoch(BlockHeight(600));
         println!("epochs {:#?}", epochs);
-        assert_eq!(epochs.get_height(Epoch(7)), Some(BlockHeight(550)));
-        assert_eq!(epochs.get_height(Epoch(8)), Some(BlockHeight(600)));
-        assert_eq!(epochs.get_epoch(BlockHeight(500)), None);
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(7)),
+            Some(BlockHeight(550))
+        );
+        assert_eq!(
+            epochs.get_start_height_of_epoch(Epoch(8)),
+            Some(BlockHeight(600))
+        );
+        assert_eq!(epochs.get_epoch(BlockHeight(500)), Some(Epoch(6)));
         assert_eq!(epochs.get_epoch(BlockHeight(550)), Some(Epoch(7)));
         assert_eq!(epochs.get_epoch(BlockHeight(600)), Some(Epoch(8)));
 
         // try to fetch height values out of range
         // at this point, the min known epoch is 7
-        for e in [1, 2, 3, 4, 5, 6, 9, 10, 11, 12] {
-            assert!(epochs.get_height(Epoch(e)).is_none(), "Epoch: {e}");
+        for e in [9, 10, 11, 12] {
+            assert!(
+                epochs.get_start_height_of_epoch(Epoch(e)).is_none(),
+                "Epoch: {e}"
+            );
         }
     }
 

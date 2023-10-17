@@ -25,7 +25,7 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
     relaxed_simd: false,
     threads: false,
     tail_call: false,
-    floats: false,
+    floats: true,
     multi_memory: false,
     exceptions: false,
     memory64: false,
@@ -37,7 +37,7 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
 };
 
 #[allow(missing_docs)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum WasmValidationError {
     #[error(
         "Invalid WASM using forbidden features: {0}. Expected: \
@@ -77,7 +77,7 @@ impl WasmCacheAccess for WasmCacheRoAccess {
 /// reference, so the access is thread-safe, but because of the unsafe
 /// reference conversion, care must be taken that while this reference is
 /// borrowed, no other process can modify it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HostRef<'a, T: 'a> {
     data: *const c_void,
     phantom: PhantomData<&'a T>,
@@ -154,7 +154,7 @@ impl<'a, T: 'a> HostSlice<'a, &[T]> {
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MutHostRef<'a, T: 'a> {
     data: *mut c_void,
     phantom: PhantomData<&'a T>,

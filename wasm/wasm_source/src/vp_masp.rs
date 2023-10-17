@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::components::Amount;
+use masp_primitives::transaction::components::I128Sum;
 /// Multi-asset shielded pool VP.
 use namada_vp_prelude::address::masp;
 use namada_vp_prelude::storage::Epoch;
@@ -64,15 +64,16 @@ fn convert_amount(
     token: &Address,
     val: token::Amount,
     denom: token::MaspDenom,
-) -> (AssetType, Amount) {
+) -> (AssetType, I128Sum) {
     let asset_type = asset_type_from_epoched_address(epoch, token, denom);
     // Combine the value and unit into one amount
-    let amount = Amount::from_nonnegative(asset_type, denom.denominate(&val))
-        .expect("invalid value or asset type for amount");
+    let amount =
+        I128Sum::from_nonnegative(asset_type, denom.denominate(&val) as i128)
+            .expect("invalid value or asset type for amount");
     (asset_type, amount)
 }
 
-#[validity_predicate]
+#[validity_predicate(gas = 8030000)]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -88,6 +89,14 @@ fn validate_tx(
         keys_changed,
         verifiers,
     );
+    log_string(&format!(
+        "vp_masp called with {} bytes data, address {}, keys_changed {:?}, \
+         verifiers {:?}",
+        tx_data.data().as_ref().map(|x| x.len()).unwrap_or(0),
+        addr,
+        keys_changed,
+        verifiers,
+    ));
 
     let signed = tx_data;
     let transfer =
@@ -104,7 +113,7 @@ fn validate_tx(
         })
         .transpose()?;
     if let Some(shielded_tx) = shielded {
-        let mut transparent_tx_pool = Amount::zero();
+        let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
         transparent_tx_pool += shielded_tx.sapling_value_balance();
 
@@ -165,7 +174,6 @@ fn validate_tx(
                      beteween 1 and 4 but is {}",
                     transp_bundle.vout.len()
                 );
-
                 return reject();
             }
             let mut outs = transp_bundle.vout.iter();
@@ -190,9 +198,10 @@ fn validate_tx(
                     continue;
                 }
                 if !valid_transfer_amount(
-                    out.value as u64,
+                    out.value,
                     denom.denominate(&transfer.amount.amount),
                 ) {
+                    log_string("INvalid transfer amount");
                     return reject();
                 }
 
@@ -226,6 +235,7 @@ fn validate_tx(
             // one or more of the denoms in the batch failed to verify
             // the asset derivation.
             if valid_count != out_length {
+                log_string("WTF");
                 return reject();
             }
         } else {
@@ -246,19 +256,31 @@ fn validate_tx(
             }
         }
 
-        match transparent_tx_pool.partial_cmp(&Amount::zero()) {
+        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
                 debug_log!(
                     "Transparent transaction value pool must be nonnegative. \
                      Violation may be caused by transaction being constructed \
                      in previous epoch. Maybe try again."
                 );
+                log_string(
+                    "Transparent transaction value pool must be nonnegative. \
+                     Violation may be caused by transaction being constructed \
+                     in previous epoch. Maybe try again.",
+                );
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
                 return reject();
             }
+            Some(Ordering::Greater) => {
+                debug_log!(
+                    "Transaction fees cannot be paid inside MASP transaction."
+                );
+                return reject();
+            }
             _ => {}
         }
+        log_string("verify");
         // Do the expensive proof verification in the VM at the end.
         ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
     } else {

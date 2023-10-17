@@ -47,8 +47,7 @@ fn num_of_threads_aux(
     }
 }
 
-// fixme: Handle this gracefully with either an Option or a Result. Ensure that
-// hostname resolution works.
+// FIXME: Handle this gracefully with either an Option or a Result.
 pub fn convert_tm_addr_to_socket_addr(
     tm_addr: &TendermintAddress,
 ) -> SocketAddr {

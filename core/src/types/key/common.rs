@@ -82,8 +82,11 @@ impl string_encoding::Format for PublicKey {
         BorshSerialize::try_to_vec(self).unwrap()
     }
 
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
         BorshDeserialize::try_from_slice(bytes)
+            .map_err(DecodeError::InvalidBytes)
     }
 }
 
@@ -252,8 +255,11 @@ impl string_encoding::Format for Signature {
         BorshSerialize::try_to_vec(self).unwrap()
     }
 
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
         BorshDeserialize::try_from_slice(bytes)
+            .map_err(DecodeError::InvalidBytes)
     }
 }
 

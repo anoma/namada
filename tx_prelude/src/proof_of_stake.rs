@@ -2,7 +2,7 @@
 
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
-use namada_core::types::transaction::InitValidator;
+use namada_core::types::transaction::pos::InitValidator;
 use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
@@ -74,7 +74,8 @@ impl Ctx {
     pub fn init_validator(
         &mut self,
         InitValidator {
-            account_key,
+            account_keys,
+            threshold,
             consensus_key,
             eth_cold_key,
             eth_hot_key,
@@ -89,8 +90,12 @@ impl Ctx {
         let current_epoch = self.get_block_epoch()?;
         // Init validator account
         let validator_address = self.init_account(validator_vp_code_hash)?;
-        let pk_key = key::pk_key(&validator_address);
-        self.write(&pk_key, &account_key)?;
+        storage_api::account::init_account_storage(
+            self,
+            &validator_address,
+            &account_keys,
+            threshold,
+        )?;
         let protocol_pk_key = key::protocol_pk_key(&validator_address);
         self.write(&protocol_pk_key, &protocol_key)?;
         let dkg_pk_key = key::dkg_session_keys::dkg_pk_key(&validator_address);

@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::io::ErrorKind;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -11,7 +12,7 @@ use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::ibc::signer::Signer;
+use crate::ibc::Signer;
 use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::PublicKeyHash;
@@ -68,8 +69,6 @@ mod internal {
         "ano::Protocol Parameters                     ";
     pub const GOVERNANCE: &str =
         "ano::Governance                              ";
-    pub const SLASH_FUND: &str =
-        "ano::Slash Fund                              ";
     pub const IBC: &str =
         "ibc::Inter-Blockchain Communication          ";
     pub const ETH_BRIDGE: &str =
@@ -80,6 +79,8 @@ mod internal {
         "ano::Replay Protection                       ";
     pub const MULTITOKEN: &str =
         "ano::Multitoken                              ";
+    pub const PGF: &str =
+        "ano::Pgf                                     ";
 }
 
 /// Error from decoding address from string
@@ -98,6 +99,8 @@ const PREFIX_INTERNAL: &str = "ano";
 const PREFIX_IBC: &str = "ibc";
 /// Fixed-length address strings prefix for Ethereum addresses.
 const PREFIX_ETH: &str = "eth";
+/// Fixed-length address strings prefix for Non-Usable-Token addresses.
+const PREFIX_NUT: &str = "nut";
 
 /// An account's address
 #[derive(
@@ -178,9 +181,6 @@ impl Address {
                     InternalAddress::Governance => {
                         internal::GOVERNANCE.to_string()
                     }
-                    InternalAddress::SlashFund => {
-                        internal::SLASH_FUND.to_string()
-                    }
                     InternalAddress::Ibc => internal::IBC.to_string(),
                     InternalAddress::IbcToken(hash) => {
                         format!("{}::{}", PREFIX_IBC, hash)
@@ -196,12 +196,18 @@ impl Address {
                             eth_addr.to_canonical().replace("0x", "");
                         format!("{}::{}", PREFIX_ETH, eth_addr)
                     }
+                    InternalAddress::Nut(eth_addr) => {
+                        let eth_addr =
+                            eth_addr.to_canonical().replace("0x", "");
+                        format!("{PREFIX_NUT}::{eth_addr}")
+                    }
                     InternalAddress::ReplayProtection => {
                         internal::REPLAY_PROTECTION.to_string()
                     }
                     InternalAddress::Multitoken => {
                         internal::MULTITOKEN.to_string()
                     }
+                    InternalAddress::Pgf => internal::PGF.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -213,43 +219,55 @@ impl Address {
     }
 
     /// Try to parse an address from fixed-length utf-8 encoded address string.
-    pub fn try_from_fixed_len_string(buf: &mut &[u8]) -> std::io::Result<Self> {
-        use std::io::{Error, ErrorKind};
-        let string = std::str::from_utf8(buf)
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+    fn try_from_fixed_len_string(buf: &mut &[u8]) -> Result<Self> {
+        let string = std::str::from_utf8(buf).map_err(|err| {
+            DecodeError::InvalidInnerEncoding(
+                ErrorKind::InvalidData,
+                err.to_string(),
+            )
+        })?;
         if string.len() != FIXED_LEN_STRING_BYTES {
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid length"));
+            return Err(DecodeError::InvalidInnerEncoding(
+                ErrorKind::InvalidData,
+                "Invalid length".to_string(),
+            ));
         }
         match string.split_once("::") {
             Some((PREFIX_ESTABLISHED, hash)) => {
                 if hash.len() == HASH_HEX_LEN {
                     let raw =
                         HEXUPPER.decode(hash.as_bytes()).map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                e,
+                            DecodeError::InvalidInnerEncoding(
+                                ErrorKind::InvalidInput,
+                                e.to_string(),
                             )
                         })?;
                     if raw.len() != HASH_LEN {
-                        return Err(Error::new(
+                        return Err(DecodeError::InvalidInnerEncoding(
                             ErrorKind::InvalidData,
                             "Established address hash must be 40 characters \
-                             long",
+                             long"
+                                .to_string(),
                         ));
                     }
                     let mut hash: [u8; HASH_LEN] = Default::default();
                     hash.copy_from_slice(&raw);
                     Ok(Address::Established(EstablishedAddress { hash }))
                 } else {
-                    Err(Error::new(
+                    Err(DecodeError::InvalidInnerEncoding(
                         ErrorKind::InvalidData,
-                        "Established address hash must be 40 characters long",
+                        "Established address hash must be 40 characters long"
+                            .to_string(),
                     ))
                 }
             }
             Some((PREFIX_IMPLICIT, pkh)) => {
-                let pkh = PublicKeyHash::from_str(pkh)
-                    .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+                let pkh = PublicKeyHash::from_str(pkh).map_err(|err| {
+                    DecodeError::InvalidInnerEncoding(
+                        ErrorKind::InvalidData,
+                        err.to_string(),
+                    )
+                })?;
                 Ok(Address::Implicit(ImplicitAddress(pkh)))
             }
             Some((PREFIX_INTERNAL, _)) => match string {
@@ -263,9 +281,6 @@ impl Address {
                 internal::GOVERNANCE => {
                     Ok(Address::Internal(InternalAddress::Governance))
                 }
-                internal::SLASH_FUND => {
-                    Ok(Address::Internal(InternalAddress::SlashFund))
-                }
                 internal::ETH_BRIDGE => {
                     Ok(Address::Internal(InternalAddress::EthBridge))
                 }
@@ -278,9 +293,10 @@ impl Address {
                 internal::MULTITOKEN => {
                     Ok(Address::Internal(InternalAddress::Multitoken))
                 }
-                _ => Err(Error::new(
+                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
+                _ => Err(DecodeError::InvalidInnerEncoding(
                     ErrorKind::InvalidData,
-                    "Invalid internal address",
+                    "Invalid internal address".to_string(),
                 )),
             },
             Some((PREFIX_IBC, raw)) => match string {
@@ -288,31 +304,37 @@ impl Address {
                 _ if raw.len() == HASH_HEX_LEN => Ok(Address::Internal(
                     InternalAddress::IbcToken(raw.to_string()),
                 )),
-                _ => Err(Error::new(
+                _ => Err(DecodeError::InvalidInnerEncoding(
                     ErrorKind::InvalidData,
-                    "Invalid IBC internal address",
+                    "Invalid IBC internal address".to_string(),
                 )),
             },
-            Some((PREFIX_ETH, raw)) => match string {
+            Some((prefix @ (PREFIX_ETH | PREFIX_NUT), raw)) => match string {
                 _ if raw.len() == HASH_HEX_LEN => {
                     match EthAddress::from_str(&format!("0x{}", raw)) {
-                        Ok(eth_addr) => Ok(Address::Internal(
-                            InternalAddress::Erc20(eth_addr),
-                        )),
-                        Err(e) => Err(Error::new(
+                        Ok(eth_addr) => Ok(match prefix {
+                            PREFIX_ETH => Address::Internal(
+                                InternalAddress::Erc20(eth_addr),
+                            ),
+                            PREFIX_NUT => Address::Internal(
+                                InternalAddress::Nut(eth_addr),
+                            ),
+                            _ => unreachable!(),
+                        }),
+                        Err(e) => Err(DecodeError::InvalidInnerEncoding(
                             ErrorKind::InvalidData,
                             e.to_string(),
                         )),
                     }
                 }
-                _ => Err(Error::new(
+                _ => Err(DecodeError::InvalidInnerEncoding(
                     ErrorKind::InvalidData,
-                    "Invalid ERC20 internal address",
+                    "Invalid ERC20 internal address".to_string(),
                 )),
             },
-            _ => Err(Error::new(
+            _ => Err(DecodeError::InvalidInnerEncoding(
                 ErrorKind::InvalidData,
-                "Invalid address prefix",
+                "Invalid address prefix".to_string(),
             )),
         }
     }
@@ -344,7 +366,7 @@ impl string_encoding::Format for Address {
         Self::to_fixed_len_string(self)
     }
 
-    fn decode_bytes(bytes: &[u8]) -> std::result::Result<Self, std::io::Error> {
+    fn decode_bytes(bytes: &[u8]) -> Result<Self> {
         Self::try_from_fixed_len_string(&mut &bytes[..])
     }
 }
@@ -510,18 +532,20 @@ pub enum InternalAddress {
     IbcToken(String),
     /// Governance address
     Governance,
-    /// SlashFund address for governance
-    SlashFund,
     /// Bridge to Ethereum
     EthBridge,
     /// The pool of transactions to be relayed to Ethereum
     EthBridgePool,
     /// ERC20 token for Ethereum bridge
     Erc20(EthAddress),
+    /// Non-usable ERC20 tokens
+    Nut(EthAddress),
     /// Replay protection contains transactions' hash
     ReplayProtection,
     /// Multitoken
     Multitoken,
+    /// Pgf
+    Pgf,
 }
 
 impl Display for InternalAddress {
@@ -534,14 +558,15 @@ impl Display for InternalAddress {
                 Self::PosSlashPool => "PosSlashPool".to_string(),
                 Self::Parameters => "Parameters".to_string(),
                 Self::Governance => "Governance".to_string(),
-                Self::SlashFund => "SlashFund".to_string(),
                 Self::Ibc => "IBC".to_string(),
                 Self::IbcToken(hash) => format!("IbcToken: {}", hash),
                 Self::EthBridge => "EthBridge".to_string(),
                 Self::EthBridgePool => "EthBridgePool".to_string(),
                 Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
+                Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::Multitoken => "Multitoken".to_string(),
+                Self::Pgf => "PublicGoodFundings".to_string(),
             }
         )
     }
@@ -641,7 +666,7 @@ pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
 /// Temporary helper for testing, a hash map of tokens addresses with their
 /// MASP XAN incentive schedules. If the reward is (a, b) then a rewarded tokens
 /// are dispensed for every b possessed tokens.
-pub fn masp_rewards() -> HashMap<&'static str, (u64, u64)> {
+pub fn masp_rewards() -> HashMap<&'static str, (u32, u32)> {
     vec![
         ("nam", (0, 100)),
         ("btc", (1, 100)),
@@ -842,14 +867,15 @@ pub mod testing {
             InternalAddress::PoS => {}
             InternalAddress::PosSlashPool => {}
             InternalAddress::Governance => {}
-            InternalAddress::SlashFund => {}
             InternalAddress::Parameters => {}
             InternalAddress::Ibc => {}
             InternalAddress::IbcToken(_) => {}
             InternalAddress::EthBridge => {}
             InternalAddress::EthBridgePool => {}
             InternalAddress::Erc20(_) => {}
+            InternalAddress::Nut(_) => {}
             InternalAddress::ReplayProtection => {}
+            InternalAddress::Pgf => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
         };
@@ -860,12 +886,13 @@ pub mod testing {
             Just(InternalAddress::Parameters),
             arb_ibc_token(),
             Just(InternalAddress::Governance),
-            Just(InternalAddress::SlashFund),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
             Just(arb_erc20()),
+            Just(arb_nut()),
             Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::Multitoken),
+            Just(InternalAddress::Pgf),
         ]
     }
 
@@ -887,6 +914,13 @@ pub mod testing {
 
     fn arb_erc20() -> InternalAddress {
         use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        // TODO: generate random erc20 addr data
         InternalAddress::Erc20(arbitrary_eth_address())
+    }
+
+    fn arb_nut() -> InternalAddress {
+        use crate::types::ethereum_events::testing::arbitrary_eth_address;
+        // TODO: generate random erc20 addr data
+        InternalAddress::Nut(arbitrary_eth_address())
     }
 }

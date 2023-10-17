@@ -18,28 +18,33 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use std::collections::BTreeSet;
     use std::panic;
 
     use itertools::Itertools;
-    use namada::ibc::tx_msg::Msg;
+    use namada::ibc::core::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
-    use namada::ledger::ibc::vp::{
+    use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
     use namada::ledger::tx_env::TxEnv;
-    use namada::proto::{Code, Data, Section, Signature, Tx};
-    use namada::types::address::{Address, InternalAddress};
+    use namada::proto::Tx;
     use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::types::time::DateTimeUtc;
     use namada::types::token::{self, Amount};
-    use namada::types::transaction::TxType;
     use namada::types::{address, key};
+    use namada_core::ledger::gas::{TxGasMeter, VpGasMeter};
     use namada_core::ledger::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_core::ledger::ibc::Error as IbcActionError;
     use namada_test_utils::TestWasms;
-    use namada_tx_prelude::{BorshSerialize, StorageRead, StorageWrite};
+    use namada_tx_prelude::address::InternalAddress;
+    use namada_tx_prelude::chain::ChainId;
+    use namada_tx_prelude::{
+        Address, BorshSerialize, StorageRead, StorageWrite,
+    };
+    use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
     use test_log::test;
@@ -437,12 +442,11 @@ mod tests {
         let addr = address::testing::established_address_1();
 
         // Write the public key to storage
-        let pk_key = key::pk_key(&addr);
         let keypair = key::testing::keypair_1();
         let pk = keypair.ref_to();
-        env.wl_storage
-            .write(&pk_key, pk.try_to_vec().unwrap())
-            .unwrap();
+
+        let _ = pks_handle(&addr).insert(&mut env.wl_storage, 0_u8, pk.clone());
+
         // Initialize the environment
         vp_host_env::set(env);
 
@@ -455,28 +459,33 @@ mod tests {
             // Tx without any data
             vec![],
         ] {
+            let keypairs = vec![keypair.clone()];
+            let pks_map = AccountPublicKeysMap::from_iter(vec![pk.clone()]);
             let signed_tx_data = vp_host_env::with(|env| {
-                let mut tx = Tx::new(TxType::Raw);
-                tx.header.chain_id = env.wl_storage.storage.chain_id.clone();
-                tx.header.expiration = expiration;
-                tx.set_code(Code::new(code.clone()));
-                tx.set_data(Data::new(data.clone()));
-                tx.add_section(Section::Signature(Signature::new(
-                    vec![*tx.code_sechash(), *tx.data_sechash()],
-                    &keypair,
-                )));
+                let chain_id = env.wl_storage.storage.chain_id.clone();
+                let mut tx = Tx::new(chain_id, expiration);
+                tx.add_code(code.clone())
+                    .add_serialized_data(data.to_vec())
+                    .sign_raw(keypairs.clone(), pks_map.clone(), None)
+                    .sign_wrapper(keypair.clone());
                 env.tx = tx;
                 env.tx.clone()
             });
             assert_eq!(signed_tx_data.data().as_ref(), Some(data));
             assert!(
                 signed_tx_data
-                    .verify_signature(
-                        &pk,
+                    .verify_signatures(
                         &[
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
                         ],
+                        pks_map,
+                        &None,
+                        1,
+                        None,
+                        Some(&mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ))
                     )
                     .is_ok()
             );
@@ -484,12 +493,20 @@ mod tests {
             let other_keypair = key::testing::keypair_2();
             assert!(
                 signed_tx_data
-                    .verify_signature(
-                        &other_keypair.ref_to(),
+                    .verify_signatures(
                         &[
                             *signed_tx_data.data_sechash(),
                             *signed_tx_data.code_sechash(),
                         ],
+                        AccountPublicKeysMap::from_iter([
+                            other_keypair.ref_to()
+                        ]),
+                        &None,
+                        1,
+                        None,
+                        Some(&mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ))
                     )
                     .is_err()
             );
@@ -543,32 +560,39 @@ mod tests {
         // evaluating without any code should fail
         let empty_code = Hash::zero();
         let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(input_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         let result = vp::CTX.eval(empty_code, tx).unwrap();
         assert!(!result);
 
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
         });
-        let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code_from_hash(code_hash)
+            .add_serialized_data(input_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(result);
 
@@ -576,19 +600,22 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
+        let code_len = (code.len() as u64).try_to_vec().unwrap();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
+            let len_key = Key::wasm_code_len(&code_hash);
             env.wl_storage.storage.write(&key, code.clone()).unwrap();
+            env.wl_storage
+                .storage
+                .write(&len_key, code_len.clone())
+                .unwrap();
         });
-        let input_data = vec![];
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(input_data));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code_from_hash(code_hash)
+            .add_serialized_data(input_data)
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         let result = vp::CTX.eval(code_hash, tx).unwrap();
         assert!(!result);
     }
@@ -599,18 +626,21 @@ mod tests {
         tx_host_env::init();
 
         ibc::init_storage();
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Start a transaction to create a new client
         let msg = ibc::msg_create_client();
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
 
         // create a client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -640,13 +670,11 @@ mod tests {
         let msg = ibc::msg_update_client(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -662,6 +690,12 @@ mod tests {
     fn test_ibc_connection_init_and_open() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         ibc::init_storage();
@@ -679,13 +713,11 @@ mod tests {
         let msg = ibc::msg_connection_open_init(client_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -714,13 +746,11 @@ mod tests {
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -740,6 +770,12 @@ mod tests {
         // Set the initial state before starting transactions
         ibc::init_storage();
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         let (client_id, client_state, writes) = ibc::prepare_client();
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
@@ -754,13 +790,11 @@ mod tests {
         let msg = ibc::msg_connection_open_try(client_id, client_state);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -789,13 +823,11 @@ mod tests {
         let msg = ibc::msg_connection_open_confirm(conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -811,6 +843,12 @@ mod tests {
     fn test_ibc_channel_init_and_open() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         ibc::init_storage();
@@ -831,13 +869,11 @@ mod tests {
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -866,13 +902,11 @@ mod tests {
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // open the channle with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -903,18 +937,22 @@ mod tests {
             });
         });
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         // Start a transaction for ChannelOpenTry
         let port_id = ibc::PortId::transfer();
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -944,13 +982,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -984,18 +1020,22 @@ mod tests {
             });
         });
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         // Start a transaction to close the channel
         let msg = ibc::msg_channel_close_init(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // close the channel with the message
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
@@ -1037,18 +1077,22 @@ mod tests {
             });
         });
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         // Start a transaction to close the channel
         let msg = ibc::msg_channel_close_confirm(port_id, channel_id);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1083,6 +1127,12 @@ mod tests {
             });
         });
 
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
@@ -1092,13 +1142,11 @@ mod tests {
             .encode(&mut tx_data)
             .expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs.clone(), pks_map.clone(), None)
+            .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1141,13 +1189,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1163,7 +1209,10 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow_key = token::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
@@ -1171,13 +1220,22 @@ mod tests {
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(100)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(100, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
     fn test_ibc_burn_token() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, sender) = ibc::init_storage();
@@ -1191,7 +1249,7 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
         let balance_key = token::balance_key(&ibc_token, &sender);
-        let init_bal = Amount::native_whole(100);
+        let init_bal = Amount::from_u64(100);
         writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
         let minted_key = token::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.try_to_vec().unwrap());
@@ -1217,18 +1275,15 @@ mod tests {
 
         // Start a transaction to send a packet
         // Set this chain is the sink zone
-        let hashed_denom = ibc_token.to_string();
-        let msg = ibc::msg_transfer(port_id, channel_id, hashed_denom, &sender);
+        let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1247,17 +1302,23 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&balance_key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(0)));
+        assert_eq!(balance, Some(Amount::from_u64(0)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(0)));
+        assert_eq!(minted, Some(Amount::from_u64(0)));
     }
 
     #[test]
     fn test_ibc_receive_token() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, receiver) = ibc::init_storage();
@@ -1291,13 +1352,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1320,17 +1379,108 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::native_whole(100)));
+        assert_eq!(minted, Some(Amount::from_u64(100)));
+    }
+
+    #[test]
+    fn test_ibc_receive_no_token() {
+        // The environment must be initialized first
+        tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
+
+        // Set the initial state before starting transactions
+        let (token, receiver) = ibc::init_storage();
+        let (client_id, _client_state, mut writes) = ibc::prepare_client();
+        let (conn_id, conn_writes) = ibc::prepare_opened_connection(&client_id);
+        writes.extend(conn_writes);
+        let (port_id, channel_id, channel_writes) =
+            ibc::prepare_opened_channel(&conn_id, false);
+        writes.extend(channel_writes);
+
+        writes.into_iter().for_each(|(key, val)| {
+            tx_host_env::with(|env| {
+                env.wl_storage
+                    .storage
+                    .write(&key, &val)
+                    .expect("write error");
+            });
+        });
+
+        // packet with invalid data
+        let sequence = ibc::Sequence::from(1);
+        let mut packet = ibc::received_packet(
+            port_id.clone(),
+            channel_id.clone(),
+            sequence,
+            token.to_string(),
+            &receiver,
+        );
+        packet.data = vec![0];
+
+        // Start a transaction to receive a packet
+        let msg = ibc::msg_packet_recv(packet);
+        let mut tx_data = vec![];
+        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
+        // Receive the packet, but no token is received
+        tx_host_env::ibc::ibc_actions(tx::ctx())
+            .execute(&tx_data)
+            .expect("receiving the token failed");
+
+        // Check if the transaction is valid
+        let env = tx_host_env::take();
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(result.expect("validation failed unexpectedly"));
+        // Check if the ack has an error due to the invalid packet data
+        tx_host_env::set(env);
+        let ack_key = ibc_storage::ack_key(&port_id, &channel_id, sequence);
+        let ack = tx_host_env::with(|env| {
+            env.wl_storage
+                .read_bytes(&ack_key)
+                .expect("read error")
+                .unwrap()
+        });
+        let expected_ack =
+            Hash::sha256(Vec::<u8>::from(ibc::transfer_ack_with_error()))
+                .to_vec();
+        assert_eq!(ack, expected_ack);
+        // Check if only the ack and the receipt are added
+        let receipt_key =
+            ibc_storage::receipt_key(&port_id, &channel_id, sequence);
+        let changed_keys = tx_host_env::with(|env| {
+            env.wl_storage
+                .write_log
+                .verifiers_and_changed_keys(&BTreeSet::new())
+                .1
+        });
+        let expected_changed_keys = BTreeSet::from([ack_key, receipt_key]);
+        assert_eq!(changed_keys, expected_changed_keys);
     }
 
     #[test]
     fn test_ibc_unescrow_token() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, receiver) = ibc::init_storage();
@@ -1353,7 +1503,10 @@ mod tests {
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_uint(100, ibc::ANY_DENOMINATION)
+            .unwrap()
+            .try_to_vec()
+            .unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1382,13 +1535,11 @@ mod tests {
         let msg = ibc::msg_packet_recv(packet);
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1408,17 +1559,29 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(200)));
+        assert_eq!(
+            balance,
+            Some(Amount::from_uint(200, ibc::ANY_DENOMINATION).unwrap())
+        );
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(
+            escrow,
+            Some(Amount::from_uint(0, ibc::ANY_DENOMINATION).unwrap())
+        );
     }
 
     #[test]
     fn test_ibc_unescrow_received_token() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, receiver) = ibc::init_storage();
@@ -1445,7 +1608,7 @@ mod tests {
             denom,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::native_whole(100).try_to_vec().unwrap();
+        let val = Amount::from_u64(100).try_to_vec().unwrap();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1477,13 +1640,11 @@ mod tests {
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1506,17 +1667,23 @@ mod tests {
         let balance: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&key).expect("read error")
         });
-        assert_eq!(balance, Some(Amount::native_whole(100)));
+        assert_eq!(balance, Some(Amount::from_u64(100)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.wl_storage.read(&escrow_key).expect("read error")
         });
-        assert_eq!(escrow, Some(Amount::native_whole(0)));
+        assert_eq!(escrow, Some(Amount::from_u64(0)));
     }
 
     #[test]
     fn test_ibc_packet_timeout() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, sender) = ibc::init_storage();
@@ -1573,13 +1740,11 @@ mod tests {
         let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
@@ -1603,6 +1768,12 @@ mod tests {
     fn test_ibc_timeout_on_close() {
         // The environment must be initialized first
         tx_host_env::init();
+
+        let keypair = key::testing::keypair_1();
+        let keypairs = vec![keypair.clone()];
+        let pks_map = AccountPublicKeysMap::from_iter([
+            key::testing::keypair_1().ref_to(),
+        ]);
 
         // Set the initial state before starting transactions
         let (token, sender) = ibc::init_storage();
@@ -1658,13 +1829,11 @@ mod tests {
         let msg = ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1));
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let mut tx = Tx::new(TxType::Raw);
-        tx.set_code(Code::new(vec![]));
-        tx.set_data(Data::new(tx_data.clone()));
-        tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.code_sechash(), *tx.data_sechash()],
-            &key::testing::keypair_1(),
-        )));
+        let mut tx = Tx::new(ChainId::default(), None);
+        tx.add_code(vec![])
+            .add_serialized_data(tx_data.clone())
+            .sign_raw(keypairs, pks_map, None)
+            .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())

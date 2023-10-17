@@ -14,6 +14,11 @@ pub fn token(address: &EthAddress) -> Address {
     Address::Internal(InternalAddress::Erc20(*address))
 }
 
+/// Construct a NUT token address from an ERC20 address.
+pub fn nut(address: &EthAddress) -> Address {
+    Address::Internal(InternalAddress::Nut(*address))
+}
+
 /// Represents the type of a key relating to a wrapped ERC20
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum KeyType {

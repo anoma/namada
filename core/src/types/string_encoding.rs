@@ -8,6 +8,7 @@
 //! below and use it to `impl string_encoding::Format for YourType`.
 
 use std::fmt::Display;
+use std::io::ErrorKind;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -52,6 +53,10 @@ pub enum DecodeError {
     UnexpectedBech32Hrp(String, String),
     #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
     UnexpectedBech32Variant(bech32::Variant),
+    #[error("Invalid address encoding: {0}, {1}")]
+    InvalidInnerEncoding(ErrorKind, String),
+    #[error("Invalid address encoding")]
+    InvalidInnerEncodingStr(String),
     #[error("Invalid bytes: {0}")]
     InvalidBytes(std::io::Error),
 }
@@ -91,14 +96,14 @@ pub trait Format: Sized {
         let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
             .map_err(DecodeError::DecodeBase32)?;
 
-        Self::decode_bytes(&bytes).map_err(DecodeError::InvalidBytes)
+        Self::decode_bytes(&bytes)
     }
 
     /// Encode `Self` to bytes
     fn to_bytes(&self) -> Vec<u8>;
 
     /// Try to decode `Self` from bytes
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error>;
+    fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>;
 }
 
 /// Implement [`std::fmt::Display`] and [`std::str::FromStr`] via

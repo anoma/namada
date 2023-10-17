@@ -9,12 +9,12 @@ pub const ADDRESS: Address =
     Address::Internal(InternalAddress::ReplayProtection);
 
 /// Check if a key is a replay protection key
-pub fn is_tx_hash_key(key: &Key) -> bool {
+pub fn is_replay_protection_key(key: &Key) -> bool {
     matches!(&key.segments[0], DbKeySeg::AddressSeg(addr) if addr == &ADDRESS)
 }
 
 /// Get the transaction hash key
-pub fn get_tx_hash_key(hash: &Hash) -> Key {
+pub fn get_replay_protection_key(hash: &Hash) -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&hash.to_string())
         .expect("Cannot obtain a valid db key")

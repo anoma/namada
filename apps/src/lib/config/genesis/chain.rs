@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::wallet::store::AddressVpType;
-use namada::ledger::wallet::{pre_genesis, Wallet};
+use namada::sdk::wallet::store::AddressVpType;
+use namada::sdk::wallet::{pre_genesis, Wallet};
 use namada::types::address::{masp, Address, EstablishedAddressGen};
 use namada::types::chain::{ChainId, ChainIdPrefix};
 use namada::types::dec::Dec;
@@ -258,12 +258,11 @@ impl Finalized {
             epochs_per_year,
             pos_gain_p,
             pos_gain_d,
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees,
-            #[cfg(not(feature = "mainnet"))]
-                faucet_pow_difficulty: _,
-            #[cfg(not(feature = "mainnet"))]
-                faucet_withdrawal_limit: _,
+            max_signatures_per_transaction,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
+            max_block_gas,
+            minimum_gas_price,
             ..
         } = self.parameters.parameters.clone();
 
@@ -292,25 +291,6 @@ impl Finalized {
         let staked_ratio = Dec::zero();
         let pos_inflation_amount = 0;
 
-        // Try to find a faucet account
-        #[cfg(not(feature = "mainnet"))]
-        let faucet_account = {
-            self.transactions
-                .established_account
-                .as_ref()
-                .and_then(|acc| {
-                    acc.iter().find_map(
-                        |FinalizedEstablishedAccountTx { address, tx }| {
-                            if tx.vp == "vp_testnet_faucet" {
-                                Some(address.clone())
-                            } else {
-                                None
-                            }
-                        },
-                    )
-                })
-        };
-
         namada::ledger::parameters::Parameters {
             epoch_duration,
             max_expected_time_per_block,
@@ -323,10 +303,19 @@ impl Finalized {
             staked_ratio,
             pos_inflation_amount: Amount::native_whole(pos_inflation_amount),
             max_proposal_bytes,
-            #[cfg(not(feature = "mainnet"))]
-            faucet_account,
-            #[cfg(not(feature = "mainnet"))]
-            wrapper_tx_fees,
+            max_signatures_per_transaction,
+            fee_unshielding_gas_limit,
+            fee_unshielding_descriptions_limit,
+            max_block_gas,
+            minimum_gas_price: minimum_gas_price
+                .iter()
+                .map(|(token, amt)| {
+                    (
+                        self.tokens.token.get(token).cloned().unwrap().address,
+                        amt.amount,
+                    )
+                })
+                .collect(),
         }
     }
 
@@ -366,23 +355,30 @@ impl Finalized {
 
     pub fn get_gov_params(
         &self,
-    ) -> namada::ledger::governance::parameters::GovParams {
+    ) -> namada::core::ledger::governance::parameters::GovernanceParameters
+    {
         let templates::GovernanceParams {
             min_proposal_fund,
             max_proposal_code_size,
-            min_proposal_period,
+            min_proposal_voting_period,
             max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
         } = self.parameters.gov_params.clone();
-        namada::ledger::governance::parameters::GovParams {
-            min_proposal_fund,
+        namada::core::ledger::governance::parameters::GovernanceParameters {
+            min_proposal_fund: Amount::native_whole(min_proposal_fund),
             max_proposal_code_size,
-            min_proposal_period,
             max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
+            min_proposal_voting_period,
         }
+    }
+
+    pub fn get_pgf_params(
+        &self,
+    ) -> namada::core::ledger::pgf::parameters::PgfParameters {
+        self.parameters.pgf_params.clone()
     }
 
     pub fn get_eth_bridge_params(
@@ -392,11 +388,13 @@ impl Finalized {
             eth_start_height,
             min_confirmations,
             contracts,
+            erc20_whitelist,
         }) = self.parameters.eth_bridge_params.clone()
         {
             Some(namada::ledger::eth_bridge::EthereumBridgeParams {
                 eth_start_height,
                 min_confirmations,
+                erc20_whitelist,
                 contracts,
             })
         } else {
@@ -474,6 +472,8 @@ pub fn finalize(
     let tokens = FinalizedTokens::finalize_from(tokens, &mut addr_gen);
     let transactions =
         FinalizedTransactions::finalize_from(transactions, &mut addr_gen);
+    let parameters =
+        FinalizedParameters::finalize_from(&transactions, parameters);
 
     // Store the last state of the address generator in the metadata
     let mut metadata = genesis_to_gen_address.metadata;
@@ -570,7 +570,7 @@ pub struct Chain<ID> {
     pub vps: templates::ValidityPredicates,
     pub tokens: FinalizedTokens,
     pub balances: templates::DenominatedBalances,
-    pub parameters: templates::Parameters,
+    pub parameters: FinalizedParameters,
     pub transactions: FinalizedTransactions,
     /// Chain metadata
     pub metadata: Metadata<ID>,
@@ -683,6 +683,72 @@ impl FinalizedTransactions {
         self.validator_account
             .as_ref()
             .and_then(|txs| txs.iter().find(|tx| &tx.tx.alias == alias))
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct FinalizedParameters {
+    pub parameters: templates::ChainParams<templates::Validated>,
+    pub pos_params: templates::PosParams,
+    pub gov_params: templates::GovernanceParams,
+    pub pgf_params: namada::core::ledger::pgf::parameters::PgfParameters,
+    pub eth_bridge_params: Option<templates::EthBridgeParams>,
+}
+
+impl FinalizedParameters {
+    fn finalize_from(
+        txs: &FinalizedTransactions,
+        templates::Parameters {
+            parameters,
+            pos_params,
+            gov_params,
+            pgf_params,
+            eth_bridge_params,
+        }: templates::Parameters<Validated>,
+    ) -> Self {
+        use namada::core::ledger::pgf::parameters::PgfParameters;
+        let mut finalized_pgf_params = PgfParameters {
+            stewards: Default::default(),
+            pgf_inflation_rate: pgf_params.pgf_inflation_rate,
+            stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+        };
+        finalized_pgf_params.stewards = pgf_params
+            .stewards
+            .into_iter()
+            .map(|alias| {
+                let maybe_estbd = txs
+                    .established_account
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .find(|tx| tx.tx.alias == alias)
+                    .map(|tx| tx.address.clone());
+                let maybe_validator = txs
+                    .validator_account
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .find(|tx| tx.tx.alias == alias)
+                    .map(|tx| tx.address.clone());
+                maybe_estbd.or(maybe_validator).unwrap()
+            })
+            .collect();
+        Self {
+            parameters,
+            pos_params,
+            gov_params,
+            pgf_params: finalized_pgf_params,
+            eth_bridge_params,
+        }
     }
 }
 

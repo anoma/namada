@@ -1,5 +1,6 @@
 //! Types definitions.
 
+pub mod account;
 pub mod address;
 pub mod chain;
 pub mod dec;
@@ -7,7 +8,6 @@ pub mod eth_abi;
 pub mod eth_bridge_pool;
 pub mod ethereum_events;
 pub mod ethereum_structs;
-pub mod governance;
 pub mod hash;
 pub mod ibc;
 pub mod internal;

@@ -2,11 +2,10 @@
 //! as the PoS and IBC modules.
 
 pub mod ethereum_bridge;
-pub mod governance;
+pub mod ibc;
 pub mod multitoken;
 pub mod parameters;
 pub mod replay_protection;
-pub mod slash_fund;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -148,14 +147,6 @@ where
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
         }
-    }
-
-    /// Add a gas cost incured in a validity predicate
-    pub fn add_gas(
-        &self,
-        used_gas: u64,
-    ) -> Result<(), vp_host_fns::RuntimeError> {
-        vp_host_fns::add_gas(&mut self.gas_meter.borrow_mut(), used_gas)
     }
 
     /// Read access to the prior storage (state before tx execution)
@@ -506,8 +497,6 @@ where
                 self.keys_changed,
                 &eval_runner,
                 &mut vp_wasm_cache,
-                #[cfg(not(feature = "mainnet"))]
-                false,
             );
             match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
             {
@@ -535,6 +524,10 @@ where
 
     fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
         unimplemented!("no masp native vp")
+    }
+
+    fn charge_gas(&self, _used_gas: u64) -> Result<(), storage_api::Error> {
+        unimplemented!("Native vps don't consume whitelisted gas")
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {

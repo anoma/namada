@@ -66,7 +66,7 @@ impl WeightScale<Hash, Module> for ModuleCacheScale {
         // elements, so we use the size of the module as its scale
         // and subtract 1 from it to negate the increment of the cache length.
 
-        let size = loupe::size_of_val(value) + HASH_LENGTH;
+        let size = std::mem::size_of_val(value) + HASH_LENGTH;
         tracing::debug!(
             "WASM module hash {}, size including the hash {}",
             key.to_string(),

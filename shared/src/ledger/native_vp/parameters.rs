@@ -8,7 +8,7 @@ use namada_core::types::address::Address;
 use namada_core::types::storage::Key;
 use thiserror::Error;
 
-use super::governance;
+use crate::core::ledger::storage_api::governance;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::vm::WasmCacheAccess;
 
@@ -55,11 +55,10 @@ where
                 return false;
             };
             match key_type {
-                KeyType::PARAMETER => governance::utils::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    &data,
-                )
-                .unwrap_or(false),
+                KeyType::PARAMETER => {
+                    governance::is_proposal_accepted(&self.ctx.pre(), &data)
+                        .unwrap_or(false)
+                }
                 KeyType::UNKNOWN_PARAMETER => false,
                 KeyType::UNKNOWN => true,
             }

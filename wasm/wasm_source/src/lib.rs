@@ -12,6 +12,8 @@ pub mod tx_init_account;
 pub mod tx_init_proposal;
 #[cfg(feature = "tx_init_validator")]
 pub mod tx_init_validator;
+#[cfg(feature = "tx_resign_steward")]
+pub mod tx_resign_steward;
 #[cfg(feature = "tx_reveal_pk")]
 pub mod tx_reveal_pk;
 #[cfg(feature = "tx_transfer")]
@@ -20,8 +22,10 @@ pub mod tx_transfer;
 pub mod tx_unbond;
 #[cfg(feature = "tx_unjail_validator")]
 pub mod tx_unjail_validator;
-#[cfg(feature = "tx_update_vp")]
-pub mod tx_update_vp;
+#[cfg(feature = "tx_update_account")]
+pub mod tx_update_account;
+#[cfg(feature = "tx_update_steward_commission")]
+pub mod tx_update_steward_commission;
 #[cfg(feature = "tx_vote_proposal")]
 pub mod tx_vote_proposal;
 #[cfg(feature = "tx_withdraw")]
@@ -31,8 +35,6 @@ pub mod tx_withdraw;
 pub mod vp_implicit;
 #[cfg(feature = "vp_masp")]
 pub mod vp_masp;
-#[cfg(feature = "vp_testnet_faucet")]
-pub mod vp_testnet_faucet;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 #[cfg(feature = "vp_validator")]

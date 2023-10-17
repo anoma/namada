@@ -1,18 +1,18 @@
 //! Genesis transactions
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{Debug, Display, Formatter};
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada::core::types::storage;
 use namada::core::types::string_encoding::StringEncoded;
-use namada::ledger::wallet::pre_genesis::ValidatorWallet;
-use namada::ledger::wallet::{FindKeyError, Wallet, WalletUtils};
 use namada::proto::{
     standalone_signature, verify_standalone_sig, SerializeWithBorsh,
 };
+use namada::sdk::wallet::pre_genesis::ValidatorWallet;
+use namada::sdk::wallet::{FindKeyError, Wallet, WalletUtils};
 use namada::types::dec::Dec;
 use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::{common, RefTo, VerifySigError};
@@ -27,6 +27,7 @@ use super::templates::{
 use crate::config::genesis::templates::{
     TemplateValidation, Tokens, Unvalidated, Validated,
 };
+use crate::config::genesis::HexString;
 use crate::wallet::Alias;
 
 pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
@@ -172,7 +173,6 @@ pub fn init_validator<U: WalletUtils>(
             source: StringEncoded::new(source_key.ref_to()),
             target: alias.clone(),
             amount: transfer_from_source_amount,
-            valid: Default::default(),
         };
         let transfer_tx = sign_transfer_tx(unsigned_transfer_tx, source_wallet);
         Some(vec![transfer_tx])
@@ -185,7 +185,6 @@ pub fn init_validator<U: WalletUtils>(
             source: AliasOrPk::Alias(alias.clone()),
             validator: alias,
             amount: self_bond_amount,
-            valid: Default::default(),
         };
         let bond_tx = sign_self_bond_tx(unsigned_bond_tx, validator_wallet);
         Some(vec![bond_tx])
@@ -217,12 +216,14 @@ pub fn sign_established_account_tx<U: WalletUtils>(
         alias,
         vp,
         public_key: _,
+        storage,
     } = unsigned_tx;
 
     SignedEstablishedAccountTx {
         alias,
         vp,
         public_key: key,
+        storage,
     }
 }
 
@@ -583,6 +584,9 @@ pub struct EstablishedAccountTx<PK> {
     pub vp: String,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
     pub public_key: Option<PK>,
+    #[serde(default)]
+    /// Initial storage key values
+    pub storage: HashMap<storage::Key, HexString>,
 }
 
 pub type SignedTransferTx = Signed<TransferTx<Unvalidated>>;
@@ -618,15 +622,7 @@ pub struct TransferTx<T: TemplateValidation> {
     pub token: Alias,
     pub source: StringEncoded<common::PublicKey>,
     pub target: Alias,
-    pub amount: token::DenominatedAmount,
-    #[serde(default)]
-    #[serde(skip_serializing)]
-    #[cfg(test)]
-    pub valid: PhantomData<T>,
-    #[serde(default)]
-    #[serde(skip_serializing)]
-    #[cfg(not(test))]
-    valid: PhantomData<T>,
+    pub amount: T::Amount,
 }
 
 impl TransferTx<Unvalidated> {
@@ -640,7 +636,6 @@ impl TransferTx<Unvalidated> {
             source,
             target,
             amount,
-            ..
         } = self;
         let denom =
             if let Some(super::templates::TokenConfig { denom, .. }) =
@@ -673,7 +668,6 @@ impl TransferTx<Unvalidated> {
             source,
             target,
             amount,
-            valid: Default::default(),
         })
     }
 
@@ -741,15 +735,7 @@ impl SignedBondTx {
 pub struct BondTx<T: TemplateValidation> {
     pub source: AliasOrPk,
     pub validator: Alias,
-    pub amount: token::DenominatedAmount,
-    #[serde(default)]
-    #[serde(skip_serializing)]
-    #[cfg(test)]
-    pub valid: PhantomData<T>,
-    #[serde(default)]
-    #[serde(skip_serializing)]
-    #[cfg(not(test))]
-    valid: PhantomData<T>,
+    pub amount: T::Amount,
 }
 
 impl BondTx<Unvalidated> {
@@ -759,7 +745,6 @@ impl BondTx<Unvalidated> {
             source,
             validator,
             amount,
-            ..
         } = self;
         let amount = amount
             .increase_precision(NATIVE_MAX_DECIMAL_PLACES.into())
@@ -775,7 +760,6 @@ impl BondTx<Unvalidated> {
             source,
             validator,
             amount,
-            valid: Default::default(),
         })
     }
 
@@ -911,7 +895,7 @@ pub fn validate(
     vps: Option<&ValidityPredicates>,
     balances: Option<&DenominatedBalances>,
     tokens: &Tokens,
-    parameters: Option<&Parameters>,
+    parameters: Option<&Parameters<Validated>>,
 ) -> Option<Transactions<Validated>> {
     let mut is_valid = true;
 
@@ -1051,7 +1035,7 @@ fn validate_bond(
     balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
     established_accounts: &BTreeMap<Alias, Option<common::PublicKey>>,
     validator_accounts: &BTreeMap<Alias, common::PublicKey>,
-    parameters: &Parameters,
+    parameters: &Parameters<Validated>,
 ) -> Option<BondTx<Validated>> {
     // Check signature
     let mut is_valid = {
@@ -1439,11 +1423,13 @@ impl From<&SignedEstablishedAccountTx> for UnsignedEstablishedAccountTx {
             alias,
             vp,
             public_key,
+            storage,
         } = tx;
         Self {
             alias: alias.clone(),
             vp: vp.clone(),
             public_key: public_key.as_ref().map(|signed| signed.pk.clone()),
+            storage: storage.clone(),
         }
     }
 }

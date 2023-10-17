@@ -1,6 +1,6 @@
 //! Default addresses and keys.
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
@@ -8,21 +8,24 @@ pub use dev::{
     validator_keys,
 };
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
     use std::collections::HashMap;
 
     use borsh::BorshDeserialize;
-    use namada::ledger::wallet::alias::Alias;
-    use namada::ledger::{governance, pos};
+    use namada::ledger::{governance, pgf, pos};
+    use namada::sdk::wallet::alias::Alias;
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
 
-    /// Generate a new protocol signing keypair, eth hot key and DKG session
-    /// keypair
+    /// N.B. these are the corresponding values from
+    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
+    ///
+    /// If that wallet is regenerated, these values must be changed to fix unit
+    /// tests.
     pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
     {
         // ed25519 bytes
@@ -85,6 +88,7 @@ mod dev {
             ("pos".into(), pos::ADDRESS),
             ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::ADDRESS),
+            ("governance".into(), pgf::ADDRESS),
             ("validator".into(), validator_address()),
             ("albert".into(), albert_address()),
             ("bertha".into(), bertha_address()),
@@ -130,57 +134,57 @@ mod dev {
         Address::decode("atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q").expect("The token address decoding shouldn't fail")
     }
 
+    /// N.B. this is the corresponding value from
+    /// `genesis/pre-genesis/wallet.toml`.
     pub fn albert_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
-            115, 191, 32, 247, 18, 101, 5, 106, 26, 203, 48, 145, 39, 41, 41,
-            196, 252, 190, 245, 222, 96, 209, 34, 36, 40, 214, 169, 156, 235,
-            78, 188, 33,
+            131, 49, 140, 204, 234, 198, 192, 138, 1, 119, 102, 120, 64, 180,
+            185, 63, 14, 69, 94, 69, 212, 195, 140, 40, 183, 59, 143, 132, 98,
+            251, 245, 72,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
     }
 
+    /// N.B. this is the corresponding value from
+    /// `genesis/pre-genesis/wallet.toml`.
     pub fn bertha_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
-            240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186,
-            6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,
-            119, 243,
+            115, 237, 97, 129, 119, 32, 210, 119, 132, 231, 169, 188, 164, 166,
+            6, 104, 215, 99, 166, 247, 236, 172, 45, 69, 237, 31, 36, 26, 165,
+            197, 158, 153,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
     }
 
+    /// N.B. this is the corresponding value from
+    /// `genesis/pre-genesis/wallet.toml`.
     pub fn christel_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
-            65, 198, 96, 145, 237, 227, 84, 182, 107, 55, 209, 235, 115, 105,
-            71, 190, 234, 137, 176, 188, 181, 174, 183, 49, 131, 230, 46, 39,
-            70, 20, 130, 253,
+            54, 37, 185, 57, 165, 142, 246, 4, 2, 215, 207, 143, 192, 66, 80,
+            2, 108, 193, 186, 144, 204, 48, 40, 175, 28, 230, 178, 43, 232, 87,
+            255, 199,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
     }
 
+    /// N.B. this is the corresponding value from
+    /// `genesis/pre-genesis/wallet.toml`.
     pub fn daewon_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
-            235, 250, 15, 1, 145, 250, 172, 218, 247, 27, 63, 212, 60, 47, 164,
-            57, 187, 156, 182, 144, 107, 174, 38, 81, 37, 40, 19, 142, 68, 135,
-            57, 50,
+            209, 158, 34, 108, 14, 125, 18, 61, 121, 245, 144, 139, 89, 72,
+            212, 196, 97, 182, 106, 95, 138, 169, 86, 0, 194, 139, 85, 171,
+            111, 93, 199, 114,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()
     }
 
+    /// N.B. this is the corresponding value from
+    /// `genesis/pre-genesis/wallet.toml`.
     pub fn ester_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::secp256k1::gen_keypair`]
         let bytes = [
             54, 144, 147, 226, 3, 93, 132, 247, 42, 126, 90, 23, 200, 155, 122,
             147, 139, 93, 8, 204, 135, 178, 40, 152, 5, 227, 175, 204, 102,
@@ -190,13 +194,15 @@ mod dev {
         sk.try_to_sk().unwrap()
     }
 
+    /// N.B. this is the consensus key from
+    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
+    /// If that wallet is regenerated, this value must be changed to fix unit
+    /// tests.
     pub fn validator_keypair() -> common::SecretKey {
-        // generated from
-        // [`namada::types::key::ed25519::gen_keypair`]
         let bytes = [
-            80, 110, 166, 33, 135, 254, 34, 138, 253, 44, 214, 71, 50, 230, 39,
-            246, 124, 201, 68, 138, 194, 251, 192, 36, 55, 160, 211, 68, 65,
-            189, 121, 217,
+            194, 41, 223, 103, 103, 178, 152, 145, 161, 212, 82, 133, 69, 13,
+            133, 136, 238, 11, 198, 182, 29, 41, 75, 249, 88, 0, 28, 215, 217,
+            63, 234, 78,
         ];
         let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
         ed_sk.try_to_sk().unwrap()

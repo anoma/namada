@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::address::Address;
 use crate::types::eth_abi::Encode;
+use crate::types::ethereum_structs::Erc20Transfer;
 use crate::types::hash::Hash;
 use crate::types::keccak::KeccakHash;
 use crate::types::storage::{DbKeySeg, KeySeg};
@@ -50,11 +51,14 @@ impl Ord for Uint {
 }
 
 impl Uint {
-    /// Convert to a little endian byte representation of
-    /// a uint256.
+    /// Convert to an Ethereum-compatible byte representation.
+    ///
+    /// The Ethereum virtual machine employs big-endian integers
+    /// (Wood, 2014), therefore the returned byte array has the
+    /// same endianness.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
-        ethUint(self.0).to_little_endian(&mut bytes);
+        ethUint(self.0).to_big_endian(&mut bytes);
         bytes
     }
 
@@ -231,8 +235,6 @@ pub struct TransfersToNamada {
     pub nonce: Uint,
     /// The batch of transfers
     pub transfers: Vec<TransferToNamada>,
-    /// The indices of the transfers which succeeded or failed
-    pub valid_transfers_map: Vec<bool>,
 }
 
 impl GetEventNonce for TransfersToNamada {
@@ -245,16 +247,8 @@ impl GetEventNonce for TransfersToNamada {
 impl From<TransfersToNamada> for EthereumEvent {
     #[inline]
     fn from(event: TransfersToNamada) -> Self {
-        let TransfersToNamada {
-            nonce,
-            transfers,
-            valid_transfers_map,
-        } = event;
-        Self::TransfersToNamada {
-            nonce,
-            transfers,
-            valid_transfers_map,
-        }
+        let TransfersToNamada { nonce, transfers } = event;
+        Self::TransfersToNamada { nonce, transfers }
     }
 }
 
@@ -281,9 +275,6 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToNamada>,
-        /// The indices of the transfers which succeeded or failed
-        #[allow(dead_code)]
-        valid_transfers_map: Vec<bool>,
     },
     /// A confirmation event that a batch of transfers have been made
     /// from Namada to Ethereum
@@ -294,9 +285,6 @@ pub enum EthereumEvent {
         /// The batch of transfers
         #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
-        /// The indices of the transfers which succeeded or failed
-        #[allow(dead_code)]
-        valid_transfers_map: Vec<bool>,
         /// The Namada address that receives the gas fees
         /// for relaying a batch of transfers
         #[allow(dead_code)]
@@ -314,35 +302,6 @@ pub enum EthereumEvent {
         /// Hash of the validators in the governance contract
         #[allow(dead_code)]
         governance_validator_hash: KeccakHash,
-    },
-    /// Event indication that a new smart contract has been
-    /// deployed
-    NewContract {
-        /// Name of the contract
-        #[allow(dead_code)]
-        name: String,
-        /// Address of the contract on Ethereum
-        #[allow(dead_code)]
-        address: EthAddress,
-    },
-    /// Event indicating that a smart contract has been updated
-    UpgradedContract {
-        /// Name of the contract
-        #[allow(dead_code)]
-        name: String,
-        /// Address of the contract on Ethereum
-        #[allow(dead_code)]
-        address: EthAddress,
-    },
-    /// Event indication a new Ethereum based token has been whitelisted for
-    /// transfer across the bridge
-    UpdateBridgeWhitelist {
-        /// Monotonically increasing nonce
-        #[allow(dead_code)]
-        nonce: Uint,
-        /// Tokens to be allowed to be transferred across the bridge
-        #[allow(dead_code)]
-        whitelist: Vec<TokenWhitelist>,
     },
 }
 
@@ -398,36 +357,34 @@ pub struct TransferToEthereum {
     pub asset: EthAddress,
     /// The address receiving assets on Ethereum
     pub receiver: EthAddress,
-    /// The amount of fees (in NAM)
-    pub gas_amount: Amount,
-    /// The address sending assets to Ethereum.
-    pub sender: Address,
-    /// The account of fee payer.
-    pub gas_payer: Address,
+    /// Checksum of all Namada specific fields, including,
+    /// but not limited to, whether it is a NUT transfer,
+    /// the address of the sender, etc
+    ///
+    /// It serves to uniquely identify an event stored under
+    /// the Bridge pool, in Namada
+    pub checksum: Hash,
 }
 
-/// struct for whitelisting a token from Ethereum.
-/// Includes the address of issuing contract and
-/// a cap on the max amount of this token allowed to be
-/// held by the bridge.
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-#[allow(dead_code)]
-pub struct TokenWhitelist {
-    /// Address of Ethereum smart contract issuing token
-    pub token: EthAddress,
-    /// Maximum amount of token allowed on the bridge
-    pub cap: Amount,
+impl From<Erc20Transfer> for TransferToEthereum {
+    #[inline]
+    fn from(transfer: Erc20Transfer) -> Self {
+        Self {
+            amount: {
+                let uint = {
+                    use crate::types::uint::Uint as NamadaUint;
+                    let mut num_buf = [0; 32];
+                    transfer.amount.to_little_endian(&mut num_buf);
+                    NamadaUint::from_little_endian(&num_buf)
+                };
+                // this is infallible for a denom of 0
+                Amount::from_uint(uint, 0).unwrap()
+            },
+            asset: EthAddress(transfer.from.0),
+            receiver: EthAddress(transfer.to.0),
+            checksum: Hash(transfer.data_digest),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -538,7 +495,6 @@ pub mod testing {
                 asset: arbitrary_eth_address(),
                 receiver,
             }],
-            valid_transfers_map: vec![true],
         }
     }
 }

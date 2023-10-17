@@ -2,6 +2,8 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::types::ethereum_events::EthereumEvent;
+
 /// A result of a wasm call to host functions that may fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostEnvResult {
@@ -48,6 +50,7 @@ impl From<bool> for HostEnvResult {
 mod tx_queue {
     use borsh::{BorshDeserialize, BorshSerialize};
 
+    use crate::ledger::gas::Gas;
     use crate::proto::Tx;
 
     /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
@@ -56,12 +59,10 @@ mod tx_queue {
     pub struct TxInQueue {
         /// Wrapper tx
         pub tx: Tx,
-        #[cfg(not(feature = "mainnet"))]
-        /// A PoW solution can be used to allow zero-fee testnet
-        /// transactions.
-        /// This is true when the wrapper of this tx contains a valid
-        /// `testnet_pow::Solution`
-        pub has_valid_pow: bool,
+        /// The available gas remaining for the inner tx (for gas accounting).
+        /// This allows for a more detailed logging about the gas used by the
+        /// wrapper and that used by the inner
+        pub gas: Gas,
     }
 
     #[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
@@ -100,3 +101,30 @@ mod tx_queue {
 
 #[cfg(feature = "ferveo-tpke")]
 pub use tx_queue::{TxInQueue, TxQueue};
+
+/// Expired transaction kinds.
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub enum ExpiredTx {
+    /// Broadcast the given Ethereum event.
+    EthereumEvent(EthereumEvent),
+}
+
+/// Queue of expired transactions that need to be retransmitted.
+#[derive(Default, Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct ExpiredTxsQueue {
+    inner: Vec<ExpiredTx>,
+}
+
+impl ExpiredTxsQueue {
+    /// Push a new transaction to the back of the queue.
+    #[inline]
+    pub fn push(&mut self, tx: ExpiredTx) {
+        self.inner.push(tx);
+    }
+
+    /// Consume all the transactions in the queue.
+    #[inline]
+    pub fn drain(&mut self) -> impl Iterator<Item = ExpiredTx> + '_ {
+        self.inner.drain(..)
+    }
+}

@@ -1,5 +1,206 @@
 # CHANGELOG
 
+## v0.23.0
+
+Namada is a minor release that improves the ethereum bridge, the IBC mechanism, and fixes some general protocol bugs.
+
+### BUG FIXES
+
+- Fixed a bug in the parallel gas accounting of validity predicates.
+  ([\#1835](https://github.com/anoma/namada/pull/1835))
+- Removed gas and fees related panics from the sdk.
+  ([\#1878](https://github.com/anoma/namada/pull/1878))
+- Fix lower bound in client proposal vote check
+  ([\#1887](https://github.com/anoma/namada/pull/1887))
+- Respect force option for proposal vote transaction
+  ([\#1889](https://github.com/anoma/namada/pull/1889))
+- Never overwrite recent Bridge pool proofs in storage
+  ([\#1893](https://github.com/anoma/namada/pull/1893))
+- Keep a record of the first block heights of every epoch in the chain's history
+  instead of trimming to only keep this data for a certain number of epochs in
+  the past. ([\#1898](https://github.com/anoma/namada/pull/1898))
+- Added wasm validation in `init_chain` and in client utils.
+  ([\#1902](https://github.com/anoma/namada/pull/1902))
+- Implement IBC tx execution via a native host function to workaround Mac M1/2
+  WASM compilation issues. ([\#1904](https://github.com/anoma/namada/pull/1904))
+
+### FEATURES
+
+- Replaced standard IO in SDK and client code with a trait that allows custom
+  handling. ([\#1746](https://github.com/anoma/namada/pull/1746))
+
+### IMPROVEMENTS
+
+- Rework voting on Ethereum tallies across epoch boundaries
+  ([\#1865](https://github.com/anoma/namada/pull/1865))
+- Move all functions considered to be apart of the SDK to the SDK
+  folder. ([#1868](https://github.com/anoma/namada/pull/1868))
+- Remove pay-fee-with-pow feature and faucet vp.
+  ([\#1873](https://github.com/anoma/namada/pull/1873))
+- Removed redundant `WasmPayload` enum in favor of `Commitment`.
+  ([\#1874](https://github.com/anoma/namada/pull/1874))
+- Added a section in CONTRIBUTING.md to outline how to document SDK
+  changes ([#1876](https://github.com/anoma/namada/pull/1876))
+- Refactored retrieval of `Transaction` object for fee unshielding.
+  ([\#1877](https://github.com/anoma/namada/pull/1877))
+- Renamed `gas_cost` to `minimum_gas_price` in the genesis file.
+  ([\#1882](https://github.com/anoma/namada/pull/1882))
+- Enable hardware wallets to participate in nondegenerate multisignature
+  transactions. ([\#1884](https://github.com/anoma/namada/pull/1884))
+- Added support for validators' hostnames in configuration.
+  ([\#1886](https://github.com/anoma/namada/pull/1886))
+- Allow Bridge pool transfers to pay zero gas fees
+  ([\#1892](https://github.com/anoma/namada/pull/1892))
+- Forced the `async_trait`s' futures in the SDK to be `Send`.
+  ([\#1894](https://github.com/anoma/namada/pull/1894))
+- Retransmit timed out Ethereum events in case they have accumulated >1/3 voting
+  power ([\#1899](https://github.com/anoma/namada/pull/1899))
+- Move the IBC native VP to a different module
+  ([\#1927](https://github.com/anoma/namada/pull/1927))
+
+### MISCELLANEOUS
+
+- Migrate to the new Ethereum contracts
+  ([\#1885](https://github.com/anoma/namada/pull/1885))
+
+### SDK
+
+- The shared-utils topic ([#1868](https://github.com/anoma/namada/pull/1868)) moves the following:
+  + _Modules_
+    | From                                    | To                                   |
+    |-----------------------------------------|--------------------------------------|
+    | namada::ledger::tx                      | namada::sdk::tx                      |
+    | namada::ledger::rpc                     | namada::sdk::rpc                     |
+    | namada::ledger::signing                 | namada::sdk::signing                 |
+    | namada::ledger::masp                    | namada::sdk::masp                    |
+    | namada::ledger::args                    | namada::sdk::args                    |
+    | namada::ledger::wallet::alias           | namada::sdk::wallet::alias           |
+    | namada::ledger::wallet::derivation_path | namada::sdk::wallet::derivation_path |
+    | namada::ledger::wallet::keys            | namada::sdk::wallet::keys            |
+    | namada::ledger::wallet::pre_genesis     | namada::sdk::wallet::pre_genesis     |
+    | namada::ledger::wallet::store           | namada::sdk::wallet::store           |
+    | namada::types::error                    | namada::sdk::error                   |
+
+  + _Types_
+
+    | From                            | To                           |
+    |---------------------------------|------------------------------|
+    | namada::ledger::queires::Client | namada::sdk::queires::Client |
+- Added two new variants to the `TxError` enum, `BalanceToLowForFees` and
+  `FeeUnshieldingError`, representing possible failures in transactions' fees.
+  ([\#1878](https://github.com/anoma/namada/pull/1878))
+- Added the `Send` bound to the `Client` and `ShieldedUtils` `async_trait`s'.
+  This allows the SDK to be used in environments which are both asynchronous and
+  multithread. ([\#1894](https://github.com/anoma/namada/pull/1894))
+
+### TESTING
+
+- Updated benchmarks and added tests to ensure they're working.
+  ([\#1907](https://github.com/anoma/namada/pull/1907))
+
+## v0.22.0
+
+Namada 0.22.0 is a minor release introducing a redefined PGF mechanism, a proper gas module, and major 
+improvements to the sdk and ethereum bridge.
+
+### BUG FIXES
+
+- Fix IBC amount handling ([\#1744](https://github.com/anoma/namada/issues/1744))
+- Fix wasm pointer misalignment issues on Apple silicon devices.
+  ([\#1778](https://github.com/anoma/namada/pull/1778))
+- Fix the decoding of events observed by the Ethereum oracle
+  ([\#1852](https://github.com/anoma/namada/pull/1852))
+- Trigger the NUT VP when NUTs are moved between accounts during wasm
+  transaction execution ([\#1854](https://github.com/anoma/namada/pull/1854))
+- Fix the Ethereum Bridge VP
+  ([\#1855](https://github.com/anoma/namada/pull/1855))
+- Miscellaneous Ethereum smart contract nonce fixes
+  ([\#1856](https://github.com/anoma/namada/pull/1856))
+- Log proper duped validator votes on Ethereum tallies
+  ([\#1860](https://github.com/anoma/namada/pull/1860))
+
+### FEATURES
+
+- Implement Ethereum token whitelist.
+  ([\#1290](https://github.com/anoma/namada/issues/1290))
+- Implemented the runtime gas and fee system.
+  ([\#1327](https://github.com/anoma/namada/pull/1327))
+- Control the flow of NAM over the Ethereum bridge
+  ([\#1781](https://github.com/anoma/namada/pull/1781))
+- Update ethbridge-rs to v0.22.0
+  ([\#1789](https://github.com/anoma/namada/pull/1789))
+- Allow Bridge pool transfer fees to be paid in arbitrary token types (except
+  NUTs) ([\#1795](https://github.com/anoma/namada/pull/1795))
+
+### IMPROVEMENTS
+
+- Adds the possibility to dump the state of the db at a custom height.
+  ([\#1468](https://github.com/anoma/namada/pull/1468))
+- Added various fee types to the output of the Bridge pool recommendations RPC
+  ([\#1811](https://github.com/anoma/namada/pull/1811))
+- Ensure that Namada (shared) crate can be built for WASM target.
+  ([\#1828](https://github.com/anoma/namada/pull/1828))
+- Upgraded the MASP crate commit used by Namada to the latest version.
+  ([\#1842](https://github.com/anoma/namada/pull/1842))
+- Add the Bridge pool as a default wallet address
+  ([\#1848](https://github.com/anoma/namada/pull/1848))
+- Call `Message::parse` directly
+  ([\#1849](https://github.com/anoma/namada/pull/1849))
+- Parse Eth addresses from the CLI
+  ([\#1850](https://github.com/anoma/namada/pull/1850))
+- Split Bridge pool transfer hashes on all whitespace toks
+  ([\#1851](https://github.com/anoma/namada/pull/1851))
+- Denominate non-whitelisted NUT amounts
+  ([\#1853](https://github.com/anoma/namada/pull/1853))
+- Removed replay protection storage keys from the merkle tree.
+  ([\#1863](https://github.com/anoma/namada/pull/1863))
+
+## v0.21.1
+
+Namada 0.21.0 is a patch release addressing some minor changes to the PGF and IBC components.
+
+### BUG FIXES
+
+- Introduce a new genesis section to control PGF storage at chain start.
+  ([\#1816](https://github.com/anoma/namada/pull/1816))
+
+### FEATURES
+
+- Support the memo field of IBC transfer
+  ([\#1635](https://github.com/anoma/namada/issues/1635))
+
+## v0.21.0
+
+Namada 0.21.0 is a minor release introducing a first version of the PGF mechanism, addressing several 
+improvements to the PoS and Governance system and some changes to the ledger stability.
+
+### BUG FIXES
+
+- Fixes buggy Display for the Dec type when the number is some multiple of 10
+  ([\#1774](https://github.com/anoma/namada/pull/1774))
+- Downgraded sysinfo back to v0.27.8 with a working available memory report on
+  Mac M1. ([\#1775](https://github.com/anoma/namada/pull/1775))
+- Fixes buggy error handling in pos unjail_validator. Now properly enforces that
+  if an unjail tx is submitted when the validator state is something other than
+  Jailed in any of the current or future epochs, the tx will error out and fail.
+  ([\#1793](https://github.com/anoma/namada/pull/1793))
+- Fix available_memory size
+  ([\#1801](https://github.com/anoma/namada/issues/1801))
+
+### FEATURES
+
+- Introduce multisignature accounts and transaction format. It is now possible
+  to supply multiple public keys when creating a new account/validator and
+  specify the minimum number of signatures required to authorize a transaction.
+  ([\#1765](https://github.com/anoma/namada/pull/1765))
+- Introduce a simplified version of Public Good Fundings.
+  ([\#1803](https://github.com/anoma/namada/pull/1803))
+
+### TESTING
+
+- Added pre-built MASP proofs for integration tests.
+  ([\#1768](https://github.com/anoma/namada/pull/1768))
+
 ## v0.20.1
 
 Namada 0.20.1 is a patch release addressing a bug in the inflation mechanism and minor ledger improvements.

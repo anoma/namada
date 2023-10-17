@@ -9,30 +9,22 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
-use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::storage::{IbcStorageContext, ProofSpec};
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use prost::Message;
 use thiserror::Error;
 
-use crate::ibc::applications::transfer::denom::TracePrefix;
 use crate::ibc::applications::transfer::error::TokenTransferError;
-use crate::ibc::applications::transfer::msgs::transfer::{
-    MsgTransfer, TYPE_URL as MSG_TRANSFER_TYPE_URL,
-};
-use crate::ibc::applications::transfer::packet::PacketData;
-use crate::ibc::applications::transfer::relay::send_transfer::{
+use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
+use crate::ibc::applications::transfer::{
     send_transfer_execute, send_transfer_validate,
 };
-use crate::ibc::core::context::Router;
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
 use crate::ibc::core::ics24_host::identifier::{ChainId as IbcChainId, PortId};
-use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
-use crate::ibc::core::ics26_routing::error::RouterError;
-use crate::ibc::core::ics26_routing::msgs::MsgEnvelope;
-use crate::ibc::core::{execute, validate};
+use crate::ibc::core::router::{Module, ModuleId, Router};
+use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
 use crate::types::chain::ChainId;
 
@@ -115,88 +107,75 @@ where
 
     /// Execute according to the message in an IBC transaction or VP
     pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
-        let msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
-        match msg.type_url.as_str() {
-            MSG_TRANSFER_TYPE_URL => {
-                let msg =
-                    MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
+        let any_msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
+        match MsgTransfer::try_from(any_msg.clone()) {
+            Ok(msg) => {
                 let port_id = msg.port_id_on_a.clone();
                 match self.get_route_mut_by_port(&port_id) {
                     Some(_module) => {
                         let mut module = TransferModule::new(self.ctx.clone());
-                        // restore the denom if it is hashed
-                        let msg = self.restore_denom(msg)?;
                         send_transfer_execute(&mut module, msg)
                             .map_err(Error::TokenTransfer)
                     }
                     None => Err(Error::NoModule),
                 }
             }
-            _ => {
-                execute(self, msg.clone()).map_err(Error::Execution)?;
+            Err(_) => {
+                let envelope =
+                    MsgEnvelope::try_from(any_msg).map_err(Error::Execution)?;
+                execute(self, envelope.clone()).map_err(Error::Execution)?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(msg)
+                self.store_denom(envelope)
             }
         }
     }
 
-    /// Restore the denom when it is hashed
-    fn restore_denom(&self, msg: MsgTransfer) -> Result<MsgTransfer, Error> {
-        let mut msg = msg;
-        // lookup the original denom with the IBC token hash
-        if let Some(token_hash) =
-            storage::token_hash_from_denom(&msg.token.denom).map_err(|e| {
-                Error::Denom(format!("Invalid denom: error {}", e))
-            })?
-        {
-            let denom_key = storage::ibc_denom_key(token_hash);
-            let denom = match self.ctx.borrow().read(&denom_key) {
-                Ok(Some(v)) => String::try_from_slice(&v[..]).map_err(|e| {
-                    Error::Denom(format!(
-                        "Decoding the denom string failed: {}",
-                        e
-                    ))
-                })?,
-                _ => {
-                    return Err(Error::Denom(format!(
-                        "No original denom: denom_key {}",
-                        denom_key
-                    )));
-                }
-            };
-            msg.token.denom = denom;
-        }
-        Ok(msg)
-    }
-
     /// Store the denom when transfer with MsgRecvPacket
-    fn store_denom(&mut self, msg: Any) -> Result<(), Error> {
-        let envelope = MsgEnvelope::try_from(msg).map_err(|e| {
-            Error::Denom(format!("Decoding the message failed: {}", e))
-        })?;
+    fn store_denom(&mut self, envelope: MsgEnvelope) -> Result<(), Error> {
         match envelope {
-            MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                let data = match serde_json::from_slice::<PacketData>(
-                    &msg.packet.data,
-                ) {
-                    Ok(data) => data,
-                    // not token transfer data
-                    Err(_) => return Ok(()),
-                };
-                let prefix = TracePrefix::new(
-                    msg.packet.port_id_on_b.clone(),
-                    msg.packet.chan_id_on_b,
-                );
-                let mut coin = data.token;
-                coin.denom.add_trace_prefix(prefix);
-                let trace_hash = storage::calc_hash(coin.denom.to_string());
-                self.ctx
-                    .borrow_mut()
-                    .store_denom(trace_hash, coin.denom)
-                    .map_err(|e| {
-                        Error::Denom(format!("Write the denom failed: {}", e))
+            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+                let result = self
+                    .ctx
+                    .borrow()
+                    .get_ibc_event("denomination_trace")
+                    .map_err(|_| {
+                        Error::Denom("Reading the IBC event failed".to_string())
+                    })?;
+                if let Some((trace_hash, ibc_denom)) =
+                    result.as_ref().and_then(|event| {
+                        event
+                            .attributes
+                            .get("trace_hash")
+                            .zip(event.attributes.get("denom"))
                     })
+                {
+                    // If the denomination trace event has the trace hash and
+                    // the IBC denom, a token has been minted. The raw IBC denom
+                    // including the port ID, the channel ID and the base token
+                    // is stored to be restored from the trace hash. The amount
+                    // denomination is also set for the minting.
+                    self.ctx
+                        .borrow_mut()
+                        .store_ibc_denom(trace_hash, ibc_denom)
+                        .map_err(|e| {
+                            Error::Denom(format!(
+                                "Writing the IBC denom failed: {}",
+                                e
+                            ))
+                        })?;
+                    let token = storage::ibc_token(ibc_denom);
+                    self.ctx.borrow_mut().store_token_denom(&token).map_err(
+                        |e| {
+                            Error::Denom(format!(
+                                "Writing the token denom failed: {}",
+                                e
+                            ))
+                        },
+                    )
+                } else {
+                    Ok(())
+                }
             }
             // other messages
             _ => Ok(()),
@@ -205,24 +184,24 @@ where
 
     /// Validate according to the message in IBC VP
     pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
-        let msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
-        match msg.type_url.as_str() {
-            MSG_TRANSFER_TYPE_URL => {
-                let msg =
-                    MsgTransfer::try_from(msg).map_err(Error::TokenTransfer)?;
+        let any_msg = Any::decode(tx_data).map_err(Error::DecodingData)?;
+        match MsgTransfer::try_from(any_msg.clone()) {
+            Ok(msg) => {
                 let port_id = msg.port_id_on_a.clone();
                 match self.get_route_by_port(&port_id) {
                     Some(_module) => {
                         let module = TransferModule::new(self.ctx.clone());
-                        // restore the denom if it is hashed
-                        let msg = self.restore_denom(msg)?;
                         send_transfer_validate(&module, msg)
                             .map_err(Error::TokenTransfer)
                     }
                     None => Err(Error::NoModule),
                 }
             }
-            _ => validate(self, msg).map_err(Error::Validation),
+            Err(_) => {
+                let envelope = MsgEnvelope::try_from(any_msg)
+                    .map_err(Error::Validation)?;
+                validate(self, envelope).map_err(Error::Validation)
+            }
         }
     }
 }

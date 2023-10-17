@@ -3,9 +3,8 @@
 use std::rc::Rc;
 
 use super::super::{IbcActions, IbcCommonContext};
-use crate::ibc::core::context::Router;
 use crate::ibc::core::ics24_host::identifier::PortId;
-use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
+use crate::ibc::core::router::{Module, ModuleId, Router};
 
 impl<C> Router for IbcActions<'_, C>
 where

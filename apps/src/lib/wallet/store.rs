@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
 use fd_lock::RwLock;
-use namada::ledger::wallet::{gen_sk_rng, Store, ValidatorKeys};
+use namada::sdk::wallet::{gen_sk_rng, Store, ValidatorKeys};
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use thiserror::Error;

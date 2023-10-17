@@ -2,8 +2,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-#[cfg(not(feature = "mainnet"))]
-use namada::core::ledger::testnet_pow;
 use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::PosParams;
@@ -13,11 +11,11 @@ use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::{BecomeValidator, Epoch, KeySeg};
-use namada::types::address::masp_rewards;
+use namada::types::address::{masp, masp_rewards};
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
-use namada::types::token;
+use namada::vm::validate_untrusted_wasm;
 
 use super::*;
 use crate::config::genesis::chain::{
@@ -48,7 +46,7 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        #[cfg(test)] num_validators: u64,
+        #[cfg(any(test, feature = "testing"))] _num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.wl_storage.storage.chain_id.as_str();
@@ -60,17 +58,25 @@ where
         }
 
         // Read the genesis files
-        #[cfg(not(test))]
+        #[cfg(any(
+            feature = "integration",
+            not(any(test, feature = "benches"))
+        ))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
             genesis::chain::Finalized::read_toml_files(&chain_dir)
                 .expect("Missing genesis files")
         };
-        #[cfg(test)]
-        let genesis = genesis::make_dev_genesis(num_validators);
-        #[cfg(test)]
+        #[cfg(all(
+            any(test, feature = "benches"),
+            not(feature = "integration")
+        ))]
+        let genesis = genesis::make_dev_genesis(_num_validators);
+        #[cfg(all(
+            any(test, feature = "benches"),
+            not(feature = "integration")
+        ))]
         {
-            // TODO: is this needed? check if any test fails without it
             // update the native token from the genesis file
             let native_token = genesis.get_native_token().clone();
             self.wl_storage.storage.native_token = native_token;
@@ -127,9 +133,14 @@ where
         )
         .expect("Must be able to initialize PoS genesis storage");
 
+        // PGF parameters
+        let pgf_params = genesis.get_pgf_params();
+        pgf_params
+            .init_storage(&mut self.wl_storage)
+            .expect("Should be able to initialized PGF at genesis");
+
         // Loaded VP code cache to avoid loading the same files multiple times
         let mut vp_cache: HashMap<String, Vec<u8>> = HashMap::default();
-
         self.init_token_accounts(&genesis);
         self.init_token_balances(&genesis);
         self.apply_genesis_txs_established_account(&genesis, &mut vp_cache);
@@ -195,6 +206,9 @@ where
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
                 .map_err(Error::ReadingWasm)?;
             let code_hash = CodeHash::sha256(&code);
+            let code_len = u64::try_from(code.len())
+                .map_err(|e| Error::LoadingWasm(e.to_string()))?;
+
             let elements = full_name.split('.').collect::<Vec<&str>>();
             let checksum = elements.get(1).ok_or_else(|| {
                 Error::LoadingWasm(format!("invalid full name: {}", full_name))
@@ -210,6 +224,9 @@ where
                 || tx_whitelist.contains(&code_hash.to_string().to_lowercase())
                 || vp_whitelist.contains(&code_hash.to_string().to_lowercase())
             {
+                validate_untrusted_wasm(&code)
+                    .map_err(|e| Error::LoadingWasm(e.to_string()))?;
+
                 #[cfg(not(test))]
                 if name.starts_with("tx_") {
                     self.tx_wasm_cache.pre_compile(&code);
@@ -218,13 +235,17 @@ where
                 }
 
                 let code_key = Key::wasm_code(&code_hash);
-                self.wl_storage.write_bytes(&code_key, code)?;
-
+                let code_len_key = Key::wasm_code_len(&code_hash);
                 let hash_key = Key::wasm_hash(name);
+                let code_name_key = Key::wasm_code_name(name.to_owned());
+
+                self.wl_storage.write_bytes(&code_key, code)?;
+                self.wl_storage.write(&code_len_key, code_len)?;
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
                 if &code_hash == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
+                self.wl_storage.write_bytes(&code_name_key, code_hash)?;
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
             }
@@ -287,11 +308,13 @@ where
                 .address;
             for (owner_pk, balance) in balances {
                 let owner = Address::from(&owner_pk.raw);
-
-                let pk_storage_key = pk_key(&owner);
-                self.wl_storage
-                    .write(&pk_storage_key, &owner_pk.raw)
-                    .unwrap();
+                storage_api::account::set_public_key_at(
+                    &mut self.wl_storage,
+                    &owner,
+                    &owner_pk.raw,
+                    0,
+                )
+                .unwrap();
                 tracing::info!(
                     "Crediting {} {} tokens to {}",
                     balance,
@@ -328,6 +351,7 @@ where
                         alias,
                         vp,
                         public_key,
+                        storage,
                     },
             } in txs
             {
@@ -342,37 +366,26 @@ where
                     .unwrap();
 
                 if let Some(pk) = public_key {
-                    let pk_storage_key = pk_key(address);
-                    self.wl_storage
-                        .write_bytes(
-                            &pk_storage_key,
-                            pk.pk.try_to_vec().unwrap(),
-                        )
-                        .unwrap();
-                }
-
-                // When using a faucet WASM, initialize its PoW challenge
-                // storage
-                #[cfg(not(feature = "mainnet"))]
-                if vp.as_str() == "vp_testnet_faucet" {
-                    let difficulty = genesis
-                        .parameters
-                        .parameters
-                        .faucet_pow_difficulty
-                        .unwrap_or_default();
-                    // withdrawal limit defaults to 1000 NAM when not set
-                    let withdrawal_limit = genesis
-                        .parameters
-                        .parameters
-                        .faucet_withdrawal_limit
-                        .unwrap_or_else(|| token::Amount::native_whole(1_000));
-                    testnet_pow::init_faucet_storage(
+                    storage_api::account::set_public_key_at(
                         &mut self.wl_storage,
                         address,
-                        difficulty,
-                        withdrawal_limit.into(),
+                        &pk.pk.raw,
+                        0,
                     )
-                    .expect("Couldn't init faucet storage")
+                    .unwrap();
+                }
+
+                // Place the keys under the owners sub-storage
+                let sub_key = namada::core::types::storage::Key::from(
+                    address.to_db_key(),
+                );
+                for (key, value) in storage {
+                    self.wl_storage
+                        .write_bytes(
+                            &sub_key.join(key),
+                            value.to_bytes().unwrap(),
+                        )
+                        .unwrap();
                 }
             }
         }
@@ -416,10 +429,14 @@ where
                     .write_bytes(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
                 // Validator account key
-                let pk_key = pk_key(address);
-                self.wl_storage
-                    .write(&pk_key, &account_key.pk.raw)
-                    .expect("Unable to set genesis user public key");
+                storage_api::account::set_public_key_at(
+                    &mut self.wl_storage,
+                    address,
+                    &account_key.pk.raw,
+                    0,
+                )
+                .unwrap();
+
                 self.wl_storage
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
                     .expect("Unable to set genesis user protocol public key");

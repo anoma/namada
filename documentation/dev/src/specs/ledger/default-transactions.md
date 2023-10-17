@@ -28,7 +28,7 @@ Transparently transfer `amount` of fungible `token` from the `source` to the `ta
 
 Attach [Transfer](../encoding.md#transfer) to the `data`.
 
-### tx_update_vp
+### tx_update_account
 
 Update a validity predicate of an established account.
 

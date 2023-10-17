@@ -6,8 +6,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub mod key;
-
 // used in the VP input
 use core::convert::AsRef;
 use core::slice;
@@ -17,12 +15,13 @@ use std::marker::PhantomData;
 
 pub use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::ledger::governance::storage as gov_storage;
+pub use namada_core::ledger::parameters;
+pub use namada_core::ledger::pgf::storage as pgf_storage;
 pub use namada_core::ledger::storage_api::{
     self, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead,
 };
 pub use namada_core::ledger::vp_env::VpEnv;
-pub use namada_core::ledger::{parameters, testnet_pow};
 pub use namada_core::proto::{Section, Tx};
 pub use namada_core::types::address::Address;
 use namada_core::types::chain::CHAIN_ID_LENGTH;
@@ -74,9 +73,44 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
 /// Checks if a proposal id is being executed
 pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
     let proposal_execution_key =
-        gov_storage::get_proposal_execution_key(proposal_id);
+        gov_storage::keys::get_proposal_execution_key(proposal_id);
 
     ctx.has_key_pre(&proposal_execution_key)
+}
+
+/// Verify section signatures
+pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+    let max_signatures_per_transaction =
+        parameters::max_signatures_per_transaction(&ctx.pre())?;
+
+    let public_keys_index_map =
+        storage_api::account::public_keys_index_map(&ctx.pre(), owner)?;
+    let threshold =
+        storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+
+    let targets = [*tx.data_sechash(), *tx.code_sechash()];
+
+    // Serialize parameters
+    let max_signatures = max_signatures_per_transaction.try_to_vec().unwrap();
+    let public_keys_map = public_keys_index_map.try_to_vec().unwrap();
+    let targets = targets.try_to_vec().unwrap();
+    let signer = owner.try_to_vec().unwrap();
+
+    let valid = unsafe {
+        namada_vp_verify_tx_section_signature(
+            targets.as_ptr() as _,
+            targets.len() as _,
+            public_keys_map.as_ptr() as _,
+            public_keys_map.len() as _,
+            signer.as_ptr() as _,
+            signer.len() as _,
+            threshold,
+            max_signatures.as_ptr() as _,
+            max_signatures.len() as _,
+        )
+    };
+
+    Ok(HostEnvResult::is_success(valid))
 }
 
 /// Checks whether a transaction is valid, which happens in two cases:
@@ -156,12 +190,6 @@ impl Ctx {
     /// via [`trait@StorageRead`].
     pub fn post(&self) -> CtxPostStorageRead<'_> {
         CtxPostStorageRead { _ctx: self }
-    }
-
-    /// Check if the wrapper tx contained a valid testnet PoW
-    pub fn has_valid_pow(&self) -> bool {
-        let valid = unsafe { namada_vp_has_valid_pow() };
-        HostEnvResult::is_success(valid)
     }
 }
 
@@ -276,12 +304,12 @@ impl<'view> VpEnv<'view> for Ctx {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(&self, vp_code: Hash, input_data: Tx) -> Result<bool, Error> {
+    fn eval(&self, vp_code_hash: Hash, input_data: Tx) -> Result<bool, Error> {
         let input_data_bytes = BorshSerialize::try_to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
-                vp_code.0.as_ptr() as _,
-                vp_code.0.len() as _,
+                vp_code_hash.0.as_ptr() as _,
+                vp_code_hash.0.len() as _,
                 input_data_bytes.as_ptr() as _,
                 input_data_bytes.len() as _,
             )
@@ -311,6 +339,11 @@ impl<'view> VpEnv<'view> for Ctx {
         let valid =
             unsafe { namada_vp_verify_masp(tx.as_ptr() as _, tx.len() as _) };
         Ok(HostEnvResult::is_success(valid))
+    }
+
+    fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
+        unsafe { namada_vp_charge_gas(used_gas) };
+        Ok(())
     }
 }
 

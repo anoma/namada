@@ -18,7 +18,7 @@ use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
 use itertools::{Either, Itertools};
-use namada::ledger::wallet::alias::Alias;
+use namada::sdk::wallet::alias::Alias;
 use namada::types::chain::ChainId;
 use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
@@ -63,6 +63,7 @@ pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
 /// This file must contain a single validator with alias "validator-0".
 /// To add more validators, use the [`set_validators`] function in the call to
 /// setup the [`network`].
+#[allow(dead_code)]
 pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/localnet";
 /// An E2E test network.
 #[derive(Debug, Clone)]
@@ -158,7 +159,7 @@ where
                 StringEncoded::new(sk.ref_to()),
                 token::DenominatedAmount {
                     amount: token::Amount::from_uint(
-                        2000000,
+                        3000000,
                         NATIVE_MAX_DECIMAL_PLACES,
                     )
                     .unwrap(),
@@ -1078,6 +1079,7 @@ pub mod constants {
     pub const CHRISTEL: &str = "Christel";
     pub const CHRISTEL_KEY: &str = "Christel-key";
     pub const DAEWON: &str = "Daewon";
+    pub const DAEWON_KEY: &str = "Daewon-key";
     pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
     pub const MASP: &str = "atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5";

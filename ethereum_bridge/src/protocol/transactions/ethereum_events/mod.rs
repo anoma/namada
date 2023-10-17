@@ -12,10 +12,11 @@ use namada_core::ledger::storage::traits::StorageHasher;
 use namada_core::ledger::storage::{DBIter, WlStorage, DB};
 use namada_core::types::address::Address;
 use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::types::internal::ExpiredTx;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
+use namada_core::types::token::Amount;
 use namada_core::types::transaction::TxResult;
 use namada_core::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
-use namada_core::types::voting_power::FractionalVotingPower;
 use namada_proof_of_stake::pos_queries::PosQueries;
 
 use super::ChangedKeys;
@@ -86,7 +87,7 @@ where
 pub(super) fn apply_updates<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     updates: HashSet<EthMsgUpdate>,
-    voting_powers: HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -133,7 +134,7 @@ where
 fn apply_update<D, H>(
     wl_storage: &mut WlStorage<D, H>,
     update: EthMsgUpdate,
-    voting_powers: &HashMap<(Address, BlockHeight), FractionalVotingPower>,
+    voting_powers: &HashMap<(Address, BlockHeight), Amount>,
 ) -> Result<(ChangedKeys, bool)>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -199,7 +200,22 @@ where
             %keys.prefix,
             "Ethereum event timed out",
         );
-        votes::storage::delete(wl_storage, &keys)?;
+        if let Some(event) = votes::storage::delete(wl_storage, &keys)? {
+            tracing::debug!(
+                %keys.prefix,
+                "Queueing Ethereum event for retransmission",
+            );
+            // NOTE: if we error out in the `ethereum_bridge` crate,
+            // currently there is no way to reset the expired txs queue
+            // to its previous state. this shouldn't be a big deal, as
+            // replaying ethereum events has no effect on the ledger.
+            // however, we may need to revisit this code if we ever
+            // implement slashing on double voting of ethereum events.
+            wl_storage
+                .storage
+                .expired_txs_queue
+                .push(ExpiredTx::EthereumEvent(event));
+        }
         changed.extend(keys.clone().into_iter());
     }
 
@@ -284,7 +300,8 @@ mod tests {
     use namada_core::types::ethereum_events::{
         EthereumEvent, TransferToNamada,
     };
-    use namada_core::types::token::{balance_key, minted_balance_key, Amount};
+    use namada_core::types::token::{balance_key, minted_balance_key};
+    use namada_core::types::voting_power::FractionalVotingPower;
 
     use super::*;
     use crate::protocol::transactions::utils::GetVoters;
@@ -305,14 +322,13 @@ mod tests {
     #[test]
     /// Test applying a `TransfersToNamada` batch containing a single transfer
     fn test_apply_single_transfer() -> Result<()> {
-        let sole_validator = address::testing::gen_established_address();
+        let (sole_validator, validator_stake) = test_utils::default_validator();
         let receiver = address::testing::established_address_2();
 
         let amount = arbitrary_amount();
         let asset = arbitrary_eth_address();
         let body = EthereumEvent::TransfersToNamada {
             nonce: arbitrary_nonce(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount,
                 asset,
@@ -326,10 +342,19 @@ mod tests {
         let updates = HashSet::from_iter(vec![update]);
         let voting_powers = HashMap::from_iter(vec![(
             (sole_validator.clone(), BlockHeight(100)),
-            FractionalVotingPower::WHOLE,
+            validator_stake,
         )]);
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        let (mut wl_storage, _) = test_utils::setup_default_storage();
+        test_utils::whitelist_tokens(
+            &mut wl_storage,
+            [(
+                DAI_ERC20_ETH_ADDRESS,
+                test_utils::WhitelistMeta {
+                    cap: Amount::max(),
+                    denom: 18,
+                },
+            )],
+        );
 
         let changed_keys =
             apply_updates(&mut wl_storage, updates, voting_powers)?;
@@ -367,7 +392,7 @@ mod tests {
         let voting_power = wl_storage
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
         let epoch_bytes =
@@ -404,12 +429,20 @@ mod tests {
             test_utils::setup_storage_with_validators(HashMap::from_iter(
                 vec![(sole_validator.clone(), Amount::native_whole(100))],
             ));
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        test_utils::whitelist_tokens(
+            &mut wl_storage,
+            [(
+                DAI_ERC20_ETH_ADDRESS,
+                test_utils::WhitelistMeta {
+                    cap: Amount::max(),
+                    denom: 18,
+                },
+            )],
+        );
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -431,7 +464,8 @@ mod tests {
         };
 
         assert_eq!(
-            tx_result.gas_used, 0,
+            tx_result.gas_used,
+            0.into(),
             "No gas should be used for a derived transaction"
         );
         let eth_msg_keys = vote_tallies::Keys::from(&event);
@@ -467,12 +501,10 @@ mod tests {
                 (validator_b, Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -524,7 +556,6 @@ mod tests {
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -569,7 +600,7 @@ mod tests {
         let voting_power = wl_storage
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .average_voting_power(&wl_storage);
+            .fractional_stake(&wl_storage);
         assert_eq!(voting_power, FractionalVotingPower::HALF);
 
         Ok(())
@@ -643,12 +674,10 @@ mod tests {
                 (validator_b, Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
         let receiver = address::testing::established_address_1();
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -679,7 +708,6 @@ mod tests {
 
         let new_event = EthereumEvent::TransfersToNamada {
             nonce: 1.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -772,12 +800,10 @@ mod tests {
                 (validator_b.clone(), Amount::native_whole(100)),
             ]),
         );
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
 
         let receiver = address::testing::established_address_1();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0.into(),
-            valid_transfers_map: vec![true],
             transfers: vec![TransferToNamada {
                 amount: Amount::from(100),
                 asset: DAI_ERC20_ETH_ADDRESS,
@@ -800,7 +826,7 @@ mod tests {
             (KeyKind::VotingPower, Some(power)) => {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
-                    .average_voting_power(&wl_storage);
+                    .fractional_stake(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}
@@ -830,7 +856,7 @@ mod tests {
             (KeyKind::VotingPower, Some(power)) => {
                 let power = EpochedVotingPower::try_from_slice(&power)
                     .expect("Test failed")
-                    .average_voting_power(&wl_storage);
+                    .fractional_stake(&wl_storage);
                 assert_eq!(power, FractionalVotingPower::HALF);
             }
             (_, Some(_)) => {}

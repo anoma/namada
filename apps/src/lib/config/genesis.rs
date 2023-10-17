@@ -5,14 +5,17 @@ pub mod templates;
 pub mod toml_utils;
 pub mod transactions;
 
-use std::collections::HashMap;
+use std::array::TryFromSliceError;
+use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXLOWER;
 use derivative::Derivative;
-#[cfg(not(feature = "mainnet"))]
-use namada::core::ledger::testnet_pow;
+use namada::core::ledger::governance::parameters::GovernanceParameters;
+use namada::core::ledger::pgf::parameters::PgfParameters;
+use namada::core::types::string_encoding;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
-use namada::ledger::governance::parameters::GovParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, PosParams};
 use namada::types::address::Address;
@@ -21,10 +24,10 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
-use namada::types::uint::Uint;
 use namada::types::{storage, token};
+use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
+#[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
 use crate::config::genesis::chain::Finalized;
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
@@ -32,17 +35,14 @@ use crate::config::genesis::chain::Finalized;
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
     pub native_token: Address,
-    #[cfg(not(feature = "mainnet"))]
-    pub faucet_pow_difficulty: Option<testnet_pow::Difficulty>,
-    #[cfg(not(feature = "mainnet"))]
-    pub faucet_withdrawal_limit: Option<Uint>,
     pub validators: Vec<Validator>,
     pub token_accounts: Vec<TokenAccount>,
     pub established_accounts: Vec<EstablishedAccount>,
     pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
     pub pos_params: PosParams,
-    pub gov_params: GovParams,
+    pub gov_params: GovernanceParameters,
+    pub pgf_params: PgfParameters,
     // Ethereum bridge config
     pub ethereum_bridge_params: Option<EthereumBridgeParams>,
 }
@@ -156,6 +156,8 @@ pub struct ImplicitAccount {
 pub struct Parameters {
     // Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
+    /// Max block gas
+    pub max_block_gas: u64,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block
@@ -170,6 +172,8 @@ pub struct Parameters {
     pub implicit_vp_sha256: [u8; 32],
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
+    /// Maximum amount of signatures per transaction
+    pub max_signatures_per_transaction: u8,
     /// PoS gain p (read only)
     pub pos_gain_p: Dec,
     /// PoS gain d (read only)
@@ -178,9 +182,79 @@ pub struct Parameters {
     pub staked_ratio: Dec,
     /// PoS inflation amount from the last epoch (read + write for every epoch)
     pub pos_inflation_amount: token::Amount,
-    /// Fixed Wrapper tx fees
-    #[cfg(not(feature = "mainnet"))]
-    pub wrapper_tx_fees: Option<token::Amount>,
+    /// Fee unshielding gas limit
+    pub fee_unshielding_gas_limit: u64,
+    /// Fee unshielding descriptions limit
+    pub fee_unshielding_descriptions_limit: u64,
+    /// Map of the cost per gas unit for every token allowed for fee payment
+    pub minimum_gas_price: BTreeMap<Address, token::Amount>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+)]
+pub struct HexString(pub String);
+
+impl HexString {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
+        let bytes = HEXLOWER.decode(self.0.as_ref())?;
+        Ok(bytes)
+    }
+
+    pub fn to_sha256_bytes(&self) -> Result<[u8; 32], HexKeyError> {
+        let bytes = HEXLOWER.decode(self.0.as_ref())?;
+        let slice = bytes.as_slice();
+        let array: [u8; 32] = slice.try_into()?;
+        Ok(array)
+    }
+
+    pub fn to_public_key(&self) -> Result<common::PublicKey, HexKeyError> {
+        let key = common::PublicKey::from_str(&self.0)
+            .map_err(HexKeyError::InvalidPublicKey)?;
+        Ok(key)
+    }
+
+    pub fn to_dkg_public_key(&self) -> Result<DkgPublicKey, HexKeyError> {
+        let key = DkgPublicKey::from_str(&self.0)?;
+        Ok(key)
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum HexKeyError {
+    #[error("Invalid hex string: {0:?}")]
+    InvalidHexString(data_encoding::DecodeError),
+    #[error("Invalid sha256 checksum: {0}")]
+    InvalidSha256(TryFromSliceError),
+    #[error("Invalid public key: {0}")]
+    InvalidPublicKey(string_encoding::DecodeError),
+}
+
+impl From<data_encoding::DecodeError> for HexKeyError {
+    fn from(err: data_encoding::DecodeError) -> Self {
+        Self::InvalidHexString(err)
+    }
+}
+
+impl From<string_encoding::DecodeError> for HexKeyError {
+    fn from(err: string_encoding::DecodeError) -> Self {
+        Self::InvalidPublicKey(err)
+    }
+}
+
+impl From<TryFromSliceError> for HexKeyError {
+    fn from(err: TryFromSliceError) -> Self {
+        Self::InvalidSha256(err)
+    }
 }
 
 /// Modify the default genesis file (namada/genesis/localnet/) to
@@ -188,16 +262,15 @@ pub struct Parameters {
 ///
 /// This includes adding the Ethereum bridge parameters and
 /// adding a specified number of validators.
-#[cfg(test)]
+#[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
 pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use std::str::FromStr;
     use std::time::Duration;
 
     use namada::core::types::string_encoding::StringEncoded;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-    use namada::ledger::wallet::alias::Alias;
     use namada::proto::{standalone_signature, SerializeWithBorsh};
+    use namada::sdk::wallet::alias::Alias;
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
@@ -234,12 +307,10 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                 address: EthAddress([0; 20]),
                 version: Default::default(),
             },
-            governance: UpgradeableContract {
-                address: EthAddress([1; 20]),
-                version: Default::default(),
-            },
         },
+        erc20_whitelist: vec![],
     });
+
     if let Some(vals) = genesis.transactions.validator_account.as_mut() {
         vals[0].address = defaults::validator_address();
     }
@@ -345,7 +416,6 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                     amount: token::Amount::native_whole(200_000),
                     denom: NATIVE_MAX_DECIMAL_PLACES.into(),
                 },
-                valid: Default::default(),
             })
         }
         // self bond
@@ -357,7 +427,6 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
                     amount: token::Amount::native_whole(100_000),
                     denom: NATIVE_MAX_DECIMAL_PLACES.into(),
                 },
-                valid: Default::default(),
             })
         }
     }

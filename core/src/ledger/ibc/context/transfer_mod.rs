@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 use super::common::IbcCommonContext;
 use crate::ibc::applications::transfer::coin::PrefixedCoin;
@@ -22,6 +21,7 @@ use crate::ibc::applications::transfer::context::{
 use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::MODULE_ID_STR;
+use crate::ibc::core::events::IbcEvent;
 use crate::ibc::core::ics02_client::client_state::ClientState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -33,9 +33,9 @@ use crate::ibc::core::ics04_channel::context::{
     SendPacketExecutionContext, SendPacketValidationContext,
 };
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::handler::ModuleExtras;
-use crate::ibc::core::ics04_channel::msgs::acknowledgement::Acknowledgement;
-use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
+use crate::ibc::core::ics04_channel::packet::{
+    Acknowledgement, Packet, Sequence,
+};
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
@@ -43,13 +43,13 @@ use crate::ibc::core::ics24_host::identifier::{
 use crate::ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
-use crate::ibc::core::ics26_routing::context::{Module, ModuleId};
+use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
 use crate::ibc::core::ContextError;
-use crate::ibc::events::IbcEvent;
-use crate::ibc::signer::Signer;
+use crate::ibc::Signer;
 use crate::ledger::ibc::storage;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
+use crate::types::uint::Uint;
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -81,7 +81,41 @@ where
 
     /// Get the module ID
     pub fn module_id(&self) -> ModuleId {
-        ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+        ModuleId::new(MODULE_ID_STR.to_string())
+    }
+
+    /// Get the token address and the amount from PrefixedCoin. If the base
+    /// denom is not an address, it returns `IbcToken`
+    fn get_token_amount(
+        &self,
+        coin: &PrefixedCoin,
+    ) -> Result<(Address, token::DenominatedAmount), TokenTransferError> {
+        let token = match Address::decode(coin.denom.base_denom.as_str()) {
+            Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
+            _ => storage::ibc_token(coin.denom.to_string()),
+        };
+
+        // Convert IBC amount to Namada amount for the token
+        let denom = self
+            .ctx
+            .borrow()
+            .read_token_denom(&token)?
+            .unwrap_or(token::Denomination(0));
+        let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
+        let amount =
+            token::Amount::from_uint(uint_amount, denom).map_err(|e| {
+                TokenTransferError::ContextError(ContextError::ChannelError(
+                    ChannelError::Other {
+                        description: format!(
+                            "The IBC amount is invalid: Coin {}, Error {}",
+                            coin, e
+                        ),
+                    },
+                ))
+            })?;
+        let amount = token::DenominatedAmount { amount, denom };
+
+        Ok((token, amount))
     }
 }
 
@@ -444,7 +478,7 @@ where
     ) -> Result<(), TokenTransferError> {
         // Assumes that the coin denom is prefixed with "port-id/channel-id" or
         // has no prefix
-        let (ibc_token, amount) = get_token_amount(coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
@@ -454,9 +488,7 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Sending a coin failed: from {}, to {}, amount {}",
-                            from,
-                            to,
-                            amount.to_string_native()
+                            from, to, amount,
                         ),
                     },
                 ))
@@ -469,7 +501,7 @@ where
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         // The trace path of the denom is already updated if receiving the token
-        let (ibc_token, amount) = get_token_amount(coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.ctx
             .borrow_mut()
@@ -479,8 +511,7 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Minting a coin failed: account {}, amount {}",
-                            account,
-                            amount.to_string_native()
+                            account, amount,
                         ),
                     },
                 ))
@@ -492,7 +523,7 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (ibc_token, amount) = get_token_amount(coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         // The burn is "unminting" from the minted balance
         self.ctx
@@ -503,8 +534,7 @@ where
                     ChannelError::Other {
                         description: format!(
                             "Burning a coin failed: account {}, amount {}",
-                            account,
-                            amount.to_string_native()
+                            account, amount,
                         ),
                     },
                 ))
@@ -549,25 +579,6 @@ where
     }
 }
 
-/// Get the token address and the amount from PrefixedCoin. If the base denom is
-/// not an address, it returns `IbcToken`
-fn get_token_amount(
-    coin: &PrefixedCoin,
-) -> Result<(Address, token::Amount), TokenTransferError> {
-    let token = match Address::decode(coin.denom.base_denom.as_str()) {
-        Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
-        _ => storage::ibc_token(coin.denom.to_string()),
-    };
-
-    let amount = coin.amount.try_into().map_err(|_| {
-        TokenTransferError::InvalidCoin {
-            coin: coin.to_string(),
-        }
-    })?;
-
-    Ok((token, amount))
-}
-
 fn into_channel_error(error: TokenTransferError) -> ChannelError {
     ChannelError::AppModule {
         description: error.to_string(),
@@ -593,7 +604,7 @@ pub mod testing {
     impl DummyTransferModule {
         /// Get the module ID
         pub fn module_id(&self) -> ModuleId {
-            ModuleId::from_str(MODULE_ID_STR).expect("should be parsable")
+            ModuleId::new(MODULE_ID_STR.to_string())
         }
     }
 

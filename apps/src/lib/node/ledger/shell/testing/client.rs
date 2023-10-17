@@ -3,13 +3,14 @@ use std::ops::ControlFlow;
 use clap::Command as App;
 use eyre::Report;
 use namada::types::control_flow::Halt;
+use namada::types::io::Io;
 use tendermint_config::net::Address as TendermintAddress;
 
 use super::node::MockNode;
 use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::Global;
-use crate::cli::{args, cmds, Cmd, Context, NamadaClient};
-use crate::node::ledger::shell::testing::utils::Bin;
+use crate::cli::{args, cmds, Cmd, Context, NamadaClient, NamadaRelayer};
+use crate::node::ledger::shell::testing::utils::{Bin, TestingIo};
 
 pub fn run(
     node: &MockNode,
@@ -24,7 +25,7 @@ pub fn run(
             wasm_dir: Some(locked.wasm_dir.clone()),
         }
     };
-    let ctx = Context::new(global.clone())?;
+    let ctx = Context::new::<TestingIo>(global.clone())?;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     match who {
@@ -46,7 +47,10 @@ pub fn run(
                     NamadaClient::WithoutContext(sub_cmd, global)
                 }
             };
-            rt.block_on(CliApi::<()>::handle_client_command(Some(node), cmd))
+            rt.block_on(CliApi::<TestingIo>::handle_client_command(
+                Some(node),
+                cmd,
+            ))
         }
         Bin::Wallet => {
             args.insert(0, "wallet");
@@ -56,16 +60,32 @@ pub fn run(
 
             let cmd = cmds::NamadaWallet::parse(&matches)
                 .expect("Could not parse wallet command");
-            CliApi::<()>::handle_wallet_command(cmd, ctx)
+            CliApi::<TestingIo>::handle_wallet_command(cmd, ctx)
         }
         Bin::Relayer => {
             args.insert(0, "relayer");
             let app = App::new("test");
             let app = cmds::NamadaRelayer::add_sub(args::Global::def(app));
             let matches = app.get_matches_from(args.clone());
-            let cmd = cmds::NamadaRelayer::parse(&matches)
-                .expect("Could not parse wallet command");
-            rt.block_on(CliApi::<()>::handle_relayer_command(Some(node), cmd))
+            let cmd = match cmds::NamadaRelayer::parse(&matches)
+                .expect("Could not parse relayer command")
+            {
+                cmds::NamadaRelayer::EthBridgePool(
+                    cmds::EthBridgePool::WithContext(sub_cmd),
+                ) => NamadaRelayer::EthBridgePoolWithCtx(Box::new((
+                    sub_cmd, ctx,
+                ))),
+                cmds::NamadaRelayer::EthBridgePool(
+                    cmds::EthBridgePool::WithoutContext(sub_cmd),
+                ) => NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd),
+                cmds::NamadaRelayer::ValidatorSet(sub_cmd) => {
+                    NamadaRelayer::ValidatorSet(sub_cmd)
+                }
+            };
+            rt.block_on(CliApi::<TestingIo>::handle_relayer_command(
+                Some(node),
+                cmd,
+            ))
         }
     }
 }
@@ -76,7 +96,7 @@ impl<'a> CliClient for &'a MockNode {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 
-    async fn wait_until_node_is_synced(&self) -> Halt<()> {
+    async fn wait_until_node_is_synced<IO: Io>(&self) -> Halt<()> {
         ControlFlow::Continue(())
     }
 }

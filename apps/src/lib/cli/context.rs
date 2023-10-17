@@ -6,10 +6,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
-use namada::ledger::masp::ShieldedContext;
-use namada::ledger::wallet::Wallet;
-use namada::types::address::Address;
+use namada::sdk::masp::ShieldedContext;
+use namada::sdk::wallet::Wallet;
+use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
+use namada::types::ethereum_events::EthAddress;
+use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::*;
 
@@ -87,7 +89,7 @@ pub struct ChainContext {
 }
 
 impl Context {
-    pub fn new(global_args: args::Global) -> Result<Self> {
+    pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
 
         let chain = match global_config.default_chain_id.as_ref() {
@@ -125,7 +127,7 @@ impl Context {
                 Some(ChainContext {
                     wallet,
                     config,
-                    shielded: CLIShieldedUtils::new(chain_dir),
+                    shielded: CLIShieldedUtils::new::<IO>(chain_dir),
                     native_token,
                 })
             }
@@ -356,16 +358,30 @@ impl ArgFromContext for Address {
         ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
+        struct Skip;
         let raw = raw.as_ref();
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(raw)
+            // An Ethereum address
+            .or_else(|_| {
+                (raw.len() == 42 && raw.starts_with("0x"))
+                    .then(|| {
+                        raw.parse::<EthAddress>()
+                            .map(|addr| {
+                                Address::Internal(InternalAddress::Erc20(addr))
+                            })
+                            .map_err(|_| Skip)
+                    })
+                    .unwrap_or(Err(Skip))
+            })
             // Or it can be an alias that may be found in the wallet
             .or_else(|_| {
                 ctx.wallet
                     .find_address(raw)
                     .map(|addr| addr.into_owned())
-                    .ok_or_else(|| format!("Unknown address {}", raw))
+                    .ok_or(Skip)
             })
+            .map_err(|_| format!("Unknown address {raw}"))
     }
 }
 

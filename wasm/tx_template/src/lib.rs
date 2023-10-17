@@ -1,6 +1,6 @@
 use namada_tx_prelude::*;
 
-#[transaction]
+#[transaction(gas = 1000)]
 fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     log_string(format!("apply_tx called with data: {:#?}", tx_data));
     Ok(())
@@ -19,7 +19,7 @@ mod tests {
         // The environment must be initialized first
         tx_host_env::init();
 
-        let tx = Tx::new(TxType::Raw);
+        let tx = Tx::from_type(TxType::Raw);
         apply_tx(ctx(), tx).unwrap();
 
         let env = tx_host_env::take();

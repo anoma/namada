@@ -16,10 +16,6 @@ filename = "vp_validator.wasm"
 [wasm.vp_token]
 filename = "vp_token.wasm"
 
-# Faucet VP
-[wasm.vp_testnet_faucet]
-filename = "vp_testnet_faucet.wasm"
-
 # MASP VP
 [wasm.vp_masp]
 filename = "vp_masp.wasm"

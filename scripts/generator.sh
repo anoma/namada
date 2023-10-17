@@ -212,79 +212,79 @@ elif [ "$1" = "client" ]; then
 
     # proposal_submission
     
-    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.02 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.02 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
-    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path proposal_submission_valid_proposal.json --node 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- init-proposal --force --data-path proposal_submission_valid_proposal.json --node 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
 
-    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --signer validator-0 --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --address validator-0 --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote nay --signer Bertha --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote nay --address Bertha --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --signer Albert --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --address Albert --node 127.0.0.1:27657
 
     # proposal_offline
 
-    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Albert --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- bond --validator validator-0 --source Albert --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Albert --commission-rate 0.05 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- change-commission-rate --validator Albert --commission-rate 0.05 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path proposal_offline_valid_proposal.json --offline --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- init-proposal --force --data-path proposal_offline_valid_proposal.json --offline --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --data-path proposal_offline_proposal --vote yay --signer Albert --offline --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --data-path proposal_offline_proposal --vote yay --address Albert --offline --node 127.0.0.1:27657
 
     # eth_governance_proposal
 
-    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.07 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.07 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
-    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path eth_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- init-proposal --force --data-path eth_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id 0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --signer Bertha --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --force --proposal-id 0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --address Bertha --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --signer validator-0 --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --eth '011586062748ba53bc53155e817ec1ea708de75878dcb9a5713bf6986d87fe14e7 fd34672ab5' --address validator-0 --ledger-address 127.0.0.1:27657
 
     # pgf_governance_proposal
 
-    cargo run --bin namadac --features std -- --mode full bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- bond --validator validator-0 --source Bertha --amount 900 --gas-amount 0 --gas-limit 0 --gas-token NAM --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.09 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.09 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
-    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+    PROPOSAL_ID_0=$(cargo run --bin namadac --features std -- init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
 
-    PROPOSAL_ID_1=$(cargo run --bin namadac --features std -- --mode full init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
+    PROPOSAL_ID_1=$(cargo run --bin namadac --features std -- init-proposal --force --data-path pgf_governance_proposal_valid_proposal.json --ledger-address 127.0.0.1:27657 | grep -o -P '(?<=/proposal/).*(?=/author)')
 
-    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada --mode validator vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 1000" --signer validator-0 --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- --base-dir $NAMADA_BASE_DIR/setup/validator-0/.namada vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 1000" --address validator-0 --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 900" --signer Bertha --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_0 --vote yay --pgf "$ALBERT_ADDRESS 900" --address Bertha --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full vote-proposal --force --proposal-id $PROPOSAL_ID_1 --vote yay --pgf "$ALBERT_ADDRESS 900" --signer Bertha --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- vote-proposal --force --proposal-id $PROPOSAL_ID_1 --vote yay --pgf "$ALBERT_ADDRESS 900" --address Bertha --ledger-address 127.0.0.1:27657
 
     # non-proposal tests
     
-    cargo run --bin namadac --features std -- transfer --source bertha --target christel --token btc --amount 23 --force --signing-key bertha-key --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- transfer --source bertha --target christel --token btc --amount 23 --force --signing-keys bertha-key --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- bond --validator bertha --amount 25 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- bond --validator bertha --amount 25 --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- --mode full change-commission-rate --validator Bertha --commission-rate 0.11 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
+    cargo run --bin namadac --features std -- change-commission-rate --validator Bertha --commission-rate 0.11 --gas-amount 0 --gas-limit 0 --gas-token NAM --force --node 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- reveal-pk --public-key albert-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- reveal-pk --public-key albert-key --gas-payer albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- update --code-path vp_user.wasm --address bertha --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- update-account --code-path vp_user.wasm --address bertha --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- init-validator --alias bertha-validator --source bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-key bertha-key --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- init-validator --alias bertha-validator --account-keys bertha --commission-rate 0.05 --max-commission-rate-change 0.01 --signing-keys bertha-key --unsafe-dont-encrypt --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- unbond --validator christel --amount 5 --signing-key christel-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- unbond --validator christel --amount 5 --signing-keys christel-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- withdraw --validator albert --signing-key albert-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- withdraw --validator albert --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- init-account --alias albert-account --source albert --public-key albert-key --signing-key albert-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- init-account --alias albert-account --public-keys albert-key --signing-keys albert-key --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-key albert-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- tx --code-path $NAMADA_DIR/wasm_for_tests/tx_no_op.wasm --data-path README.md --signing-keys albert-key --owner albert --force --ledger-address 127.0.0.1:27657
 
-    cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-key bertha-key --force --ledger-address 127.0.0.1:27657
+    cargo run --bin namadac --features std -- ibc-transfer --source bertha --receiver christel  --token btc --amount 24 --channel-id channel-141 --signing-keys bertha-key --force --ledger-address 127.0.0.1:27657
 
     cargo run --bin namadaw -- masp add --alias a_spending_key --value xsktest1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcvedhsv --unsafe-dont-encrypt
     

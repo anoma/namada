@@ -77,6 +77,11 @@ impl Amount {
         self.raw = self.raw.checked_sub(amount.raw).unwrap();
     }
 
+    /// Check if there are enough funds.
+    pub fn can_spend(&self, amount: &Amount) -> bool {
+        self.raw >= amount.raw
+    }
+
     /// Receive a given amount.
     /// Panics on overflow and when [`uint::MAX_SIGNED_VALUE`] is exceeded.
     pub fn receive(&mut self, amount: &Amount) {
@@ -155,6 +160,20 @@ impl Amount {
         Self { raw: change.abs() }
     }
 
+    /// Checked division. Returns `None` on underflow.
+    pub fn checked_div(&self, amount: Amount) -> Option<Self> {
+        self.raw
+            .checked_div(amount.raw)
+            .map(|result| Self { raw: result })
+    }
+
+    /// Checked division. Returns `None` on overflow.
+    pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
+        self.raw
+            .checked_mul(amount.raw)
+            .map(|result| Self { raw: result })
+    }
+
     /// Given a string and a denomination, parse an amount from string.
     pub fn from_str(
         string: impl AsRef<str>,
@@ -172,9 +191,13 @@ impl Amount {
         denom: impl Into<u8>,
     ) -> Result<Self, AmountParseError> {
         let denom = denom.into();
+        let uint = uint.into();
+        if denom == 0 {
+            return Ok(Self { raw: uint });
+        }
         match Uint::from(10)
             .checked_pow(Uint::from(denom))
-            .and_then(|scaling| scaling.checked_mul(uint.into()))
+            .and_then(|scaling| scaling.checked_mul(uint))
         {
             Some(amount) => Ok(Self { raw: amount }),
             None => Err(AmountParseError::ConvertToDecimal),
@@ -287,6 +310,12 @@ impl DenominatedAmount {
             amount,
             denom: Denomination(NATIVE_MAX_DECIMAL_PLACES),
         }
+    }
+
+    /// Check if the inner [`Amount`] is zero.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.amount.is_zero()
     }
 
     /// A precise string representation. The number of
@@ -631,6 +660,20 @@ impl Mul<(u64, u64)> for Amount {
     }
 }
 
+/// A combination of Euclidean division and fractions:
+/// x*(a,b) = (a*(x//b), x%b).
+impl Mul<(u32, u32)> for Amount {
+    type Output = (Amount, Amount);
+
+    fn mul(mut self, rhs: (u32, u32)) -> Self::Output {
+        let amt = Amount {
+            raw: (self.raw / rhs.1) * rhs.0,
+        };
+        self.raw %= rhs.1;
+        (amt, self)
+    }
+}
+
 impl Div<u64> for Amount {
     type Output = Self;
 
@@ -800,17 +843,9 @@ impl MaspDenom {
     }
 }
 
-impl TryFrom<IbcAmount> for Amount {
-    type Error = AmountParseError;
-
-    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
-        // TODO: https://github.com/anoma/namada/issues/1089
-        // TODO: OVERFLOW CHECK PLEASE (PATCH IBC TO ALLOW GETTING
-        // IBCAMOUNT::MAX OR SIMILAR) if amount > u64::MAX.into() {
-        //    return Err(AmountParseError::InvalidRange);
-        //}
-        DenominatedAmount::from_str(&amount.to_string())
-            .map(|a| a.amount * NATIVE_SCALE)
+impl From<DenominatedAmount> for IbcAmount {
+    fn from(amount: DenominatedAmount) -> Self {
+        primitive_types::U256(amount.canonical().amount.raw.0).into()
     }
 }
 

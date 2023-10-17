@@ -53,20 +53,14 @@ signature = "sigtest1qpss2x7vewnr2sr2wxj0ftldcmvv7v7t7qsr26k2l2hx4gls7y9sksrcq0m
 # 2.
 
 [[established_account]]
-alias = "faucet"
-vp = "vp_testnet_faucet"
-
-[established_account.public_key]
-pk = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-authorization = "sigtest1qrp4gkkj297d79cw09ms4aleae2lkr452q75n8u5d6mmqus0jdl77mwp0mdpvslwdrvmppl6wqzyx743r93y9c2mfw3vdqv6khj6glqxxgktrv"
-
-[[established_account]]
 alias = "albert"
 vp = "vp_user"
 
 [established_account.public_key]
 pk = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
-authorization = "sigtest1qqljvm4244f764hm6mw4e49tz5csetyxu9r44cgjtdjlhc08pa3f7em6dwseav2rleuvcrfnnwv9xaqdjvq0ek6qmwmhyjqvpehlsksget58v0"
+authorization = "sigtest1qzq6dwf2a9dq4hp3nmxfgckh55mulzryxsfkqhr9uvfvmtr9wt38lyyvzvfqryxnat2a4ry6hygv957z683dyngu03gse2uvl5ldfccypktkp6"
+
+[established_account.storage]
 
 [[established_account]]
 alias = "bertha"
@@ -74,7 +68,9 @@ vp = "vp_user"
 
 [established_account.public_key]
 pk = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
-authorization = "sigtest1qqfh5v2shrxe6f5qjczvykp3geen3kzq5haev4ryqlteppzeqf3jetstkn6l0zdw95w6kph4u9dx5gmlvtsyuw3c43jzcsf09feck3qf33zynh"
+authorization = "sigtest1qzt58nd7k2mj647x8x4ydhsjkut7dmsl7yjlnrnwu9kzjdch3cljv6dq05mx2kvwn80kjezh7lz26adc5ksvyn3knufymtkhlmnhg3c8zka3y4"
+
+[established_account.storage]
 
 [[established_account]]
 alias = "christel"
@@ -82,49 +78,9 @@ vp = "vp_user"
 
 [established_account.public_key]
 pk = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
-authorization = "sigtest1qrx0h0zxwl5rd4zqrk6heth4602xqek505gcd9g9wuau4yxkxarzy8hh32avaxg55guanqzdd76h8lcc9fkclzuukf4ay0a5euwk32ggn0akrn"
+authorization = "sigtest1qrf2l6a5u4ywskryhdueudnm50j3kqhujas3mmktenqm89fmlskjnyeskr2tr7js5swmtqqtenkj6ap9xpelx2w40fjjczc4w9xtdggqjtszy4"
 
-[[transfer]]
-token = "nam"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qpldws3c6culv3sen396u6l977gw0lngp034d7h9nyrxf20t7h9tx8jp0rrk8aamc4lhkgvqgpzeyg8twh6748qympqgjgc0cfzmvscwm8eacd"
-
-[[transfer]]
-token = "btc"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qzlp29ylc0j2ad6vj7jmgtanvv94e2nyj9mynpzjsk5cfps0k7q7z72364dh7axn2tlssxchfth9gqrh9ap77aml7x3el6y6hahwdvgpwpe88r"
-
-[[transfer]]
-token = "dot"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qreejkvm6czr5wrnza6mcefryhzqr8n4zeke6xlmrku7hdrkhmp9sdwk7uhmn68dvm8wyj8vdmlv6k5g0uh4xq4800t2ha945sn3zccpe3zep2"
-
-[[transfer]]
-token = "schnitzel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qp5y3ms707ky7kvtgjvx5szpz2c5pscakhtszpvd0vzvf68x0gll6wx8mgtvrjqp2hap5v7wcge3lue86dm8755g7y9nphy92nksj2c0fqquwz"
-
-[[transfer]]
-token = "apfel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qqh4vvdukv5e2ujznpau2vlwfr8hljashemah5v92tju204u79vj06mxtnqmmtlfm5734wufud67kuykdxy8ecjx7gn0jsesqze304qf5df90j"
-
-[[transfer]]
-token = "kartoffel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-signature = "sigtest1qqf9kr8unfrf4jzgpa2danu6jg3d40ssu6majaen77lp3v7mn5f98e9rkra73mjpxzke94d4zqjht6qlcj5f27xw6grc2pnz9xg6ddcfkdc8cn"
+[established_account.storage]
 
 [[transfer]]
 token = "nam"

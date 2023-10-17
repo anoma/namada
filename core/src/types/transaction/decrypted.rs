@@ -24,17 +24,7 @@ pub mod decrypted_tx {
     /// other validators to verify
     pub enum DecryptedTx {
         /// The decrypted payload
-        Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-            /// A PoW solution can be used to allow zero-fee testnet
-            /// transactions.
-            /// This is true when the wrapper of this tx contains a valid
-            /// `testnet_pow::Solution`.
-            // For some reason, we get `warning: fields `tx` and
-            // `has_valid_pow` are never read` even though they are being used!
-            #[allow(dead_code)]
-            has_valid_pow: bool,
-        },
+        Decrypted,
         /// The wrapper whose payload could not be decrypted
         Undecryptable,
     }

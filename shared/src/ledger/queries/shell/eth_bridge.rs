@@ -1,23 +1,24 @@
 //! Ethereum bridge related shell queries.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
-use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
 use namada_core::ledger::storage::merkle_tree::StoreRef;
 use namada_core::ledger::storage::{DBIter, StorageHasher, StoreType, DB};
 use namada_core::ledger::storage_api::{
     self, CustomError, ResultExt, StorageRead,
 };
 use namada_core::types::address::Address;
+use namada_core::types::eth_bridge_pool::PendingTransferAppendix;
 use namada_core::types::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
-use namada_core::types::ethereum_structs::RelayProof;
+use namada_core::types::ethereum_structs;
 use namada_core::types::storage::{BlockHeight, DbKeySeg, Key};
-use namada_core::types::token::{minted_balance_key, Amount};
+use namada_core::types::token::Amount;
 use namada_core::types::vote_extensions::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
@@ -30,11 +31,11 @@ use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
 use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
-    bridge_contract_key, governance_contract_key, native_erc20_key,
-    vote_tallies,
+    bridge_contract_key, native_erc20_key, vote_tallies,
 };
 use namada_proof_of_stake::pos_queries::PosQueries;
 
+use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::ledger::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 use crate::types::eth_abi::{Encode, EncodeCell};
 use crate::types::eth_bridge_pool::PendingTransfer;
@@ -42,7 +43,60 @@ use crate::types::keccak::KeccakHash;
 use crate::types::storage::Epoch;
 use crate::types::storage::MembershipProof::BridgePool;
 
-pub type RelayProofBytes = Vec<u8>;
+/// Contains information about the flow control of some ERC20
+/// wrapped asset.
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize,
+)]
+pub struct Erc20FlowControl {
+    /// Whether the wrapped asset is whitelisted.
+    whitelisted: bool,
+    /// Total minted supply of some wrapped asset.
+    supply: Amount,
+    /// The token cap of some wrapped asset.
+    cap: Amount,
+}
+
+/// Request data to pass to `generate_bridge_pool_proof`.
+#[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct GenBridgePoolProofReq<'transfers, 'relayer> {
+    /// The hashes of the transfers to be relayed.
+    pub transfers: Cow<'transfers, [KeccakHash]>,
+    /// The address of the relayer to compensate.
+    pub relayer: Cow<'relayer, Address>,
+    /// Whether to return the appendix of a [`PendingTransfer`].
+    pub with_appendix: bool,
+}
+
+/// Arguments to pass to `transfer_to_erc`.
+pub type TransferToErcArgs = (
+    ethereum_structs::ValidatorSetArgs,
+    Vec<ethereum_structs::Signature>,
+    ethereum_structs::RelayProof,
+);
+
+/// Response data returned by `generate_bridge_pool_proof`.
+#[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct GenBridgePoolProofRsp {
+    /// Ethereum ABI encoded arguments to pass to `transfer_to_erc`.
+    pub abi_encoded_args: Vec<u8>,
+    /// Appendix data of all requested pending transfers.
+    pub appendices: Option<Vec<PendingTransferAppendix<'static>>>,
+}
+
+impl GenBridgePoolProofRsp {
+    /// Retrieve all [`PendingTransfer`] instances returned from the RPC server.
+    pub fn pending_transfers(self) -> impl Iterator<Item = PendingTransfer> {
+        TransferToErcArgs::decode(&self.abi_encoded_args)
+            .into_iter()
+            .flat_map(|(_, _, proof)| proof.transfers)
+            .zip(self.appendices.into_iter().flatten())
+            .map(|(event, appendix)| {
+                let event: TransferToEthereum = event.into();
+                PendingTransfer::from_parts(&event, appendix)
+            })
+    }
+}
 
 router! {ETH_BRIDGE,
     // Get the current contents of the Ethereum bridge pool
@@ -57,12 +111,12 @@ router! {ETH_BRIDGE,
     // Generate a merkle proof for the inclusion of requested
     // transfers in the Ethereum bridge pool
     ( "pool" / "proof" )
-        -> RelayProofBytes = (with_options generate_bridge_pool_proof),
+        -> GenBridgePoolProofRsp = (with_options generate_bridge_pool_proof),
 
     // Iterates over all ethereum events and returns the amount of
     // voting power backing each `TransferToEthereum` event.
     ( "pool" / "transfer_to_eth_progress" )
-        -> HashMap<TransferToEthereum, FractionalVotingPower>
+        -> HashMap<PendingTransfer, FractionalVotingPower>
         = transfer_to_ethereum_progress,
 
     // Request a proof of a validator set signed off for
@@ -73,16 +127,17 @@ router! {ETH_BRIDGE,
         -> EncodeCell<EthereumProof<(Epoch, VotingPowersMap)>>
         = read_valset_upd_proof,
 
-    // Request the set of consensus validator at the given epoch.
+    // Request the set of bridge validators at the given epoch.
     //
     // The request may fail if no validator set exists at that epoch.
-    ( "validator_set" / "consensus" / [epoch: Epoch] )
-        -> EncodeCell<ValidatorSetArgs> = read_consensus_valset,
+    ( "validator_set" / "bridge" / [epoch: Epoch] )
+        -> ValidatorSetArgs = read_bridge_valset,
 
-    // Read the address and version of the Ethereum bridge's Governance
-    // smart contract.
-    ( "contracts" / "governance" )
-        -> UpgradeableContract = read_governance_contract,
+    // Request the set of governance validators at the given epoch.
+    //
+    // The request may fail if no validator set exists at that epoch.
+    ( "validator_set" / "governance" / [epoch: Epoch] )
+        -> ValidatorSetArgs = read_governance_valset,
 
     // Read the address and version of the Ethereum bridge's Bridge
     // smart contract.
@@ -104,31 +159,35 @@ router! {ETH_BRIDGE,
     ( "voting_powers" / "epoch" / [epoch: Epoch] )
         -> VotingPowersMap = voting_powers_at_epoch,
 
-    // Read the total supply of some wrapped ERC20 token in Namada.
-    ( "erc20" / "supply" / [asset: EthAddress] )
-        -> Option<Amount> = read_erc20_supply,
+    // Read the total supply and respective cap of some wrapped
+    // ERC20 token in Namada.
+    ( "erc20" / "flow_control" / [asset: EthAddress] )
+        -> Erc20FlowControl = get_erc20_flow_control,
 }
 
-/// Read the total supply of some wrapped ERC20 token in Namada.
-fn read_erc20_supply<D, H>(
+/// Read the total supply and respective cap of some wrapped
+/// ERC20 token in Namada.
+fn get_erc20_flow_control<D, H>(
     ctx: RequestCtx<'_, D, H>,
     asset: EthAddress,
-) -> storage_api::Result<Option<Amount>>
+) -> storage_api::Result<Erc20FlowControl>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let Some(native_erc20) = ctx.wl_storage.read(&native_erc20_key())? else {
-        return Err(storage_api::Error::SimpleMessage(
-            "The Ethereum bridge storage is not initialized",
-        ));
-    };
-    let token = if asset == native_erc20 {
-        ctx.wl_storage.storage.native_token.clone()
-    } else {
-        wrapped_erc20s::token(&asset)
-    };
-    ctx.wl_storage.read(&minted_balance_key(&token))
+    let ethbridge_queries = ctx.wl_storage.ethbridge_queries();
+
+    let whitelisted = ethbridge_queries.is_token_whitelisted(&asset);
+    let supply = ethbridge_queries
+        .get_token_supply(&asset)
+        .unwrap_or_default();
+    let cap = ethbridge_queries.get_token_cap(&asset).unwrap_or_default();
+
+    Ok(Erc20FlowControl {
+        whitelisted,
+        supply,
+        cap,
+    })
 }
 
 /// Helper function to read a smart contract from storage.
@@ -148,19 +207,6 @@ where
         ));
     };
     Ok(contract)
-}
-
-/// Read the address and version of the Ethereum bridge's Governance
-/// smart contract.
-#[inline]
-fn read_governance_contract<D, H>(
-    ctx: RequestCtx<'_, D, H>,
-) -> storage_api::Result<UpgradeableContract>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    read_contract(&governance_contract_key(), ctx)
 }
 
 /// Read the address and version of the Ethereum bridge's Bridge
@@ -273,8 +319,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if let Ok((transfer_hashes, relayer)) =
-        <(Vec<KeccakHash>, Address)>::try_from_slice(request.data.as_slice())
+    if let Ok(GenBridgePoolProofReq {
+        transfers: transfer_hashes,
+        relayer,
+        with_appendix,
+    }) = BorshDeserialize::try_from_slice(request.data.as_slice())
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx
@@ -286,6 +335,21 @@ where
                  storage.",
             ))
             .into_storage_result()?;
+
+        // make sure a relay attempt won't happen before the new signed
+        // root has had time to be generated
+        let latest_bp_nonce =
+            ctx.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
+        if latest_bp_nonce != signed_root.data.1 {
+            return Err(storage_api::Error::Custom(CustomError(
+                format!(
+                    "Mismatch between the nonce in the Bridge pool root proof \
+                     ({}) and the latest Bridge pool nonce in storage ({})",
+                    signed_root.data.1, latest_bp_nonce,
+                )
+                .into(),
+            )));
+        }
 
         // get the merkle tree corresponding to the above root.
         let tree = ctx
@@ -318,14 +382,19 @@ where
                 .into(),
             )));
         }
-        let transfers = values
-            .iter()
-            .map(|bytes| {
-                PendingTransfer::try_from_slice(bytes)
-                    .expect("Deserializing storage shouldn't fail")
-                    .into()
-            })
-            .collect();
+        let (transfers, appendices) = values.iter().fold(
+            (vec![], vec![]),
+            |(mut transfers, mut appendices), bytes| {
+                let pending = PendingTransfer::try_from_slice(bytes)
+                    .expect("Deserializing storage shouldn't fail");
+                let eth_transfer = (&pending).into();
+                if with_appendix {
+                    appendices.push(pending.into_appendix());
+                }
+                transfers.push(eth_transfer);
+                (transfers, appendices)
+            },
+        );
         // get the membership proof
         match tree.get_sub_tree_existence_proof(
             &keys,
@@ -335,13 +404,8 @@ where
                 let (validator_args, voting_powers) = ctx
                     .wl_storage
                     .ethbridge_queries()
-                    .get_validator_set_args(None);
-                let data = RelayProof {
-                    validator_set_args: validator_args.into(),
-                    signatures: sort_sigs(
-                        &voting_powers,
-                        &signed_root.signatures,
-                    ),
+                    .get_bridge_validator_set(None);
+                let relay_proof = ethereum_structs::RelayProof {
                     transfers,
                     pool_root: signed_root.data.0.0,
                     proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
@@ -349,9 +413,19 @@ where
                     batch_nonce: signed_root.data.1.into(),
                     relayer_address: relayer.to_string(),
                 };
-                let data = ethers::abi::AbiEncode::encode(data)
-                    .try_to_vec()
-                    .expect("Serializing a relay proof should not fail.");
+                let validator_set: ethereum_structs::ValidatorSetArgs =
+                    validator_args.into();
+                let signatures =
+                    sort_sigs(&voting_powers, &signed_root.signatures);
+                let rsp = GenBridgePoolProofRsp {
+                    abi_encoded_args: ethers::abi::AbiEncode::encode((
+                        validator_set,
+                        signatures,
+                        relay_proof,
+                    )),
+                    appendices: with_appendix.then_some(appendices),
+                };
+                let data = rsp.try_to_vec().into_storage_result()?;
                 Ok(EncodedResponseQuery {
                     data,
                     ..Default::default()
@@ -372,7 +446,7 @@ where
 /// backing each `TransferToEthereum` event.
 fn transfer_to_ethereum_progress<D, H>(
     ctx: RequestCtx<'_, D, H>,
-) -> storage_api::Result<HashMap<TransferToEthereum, FractionalVotingPower>>
+) -> storage_api::Result<HashMap<PendingTransfer, FractionalVotingPower>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -425,8 +499,14 @@ where
                     "Iterating over storage should not yield keys without \
                      values.",
                 )
-                .average_voting_power(ctx.wl_storage);
+                .fractional_stake(ctx.wl_storage);
             for transfer in transfers {
+                let key = get_key_from_hash(&transfer.keccak256());
+                let transfer = ctx
+                    .wl_storage
+                    .read::<PendingTransfer>(&key)
+                    .into_storage_result()?
+                    .expect("The transfer must be present in storage");
                 pending_events.insert(transfer, voting_power);
             }
         }
@@ -484,14 +564,14 @@ where
     Ok(proof.map(|set| (epoch, set)).encode())
 }
 
-/// Read the consensus set of validators at the given [`Epoch`].
+/// Request the set of bridge validators at the given epoch.
 ///
 /// This method may fail if no set of validators exists yet,
 /// at that [`Epoch`].
-fn read_consensus_valset<D, H>(
+fn read_bridge_valset<D, H>(
     ctx: RequestCtx<'_, D, H>,
     epoch: Epoch,
-) -> storage_api::Result<EncodeCell<ValidatorSetArgs>>
+) -> storage_api::Result<ValidatorSetArgs>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -500,7 +580,37 @@ where
     if epoch > current_epoch.next() {
         Err(storage_api::Error::Custom(CustomError(
             format!(
-                "Requesting consensus validator set at {epoch:?}, but the \
+                "Requesting Bridge validator set at {epoch:?}, but the last \
+                 installed epoch is still {current_epoch:?}"
+            )
+            .into(),
+        )))
+    } else {
+        Ok(ctx
+            .wl_storage
+            .ethbridge_queries()
+            .get_bridge_validator_set(Some(epoch))
+            .0)
+    }
+}
+
+/// Request the set of governance validators at the given epoch.
+///
+/// This method may fail if no set of validators exists yet,
+/// at that [`Epoch`].
+fn read_governance_valset<D, H>(
+    ctx: RequestCtx<'_, D, H>,
+    epoch: Epoch,
+) -> storage_api::Result<ValidatorSetArgs>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let current_epoch = ctx.wl_storage.storage.last_epoch;
+    if epoch > current_epoch.next() {
+        Err(storage_api::Error::Custom(CustomError(
+            format!(
+                "Requesting Governance validator set at {epoch:?}, but the \
                  last installed epoch is still {current_epoch:?}"
             )
             .into(),
@@ -509,9 +619,8 @@ where
         Ok(ctx
             .wl_storage
             .ethbridge_queries()
-            .get_validator_set_args(Some(epoch))
-            .0
-            .encode())
+            .get_governance_validator_set(Some(epoch))
+            .0)
     }
 }
 
@@ -553,7 +662,7 @@ where
     let (_, voting_powers) = ctx
         .wl_storage
         .ethbridge_queries()
-        .get_validator_set_args(Some(epoch));
+        .get_bridge_validator_set(Some(epoch));
     Ok(voting_powers)
 }
 
@@ -566,6 +675,7 @@ mod test_ethbridge_router {
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_pending_key, get_signed_root_key, BridgePoolTree,
     };
+    use namada_core::ledger::eth_bridge::storage::whitelist;
     use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::established_address_1;
@@ -577,7 +687,6 @@ mod test_ethbridge_router {
     use namada_core::types::voting_power::{
         EthBridgeVotingPower, FractionalVotingPower,
     };
-    use namada_ethereum_bridge::parameters::read_native_erc20_address;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_proof_of_stake::pos_queries::PosQueries;
@@ -586,13 +695,14 @@ mod test_ethbridge_router {
     use super::*;
     use crate::ledger::queries::testing::TestClient;
     use crate::ledger::queries::RPC;
+    use crate::types::address::nam;
     use crate::types::eth_abi::Encode;
     use crate::types::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum,
+        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
     };
     use crate::types::ethereum_events::EthAddress;
 
-    /// Test that reading the consensus validator set works.
+    /// Test that reading the bridge validator set works.
     #[tokio::test]
     async fn test_read_consensus_valset() {
         let mut client = TestClient::new(RPC);
@@ -613,7 +723,7 @@ mod test_ethbridge_router {
         let validator_set = RPC
             .shell()
             .eth_bridge()
-            .read_consensus_valset(&client, &epoch)
+            .read_bridge_valset(&client, &epoch)
             .await
             .unwrap();
         let expected = {
@@ -647,7 +757,6 @@ mod test_ethbridge_router {
                 validators,
                 voting_powers,
             }
-            .encode()
         };
 
         assert_eq!(validator_set, expected);
@@ -674,7 +783,7 @@ mod test_ethbridge_router {
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_consensus_valset(&client, &Epoch(999_999))
+            .read_bridge_valset(&client, &Epoch(999_999))
             .await;
         let Err(err) = result else {
             panic!("Test failed");
@@ -788,12 +897,14 @@ mod test_ethbridge_router {
 
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -829,12 +940,14 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -889,12 +1002,14 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -954,9 +1069,13 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    (vec![transfer.keccak256()], bertha_address())
-                        .try_to_vec()
-                        .expect("Test failed"),
+                    GenBridgePoolProofReq {
+                        transfers: vec![transfer.keccak256()].into(),
+                        relayer: Cow::Owned(bertha_address()),
+                        with_appendix: false,
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
                 ),
                 None,
                 false,
@@ -975,35 +1094,41 @@ mod test_ethbridge_router {
         let (validator_args, voting_powers) = client
             .wl_storage
             .ethbridge_queries()
-            .get_validator_set_args(None);
-        let data = RelayProof {
-            validator_set_args: validator_args.into(),
-            signatures: sort_sigs(&voting_powers, &signed_root.signatures),
-            transfers: vec![transfer.into()],
+            .get_bridge_validator_set(None);
+        let relay_proof = ethereum_structs::RelayProof {
+            transfers: vec![(&transfer).into()],
             pool_root: signed_root.data.0.0,
             proof: proof.proof.into_iter().map(|hash| hash.0).collect(),
             proof_flags: proof.flags,
             batch_nonce: Default::default(),
             relayer_address: bertha_address().to_string(),
         };
-        let proof = ethers::abi::AbiEncode::encode(data);
-        assert_eq!(proof, resp.data);
+        let signatures = sort_sigs(&voting_powers, &signed_root.signatures);
+        let validator_set: ethereum_structs::ValidatorSetArgs =
+            validator_args.into();
+        let encoded = ethers::abi::AbiEncode::encode((
+            validator_set,
+            signatures,
+            relay_proof,
+        ));
+        assert_eq!(encoded, resp.data.abi_encoded_args);
     }
 
-    /// Test if the merkle tree including a transfer
-    /// has had its root signed, then we cannot generate
-    /// a proof.
+    /// Test if the merkle tree including a transfer has not had its
+    /// root signed, then we cannot generate a proof.
     #[tokio::test]
     async fn test_cannot_get_proof() {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1069,9 +1194,13 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    (vec![transfer2.keccak256()], bertha_address())
-                        .try_to_vec()
-                        .expect("Test failed"),
+                    GenBridgePoolProofReq {
+                        transfers: vec![transfer2.keccak256()].into(),
+                        relayer: Cow::Owned(bertha_address()),
+                        with_appendix: false,
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
                 ),
                 None,
                 false,
@@ -1088,12 +1217,14 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1159,17 +1290,20 @@ mod test_ethbridge_router {
         let mut client = TestClient::new(RPC);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
         };
         // write validator to storage
+        let (_, dummy_validator_stake) = test_utils::default_validator();
         test_utils::init_default_storage(&mut client.wl_storage);
 
         // write a transfer into the bridge pool
@@ -1181,19 +1315,11 @@ mod test_ethbridge_router {
             )
             .expect("Test failed");
 
-        let event_transfer =
-            namada_core::types::ethereum_events::TransferToEthereum {
-                asset: transfer.transfer.asset,
-                receiver: transfer.transfer.recipient,
-                amount: transfer.transfer.amount,
-                gas_payer: transfer.gas_fee.payer.clone(),
-                gas_amount: transfer.gas_fee.amount,
-                sender: transfer.transfer.sender.clone(),
-            };
+        let event_transfer: namada_core::types::ethereum_events::TransferToEthereum
+            = (&transfer).into();
         let eth_event = EthereumEvent::TransfersToEthereum {
             nonce: Default::default(),
             transfers: vec![event_transfer.clone()],
-            valid_transfers_map: vec![true],
             relayer: bertha_address(),
         };
         let eth_msg_key = vote_tallies::Keys::from(&eth_event);
@@ -1209,9 +1335,12 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &eth_msg_key.voting_power(),
-                EpochedVotingPower::from([(0.into(), voting_power)])
-                    .try_to_vec()
-                    .expect("Test failed"),
+                EpochedVotingPower::from([(
+                    0.into(),
+                    voting_power * dummy_validator_stake,
+                )])
+                .try_to_vec()
+                .expect("Test failed"),
             )
             .expect("Test failed");
         client
@@ -1250,10 +1379,8 @@ mod test_ethbridge_router {
             .transfer_to_ethereum_progress(&client)
             .await
             .unwrap();
-        let expected: HashMap<
-            namada_core::types::ethereum_events::TransferToEthereum,
-            FractionalVotingPower,
-        > = [(event_transfer, voting_power)].into_iter().collect();
+        let expected: HashMap<PendingTransfer, FractionalVotingPower> =
+            [(transfer, voting_power)].into_iter().collect();
         assert_eq!(expected, resp);
     }
 
@@ -1269,12 +1396,14 @@ mod test_ethbridge_router {
         test_utils::init_default_storage(&mut client.wl_storage);
         let transfer = PendingTransfer {
             transfer: TransferToEthereum {
+                kind: TransferToEthereumKind::Erc20,
                 asset: EthAddress([0; 20]),
                 recipient: EthAddress([0; 20]),
                 sender: bertha_address(),
                 amount: 0.into(),
             },
             gas_fee: GasFee {
+                token: nam(),
                 amount: 0.into(),
                 payer: bertha_address(),
             },
@@ -1329,9 +1458,13 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![(transfer.keccak256(), bertha_address())]
-                        .try_to_vec()
-                        .expect("Test failed"),
+                    GenBridgePoolProofReq {
+                        transfers: vec![transfer.keccak256()].into(),
+                        relayer: Cow::Owned(bertha_address()),
+                        with_appendix: false,
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
                 ),
                 None,
                 false,
@@ -1352,9 +1485,13 @@ mod test_ethbridge_router {
             .generate_bridge_pool_proof(
                 &client,
                 Some(
-                    vec![transfer.keccak256()]
-                        .try_to_vec()
-                        .expect("Test failed"),
+                    GenBridgePoolProofReq {
+                        transfers: vec![transfer.keccak256()].into(),
+                        relayer: Cow::Owned(bertha_address()),
+                        with_appendix: false,
+                    }
+                    .try_to_vec()
+                    .expect("Test failed"),
                 ),
                 None,
                 false,
@@ -1364,45 +1501,9 @@ mod test_ethbridge_router {
         assert!(resp.is_err());
     }
 
-    /// Test reading the wrapped NAM supply
+    /// Test reading the supply and cap of an ERC20 token.
     #[tokio::test]
-    async fn test_read_wnam_supply() {
-        let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
-
-        // initialize storage
-        test_utils::init_default_storage(&mut client.wl_storage);
-
-        let native_erc20 =
-            read_native_erc20_address(&client.wl_storage).expect("Test failed");
-
-        // write tokens to storage
-        let amount = Amount::native_whole(12345);
-        let token = &client.wl_storage.storage.native_token;
-        client
-            .wl_storage
-            .write(&minted_balance_key(token), amount)
-            .expect("Test failed");
-
-        // commit the changes
-        client
-            .wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
-            .expect("Test failed");
-
-        // check that reading wrapped NAM fails
-        let result = RPC
-            .shell()
-            .eth_bridge()
-            .read_erc20_supply(&client, &native_erc20)
-            .await;
-        assert_matches!(result, Ok(Some(a)) if a == amount);
-    }
-
-    /// Test reading the supply of an ERC20 token.
-    #[tokio::test]
-    async fn test_read_erc20_supply() {
+    async fn test_get_erc20_flow_control() {
         const ERC20_TOKEN: EthAddress = EthAddress([0; 20]);
 
         let mut client = TestClient::new(RPC);
@@ -1411,29 +1512,49 @@ mod test_ethbridge_router {
         // initialize storage
         test_utils::init_default_storage(&mut client.wl_storage);
 
-        // check supply - should be None
+        // check supply - should be 0
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .get_erc20_flow_control(&client, &ERC20_TOKEN)
             .await;
-        assert_matches!(result, Ok(None));
+        assert_matches!(
+            result,
+            Ok(f) if f.supply.is_zero() && f.cap.is_zero()
+        );
 
         // write tokens to storage
-        let amount = Amount::native_whole(12345);
-        let token = wrapped_erc20s::token(&ERC20_TOKEN);
+        let supply_amount = Amount::native_whole(123);
+        let cap_amount = Amount::native_whole(12345);
+        let key = whitelist::Key {
+            asset: ERC20_TOKEN,
+            suffix: whitelist::KeyType::WrappedSupply,
+        }
+        .into();
         client
             .wl_storage
-            .write(&minted_balance_key(&token), amount)
+            .write(&key, supply_amount)
+            .expect("Test failed");
+        let key = whitelist::Key {
+            asset: ERC20_TOKEN,
+            suffix: whitelist::KeyType::Cap,
+        }
+        .into();
+        client
+            .wl_storage
+            .write(&key, cap_amount)
             .expect("Test failed");
 
         // check that the supply was updated
         let result = RPC
             .shell()
             .eth_bridge()
-            .read_erc20_supply(&client, &ERC20_TOKEN)
+            .get_erc20_flow_control(&client, &ERC20_TOKEN)
             .await;
-        assert_matches!(result, Ok(Some(a)) if a == amount);
+        assert_matches!(
+            result,
+            Ok(f) if f.supply == supply_amount && f.cap == cap_amount
+        );
     }
 }
 

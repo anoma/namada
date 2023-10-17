@@ -139,10 +139,14 @@ mod test_queries {
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
     use namada::ledger::pos::PosQueries;
+    use namada::proof_of_stake::types::WeightedValidator;
     use namada::types::storage::Epoch;
 
     use super::*;
+    use crate::facade::tendermint_proto::abci::VoteInfo;
     use crate::node::ledger::shell::test_utils;
+    use crate::node::ledger::shell::test_utils::get_pkh_from_address;
+    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     macro_rules! test_must_send_valset_upd {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {
@@ -216,7 +220,41 @@ mod test_queries {
                     //     );
                     // }
                     // ```
-                    shell.finalize_and_commit();
+                    let params =
+                        shell.wl_storage.pos_queries().get_pos_params();
+                    let consensus_set: Vec<WeightedValidator> =
+                        read_consensus_validator_set_addresses_with_stake(
+                            &shell.wl_storage,
+                            Epoch::default(),
+                        )
+                        .unwrap()
+                        .into_iter()
+                        .collect();
+
+                    let val1 = consensus_set[0].clone();
+                    let pkh1 = get_pkh_from_address(
+                        &shell.wl_storage,
+                        &params,
+                        val1.address.clone(),
+                        Epoch::default(),
+                    );
+                    let votes = vec![VoteInfo {
+                        validator: Some(
+                            namada::tendermint_proto::abci::Validator {
+                                address: pkh1.clone(),
+                                power: u128::try_from(val1.bonded_stake)
+                                    .expect("Test failed")
+                                    as i64,
+                            },
+                        ),
+                        signed_last_block: true,
+                    }];
+                    let req = FinalizeBlock {
+                        proposer_address: pkh1,
+                        votes,
+                        ..Default::default()
+                    };
+                    shell.finalize_and_commit(Some(req));
                 }
             }
         };

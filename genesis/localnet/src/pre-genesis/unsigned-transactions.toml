@@ -11,12 +11,6 @@
 # This file is used to produce `signed-transactions.toml` with
 # the `sign-genesis-tx` command.
 
-# Faucet
-[[established_account]]
-alias = "faucet"
-vp = "vp_testnet_faucet"
-public_key = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-
 # Albert
 [[established_account]]
 alias = "albert"
@@ -34,43 +28,6 @@ public_key = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a
 alias = "christel"
 vp = "vp_user"
 public_key = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
-
-# Transfer all the Faucet's tokens into it's established account:
-[[transfer]]
-token = "NAM"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-
-[[transfer]]
-token = "BTC"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-
-[[transfer]]
-token = "DOT"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-
-[[transfer]]
-token = "Schnitzel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-
-[[transfer]]
-token = "Apfel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
-
-[[transfer]]
-token = "Kartoffel"
-source = "pktest1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgy2dpher"
-target = "faucet"
-amount = "9123372036854"
 
 # Transfer all the Albert's tokens into it's established account:
 [[transfer]]

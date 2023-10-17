@@ -8,14 +8,14 @@ use borsh::BorshSerialize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::ledger::wallet::alias::Alias;
-use namada::ledger::wallet::{alias, Wallet};
+use namada::sdk::wallet::{alias, Wallet};
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
 use namada::types::token;
 use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada::types::uint::Uint;
+use namada::vm::validate_untrusted_wasm;
 use prost::bytes::Bytes;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -106,7 +106,7 @@ pub async fn join_network(
     let validator_alias_and_pre_genesis_wallet =
         validator_alias_and_dir.map(|(validator_alias, pre_genesis_dir)| {
             (
-                Alias::from(validator_alias),
+                alias::Alias::from(validator_alias),
                 pre_genesis::load(&pre_genesis_dir).unwrap_or_else(|err| {
                     eprintln!(
                         "Error loading validator pre-genesis wallet {err}",
@@ -330,6 +330,17 @@ pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
         path
     };
     wasm_loader::pre_fetch_wasm(&wasm_dir).await;
+}
+
+pub fn validate_wasm(args::ValidateWasm { code_path }: args::ValidateWasm) {
+    let code = std::fs::read(code_path).unwrap();
+    match validate_untrusted_wasm(code) {
+        Ok(()) => println!("Wasm code is valid"),
+        Err(e) => {
+            eprintln!("Wasm code is invalid: {e}");
+            safe_exit(1)
+        }
+    }
 }
 
 /// Length of a Tendermint Node ID in bytes

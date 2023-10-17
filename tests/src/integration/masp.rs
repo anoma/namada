@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use namada::types::io::DefaultIo;
 use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::node::ledger::shell::testing::client::run;
-use namada_apps::node::ledger::shell::testing::utils::Bin;
+use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_core::types::address::masp_rewards;
 use namada_core::types::token;
 use namada_core::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
@@ -13,10 +14,10 @@ use test_log::test;
 use super::setup;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
-    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
+    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
+    BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
+    CHRISTEL_KEY, ETH, MASP, NAM,
 };
-use crate::integration::utils::CapturedOutput;
 
 /// In this test we verify that users of the MASP receive the correct rewards
 /// for leaving their assets in the pool for varying periods of time.
@@ -29,7 +30,7 @@ fn masp_incentives() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
@@ -390,8 +391,8 @@ fn masp_incentives() -> Result<()> {
             ETH,
             "--amount",
             "10",
-            "--signer",
-            BERTHA,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -487,8 +488,8 @@ fn masp_incentives() -> Result<()> {
             BTC,
             "--amount",
             "20",
-            "--signer",
-            ALBERT,
+            "--signing-keys",
+            ALBERT_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -660,8 +661,8 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             &((amt10 * masp_rewards["eth"]).0 * (ep5.0 - ep3.0))
                 .to_string_native(),
-            "--signer",
-            BERTHA,
+            "--signing-keys",
+            BERTHA_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -686,8 +687,8 @@ fn masp_incentives() -> Result<()> {
             "--amount",
             &((amt20 * masp_rewards["btc"]).0 * (ep6.0 - ep0.0))
                 .to_string_native(),
-            "--signer",
-            ALBERT,
+            "--signing-keys",
+            ALBERT_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -765,7 +766,7 @@ fn masp_pinned_txs() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
 
     let mut node = setup::setup()?;
     // Wait till epoch boundary
@@ -922,12 +923,13 @@ fn masp_pinned_txs() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Uncomment for better debugging
-    // let _log_guard =
-    // namada_apps::logging::init_from_env_or(tracing::level_filters::LevelFilter::INFO)?
-    // ; This address doesn't matter for tests. But an argument is required.
+    // let _log_guard = namada_apps::logging::init_from_env_or(
+    //     tracing::level_filters::LevelFilter::INFO,
+    // )?;
+    // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new(PathBuf::new());
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
 
     enum Response {
         Ok(&'static str),
@@ -949,6 +951,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "10",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -966,6 +970,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "15",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1000,6 +1006,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 ETH,
                 "--amount",
                 "10",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1017,6 +1025,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1034,6 +1044,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1051,6 +1063,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "7",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1068,6 +1082,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "6",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1122,6 +1138,8 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1203,4 +1221,104 @@ fn masp_txs_and_queries() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Test the unshielding tx attached to a wrapper:
+///
+/// 1. Shield some tokens to reduce the unshielded balance
+/// 2. Submit a new wrapper with a valid unshielding tx and assert
+/// success
+/// 3. Submit a new wrapper with an invalid unshielding tx and assert the
+/// failure
+#[test]
+fn wrapper_fee_unshielding() {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let mut node = setup::setup().unwrap();
+    _ = node.next_epoch();
+
+    // 1. Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "500000",
+            "--gas-price",
+            "30", // Reduce the balance of the fee payer artificially
+            "--gas-limit",
+            "20000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )
+    .unwrap();
+    node.assert_success();
+
+    _ = node.next_epoch();
+    // 2. Valid unshielding
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-limit",
+            "20000",
+            "--gas-spending-key",
+            A_SPENDING_KEY,
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )
+    .unwrap();
+    node.assert_success();
+
+    // 3. Invalid unshielding
+    // TODO: this test shall panic because of the panic in the sdk. Once the
+    // panics are removed from there, this test can be updated
+    let tx_run = run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-price",
+            "1000",
+            "--gas-spending-key",
+            B_SPENDING_KEY,
+            "--ledger-address",
+            validator_one_rpc,
+            "--force",
+        ],
+    )
+    .is_err();
+
+    assert!(tx_run);
 }

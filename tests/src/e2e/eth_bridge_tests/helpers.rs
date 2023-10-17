@@ -184,7 +184,7 @@ pub fn attempt_wrapped_erc20_transfer(
         from,
         "--target",
         to,
-        "--signer",
+        "--signing-keys",
         signer,
         "--amount",
         &amount,

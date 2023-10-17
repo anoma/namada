@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
+use num_traits::CheckedMul;
 use serde::{Deserialize, Serialize};
 
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -149,6 +150,19 @@ impl Dec {
         } else {
             None
         }
+    }
+
+    /// Do addition of two [`Dec`]s
+    pub fn add(&self, other: &Self) -> Self {
+        Dec(self.0 + other.0)
+    }
+
+    /// Do multiply two [`Dec`]s. Return `None` if overflow.
+    /// This methods will overflow incorretly if both arguments are greater than
+    /// 128bit.
+    pub fn checked_mul(&self, other: &Self) -> Option<Self> {
+        let result = self.0.checked_mul(&other.0)?;
+        Some(Dec(result / Uint::exp10(POS_DECIMAL_PRECISION as usize)))
     }
 
     /// Return if the [`Dec`] is negative
@@ -430,7 +444,8 @@ impl Display for Dec {
             str_pre.push_str(string.as_str());
             string = str_pre;
         };
-        let stripped_string = string.trim_end_matches(['.', '0']);
+        let stripped_string = string.trim_end_matches('0');
+        let stripped_string = stripped_string.trim_end_matches('.');
         if stripped_string.is_empty() {
             f.write_str("0")
         } else if is_neg {
@@ -653,5 +668,12 @@ mod test_dec {
             pos.ceil(),
             Dec::from_str("3").expect("Test failed").to_i256()
         );
+    }
+
+    #[test]
+    fn test_dec_display() {
+        let num = Dec::from_str("14000.0000").unwrap();
+        let s = format!("{}", num);
+        assert_eq!(s, String::from("14000"));
     }
 }

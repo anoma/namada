@@ -144,8 +144,11 @@ impl string_encoding::Format for DkgPublicKey {
             .expect("Encoding public key shouldn't fail")
     }
 
-    fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
         BorshDeserialize::try_from_slice(bytes)
+            .map_err(string_encoding::DecodeError::InvalidBytes)
     }
 }
 

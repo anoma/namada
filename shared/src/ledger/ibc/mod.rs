@@ -1,8 +1,6 @@
 //! IBC integration
 
 pub use namada_core::ledger::ibc::storage;
-pub mod vp;
-
 use namada_core::ledger::ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
 };

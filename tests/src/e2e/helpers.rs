@@ -167,14 +167,9 @@ pub fn get_actor_rpc(test: &Test, who: &Who) -> String {
     };
     let config =
         Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
-    let ip = convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
-        .ip()
-        .to_string();
-    let port =
-        convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
-            .port()
-            .to_string();
-    format!("{}:{}", ip, port)
+    let socket_addr =
+        convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr);
+    format!("{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
 /// Get the public key of the validator
@@ -456,4 +451,10 @@ pub fn wait_for_wasm_pre_compile(ledger: &mut NamadaCmd) -> Result<()> {
     ledger.exp_string("Finished compiling all")?;
     ledger.exp_string("Finished compiling all")?;
     Ok(())
+}
+
+/// Convert epoch `min_duration` in seconds to `epochs_per_year` genesis
+/// parameter.
+pub fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
+    60 * 60 * 24 * 365 / min_duration
 }

@@ -1,7 +1,9 @@
 use color_eyre::eyre::{eyre, Report, Result};
 use namada::ledger::eth_bridge::bridge_pool;
-use namada::ledger::{signing, tx as sdk_tx};
+use namada::sdk::tx::dump_tx;
+use namada::sdk::{signing, tx as sdk_tx};
 use namada::types::control_flow::ProceedOrElse;
+use namada::types::io::Io;
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -13,7 +15,7 @@ fn error() -> Report {
     eyre!("Fatal error")
 }
 
-impl<IO> CliApi<IO> {
+impl<IO: Io> CliApi<IO> {
     pub async fn handle_client_command<C>(
         client: Option<C>,
         cmd: cli::NamadaClient,
@@ -34,11 +36,25 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_custom(&client, &mut ctx, args).await?;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
+                        tx::submit_custom::<_, IO>(&client, &mut ctx, args)
+                            .await?;
+                        if !dry_run {
+                            crate::wallet::save(
+                                &ctx.borrow_chain_or_exit().wallet,
+                            )
+                            .unwrap_or_else(|err| eprintln!("{}", err));
+                        } else {
+                            IO::println(
+                                "Transaction dry run. No addresses have been \
+                                 saved.",
+                            )
+                        }
                     }
                     Sub::TxTransfer(TxTransfer(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -47,11 +63,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_transfer(&client, ctx, args).await?;
+                        tx::submit_transfer::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     Sub::TxIbcTransfer(TxIbcTransfer(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -60,24 +77,28 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_ibc_transfer(&client, ctx, args).await?;
+                        tx::submit_ibc_transfer::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
-                    Sub::TxUpdateVp(TxUpdateVp(mut args)) => {
+                    Sub::TxUpdateAccount(TxUpdateAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
                                 &mut args.tx.ledger_address,
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_update_vp(&client, &mut ctx, args).await?;
+                        tx::submit_update_account::<_, IO>(
+                            &client, &mut ctx, args,
+                        )
+                        .await?;
                     }
                     Sub::TxInitAccount(TxInitAccount(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -86,12 +107,27 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_init_account(&client, &mut ctx, args)
-                            .await?;
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
+                        tx::submit_init_account::<_, IO>(
+                            &client, &mut ctx, args,
+                        )
+                        .await?;
+                        if !dry_run {
+                            crate::wallet::save(
+                                &ctx.borrow_chain_or_exit().wallet,
+                            )
+                            .unwrap_or_else(|err| eprintln!("{}", err));
+                        } else {
+                            IO::println(
+                                "Transaction dry run. No addresses have been \
+                                 saved.",
+                            )
+                        }
                     }
                     Sub::TxInitValidator(TxInitValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -100,11 +136,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_init_validator(&client, ctx, args).await?;
+                        tx::submit_init_validator::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     Sub::TxInitProposal(TxInitProposal(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -113,11 +150,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_init_proposal(&client, ctx, args).await?;
+                        tx::submit_init_proposal::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     Sub::TxVoteProposal(TxVoteProposal(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -126,11 +164,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_vote_proposal(&client, ctx, args).await?;
+                        tx::submit_vote_proposal::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     Sub::TxRevealPk(TxRevealPk(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -139,11 +178,16 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_reveal_pk(&client, &mut ctx, args).await?;
+                        tx::submit_reveal_pk::<_, IO>(
+                            &client,
+                            ctx.borrow_mut_chain_or_exit(),
+                            args,
+                        )
+                        .await?;
                     }
                     Sub::Bond(Bond(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -152,11 +196,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_bond(&client, &mut ctx, args).await?;
+                        tx::submit_bond::<_, IO>(&client, &mut ctx, args)
+                            .await?;
                     }
                     Sub::Unbond(Unbond(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -165,11 +210,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_unbond(&client, &mut ctx, args).await?;
+                        tx::submit_unbond::<_, IO>(&client, &mut ctx, args)
+                            .await?;
                     }
                     Sub::Withdraw(Withdraw(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -178,11 +224,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_withdraw(&client, ctx, args).await?;
+                        tx::submit_withdraw::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     Sub::TxCommissionRateChange(TxCommissionRateChange(
                         mut args,
@@ -193,11 +240,11 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_validator_commission_change(
+                        tx::submit_validator_commission_change::<_, IO>(
                             &client, ctx, args,
                         )
                         .await?;
@@ -211,43 +258,66 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let tx_args = args.tx.clone();
-                        let (mut tx, addr, pk) =
-                            bridge_pool::build_bridge_pool_tx(
+
+                        let default_signer = Some(args.sender.clone());
+                        let signing_data = tx::aux_signing_data::<_, IO>(
+                            &client,
+                            &mut chain_ctx.wallet,
+                            &args.tx,
+                            Some(args.sender.clone()),
+                            default_signer,
+                        )
+                        .await?;
+
+                        let (mut tx, _epoch) =
+                            bridge_pool::build_bridge_pool_tx::<_, _, _, IO>(
                                 &client,
                                 &mut chain_ctx.wallet,
-                                args,
+                                &mut chain_ctx.shielded,
+                                args.clone(),
+                                signing_data.fee_payer.clone(),
                             )
-                            .await
-                            .unwrap();
-                        tx::submit_reveal_aux(
-                            &client,
-                            chain_ctx,
-                            &tx_args,
-                            addr,
-                            pk.clone(),
-                            &mut tx,
-                        )
-                        .await?;
-                        signing::sign_tx(
-                            &mut chain_ctx.wallet,
-                            &mut tx,
-                            &tx_args,
-                            &pk,
-                        )
-                        .await?;
-                        sdk_tx::process_tx(
+                            .await?;
+
+                        signing::generate_test_vector::<_, _, IO>(
                             &client,
                             &mut chain_ctx.wallet,
-                            &tx_args,
-                            tx,
+                            &tx,
                         )
                         .await?;
+
+                        if args.tx.dump_tx {
+                            dump_tx::<IO>(&args.tx, tx);
+                        } else {
+                            tx::submit_reveal_aux::<_, IO>(
+                                &client,
+                                chain_ctx,
+                                tx_args.clone(),
+                                &args.sender,
+                            )
+                            .await?;
+
+                            signing::sign_tx(
+                                &mut chain_ctx.wallet,
+                                &tx_args,
+                                &mut tx,
+                                signing_data,
+                            )?;
+
+                            sdk_tx::process_tx::<_, _, IO>(
+                                &client,
+                                &mut chain_ctx.wallet,
+                                &tx_args,
+                                tx,
+                            )
+                            .await?;
+                        }
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -256,11 +326,46 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        tx::submit_unjail_validator(&client, ctx, args).await?;
+                        tx::submit_unjail_validator::<_, IO>(
+                            &client, ctx, args,
+                        )
+                        .await?;
+                    }
+                    Sub::TxUpdateStewardCommission(
+                        TxUpdateStewardCommission(mut args),
+                    ) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_update_steward_commission::<_, IO>(
+                            &client, ctx, args,
+                        )
+                        .await?;
+                    }
+                    Sub::TxResignSteward(TxResignSteward(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::submit_resign_steward::<_, IO>(&client, ctx, args)
+                            .await?;
                     }
                     // Ledger queries
                     Sub::QueryEpoch(QueryEpoch(mut args)) => {
@@ -268,10 +373,10 @@ impl<IO> CliApi<IO> {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
-                        rpc::query_and_print_epoch(&client).await;
+                        rpc::query_and_print_epoch::<_, IO>(&client).await;
                     }
                     Sub::QueryValidatorState(QueryValidatorState(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -280,12 +385,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_and_print_validator_state(
+                        rpc::query_and_print_validator_state::<_, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             args,
@@ -299,12 +404,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_transfers(
+                        rpc::query_transfers::<_, _, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             &mut chain_ctx.shielded,
@@ -319,12 +424,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_conversions(
+                        rpc::query_conversions::<_, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             args,
@@ -336,10 +441,10 @@ impl<IO> CliApi<IO> {
                             C::from_tendermint_address(&mut args.ledger_address)
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
-                        rpc::query_block(&client).await;
+                        rpc::query_block::<_, IO>(&client).await;
                     }
                     Sub::QueryBalance(QueryBalance(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -348,12 +453,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_balance(
+                        rpc::query_balance::<_, _, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             &mut chain_ctx.shielded,
@@ -368,14 +473,18 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_bonds(&client, &mut chain_ctx.wallet, args)
-                            .await
-                            .expect("expected successful query of bonds");
+                        rpc::query_bonds::<_, IO>(
+                            &client,
+                            &mut chain_ctx.wallet,
+                            args,
+                        )
+                        .await
+                        .expect("expected successful query of bonds");
                     }
                     Sub::QueryBondedStake(QueryBondedStake(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -384,11 +493,11 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_bonded_stake(&client, args).await;
+                        rpc::query_bonded_stake::<_, IO>(&client, args).await;
                     }
                     Sub::QueryCommissionRate(QueryCommissionRate(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -397,12 +506,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_and_print_commission_rate(
+                        rpc::query_and_print_commission_rate::<_, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             args,
@@ -416,12 +525,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_slashes(
+                        rpc::query_slashes::<_, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             args,
@@ -435,12 +544,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        rpc::query_delegations(
+                        rpc::query_delegations::<_, IO>(
                             &client,
                             &mut chain_ctx.wallet,
                             args,
@@ -454,11 +563,11 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_find_validator(&client, args).await;
+                        rpc::query_find_validator::<_, IO>(&client, args).await;
                     }
                     Sub::QueryResult(QueryResult(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -467,11 +576,11 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_result(&client, args).await;
+                        rpc::query_result::<_, IO>(&client, args).await;
                     }
                     Sub::QueryRawBytes(QueryRawBytes(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -480,13 +589,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_raw_bytes(&client, args).await;
+                        rpc::query_raw_bytes::<_, IO>(&client, args).await;
                     }
-
                     Sub::QueryProposal(QueryProposal(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(
@@ -494,11 +602,11 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_proposal(&client, args).await;
+                        rpc::query_proposal::<_, IO>(&client, args).await;
                     }
                     Sub::QueryProposalResult(QueryProposalResult(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -507,11 +615,12 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_proposal_result(&client, args).await;
+                        rpc::query_proposal_result::<_, IO>(&client, args)
+                            .await;
                     }
                     Sub::QueryProtocolParameters(QueryProtocolParameters(
                         mut args,
@@ -522,11 +631,51 @@ impl<IO> CliApi<IO> {
                             )
                         });
                         client
-                            .wait_until_node_is_synced()
+                            .wait_until_node_is_synced::<IO>()
                             .await
                             .proceed_or_else(error)?;
                         let args = args.to_sdk(&mut ctx);
-                        rpc::query_protocol_parameters(&client, args).await;
+                        rpc::query_protocol_parameters::<_, IO>(&client, args)
+                            .await;
+                    }
+                    Sub::QueryPgf(QueryPgf(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_pgf::<_, IO>(&client, args).await;
+                    }
+                    Sub::QueryAccount(QueryAccount(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        rpc::query_account::<_, IO>(&client, args).await;
+                    }
+                    Sub::SignTx(SignTx(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client
+                            .wait_until_node_is_synced::<IO>()
+                            .await
+                            .proceed_or_else(error)?;
+                        let args = args.to_sdk(&mut ctx);
+                        tx::sign_tx::<_, IO>(&client, &mut ctx, args).await?;
                     }
                 }
             }
@@ -537,6 +686,9 @@ impl<IO> CliApi<IO> {
                 }
                 Utils::FetchWasms(FetchWasms(args)) => {
                     utils::fetch_wasms(global_args, args).await
+                }
+                Utils::ValidateWasm(ValidateWasm(args)) => {
+                    utils::validate_wasm(args)
                 }
                 Utils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(global_args, args)
@@ -551,17 +703,17 @@ impl<IO> CliApi<IO> {
                     utils::default_base_dir(global_args, args)
                 }
                 Utils::EpochSleep(EpochSleep(args)) => {
-                    let mut ctx = cli::Context::new(global_args)
+                    let mut ctx = cli::Context::new::<IO>(global_args)
                         .expect("expected to construct a context");
                     let mut ledger_address = args.ledger_address.clone();
                     let client =
                         C::from_tendermint_address(&mut ledger_address);
                     client
-                        .wait_until_node_is_synced()
+                        .wait_until_node_is_synced::<IO>()
                         .await
                         .proceed_or_else(error)?;
                     let args = args.to_sdk(&mut ctx);
-                    rpc::epoch_sleep(&client, args).await;
+                    rpc::epoch_sleep::<_, IO>(&client, args).await;
                 }
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,

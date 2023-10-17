@@ -1,5 +1,7 @@
 //! Types that are used in transactions.
 
+/// txs to manage accounts
+pub mod account;
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
@@ -7,6 +9,9 @@ pub mod decrypted;
 pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
+/// txs to manage pgf
+pub mod pgf;
+/// txs to manage pos
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;
@@ -25,12 +30,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::ledger::gas::VpsGas;
+use crate::ledger::gas::{Gas, VpsGas};
 use crate::types::address::Address;
-use crate::types::dec::Dec;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
-use crate::types::key::*;
 use crate::types::storage;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::protocol::ProtocolTx;
@@ -46,7 +49,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
-    pub gas_used: u64,
+    pub gas_used: Gas,
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction
@@ -131,80 +134,6 @@ fn iterable_to_string<T: fmt::Display>(
     }
 }
 
-/// A tx data type to update an account's validity predicate
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct UpdateVp {
-    /// An address of the account
-    pub addr: Address,
-    /// The new VP code hash
-    pub vp_code_hash: Hash,
-}
-
-/// A tx data type to initialize a new established account
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct InitAccount {
-    /// Public key to be written into the account's storage. This can be used
-    /// for signature verification of transactions for the newly created
-    /// account.
-    pub public_key: common::PublicKey,
-    /// The VP code hash
-    pub vp_code_hash: Hash,
-}
-
-/// A tx data type to initialize a new validator account.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct InitValidator {
-    /// Public key to be written into the account's storage. This can be used
-    /// for signature verification of transactions for the newly created
-    /// account.
-    pub account_key: common::PublicKey,
-    /// A key to be used for signing blocks and votes on blocks.
-    pub consensus_key: common::PublicKey,
-    /// An Eth bridge governance public key
-    pub eth_cold_key: secp256k1::PublicKey,
-    /// An Eth bridge hot signing public key used for validator set updates and
-    /// cross-chain transactions
-    pub eth_hot_key: secp256k1::PublicKey,
-    /// Public key used to sign protocol transactions
-    pub protocol_key: common::PublicKey,
-    /// Serialization of the public session key used in the DKG
-    pub dkg_key: crate::types::key::dkg_session_keys::DkgPublicKey,
-    /// The initial commission rate charged for delegation rewards
-    pub commission_rate: Dec,
-    /// The maximum change allowed per epoch to the commission rate. This is
-    /// immutable once set here.
-    pub max_commission_rate_change: Dec,
-    /// The VP code for validator account
-    pub validator_vp_code_hash: Hash,
-}
-
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
 #[derive(
@@ -229,7 +158,7 @@ pub enum TxType {
 }
 
 impl TxType {
-    /// Produce a SHA-256 hash of this header
+    /// Produce a SHA-256 hash of this header  
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.try_to_vec().expect("unable to serialize header"));
         hasher
@@ -241,6 +170,7 @@ mod test_process_tx {
     use super::*;
     use crate::proto::{Code, Data, Section, Signature, Tx, TxError};
     use crate::types::address::nam;
+    use crate::types::key::*;
     use crate::types::storage::Epoch;
     use crate::types::token::Amount;
 
@@ -256,7 +186,7 @@ mod test_process_tx {
     /// data and returns an identical copy
     #[test]
     fn test_process_tx_raw_tx_no_data() {
-        let mut outer_tx = Tx::new(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         let code_sec = outer_tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -274,7 +204,7 @@ mod test_process_tx {
     /// of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_data() {
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -296,7 +226,7 @@ mod test_process_tx {
     /// signed data and returns an identical copy of the inner data
     #[test]
     fn test_process_tx_raw_tx_some_signed_data() {
-        let mut tx = Tx::new(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
         let code_sec = tx
             .set_code(Code::new("wasm code".as_bytes().to_owned()))
             .clone();
@@ -305,7 +235,8 @@ mod test_process_tx {
             .clone();
         tx.add_section(Section::Signature(Signature::new(
             vec![*tx.code_sechash(), *tx.data_sechash()],
-            &gen_keypair(),
+            [(0, gen_keypair())].into_iter().collect(),
+            None,
         )));
 
         tx.validate_tx().expect("Test failed");
@@ -324,22 +255,23 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                amount_per_gas_unit: Amount::from_uint(10, 0)
+                    .expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
-            #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         tx.add_section(Section::Signature(Signature::new(
             tx.sechashes(),
-            &keypair,
+            [(0, keypair)].into_iter().collect(),
+            None,
         )));
 
         tx.validate_tx().expect("Test failed");
@@ -359,15 +291,15 @@ mod test_process_tx {
     fn test_process_tx_wrapper_tx_unsigned() {
         let keypair = gen_keypair();
         // the signed tx
-        let mut tx = Tx::new(TxType::Wrapper(Box::new(WrapperTx::new(
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount: Amount::from_uint(10, 0).expect("Test failed"),
+                amount_per_gas_unit: Amount::from_uint(10, 0)
+                    .expect("Test failed"),
                 token: nam(),
             },
             keypair.ref_to(),
             Epoch(0),
             Default::default(),
-            #[cfg(not(feature = "mainnet"))]
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned()));
@@ -382,10 +314,7 @@ mod test_process_tx {
 #[test]
 fn test_process_tx_decrypted_unsigned() {
     use crate::proto::{Code, Data, Tx};
-    let mut tx = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: false,
-    }));
+    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     let code_sec = tx
         .set_code(Code::new("transaction data".as_bytes().to_owned()))
         .clone();
@@ -394,10 +323,7 @@ fn test_process_tx_decrypted_unsigned() {
         .clone();
     tx.validate_tx().expect("Test failed");
     match tx.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: _,
-        }) => {
+        TxType::Decrypted(DecryptedTx::Decrypted) => {
             assert_eq!(tx.header().code_hash, code_sec.get_hash(),);
             assert_eq!(tx.header().data_hash, data_sec.get_hash(),);
         }
@@ -411,6 +337,8 @@ fn test_process_tx_decrypted_unsigned() {
 #[test]
 fn test_process_tx_decrypted_signed() {
     use crate::proto::{Code, Data, Section, Signature, Tx};
+    use crate::types::key::*;
+
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
@@ -420,16 +348,19 @@ fn test_process_tx_decrypted_signed() {
     }
 
     use crate::types::key::Signature as S;
-    let mut decrypted = Tx::new(TxType::Decrypted(DecryptedTx::Decrypted {
-        #[cfg(not(feature = "mainnet"))]
-        has_valid_pow: false,
-    }));
+    let mut decrypted =
+        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
     // Invalid signed data
     let ed_sig =
         ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-    let mut sig_sec =
-        Signature::new(vec![decrypted.header_hash()], &gen_keypair());
-    sig_sec.signature = Some(common::Signature::try_from_sig(&ed_sig).unwrap());
+    let mut sig_sec = Signature::new(
+        vec![decrypted.header_hash()],
+        [(0, gen_keypair())].into_iter().collect(),
+        None,
+    );
+    sig_sec
+        .signatures
+        .insert(0, common::Signature::try_from_sig(&ed_sig).unwrap());
     decrypted.add_section(Section::Signature(sig_sec));
     // create the tx with signed decrypted data
     let code_sec = decrypted
@@ -440,10 +371,7 @@ fn test_process_tx_decrypted_signed() {
         .clone();
     decrypted.validate_tx().expect("Test failed");
     match decrypted.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted {
-            #[cfg(not(feature = "mainnet"))]
-                has_valid_pow: _,
-        }) => {
+        TxType::Decrypted(DecryptedTx::Decrypted) => {
             assert_eq!(decrypted.header.code_hash, code_sec.get_hash());
             assert_eq!(decrypted.header.data_hash, data_sec.get_hash());
         }

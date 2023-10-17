@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
-use namada::ledger::wallet::alias::Alias;
+use namada::sdk::wallet::alias::Alias;
 use namada_apps::cli::args;
 use namada_apps::client::utils::PRE_GENESIS_DIR;
 use namada_apps::config;
@@ -178,7 +178,7 @@ fn create_node(
     {
         let mut locked = node.shell.lock().unwrap();
         locked
-            .init_chain(init_req)
+            .init_chain(init_req, 1)
             .map_err(|e| eyre!("Failed to initialize ledger: {:?}", e))?;
         locked.commit();
     }

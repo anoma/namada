@@ -8,14 +8,13 @@ use thiserror::Error;
 use crate::ibc::core::ics02_client::height::Height;
 use crate::ibc::core::ics04_channel::packet::Sequence;
 use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortChannelId, PortId,
+    ChannelId, ClientId, ConnectionId, PortId,
 };
 use crate::ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
-    ClientStatePath, ClientTypePath, CommitmentPath, ConnectionPath, PortPath,
+    ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use crate::ibc::core::ics24_host::Path;
 use crate::types::address::{Address, InternalAddress, HASH_HEX_LEN};
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
@@ -70,13 +69,6 @@ pub fn channel_counter_key() -> Key {
         .expect("Creating a key for the channel counter shouldn't fail")
 }
 
-/// Returns a key for the client type
-pub fn client_type_key(client_id: &ClientId) -> Key {
-    let path = Path::ClientType(ClientTypePath(client_id.clone()));
-    ibc_key(path.to_string())
-        .expect("Creating a key for the client state shouldn't fail")
-}
-
 /// Returns a key for the client state
 pub fn client_state_key(client_id: &ClientId) -> Key {
     let path = Path::ClientState(ClientStatePath(client_id.clone()));
@@ -117,11 +109,9 @@ pub fn connection_key(conn_id: &ConnectionId) -> Key {
 }
 
 /// Returns a key for the channel end
-pub fn channel_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::ChannelEnd(ChannelEndPath(
-        port_channel_id.port_id.clone(),
-        port_channel_id.channel_id.clone(),
-    ));
+pub fn channel_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
+    let path =
+        Path::ChannelEnd(ChannelEndPath(port_id.clone(), channel_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for the channel shouldn't fail")
 }
@@ -141,31 +131,22 @@ pub fn port_key(port_id: &PortId) -> Key {
 }
 
 /// Returns a key for nextSequenceSend
-pub fn next_sequence_send_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqSend(SeqSendPath(
-        port_channel_id.port_id.clone(),
-        port_channel_id.channel_id.clone(),
-    ));
+pub fn next_sequence_send_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
+    let path = Path::SeqSend(SeqSendPath(port_id.clone(), channel_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceSend shouldn't fail")
 }
 
 /// Returns a key for nextSequenceRecv
-pub fn next_sequence_recv_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqRecv(SeqRecvPath(
-        port_channel_id.port_id.clone(),
-        port_channel_id.channel_id.clone(),
-    ));
+pub fn next_sequence_recv_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
+    let path = Path::SeqRecv(SeqRecvPath(port_id.clone(), channel_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceRecv shouldn't fail")
 }
 
 /// Returns a key for nextSequenceAck
-pub fn next_sequence_ack_key(port_channel_id: &PortChannelId) -> Key {
-    let path = Path::SeqAck(SeqAckPath(
-        port_channel_id.port_id.clone(),
-        port_channel_id.channel_id.clone(),
-    ));
+pub fn next_sequence_ack_key(port_id: &PortId, channel_id: &ChannelId) -> Key {
+    let path = Path::SeqAck(SeqAckPath(port_id.clone(), channel_id.clone()));
     ibc_key(path.to_string())
         .expect("Creating a key for nextSequenceAck shouldn't fail")
 }
@@ -295,7 +276,7 @@ pub fn connection_id(key: &Key) -> Result<ConnectionId> {
 
 /// Returns a pair of port ID and channel ID from the given channel/sequence key
 /// `#IBC/<prefix>/ports/<port_id>/channels/<channel_id>`
-pub fn port_channel_id(key: &Key) -> Result<PortChannelId> {
+pub fn port_channel_id(key: &Key) -> Result<(PortId, ChannelId)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -316,10 +297,7 @@ pub fn port_channel_id(key: &Key) -> Result<PortChannelId> {
                 .map_err(|e| Error::InvalidKey(e.to_string()))?;
             let channel_id = ChannelId::from_str(&channel.raw())
                 .map_err(|e| Error::InvalidKey(e.to_string()))?;
-            Ok(PortChannelId {
-                port_id,
-                channel_id,
-            })
+            Ok((port_id, channel_id))
         }
         _ => Err(Error::InvalidKey(format!(
             "The key doesn't have port ID and channel ID: Key {}",
@@ -393,38 +371,6 @@ pub fn port_id(key: &Key) -> Result<PortId> {
 pub fn ibc_denom_key(token_hash: impl AsRef<str>) -> Key {
     let path = format!("{}/{}", DENOM, token_hash.as_ref());
     ibc_key(path).expect("Creating a key for the denom key shouldn't fail")
-}
-
-/// Token address from the denom string
-pub fn token(denom: impl AsRef<str>) -> Result<Address> {
-    let token_str = denom.as_ref().split('/').last().ok_or_else(|| {
-        Error::Denom(format!("No token was specified: {}", denom.as_ref()))
-    })?;
-    Address::decode(token_str).map_err(|e| {
-        Error::Denom(format!(
-            "Invalid token address: token {}, error {}",
-            token_str, e
-        ))
-    })
-}
-
-/// Get the hash of IBC token address from the denom string
-pub fn token_hash_from_denom(denom: impl AsRef<str>) -> Result<Option<String>> {
-    let addr = Address::decode(denom.as_ref()).map_err(|e| {
-        Error::Denom(format!(
-            "Decoding the denom failed: denom {}, error {}",
-            denom.as_ref(),
-            e
-        ))
-    })?;
-    match addr {
-        Address::Established(_) => Ok(None),
-        Address::Internal(InternalAddress::IbcToken(h)) => Ok(Some(h)),
-        _ => Err(Error::Denom(format!(
-            "Unexpected address was given: {}",
-            addr
-        ))),
-    }
 }
 
 /// Hash the denom

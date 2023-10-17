@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
 
@@ -13,7 +14,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, BlockGasMeter, VpGasMeter, MIN_STORAGE_GAS};
+use crate::ledger::gas::{self, VpGasMeter, STORAGE_ACCESS_GAS_PER_BYTE};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -29,8 +30,6 @@ use crate::types::token::{
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use crate::vm::{HostRef, MutHostRef};
-
-const WASM_VALIDATION_GAS_PER_BYTE: u64 = 1;
 
 /// These runtime errors will abort tx WASM execution immediately
 #[allow(missing_docs)]
@@ -60,6 +59,10 @@ pub enum TxRuntimeError {
     NumConversionError(TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
+    #[error("Missing tx data")]
+    MissingTxData,
+    #[error("IBC: {0}")]
+    Ibc(#[from] namada_core::ledger::ibc::Error),
 }
 
 type TxResult<T> = std::result::Result<T, TxRuntimeError>;
@@ -79,6 +82,7 @@ where
 }
 
 /// A transaction's host context
+#[derive(Debug)]
 pub struct TxCtx<'a, DB, H, CA>
 where
     DB: storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -92,7 +96,7 @@ where
     /// Storage prefix iterators.
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
-    pub gas_meter: MutHostRef<'a, &'a BlockGasMeter>,
+    pub gas_meter: MutHostRef<'a, &'a TxGasMeter>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
@@ -134,7 +138,7 @@ where
         storage: &Storage<DB, H>,
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
-        gas_meter: &mut BlockGasMeter,
+        gas_meter: &mut TxGasMeter,
         tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
@@ -269,10 +273,6 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
-    #[cfg(not(feature = "mainnet"))]
-    /// This is true when the wrapper of this tx contained a valid
-    /// `testnet_pow::Solution`
-    has_valid_pow: bool,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -329,7 +329,6 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
-        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -345,8 +344,6 @@ where
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
         );
 
         Self { memory, ctx }
@@ -397,7 +394,6 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
-        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> Self {
         let address = unsafe { HostRef::new(address) };
         let storage = unsafe { HostRef::new(storage) };
@@ -428,8 +424,6 @@ where
             vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
         }
     }
 }
@@ -458,33 +452,12 @@ where
             vp_wasm_cache: self.vp_wasm_cache.clone(),
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow: self.has_valid_pow,
         }
     }
 }
 
-/// Called from tx wasm to request to use the given gas amount
-pub fn tx_charge_gas<MEM, DB, H, CA>(
-    env: &TxVmEnv<MEM, DB, H, CA>,
-    used_gas: i64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
-{
-    tx_add_gas(
-        env,
-        used_gas
-            .try_into()
-            .map_err(TxRuntimeError::NumConversionError)?,
-    )
-}
-
 /// Add a gas cost incured in a transaction
-pub fn tx_add_gas<MEM, DB, H, CA>(
+pub fn tx_charge_gas<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     used_gas: u64,
 ) -> TxResult<()>
@@ -496,7 +469,9 @@ where
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     // if we run out of gas, we need to stop the execution
-    let result = gas_meter.add(used_gas).map_err(TxRuntimeError::OutOfGas);
+    let result = gas_meter
+        .consume(used_gas)
+        .map_err(TxRuntimeError::OutOfGas);
     if let Err(err) = &result {
         tracing::info!(
             "Stopping transaction execution because of gas error: {}",
@@ -509,7 +484,7 @@ where
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-    used_gas: i64,
+    used_gas: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
@@ -519,12 +494,7 @@ where
     CA: WasmCacheAccess,
 {
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
-    vp_host_fns::add_gas(
-        gas_meter,
-        used_gas
-            .try_into()
-            .map_err(vp_host_fns::RuntimeError::NumConversionError)?,
-    )
+    vp_host_fns::add_gas(gas_meter, used_gas)
 }
 
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
@@ -544,7 +514,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_has_key {}, key {}", key, key_ptr,);
 
@@ -553,7 +523,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(match log_val {
         Some(&write_log::StorageModification::Write { .. }) => {
             HostEnvResult::Success.to_i64()
@@ -574,7 +544,7 @@ where
             let (present, gas) = storage
                 .has_key(&key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             HostEnvResult::from(present).to_i64()
         }
     })
@@ -600,7 +570,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_read {}, key {}", key, key_ptr,);
 
@@ -609,7 +579,7 @@ where
     // try to read from the write log first
     let write_log = unsafe { env.ctx.write_log.get() };
     let (log_val, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
             let len: i64 = value
@@ -650,7 +620,7 @@ where
             let storage = unsafe { env.ctx.storage.get() };
             let (value, gas) =
                 storage.read(&key).map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             match value {
                 Some(value) => {
                     let len: i64 = value
@@ -691,7 +661,7 @@ where
         .memory
         .write_bytes(result_ptr, value)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Storage prefix iterator function exposed to the wasm VM Tx environment.
@@ -712,7 +682,7 @@ where
         .memory
         .read_string(prefix_ptr, prefix_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_iter_prefix {}", prefix);
 
@@ -722,7 +692,7 @@ where
     let write_log = unsafe { env.ctx.write_log.get() };
     let storage = unsafe { env.ctx.storage.get() };
     let (iter, gas) = storage::iter_prefix_post(write_log, storage, &prefix);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
     Ok(iterators.insert(iter).id())
@@ -754,7 +724,7 @@ where
             &Key::parse(key.clone())
                 .map_err(TxRuntimeError::StorageDataError)?,
         );
-        tx_add_gas(env, iter_gas + log_gas)?;
+        tx_charge_gas(env, iter_gas + log_gas)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = KeyVal {
@@ -830,12 +800,12 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_update {}, {:?}", key, value);
 
@@ -850,8 +820,7 @@ where
     let (gas, _size_diff) = write_log
         .write(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
-    // TODO: charge the size diff
+    tx_charge_gas(env, gas)
 }
 
 /// Temporary storage write function exposed to the wasm VM Tx environment. The
@@ -874,12 +843,12 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let (value, gas) = env
         .memory
         .read_bytes(val_ptr, val_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_write_temp {}, {:?}", key, value);
 
@@ -891,8 +860,7 @@ where
     let (gas, _size_diff) = write_log
         .write_temp(&key, value)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
-    // TODO: charge the size diff
+    tx_charge_gas(env, gas)
 }
 
 fn check_address_existence<MEM, DB, H, CA>(
@@ -925,14 +893,14 @@ where
         }
         let vp_key = Key::validity_predicate(&addr);
         let (vp, gas) = write_log.read(&vp_key);
-        tx_add_gas(env, gas)?;
+        tx_charge_gas(env, gas)?;
         // just check the existence because the write log should not have the
         // delete log of the VP
         if vp.is_none() {
             let (is_present, gas) = storage
                 .has_key(&vp_key)
                 .map_err(TxRuntimeError::StorageError)?;
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             if !is_present {
                 tracing::info!(
                     "Trying to write into storage with a key containing an \
@@ -965,7 +933,7 @@ where
         .memory
         .read_string(key_ptr, key_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_delete {}", key);
 
@@ -978,8 +946,7 @@ where
     let (gas, _size_diff) = write_log
         .delete(&key)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
-    // TODO: charge the size diff
+    tx_charge_gas(env, gas)
 }
 
 /// Emitting an IBC event function exposed to the wasm VM Tx environment.
@@ -999,12 +966,46 @@ where
         .memory
         .read_bytes(event_ptr, event_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let write_log = unsafe { env.ctx.write_log.get() };
     let gas = write_log.emit_ibc_event(event);
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
+}
+
+/// Getting an IBC event function exposed to the wasm VM Tx environment.
+pub fn tx_get_ibc_event<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+    event_type_ptr: u64,
+    event_type_len: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (event_type, gas) = env
+        .memory
+        .read_string(event_type_ptr, event_type_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas(env, gas)?;
+    let write_log = unsafe { env.ctx.write_log.get() };
+    for event in write_log.get_ibc_events() {
+        if event.event_type == event_type {
+            let value =
+                event.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            return Ok(len);
+        }
+    }
+    Ok(HostEnvResult::Fail.to_i64())
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -1371,7 +1372,7 @@ where
         .memory
         .read_string(addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tracing::debug!("tx_insert_verifier {}, addr_ptr {}", addr, addr_ptr,);
 
@@ -1379,7 +1380,9 @@ where
 
     let verifiers = unsafe { env.ctx.verifiers.get() };
     verifiers.insert(addr);
-    tx_add_gas(env, addr_len)
+    // This is not a storage write, use the same multiplier used for a storage
+    // read
+    tx_charge_gas(env, addr_len * STORAGE_ACCESS_GAS_PER_BYTE)
 }
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
@@ -1400,7 +1403,7 @@ where
         .memory
         .read_string(addr_ptr, addr_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     let addr = Address::decode(addr).map_err(TxRuntimeError::AddressError)?;
     tracing::debug!("tx_update_validity_predicate for addr {}", addr);
@@ -1410,7 +1413,7 @@ where
         .memory
         .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1418,8 +1421,7 @@ where
     let (gas, _size_diff) = write_log
         .write(&key, code_hash)
         .map_err(TxRuntimeError::StorageModificationError)?;
-    tx_add_gas(env, gas)
-    // TODO: charge the size diff
+    tx_charge_gas(env, gas)
 }
 
 /// Initialize a new account established address.
@@ -1439,7 +1441,7 @@ where
         .memory
         .read_bytes(code_hash_ptr, code_hash_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
 
     tx_validate_vp_code_hash(env, &code_hash)?;
 
@@ -1452,12 +1454,12 @@ where
     let (addr, gas) = write_log.init_account(&storage.address_gen, code_hash);
     let addr_bytes =
         addr.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, addr_bytes)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
@@ -1473,12 +1475,12 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (chain_id, gas) = storage.get_chain_id();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_string(result_ptr, chain_id)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block height function exposed to the wasm VM Tx
@@ -1495,7 +1497,7 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (height, gas) = storage.get_block_height();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(height.0)
 }
 
@@ -1512,7 +1514,7 @@ where
     CA: WasmCacheAccess,
 {
     let tx_index = unsafe { env.ctx.tx_index.get() };
-    tx_add_gas(env, crate::vm::host_env::gas::MIN_STORAGE_GAS)?;
+    tx_charge_gas(env, crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE)?;
     Ok(tx_index.0)
 }
 
@@ -1549,12 +1551,12 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (hash, gas) = storage.get_block_hash();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     let gas = env
         .memory
         .write_bytes(result_ptr, hash.0)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block epoch function exposed to the wasm VM Tx
@@ -1571,7 +1573,7 @@ where
 {
     let storage = unsafe { env.ctx.storage.get() };
     let (epoch, gas) = storage.get_current_epoch();
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     Ok(epoch.0)
 }
 
@@ -1587,14 +1589,14 @@ where
     CA: WasmCacheAccess,
 {
     let storage = unsafe { env.ctx.storage.get() };
-    tx_add_gas(env, MIN_STORAGE_GAS)?;
+    tx_charge_gas(env, STORAGE_ACCESS_GAS_PER_BYTE)?;
     let native_token = storage.native_token.clone();
     let native_token_string = native_token.encode();
     let gas = env
         .memory
         .write_string(result_ptr, native_token_string)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_add_gas(env, gas)
+    tx_charge_gas(env, gas)
 }
 
 /// Getting the block header function exposed to the wasm VM Tx environment.
@@ -1622,7 +1624,7 @@ where
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
             result_buffer.replace(value);
-            tx_add_gas(env, gas)?;
+            tx_charge_gas(env, gas)?;
             len
         }
         None => HostEnvResult::Fail.to_i64(),
@@ -1776,6 +1778,83 @@ where
     Ok(epoch.0)
 }
 
+/// Verify a transaction signature
+/// TODO: this is just a warkaround to track gas for multiple singature
+/// verifications. When the runtime gas meter is implemented, this funcion can
+/// be removed
+#[allow(clippy::too_many_arguments)]
+pub fn vp_verify_tx_section_signature<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    hash_list_ptr: u64,
+    hash_list_len: u64,
+    public_keys_map_ptr: u64,
+    public_keys_map_len: u64,
+    signer_ptr: u64,
+    signer_len: u64,
+    threshold: u8,
+    max_signatures_ptr: u64,
+    max_signatures_len: u64,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let (hash_list, gas) = env
+        .memory
+        .read_bytes(hash_list_ptr, hash_list_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let hashes = <[Hash; 2]>::try_from_slice(&hash_list)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (public_keys_map, gas) = env
+        .memory
+        .read_bytes(public_keys_map_ptr, public_keys_map_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let public_keys_map =
+        namada_core::types::account::AccountPublicKeysMap::try_from_slice(
+            &public_keys_map,
+        )
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (signer, gas) = env
+        .memory
+        .read_bytes(signer_ptr, signer_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let signer = Address::try_from_slice(&signer)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let (max_signatures, gas) = env
+        .memory
+        .read_bytes(max_signatures_ptr, max_signatures_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(gas_meter, gas)?;
+    let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
+        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+
+    let tx = unsafe { env.ctx.tx.get() };
+
+    Ok(HostEnvResult::from(
+        tx.verify_signatures(
+            &hashes,
+            public_keys_map,
+            &Some(signer),
+            threshold,
+            max_signatures,
+            Some(gas_meter),
+        )
+        .is_ok(),
+    )
+    .to_i64())
+}
+
 /// Verify a ShieldedTransaction.
 pub fn vp_verify_masp<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
@@ -1803,7 +1882,10 @@ where
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     Ok(
-        HostEnvResult::from(crate::ledger::masp::verify_shielded_tx(&shielded))
+        // TODO: once the runtime gas meter is implemented we need to benchmark
+        // this funcion and charge the gas here. For the moment, the cost of
+        // this is included in the benchmark of the masp vp
+        HostEnvResult::from(crate::sdk::masp::verify_shielded_tx(&shielded))
             .to_i64(),
     )
 }
@@ -1830,6 +1912,34 @@ where
     Ok(())
 }
 
+/// Execute IBC tx.
+// Temporarily the IBC tx execution is implemented via a host function to
+// workaround wasm issue.
+pub fn tx_ibc_execute<MEM, DB, H, CA>(
+    env: &TxVmEnv<MEM, DB, H, CA>,
+) -> TxResult<()>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use namada_core::ledger::ibc::{IbcActions, TransferModule};
+
+    let tx_data = unsafe { env.ctx.tx.get().data() }
+        .ok_or(TxRuntimeError::MissingTxData)?;
+    let ctx = Rc::new(RefCell::new(env.ctx.clone()));
+    let mut actions = IbcActions::new(ctx.clone());
+    let module = TransferModule::new(ctx);
+    actions.add_transfer_route(module.module_id(), module);
+    actions.execute(&tx_data)?;
+
+    Ok(())
+}
+
 /// Validate a VP WASM code hash in a tx environment.
 fn tx_validate_vp_code_hash<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
@@ -1841,19 +1951,18 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_add_gas(env, code_hash.len() as u64 * WASM_VALIDATION_GAS_PER_BYTE)?;
     let hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let key = Key::wasm_code(&hash);
     let write_log = unsafe { env.ctx.write_log.get() };
     let (result, gas) = write_log.read(&key);
-    tx_add_gas(env, gas)?;
+    tx_charge_gas(env, gas)?;
     if result.is_none() {
         let storage = unsafe { env.ctx.storage.get() };
         let (is_present, gas) = storage
             .has_key(&key)
             .map_err(TxRuntimeError::StorageError)?;
-        tx_add_gas(env, gas)?;
+        tx_charge_gas(env, gas)?;
         if !is_present {
             return Err(TxRuntimeError::InvalidVpCodeHash(
                 "The corresponding VP code doesn't exist".to_string(),
@@ -1866,8 +1975,8 @@ where
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, DB, H, EVAL, CA>(
     env: &VpVmEnv<'static, MEM, DB, H, EVAL, CA>,
-    vp_code_ptr: u64,
-    vp_code_len: u64,
+    vp_code_hash_ptr: u64,
+    vp_code_hash_len: u64,
     input_data_ptr: u64,
     input_data_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1880,7 +1989,7 @@ where
 {
     let (vp_code_hash, gas) = env
         .memory
-        .read_bytes(vp_code_ptr, vp_code_len as _)
+        .read_bytes(vp_code_hash_ptr, vp_code_hash_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1928,33 +2037,6 @@ where
     vp_host_fns::add_gas(gas_meter, gas)
 }
 
-/// Find if the wrapper tx had a valid `testnet_pow::Solution`
-pub fn vp_has_valid_pow<MEM, DB, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
-) -> vp_host_fns::EnvResult<i64>
-where
-    MEM: VmMemory,
-    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    #[cfg(feature = "mainnet")]
-    let _ = env;
-
-    #[cfg(not(feature = "mainnet"))]
-    let has_valid_pow = env.ctx.has_valid_pow;
-    #[cfg(feature = "mainnet")]
-    let has_valid_pow = false;
-
-    Ok(if has_valid_pow {
-        HostEnvResult::Success
-    } else {
-        HostEnvResult::Fail
-    }
-    .to_i64())
-}
-
 /// Log a string from exposed to the wasm VM VP environment. The message will be
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
@@ -1978,6 +2060,352 @@ where
     Ok(())
 }
 
+// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcStorageContext
+    for TxCtx<'a, DB, H, CA>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    type Error = TxRuntimeError;
+    // type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
+    type PrefixIter<'iter> = u64 where Self: 'iter;
+
+    fn read(
+        &self,
+        key: &Key,
+    ) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        let (log_val, gas) = write_log.read(key);
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(match log_val {
+            Some(write_log::StorageModification::Write { ref value }) => {
+                Some(value.clone())
+            }
+            Some(&write_log::StorageModification::Delete) => None,
+            Some(write_log::StorageModification::InitAccount {
+                ref vp_code_hash,
+            }) => Some(vp_code_hash.to_vec()),
+            Some(write_log::StorageModification::Temp { ref value }) => {
+                Some(value.clone())
+            }
+            None => {
+                // when not found in write log, try to read from the storage
+                let storage = unsafe { self.storage.get() };
+                let (value, gas) =
+                    storage.read(key).map_err(TxRuntimeError::StorageError)?;
+                ibc_tx_charge_gas(self, gas)?;
+                value
+            }
+        })
+    }
+
+    fn has_key(&self, key: &Key) -> Result<bool, Self::Error> {
+        // try to read from the write log first
+        let write_log = unsafe { self.write_log.get() };
+        let (log_val, gas) = write_log.read(key);
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(match log_val {
+            Some(&write_log::StorageModification::Write { .. }) => true,
+            Some(&write_log::StorageModification::Delete) => false,
+            Some(&write_log::StorageModification::InitAccount { .. }) => true,
+            Some(&write_log::StorageModification::Temp { .. }) => true,
+            None => {
+                // when not found in write log, try to check the storage
+                let storage = unsafe { self.storage.get() };
+                let (present, gas) = storage
+                    .has_key(key)
+                    .map_err(TxRuntimeError::StorageError)?;
+                ibc_tx_charge_gas(self, gas)?;
+                present
+            }
+        })
+    }
+
+    fn write(
+        &mut self,
+        key: &Key,
+        data: Vec<u8>,
+    ) -> std::result::Result<(), Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        let (gas, _size_diff) = write_log
+            .write(key, data)
+            .map_err(TxRuntimeError::StorageModificationError)?;
+        ibc_tx_charge_gas(self, gas)
+    }
+
+    fn iter_prefix<'iter>(
+        &'iter self,
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>, Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        let storage = unsafe { self.storage.get() };
+        let (iter, gas) = storage::iter_prefix_post(write_log, storage, prefix);
+        ibc_tx_charge_gas(self, gas)?;
+
+        let iterators = unsafe { self.iterators.get() };
+        Ok(iterators.insert(iter).id())
+    }
+
+    fn iter_next<'iter>(
+        &'iter self,
+        iter_id: &mut Self::PrefixIter<'iter>,
+    ) -> Result<Option<(String, Vec<u8>)>, Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        let iterators = unsafe { self.iterators.get() };
+        let iter_id = PrefixIteratorId::new(*iter_id);
+        while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
+            let (log_val, log_gas) = write_log.read(
+                &Key::parse(key.clone())
+                    .map_err(TxRuntimeError::StorageDataError)?,
+            );
+            ibc_tx_charge_gas(self, iter_gas + log_gas)?;
+            match log_val {
+                Some(write_log::StorageModification::Write { ref value }) => {
+                    return Ok(Some((key, value.clone())));
+                }
+                Some(&write_log::StorageModification::Delete) => {
+                    // check the next because the key has already deleted
+                    continue;
+                }
+                Some(&write_log::StorageModification::InitAccount {
+                    ..
+                }) => {
+                    // a VP of a new account doesn't need to be iterated
+                    continue;
+                }
+                Some(write_log::StorageModification::Temp { ref value }) => {
+                    return Ok(Some((key, value.clone())));
+                }
+                None => {
+                    return Ok(Some((key, val)));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn delete(&mut self, key: &Key) -> std::result::Result<(), Self::Error> {
+        if key.is_validity_predicate().is_some() {
+            return Err(TxRuntimeError::CannotDeleteVp);
+        }
+
+        let write_log = unsafe { self.write_log.get() };
+        let (gas, _size_diff) = write_log
+            .delete(key)
+            .map_err(TxRuntimeError::StorageModificationError)?;
+        ibc_tx_charge_gas(self, gas)
+    }
+
+    fn emit_ibc_event(
+        &mut self,
+        event: IbcEvent,
+    ) -> std::result::Result<(), Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        let gas = write_log.emit_ibc_event(event);
+        ibc_tx_charge_gas(self, gas)
+    }
+
+    fn get_ibc_event(
+        &self,
+        event_type: impl AsRef<str>,
+    ) -> Result<Option<IbcEvent>, Self::Error> {
+        let write_log = unsafe { self.write_log.get() };
+        Ok(write_log
+            .get_ibc_events()
+            .iter()
+            .find(|event| event.event_type == event_type.as_ref())
+            .cloned())
+    }
+
+    fn transfer_token(
+        &mut self,
+        src: &Address,
+        dest: &Address,
+        token: &Address,
+        amount: namada_core::types::token::DenominatedAmount,
+    ) -> std::result::Result<(), Self::Error> {
+        use namada_core::types::token;
+
+        if amount.amount != token::Amount::default() && src != dest {
+            let src_key = token::balance_key(token, src);
+            let dest_key = token::balance_key(token, dest);
+            let src_bal: Option<token::Amount> =
+                ibc_read_borsh(self, &src_key)?;
+            let mut src_bal = src_bal.unwrap_or_else(|| {
+                self.log_string(format!("src {} has no balance", src_key));
+                unreachable!()
+            });
+            src_bal.spend(&amount.amount);
+            let mut dest_bal: token::Amount =
+                ibc_read_borsh(self, &dest_key)?.unwrap_or_default();
+            dest_bal.receive(&amount.amount);
+            ibc_write_borsh(self, &src_key, &src_bal)?;
+            ibc_write_borsh(self, &dest_key, &dest_bal)?;
+        }
+        Ok(())
+    }
+
+    fn mint_token(
+        &mut self,
+        target: &Address,
+        token: &Address,
+        amount: namada_core::types::token::DenominatedAmount,
+    ) -> Result<(), Self::Error> {
+        use namada_core::types::token;
+
+        let target_key = token::balance_key(token, target);
+        let mut target_bal: token::Amount =
+            ibc_read_borsh(self, &target_key)?.unwrap_or_default();
+        target_bal.receive(&amount.amount);
+
+        let minted_key = token::minted_balance_key(token);
+        let mut minted_bal: token::Amount =
+            ibc_read_borsh(self, &minted_key)?.unwrap_or_default();
+        minted_bal.receive(&amount.amount);
+
+        ibc_write_borsh(self, &target_key, &target_bal)?;
+        ibc_write_borsh(self, &minted_key, &minted_bal)?;
+
+        let minter_key = token::minter_key(token);
+        ibc_write_borsh(
+            self,
+            &minter_key,
+            &Address::Internal(address::InternalAddress::Ibc),
+        )?;
+
+        Ok(())
+    }
+
+    fn burn_token(
+        &mut self,
+        target: &Address,
+        token: &Address,
+        amount: namada_core::types::token::DenominatedAmount,
+    ) -> Result<(), Self::Error> {
+        use namada_core::types::token;
+
+        let target_key = token::balance_key(token, target);
+        let mut target_bal: token::Amount =
+            ibc_read_borsh(self, &target_key)?.unwrap_or_default();
+        target_bal.spend(&amount.amount);
+
+        // burn the minted amount
+        let minted_key = token::minted_balance_key(token);
+        let mut minted_bal: token::Amount =
+            ibc_read_borsh(self, &minted_key)?.unwrap_or_default();
+        minted_bal.spend(&amount.amount);
+
+        ibc_write_borsh(self, &target_key, &target_bal)?;
+        ibc_write_borsh(self, &minted_key, &minted_bal)?;
+
+        Ok(())
+    }
+
+    fn get_height(&self) -> std::result::Result<BlockHeight, Self::Error> {
+        let storage = unsafe { self.storage.get() };
+        let (height, gas) = storage.get_block_height();
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(height)
+    }
+
+    fn get_header(
+        &self,
+        height: BlockHeight,
+    ) -> std::result::Result<
+        Option<namada_core::types::storage::Header>,
+        Self::Error,
+    > {
+        let storage = unsafe { self.storage.get() };
+        let (header, gas) = storage
+            .get_block_header(Some(height))
+            .map_err(TxRuntimeError::StorageError)?;
+        ibc_tx_charge_gas(self, gas)?;
+        Ok(header)
+    }
+
+    fn log_string(&self, message: String) {
+        tracing::info!("IBC host env log: {}", message);
+    }
+}
+
+/// Add a gas cost incured in a transaction
+// Temp helper.
+fn ibc_tx_charge_gas<'a, DB, H, CA>(
+    ctx: &TxCtx<'a, DB, H, CA>,
+    used_gas: u64,
+) -> TxResult<()>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let gas_meter = unsafe { ctx.gas_meter.get() };
+    // if we run out of gas, we need to stop the execution
+    let result = gas_meter
+        .consume(used_gas)
+        .map_err(TxRuntimeError::OutOfGas);
+    if let Err(err) = &result {
+        tracing::info!(
+            "Stopping transaction execution because of gas error: {}",
+            err
+        );
+    }
+    result
+}
+
+/// Read borsh encoded val by key.
+// Temp helper for ibc tx workaround.
+fn ibc_read_borsh<'a, T, DB, H, CA>(
+    ctx: &TxCtx<'a, DB, H, CA>,
+    key: &Key,
+) -> TxResult<Option<T>>
+where
+    T: BorshDeserialize,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let bytes = namada_core::ledger::ibc::IbcStorageContext::read(ctx, key)?;
+    match bytes {
+        Some(bytes) => {
+            let val = T::try_from_slice(&bytes)
+                .map_err(TxRuntimeError::EncodingError)?;
+            Ok(Some(val))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Write borsh encoded val by key.
+// Temp helper for ibc tx workaround.
+fn ibc_write_borsh<'a, T, DB, H, CA>(
+    ctx: &mut TxCtx<'a, DB, H, CA>,
+    key: &Key,
+    val: &T,
+) -> TxResult<()>
+where
+    T: BorshSerialize,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let bytes = val.try_to_vec().map_err(TxRuntimeError::EncodingError)?;
+    namada_core::ledger::ibc::IbcStorageContext::write(ctx, key, bytes)?;
+    Ok(())
+}
+
+// Temp. workaround for <https://github.com/anoma/namada/issues/1831>
+impl<'a, DB, H, CA> namada_core::ledger::ibc::IbcCommonContext
+    for TxCtx<'a, DB, H, CA>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+}
+
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
@@ -1995,7 +2423,7 @@ pub mod testing {
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &mut BlockGasMeter,
+        gas_meter: &mut TxGasMeter,
         tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
@@ -2039,7 +2467,6 @@ pub mod testing {
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
-        #[cfg(not(feature = "mainnet"))] has_valid_pow: bool,
     ) -> VpVmEnv<'static, NativeMemory, DB, H, EVAL, CA>
     where
         DB: 'static + storage::DB + for<'iter> storage::DBIter<'iter>,
@@ -2062,8 +2489,6 @@ pub mod testing {
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
-            #[cfg(not(feature = "mainnet"))]
-            has_valid_pow,
         )
     }
 }
