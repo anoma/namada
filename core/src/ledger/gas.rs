@@ -20,13 +20,12 @@ pub enum Error {
     BlockGasExceeded,
     #[error("Overflow during gas operations")]
     GasOverflow,
-    #[error("Error converting to u64")]
-    ConversionError,
 }
 
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 const TX_SIZE_GAS_PER_BYTE: u64 = 10;
+const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 1;
 const WRAPPER_TX_VALIDATION_GAS: u64 = 1;
 
 /// The cost of accessing data, per byte, regardless of its location (memory or
@@ -167,6 +166,15 @@ pub trait GasMetering {
         )
     }
 
+    /// Add the gas for validating untrusted wasm code
+    fn add_wasm_validation_gas(&mut self, bytes_len: u64) -> Result<()> {
+        self.consume(
+            bytes_len
+                .checked_mul(WASM_CODE_VALIDATION_GAS_PER_BYTE)
+                .ok_or(Error::GasOverflow)?,
+        )
+    }
+
     /// Get the gas consumed by the tx alone
     fn get_tx_consumed_gas(&self) -> Gas;
 
@@ -250,10 +258,7 @@ impl TxGasMeter {
     pub fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
         self.consume(WRAPPER_TX_VALIDATION_GAS)?;
 
-        let bytes_len: u64 = tx_bytes
-            .len()
-            .try_into()
-            .map_err(|_| Error::ConversionError)?;
+        let bytes_len = tx_bytes.len() as u64;
         self.consume(
             bytes_len
                 .checked_mul(TX_SIZE_GAS_PER_BYTE)
