@@ -29,7 +29,6 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
-use namada_core::ledger::ibc::storage::ibc_denom_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
@@ -1587,7 +1586,7 @@ pub async fn build_ibc_transfer<'a>(
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
     let ibc_denom =
-        rpc::query_ibc_denom::<_, IO>(client, &args.token, Some(&source)).await;
+        rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
         // Set the IBC amount as an integer
@@ -1801,13 +1800,9 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     let balance_key = token::balance_key(&args.token, &source);
 
     // validate the amount given
-    let validated_amount = validate_amount(
-        context,
-        args.amount,
-        &args.token,
-        args.tx.force,
-    )
-    .await?;
+    let validated_amount =
+        validate_amount(context, args.amount, &args.token, args.tx.force)
+            .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
     let post_balance = check_balance_too_low_err(

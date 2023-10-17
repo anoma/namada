@@ -205,7 +205,7 @@ pub async fn query_transfers<'a>(
             if account != masp() {
                 display!(context.io(), "  {}:", account);
                 let token_alias =
-                    lookup_token_alias(client, wallet, asset, &account).await;
+                    lookup_token_alias(context, asset, &account).await;
                 let sign = match change.cmp(&Change::zero()) {
                     Ordering::Greater => "+",
                     Ordering::Less => "-",
@@ -228,13 +228,8 @@ pub async fn query_transfers<'a>(
             if fvk_map.contains_key(&account) {
                 display!(context.io(), "  {}:", fvk_map[&account]);
                 for (token_addr, val) in masp_change {
-                    let token_alias = lookup_token_alias(
-                        client,
-                        wallet,
-                        &token_addr,
-                        &masp(),
-                    )
-                    .await;
+                    let token_alias =
+                        lookup_token_alias(context, &token_addr, &masp()).await;
                     let sign = match val.cmp(&Change::zero()) {
                         Ordering::Greater => "+",
                         Ordering::Less => "-",
@@ -325,13 +320,8 @@ pub async fn query_transparent_balance<'a>(
     match (args.token, args.owner) {
         (Some(base_token), Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens = query_tokens::<_, IO>(
-                client,
-                wallet,
-                Some(&base_token),
-                Some(&owner),
-            )
-            .await;
+            let tokens =
+                query_tokens(context, Some(&base_token), Some(&owner)).await;
             for (token_alias, token) in tokens {
                 let balance_key = token::balance_key(&token, &owner);
                 match query_storage_value::<_, token::Amount>(
@@ -341,8 +331,14 @@ pub async fn query_transparent_balance<'a>(
                 .await
                 {
                     Ok(balance) => {
-                        let balance = context.format_amount(&token, balance).await;
-                        display_line!(context.io(), "{}: {}", token_alias, balance);
+                        let balance =
+                            context.format_amount(&token, balance).await;
+                        display_line!(
+                            context.io(),
+                            "{}: {}",
+                            token_alias,
+                            balance
+                        );
                     }
                     Err(e) => {
                         display_line!(context.io(), "Querying error: {e}");
@@ -358,8 +354,7 @@ pub async fn query_transparent_balance<'a>(
         }
         (None, Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens =
-                query_tokens::<_, IO>(client, wallet, None, Some(&owner)).await;
+            let tokens = query_tokens(context, None, Some(&owner)).await;
             for (token_alias, token) in tokens {
                 let balance =
                     get_token_balance(context.client(), &token, &owner).await;
@@ -370,15 +365,12 @@ pub async fn query_transparent_balance<'a>(
             }
         }
         (Some(base_token), None) => {
-            let tokens =
-                query_tokens::<_, IO>(client, wallet, Some(&base_token), None)
-                    .await;
+            let tokens = query_tokens(context, Some(&base_token), None).await;
             for (_, token) in tokens {
                 let prefix = token::balance_prefix(&token);
-                let balances = query_storage_prefix::<token::Amount>(
-                    context, &prefix,
-                )
-                .await;
+                let balances =
+                    query_storage_prefix::<token::Amount>(context, &prefix)
+                        .await;
                 if let Some(balances) = balances {
                     print_balances(context, balances, Some(&token), None).await;
                 }
@@ -481,13 +473,8 @@ pub async fn query_pinned_balance<'a>(
                 )
             }
             (Ok((balance, epoch)), Some(base_token)) => {
-                let tokens = query_tokens::<_, IO>(
-                    client,
-                    wallet,
-                    Some(base_token),
-                    None,
-                )
-                .await;
+                let tokens =
+                    query_tokens(context, Some(base_token), None).await;
                 for (token_alias, token) in &tokens {
                     let total_balance = balance
                         .get(&(epoch, token.clone()))
@@ -540,9 +527,13 @@ pub async fn query_pinned_balance<'a>(
                         .format_amount(token_addr, (*value).into())
                         .await;
                     let token_alias =
-                        lookup_token_alias(client, wallet, token_addr, &masp())
-                            .await;
-                    display_line!(context.io(), " {}: {}", token_alias, formatted,);
+                        lookup_token_alias(context, token_addr, &masp()).await;
+                    display_line!(
+                        context.io(),
+                        " {}: {}",
+                        token_alias,
+                        formatted,
+                    );
                 }
                 if !found_any {
                     display_line!(
@@ -585,7 +576,7 @@ async fn print_balances<'a>(
             ),
             None => continue,
         };
-        let token_alias = lookup_token_alias(client, wallet, &t, &o).await;
+        let token_alias = lookup_token_alias(context, &t, &o).await;
         // Get the token and the balance
         let (t, s) = match (token, target) {
             // the given token and the given target are the same as the
@@ -608,7 +599,8 @@ async fn print_balances<'a>(
                 // the token has been already printed
             }
             _ => {
-                display_line!(context.io(), &mut w; "Token {}", token_alias).unwrap();
+                display_line!(context.io(), &mut w; "Token {}", token_alias)
+                    .unwrap();
                 print_token = Some(t);
             }
         }
@@ -637,30 +629,31 @@ async fn print_balances<'a>(
     }
 }
 
-async fn lookup_token_alias<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    wallet: &Wallet<CliWalletUtils>,
+async fn lookup_token_alias<'a>(
+    context: &impl Namada<'a>,
     token: &Address,
     owner: &Address,
 ) -> String {
     if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
         let ibc_denom_key = ibc_denom_key(owner.to_string(), trace_hash);
-        match query_storage_value::<C, String>(client, &ibc_denom_key).await {
-            Ok(ibc_denom) => get_ibc_denom_alias(wallet, ibc_denom),
+        match query_storage_value::<_, String>(context.client(), &ibc_denom_key)
+            .await
+        {
+            Ok(ibc_denom) => get_ibc_denom_alias(context, ibc_denom).await,
             Err(_) => token.to_string(),
         }
     } else {
-        wallet.lookup_alias(token)
+        context.wallet().await.lookup_alias(token)
     }
 }
 
 /// Returns pairs of token alias and token address
-async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
-    client: &C,
-    wallet: &Wallet<CliWalletUtils>,
+async fn query_tokens<'a>(
+    context: &impl Namada<'a>,
     base_token: Option<&Address>,
     owner: Option<&Address>,
 ) -> BTreeMap<String, Address> {
+    let wallet = context.wallet().await;
     // Base tokens
     let mut tokens = match base_token {
         Some(base_token) => {
@@ -688,13 +681,12 @@ async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
     };
 
     for prefix in prefixes {
-        let ibc_denoms =
-            query_storage_prefix::<C, String, IO>(client, &prefix).await;
+        let ibc_denoms = query_storage_prefix::<String>(context, &prefix).await;
         if let Some(ibc_denoms) = ibc_denoms {
             for (key, ibc_denom) in ibc_denoms {
                 if let Some((_, hash)) = is_ibc_denom_key(&key) {
                     let ibc_denom_alias =
-                        get_ibc_denom_alias(wallet, ibc_denom);
+                        get_ibc_denom_alias(context, ibc_denom).await;
                     let ibc_token =
                         Address::Internal(InternalAddress::IbcToken(hash));
                     tokens.insert(ibc_denom_alias, ibc_token);
@@ -705,10 +697,11 @@ async fn query_tokens<C: namada::ledger::queries::Client + Sync, IO: Io>(
     tokens
 }
 
-fn get_ibc_denom_alias(
-    wallet: &Wallet<CliWalletUtils>,
+async fn get_ibc_denom_alias<'a>(
+    context: &impl Namada<'a>,
     ibc_denom: impl AsRef<str>,
 ) -> String {
+    let wallet = context.wallet().await;
     is_ibc_denom(&ibc_denom)
         .map(|(trace_path, base_token)| {
             let base_token_alias = match Address::decode(&base_token) {
@@ -815,13 +808,8 @@ pub async fn query_shielded_balance<'a>(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(base_token), true) => {
-            let tokens = query_tokens::<_, IO>(
-                client,
-                wallet,
-                Some(&base_token),
-                Some(&masp()),
-            )
-            .await;
+            let tokens =
+                query_tokens(context, Some(&base_token), Some(&masp())).await;
             for (token_alias, token) in tokens {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key =
@@ -830,7 +818,10 @@ pub async fn query_shielded_balance<'a>(
                     context
                         .shielded_mut()
                         .await
-                        .compute_shielded_balance(context.client(), &viewing_key)
+                        .compute_shielded_balance(
+                            context.client(),
+                            &viewing_key,
+                        )
                         .await
                         .unwrap()
                         .expect("context should contain viewing key")
@@ -936,20 +927,22 @@ pub async fn query_shielded_balance<'a>(
             }
             for ((fvk, token), token_balance) in balance_map {
                 // Only assets with the current timestamp count
-                let alias =
-                    lookup_token_alias(client, wallet, &token, &masp()).await;
+                let alias = lookup_token_alias(context, &token, &masp()).await;
                 display_line!(context.io(), "Shielded Token {}:", alias);
                 let formatted =
                     context.format_amount(&token, token_balance.into()).await;
-                display_line!(context.io(), "  {}, owned by {}", formatted, fvk);
+                display_line!(
+                    context.io(),
+                    "  {}, owned by {}",
+                    formatted,
+                    fvk
+                );
             }
         }
         // Here the user wants to know the balance for a specific token across
         // users
         (Some(base_token), false) => {
-            let tokens =
-                query_tokens::<_, IO>(client, wallet, Some(&base_token), None)
-                    .await;
+            let tokens = query_tokens(context, Some(&base_token), None).await;
             for (token_alias, token) in tokens {
                 // Compute the unique asset identifier from the token address
                 let token = token;
@@ -994,7 +987,12 @@ pub async fn query_shielded_balance<'a>(
                         }
                         let formatted =
                             context.format_amount(address, (*val).into()).await;
-                        display_line!(context.io(), "  {}, owned by {}", formatted, fvk);
+                        display_line!(
+                            context.io(),
+                            "  {}, owned by {}",
+                            formatted,
+                            fvk
+                        );
                     }
                 }
                 if !found_any {
@@ -1056,7 +1054,7 @@ pub async fn print_decoded_balance<'a>(
             display_line!(
                 context.io(),
                 "{} : {}",
-                lookup_token_alias(client, wallet, token_addr, &masp()).await,
+                lookup_token_alias(context, token_addr, &masp()).await,
                 context.format_amount(token_addr, (*amount).into()).await,
             );
         }
