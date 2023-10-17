@@ -1226,7 +1226,7 @@ where
             TxType::Wrapper(wrapper) => {
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if gas_meter.add_tx_size_gas(tx_bytes).is_err() {
+                if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ErrorCodes::TxGasLimit.into();
                     response.log = "{INVALID_MSG}: Wrapper transactions \
                                     exceeds its gas limit"

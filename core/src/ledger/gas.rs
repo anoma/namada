@@ -24,9 +24,10 @@ pub enum Error {
     ConversionError,
 }
 
-const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
+const TX_SIZE_GAS_PER_BYTE: u64 = 10;
+const WRAPPER_TX_VALIDATION_GAS: u64 = 1;
 
 /// The cost of accessing data, per byte, regardless of its location (memory or
 /// storage)
@@ -243,8 +244,12 @@ impl TxGasMeter {
         }
     }
 
-    /// Add the gas for the space that the transaction requires in the block
-    pub fn add_tx_size_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
+    /// Add the gas required by a wrapper transaction which is comprised of:
+    ///  - cost of validating the wrapper tx
+    ///  - space that the transaction requires in the block
+    pub fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
+        self.consume(WRAPPER_TX_VALIDATION_GAS)?;
+
         let bytes_len: u64 = tx_bytes
             .len()
             .try_into()

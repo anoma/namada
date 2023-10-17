@@ -764,7 +764,7 @@ where
                 // valid transaction and avoid wasting block
                 // resources (ABCI only)
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if tx_gas_meter.add_tx_size_gas(tx_bytes).is_err() {
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     // Account for the tx's resources even in case of an error.
                     // Ignore any allocation error
                     let _ = metadata
