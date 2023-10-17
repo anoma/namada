@@ -28,14 +28,13 @@ const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const COMPILE_GAS_PER_BYTE: u64 = 1;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 
-/// The cost of accessing the storage, per byte
-pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 = 1;
+/// The cost of accessing data, per byte, regardless of its location (memory or
+/// storage)
+pub const DATA_ACCESS_GAS_PER_BYTE: u64 = 1;
 /// The cost of writing to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// The cost of verifying a signle signature of a transaction
 pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
-/// The cost of accessing the WASM memory, per byte
-pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
 /// The cost for requesting one more page in wasm (64KB)
 pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
 
@@ -162,7 +161,7 @@ pub trait GasMetering {
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
         self.consume(
             bytes_len
-                .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
+                .checked_mul(DATA_ACCESS_GAS_PER_BYTE)
                 .ok_or(Error::GasOverflow)?,
         )
     }
