@@ -27,7 +27,7 @@ use crate::types::keccak::{KeccakHash, TryFromError};
 use crate::types::time::DateTimeUtc;
 
 /// The maximum size of an IBC key (in bytes) allowed in merkle-ized storage
-pub const IBC_KEY_LIMIT: usize = 120;
+pub const IBC_KEY_LIMIT: usize = 240;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone)]

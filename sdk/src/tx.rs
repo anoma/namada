@@ -31,7 +31,7 @@ use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::ibc::storage::ibc_denom_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
-use namada_core::types::address::{masp, Address, InternalAddress};
+use namada_core::types::address::{masp, Address};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::key::*;
@@ -1586,18 +1586,8 @@ pub async fn build_ibc_transfer<'a>(
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
 
-    let ibc_denom = match &args.token {
-        Address::Internal(InternalAddress::IbcToken(hash)) => {
-            let ibc_denom_key = ibc_denom_key(hash);
-            rpc::query_storage_value::<_, String>(
-                context.client(),
-                &ibc_denom_key,
-            )
-            .await
-            .map_err(|_e| TxError::TokenDoesNotExist(args.token.clone()))?
-        }
-        _ => args.token.to_string(),
-    };
+    let ibc_denom =
+        rpc::query_ibc_denom::<_, IO>(client, &args.token, Some(&source)).await;
     let token = PrefixedCoin {
         denom: ibc_denom.parse().expect("Invalid IBC denom"),
         // Set the IBC amount as an integer
@@ -1802,22 +1792,26 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
 
     let source = args.source.effective_address();
     let target = args.target.effective_address();
-    let token = args.token.clone();
 
     // Check that the source address exists on chain
     source_exists_or_err(source.clone(), args.tx.force, context).await?;
     // Check that the target address exists on chain
     target_exists_or_err(target.clone(), args.tx.force, context).await?;
     // Check source balance
-    let balance_key = token::balance_key(&token, &source);
+    let balance_key = token::balance_key(&args.token, &source);
 
     // validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &token, args.tx.force).await?;
+    let validated_amount = validate_amount(
+        context,
+        args.amount,
+        &args.token,
+        args.tx.force,
+    )
+    .await?;
 
     args.amount = InputAmount::Validated(validated_amount);
     let post_balance = check_balance_too_low_err(
-        &token,
+        &args.token,
         &source,
         validated_amount.amount,
         balance_key,
@@ -1828,7 +1822,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     let tx_source_balance = Some(TxSourcePostBalance {
         post_balance,
         source: source.clone(),
-        token: token.clone(),
+        token: args.token.clone(),
     });
 
     let masp_addr = masp();
@@ -1841,7 +1835,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         // TODO Refactor me, we shouldn't rely on any specific token here.
         (token::Amount::zero(), args.native_token.clone())
     } else {
-        (validated_amount.amount, token)
+        (validated_amount.amount, args.token.clone())
     };
     // Determine whether to pin this transaction to a storage key
     let key = match &args.target {

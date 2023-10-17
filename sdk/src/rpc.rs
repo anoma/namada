@@ -13,7 +13,7 @@ use namada_core::ledger::governance::storage::proposal::StorageProposal;
 use namada_core::ledger::governance::utils::Vote;
 use namada_core::ledger::storage::LastBlock;
 use namada_core::types::account::Account;
-use namada_core::types::address::Address;
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
 use namada_core::types::key::common;
 use namada_core::types::storage::{
@@ -35,6 +35,9 @@ use crate::error::{EncodingError, Error, QueryError, TxError};
 use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
+use namada_core::ledger::ibc::storage::{
+    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
+};
 use crate::proto::Tx;
 use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 use crate::queries::{Client, RPC};
@@ -1089,4 +1092,44 @@ pub async fn format_denominated_amount(
     denominate_amount(client, io, token, amount)
         .await
         .to_string()
+}
+
+/// Look up the IBC denomination from a IbcToken.
+pub async fn query_ibc_denom<
+    C: crate::ledger::queries::Client + Sync,
+    IO: Io,
+>(
+    client: &C,
+    token: &Address,
+    owner: Option<&Address>,
+) -> String {
+    let hash = match token {
+        Address::Internal(InternalAddress::IbcToken(hash)) => hash,
+        _ => return token.to_string(),
+    };
+
+    if let Some(owner) = owner {
+        let ibc_denom_key = ibc_denom_key(owner.to_string(), hash);
+        if let Ok(ibc_denom) =
+            query_storage_value::<C, String>(client, &ibc_denom_key).await
+        {
+            return ibc_denom;
+        }
+    }
+
+    // No owner is specified or the owner doesn't have the token
+    let ibc_denom_prefix = ibc_denom_key_prefix(None);
+    if let Ok(Some(ibc_denoms)) =
+        query_storage_prefix::<C, IO, String>(client, &ibc_denom_prefix).await
+    {
+        for (key, ibc_denom) in ibc_denoms {
+            if let Some((_, token_hash)) = is_ibc_denom_key(&key) {
+                if token_hash == *hash {
+                    return ibc_denom;
+                }
+            }
+        }
+    }
+
+    token.to_string()
 }
