@@ -525,11 +525,11 @@ where
             Ok((module, store))
         }
         Commitment::Id(code) => {
-            gas_meter.add_compiling_gas(
-                u64::try_from(code.len())
-                    .map_err(|e| Error::ConversionError(e.to_string()))?,
-            )?;
+            let tx_len = code.len() as u64;
+            gas_meter.add_wasm_validation_gas(tx_len)?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
+
+            gas_meter.add_compiling_gas(tx_len)?;
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
