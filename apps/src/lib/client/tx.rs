@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Write;
 
 use namada::core::ledger::governance::cli::offline::{
     OfflineProposal, OfflineSignedProposal, OfflineVote,
@@ -1093,21 +1094,12 @@ pub async fn submit_tx<'a>(
     tx::submit_tx(namada, to_broadcast).await
 }
 
-pub async fn gen_ibc_shielded_transfer<C, IO: Io>(
-    client: &C,
-    ctx: &mut Context,
+pub async fn gen_ibc_shielded_transfer<'a>(
+    context: &impl Namada<'a>,
     args: args::GenIbcShieldedTransafer,
-) -> Result<(), error::Error>
-where
-    C: namada::ledger::queries::Client + Sync,
-    C::Error: std::fmt::Display,
-{
-    if let Some(shielded_transfer) = tx::gen_ibc_shielded_transfer::<_, _, IO>(
-        client,
-        &mut ctx.shielded,
-        args.clone(),
-    )
-    .await?
+) -> Result<(), error::Error> {
+    if let Some(shielded_transfer) =
+        tx::gen_ibc_shielded_transfer(context, args.clone()).await?
     {
         let tx_id = shielded_transfer.masp_tx.txid().to_string();
         let filename = format!("ibc_shielded_transfer_{}.memo", tx_id);

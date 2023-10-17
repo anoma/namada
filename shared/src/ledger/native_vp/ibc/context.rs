@@ -183,27 +183,14 @@ where
             shielded.transfer.clone(),
             shielded.masp_tx.clone(),
         );
-        self.write(
-            &current_tx_key,
-            record.try_to_vec().expect("encoding shouldn't failed"),
-        )?;
-        self.write(
-            &head_tx_key,
-            (current_tx_idx + 1)
-                .try_to_vec()
-                .expect("encoding shouldn't failed"),
-        )?;
+        self.write(&current_tx_key, record.serialize_to_vec())?;
+        self.write(&head_tx_key, (current_tx_idx + 1).serialize_to_vec())?;
         // If storage key has been supplied, then pin this transaction to it
         if let Some(key) = &shielded.transfer.key {
             let pin_key = Key::from(masp_addr.to_db_key())
                 .push(&(PIN_KEY_PREFIX.to_owned() + key))
                 .expect("Cannot obtain a storage key");
-            self.write(
-                &pin_key,
-                current_tx_idx
-                    .try_to_vec()
-                    .expect("encoding shouldn't fail"),
-            )?;
+            self.write(&pin_key, current_tx_idx.serialize_to_vec())?;
         }
         Ok(())
     }

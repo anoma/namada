@@ -52,7 +52,8 @@ use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::types::address::{masp, Address};
 use namada_core::types::masp::{
-    BalanceOwner, ExtendedViewingKey, PaymentAddress,
+    BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
+    TransferTarget,
 };
 use namada_core::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_core::types::token;
@@ -69,7 +70,6 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::args::InputAmount;
 #[cfg(feature = "testing")]
 use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
@@ -80,8 +80,7 @@ use crate::rpc::{query_conversion, query_storage_value};
 use crate::tendermint_rpc::query::Query;
 use crate::tendermint_rpc::Order;
 use crate::tx::decode_component;
-use crate::{args, display_line, edisplay_line, rpc, Namada};
-use namada_core::types::masp::{TransferSource, TransferTarget};
+use crate::{display_line, edisplay_line, rpc, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.

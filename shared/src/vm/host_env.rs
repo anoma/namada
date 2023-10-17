@@ -1795,9 +1795,7 @@ where
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let events = vp_host_fns::get_ibc_events(gas_meter, write_log, event_type)?;
-    let value = events
-        .try_to_vec()
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+    let value = events.serialize_to_vec();
     let len: i64 = value
         .len()
         .try_into()

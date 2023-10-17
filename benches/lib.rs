@@ -95,7 +95,6 @@ use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
-use namada_sdk::args::InputAmount;
 use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };

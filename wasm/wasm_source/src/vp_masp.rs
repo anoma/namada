@@ -192,10 +192,7 @@ fn validate_tx(
             transparent_tx_pool -= transp_amt;
 
             // Satisfies 4.
-            let target_enc = transfer
-                .target
-                .try_to_vec()
-                .expect("target address encoding");
+            let target_enc = transfer.target.serialize_to_vec();
 
             let hash = Ripemd160::digest(sha256(&target_enc).0.as_slice());
 
@@ -251,5 +248,5 @@ fn validate_tx(
         _ => {}
     }
     // Do the expensive proof verification in the VM at the end.
-    ctx.verify_masp(shielded_tx.try_to_vec().unwrap())
+    ctx.verify_masp(shielded_tx.serialize_to_vec())
 }

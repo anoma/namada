@@ -64,7 +64,8 @@ mod ibc_rs_conversion {
     use std::collections::HashMap;
     use std::str::FromStr;
 
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh_ext::BorshSerializeExt;
     use data_encoding::HEXUPPER;
     use thiserror::Error;
 
@@ -124,8 +125,7 @@ mod ibc_rs_conversion {
 
     impl From<IbcShieldedTransfer> for Memo {
         fn from(shielded: IbcShieldedTransfer) -> Self {
-            let bytes =
-                shielded.try_to_vec().expect("Encoding shouldn't failed");
+            let bytes = shielded.serialize_to_vec();
             HEXUPPER.encode(&bytes).into()
         }
     }

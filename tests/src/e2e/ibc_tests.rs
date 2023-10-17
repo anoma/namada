@@ -60,14 +60,12 @@ use namada::ledger::storage::traits::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
 use namada::types::address::{Address, InternalAddress};
-use namada::types::io::DefaultIo;
 use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
 };
-use namada_apps::client::tx::CLIShieldedUtils;
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::genesis::genesis_config::GenesisConfig;
@@ -75,6 +73,7 @@ use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
+use namada_sdk::masp::fs::FsShieldedUtils;
 use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
@@ -209,7 +208,7 @@ fn run_ledger_ibc() -> Result<()> {
 
 fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     // Download the shielded pool parameters before starting node
-    let _ = CLIShieldedUtils::new::<DefaultIo>(PathBuf::new());
+    let _ = FsShieldedUtils::new(PathBuf::new());
 
     // epoch per 100 seconds
     let update_genesis = |mut genesis: GenesisConfig| {
