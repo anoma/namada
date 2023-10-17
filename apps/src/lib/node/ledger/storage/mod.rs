@@ -498,8 +498,9 @@ mod tests {
             None,
             Some(5),
         );
+        let new_epoch_start = BlockHeight(1);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(1))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
 
         let key = Key::parse("key").expect("cannot parse the key string");
@@ -509,12 +510,12 @@ mod tests {
             .expect("write failed");
 
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(1));
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
+        let new_epoch_start = BlockHeight(6);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(6))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
 
         let key = Key::parse("key2").expect("cannot parse the key string");
@@ -524,18 +525,19 @@ mod tests {
             .expect("write failed");
 
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(6));
+        storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
         let result = storage.get_merkle_tree(1.into());
         assert!(result.is_ok(), "The tree at Height 1 should be restored");
 
+        let new_epoch_start = BlockHeight(11);
         storage
-            .begin_block(BlockHash::default(), BlockHeight(11))
+            .begin_block(BlockHash::default(), new_epoch_start)
             .expect("begin_block failed");
         storage.block.epoch = storage.block.epoch.next();
-        storage.block.pred_epochs.new_epoch(BlockHeight(11));
+        storage.block.pred_epochs.new_epoch(new_epoch_start);
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
