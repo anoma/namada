@@ -706,7 +706,7 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_consensus_valset() {
         let mut client = TestClient::new(RPC);
-        let epoch = Epoch(0);
+        let epoch = Epoch::sentinel();
         assert_eq!(client.wl_storage.storage.last_epoch, epoch);
 
         // write validator to storage
@@ -767,7 +767,7 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_consensus_valset_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch, Epoch::sentinel());
 
         // write validator to storage
         test_utils::init_default_storage(&mut client.wl_storage);
@@ -800,7 +800,7 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch, Epoch::sentinel());
 
         // write validator to storage
         let keys = test_utils::init_default_storage(&mut client.wl_storage);
@@ -809,7 +809,7 @@ mod test_ethbridge_router {
         let vext = validator_set_update::Vext {
             voting_powers: VotingPowersMap::new(),
             validator_addr: established_address_1(),
-            signing_epoch: 0.into(),
+            signing_epoch: Epoch::first(),
         }
         .sign(
             &keys
@@ -820,7 +820,7 @@ mod test_ethbridge_router {
         let tx_result = aggregate_votes(
             &mut client.wl_storage,
             validator_set_update::VextDigest::singleton(vext.clone()),
-            0.into(),
+            Epoch::first(),
         )
         .expect("Test failed");
         assert!(!tx_result.changed_keys.is_empty());
@@ -836,17 +836,17 @@ mod test_ethbridge_router {
         let proof = RPC
             .shell()
             .eth_bridge()
-            .read_valset_upd_proof(&client, &Epoch(1))
+            .read_valset_upd_proof(&client, &Epoch(2))
             .await
             .unwrap();
         let expected = {
             let mut proof =
-                EthereumProof::new((1.into(), vext.data.voting_powers));
+                EthereumProof::new((2.into(), vext.data.voting_powers));
             proof.attach_signature(
                 client
                     .wl_storage
                     .ethbridge_queries()
-                    .get_eth_addr_book(&established_address_1(), Some(0.into()))
+                    .get_eth_addr_book(&established_address_1(), Some(1.into()))
                     .expect("Test failed"),
                 vext.sig,
             );
@@ -861,7 +861,7 @@ mod test_ethbridge_router {
     #[tokio::test]
     async fn test_read_valset_upd_proof_too_far_ahead() {
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch, Epoch::sentinel());
 
         // write validator to storage
         test_utils::init_default_storage(&mut client.wl_storage);
@@ -1507,7 +1507,7 @@ mod test_ethbridge_router {
         const ERC20_TOKEN: EthAddress = EthAddress([0; 20]);
 
         let mut client = TestClient::new(RPC);
-        assert_eq!(client.wl_storage.storage.last_epoch.0, 0);
+        assert_eq!(client.wl_storage.storage.last_epoch, Epoch::sentinel());
 
         // initialize storage
         test_utils::init_default_storage(&mut client.wl_storage);

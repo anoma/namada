@@ -14,7 +14,7 @@ use namada_core::types::dec::Dec;
 use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{self, protocol_pk_key, RefTo};
-use namada_core::types::storage::{BlockHeight, Key};
+use namada_core::types::storage::{BlockHeight, Epoch, Key};
 use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::pos_queries::PosQueries;
@@ -227,6 +227,7 @@ pub fn init_storage_with_validators(
             .write(&protocol_pk_key(validator), protocol_key)
             .expect("Test failed");
     }
+    wl_storage.storage.block.epoch = Epoch::first();
     wl_storage.commit_block().expect("Test failed");
 
     all_keys

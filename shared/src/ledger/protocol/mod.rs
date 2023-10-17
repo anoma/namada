@@ -1027,7 +1027,7 @@ mod tests {
         EthereumEvent, TransferToNamada,
     };
     use namada_core::types::keccak::keccak_hash;
-    use namada_core::types::storage::BlockHeight;
+    use namada_core::types::storage::{BlockHeight, Epoch};
     use namada_core::types::token::Amount;
     use namada_core::types::vote_extensions::bridge_pool_roots::BridgePoolRootVext;
     use namada_core::types::vote_extensions::ethereum_events::EthereumEventsVext;
@@ -1104,7 +1104,7 @@ mod tests {
         let voting_power: EpochedVotingPower =
             wl_storage.read(&eth_msg_keys.voting_power())?.unwrap();
         let expected = EpochedVotingPower::from([(
-            0.into(),
+            Epoch::first(),
             FractionalVotingPower::HALF * total_stake,
         )]);
         assert_eq!(voting_power, expected);
@@ -1166,7 +1166,7 @@ mod tests {
         let voting_power: EpochedVotingPower =
             wl_storage.read(&bp_root_keys.voting_power())?.unwrap();
         let expected = EpochedVotingPower::from([(
-            0.into(),
+            Epoch::first(),
             FractionalVotingPower::HALF * total_stake,
         )]);
         assert_eq!(voting_power, expected);
