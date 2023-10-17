@@ -374,19 +374,28 @@ where
                 }
             },
             PGFAction::Retro(target) => {
-                token::transfer(
+                match token::transfer(
                     storage,
                     token,
                     &ADDRESS,
                     &target.target,
                     target.amount,
-                )?;
-                tracing::info!(
-                    "Execute RetroPgf from proposal id {}: sent {} to {}.",
-                    proposal_id,
-                    target.amount.to_string_native(),
-                    target.target
-                );
+                ) {
+                    Ok(()) => tracing::info!(
+                        "Execute RetroPgf from proposal id {}: sent {} to {}.",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target
+                    ),
+                    Err(e) => tracing::warn!(
+                        "Error in RetroPgf transfer from proposal id {}, \
+                         amount {} to {}: {}",
+                        proposal_id,
+                        target.amount.to_string_native(),
+                        target.target,
+                        e
+                    ),
+                }
             }
         }
     }
