@@ -446,13 +446,28 @@ where
                                 .results
                                 .accept(tx_index);
                         }
-                        for ibc_event in &result.ibc_events {
-                            // Add the IBC event besides the tx_event
-                            let mut event = Event::from(ibc_event.clone());
-                            // Add the height for IBC event query
-                            event["height"] = height.to_string();
-                            response.events.push(event);
-                        }
+                        // events from other sources
+                        response.events.extend(
+                            // ibc events
+                            result
+                                .ibc_events
+                                .iter()
+                                .cloned()
+                                .map(|ibc_event| {
+                                    // Add the IBC event besides the tx_event
+                                    let mut event = Event::from(ibc_event);
+                                    // Add the height for IBC event query
+                                    event["height"] = height.to_string();
+                                    event
+                                })
+                                // eth bridge events
+                                .chain(
+                                    result
+                                        .eth_bridge_events
+                                        .iter()
+                                        .map(Event::from),
+                                ),
+                        );
                         match serde_json::to_string(
                             &result.initialized_accounts,
                         ) {
