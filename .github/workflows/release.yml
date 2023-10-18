@@ -79,6 +79,7 @@ jobs:
           echo "::add-path::$GITHUB_WORKSPACE"
         env:
           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+          GITHUB_WORKSPACE: ${{ github.workspace }} 
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package
