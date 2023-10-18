@@ -3059,14 +3059,14 @@ where
     // TODO: apply rewards
     let slashes = find_validator_slashes(storage, &bond_id.validator)?;
     // dbg!(&slashes);
-    let slash_rates =
-        slashes
-            .iter()
-            .fold(BTreeMap::<Epoch, Dec>::new(), |mut map, slash| {
-                let tot_rate = map.entry(slash.epoch).or_default();
-                *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
-                map
-            });
+    // let slash_rates =
+    //     slashes
+    //         .iter()
+    //         .fold(BTreeMap::<Epoch, Dec>::new(), |mut map, slash| {
+    //             let tot_rate = map.entry(slash.epoch).or_default();
+    //             *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
+    //             map
+    //         });
     // dbg!(&slash_rates);
 
     // Accumulate incoming redelegations slashes from source validator, if any.
