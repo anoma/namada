@@ -90,7 +90,7 @@ validate_arguments() {
     # The script expects 2 arguments:
     # 1. The path to the directory containing the Namada binaries
     # 2. The BASE_DIR of the chain
-    
+
     if [ "$#" -gt 3 ] || [ "$#" -lt 1 ]; then
         echo "Error: Invalid number of arguments. Expected 1 or 2 or 3 arguments."
         echo "See the help page by running --help for more information."
@@ -100,7 +100,13 @@ validate_arguments() {
     # Get absolute path of where the script is being run from
     CURRENT_DIR="$(pwd)"
     # Get the absolute directory of where the script is located
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+    SCRIPT_DIR="$(dirname "$0")"
+    if [ -d "$SCRIPT_DIR" ]; then
+        SCRIPT_DIR="$(readlink -f "$SCRIPT_DIR")"
+    else
+        echo "Error: Script directory not found."
+        exit 1
+    fi
     NETWORK_CONFIG_PATH="$SCRIPT_DIR/../genesis/e2e-tests-single-node.toml"
     NAMADA_BIN_DIR="$1"
 
@@ -205,15 +211,12 @@ package() {
 
     basename *.tar.gz .tar.gz >${CHAIN_DIR}/chain-id
     NAMADA_CHAIN_ID="$(cat ${CHAIN_DIR}/chain-id)"
-
-    # We now need the keys of the faucet
-    cp "$BASE_DIR/${NAMADA_CHAIN_ID}/setup/other/wallet.toml" "$BASE_DIR/wallet-temp.toml"
-
-    rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}/*"
-    mv "$BASE_DIR/wallet-temp.toml" "$BASE_DIR/${NAMADA_CHAIN_ID}/wallet-genesis.toml"
-    mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
     rm -rf "$SCRIPT_DIR/utils/network-config.toml"
-    
+    cp "$BASE_DIR/${NAMADA_CHAIN_ID}/setup/other/wallet.toml" "$BASE_DIR/wallet-genesis.toml"
+    rm -rf "$BASE_DIR/${NAMADA_CHAIN_ID}"
+    mv "${NAMADA_CHAIN_ID}.tar.gz" $CHAIN_DIR
+
+
     # clean up the http server when the script exits
     trap cleanup EXIT
 
