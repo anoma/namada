@@ -25,8 +25,8 @@ use namada::types::io::DefaultIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
+use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
-use namada_apps::config::{ethereum_bridge, genesis};
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::ledger::governance::cli::onchain::{
     PgfFunding, PgfFundingTarget, StewardsUpdate,
@@ -47,7 +47,10 @@ use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
     is_debug_mode, parse_reached_epoch,
 };
-use crate::e2e::setup::{self, default_port_offset, run_cmd, set_validators, sleep, Bin, Who, allow_duplicate_ips};
+use crate::e2e::setup::{
+    self, allow_duplicate_ips, default_port_offset, set_validators, sleep, Bin,
+    Who,
+};
 use crate::{run, run_as};
 
 fn start_namada_ledger_node(
