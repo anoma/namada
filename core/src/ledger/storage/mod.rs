@@ -963,8 +963,6 @@ where
         } = parameters.epoch_duration;
         self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
         self.next_epoch_min_start_time = genesis_time + min_duration;
-        // The default start height in `Epochs` is set to 1, we override it
-        // here in case it differs at genesis
         self.block.pred_epochs = Epochs {
             first_block_heights: vec![initial_height],
         };
@@ -1302,6 +1300,12 @@ mod tests {
                 minimum_gas_price: BTreeMap::default(),
             };
             parameters.init_storage(&mut wl_storage).unwrap();
+            // Initialize pred_epochs to the current height
+            wl_storage
+                .storage
+                .block
+                .pred_epochs
+                .new_epoch(wl_storage.storage.block.height);
 
             let epoch_before = wl_storage.storage.last_epoch;
             assert_eq!(epoch_before, wl_storage.storage.block.epoch);

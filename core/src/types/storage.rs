@@ -1165,6 +1165,7 @@ impl Mul for Epoch {
 #[derive(
     Clone,
     Debug,
+    Default,
     PartialEq,
     Eq,
     PartialOrd,
@@ -1177,15 +1178,6 @@ pub struct Epochs {
     /// The block heights of the first block of each known epoch.
     /// Invariant: the values must be sorted in ascending order.
     pub first_block_heights: Vec<BlockHeight>,
-}
-impl Default for Epochs {
-    /// Initialize predecessor epochs, assuming start of the first epoch at
-    /// block height 1.
-    fn default() -> Self {
-        Self {
-            first_block_heights: vec![BlockHeight(1)],
-        }
-    }
 }
 
 impl Epochs {
@@ -1630,7 +1622,9 @@ mod tests {
 
     #[test]
     fn test_predecessor_epochs_and_heights() {
-        let mut epochs = Epochs::default();
+        let mut epochs = Epochs {
+            first_block_heights: vec![BlockHeight::first()],
+        };
         println!("epochs {:#?}", epochs);
         assert_eq!(
             epochs.get_start_height_of_epoch(Epoch(0)),

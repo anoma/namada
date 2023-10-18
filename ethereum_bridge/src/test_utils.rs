@@ -227,6 +227,12 @@ pub fn init_storage_with_validators(
             .write(&protocol_pk_key(validator), protocol_key)
             .expect("Test failed");
     }
+    // Initialize pred_epochs to the current height
+    wl_storage
+        .storage
+        .block
+        .pred_epochs
+        .new_epoch(wl_storage.storage.block.height);
     wl_storage.commit_block().expect("Test failed");
 
     all_keys
