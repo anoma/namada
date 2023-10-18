@@ -333,7 +333,7 @@ impl ChainParams<Unvalidated> {
                 eprintln!(
                     "A minimum gas amount in the parameters.toml file was \
                      incorrectly formatted:\n{}",
-                    e.to_string()
+                    e
                 );
                 e
             })?;

@@ -658,7 +658,7 @@ impl TransferTx<Unvalidated> {
             eprintln!(
                 "A bond amount in the transactions.toml file was incorrectly \
                  formatted:\n{}",
-                e.to_string()
+                e
             );
             e
         })?;
@@ -752,7 +752,7 @@ impl BondTx<Unvalidated> {
                 eprintln!(
                     "A bond amount in the transactions.toml file was \
                      incorrectly formatted:\n{}",
-                    e.to_string()
+                    e
                 );
                 e
             })?;
