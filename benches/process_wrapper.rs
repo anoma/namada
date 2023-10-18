@@ -7,9 +7,9 @@ use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::{Fee, WrapperTx};
+use namada_apps::bench_utils::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
-use namada_benches::{generate_tx, BenchShell, TX_TRANSFER_WASM};
 
 fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();

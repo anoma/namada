@@ -5,6 +5,8 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
+#[cfg(feature = "testing")]
+pub mod bench_utils;
 pub mod cli;
 pub mod client;
 pub mod config;

@@ -14,7 +14,6 @@ use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
-use namada::types::uint::Uint;
 use namada::types::{storage, token};
 use namada_sdk::eth_bridge::EthereumBridgeConfig;
 
@@ -902,6 +901,7 @@ pub fn genesis(num_validators: u64) -> Genesis {
     };
     use namada::types::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada::types::ethereum_events::EthAddress;
+    use namada::types::uint::Uint;
     use namada_sdk::eth_bridge::{
         Contracts, Erc20WhitelistEntry, UpgradeableContract,
     };

@@ -24,8 +24,7 @@ use namada::types::transaction::pos::{
     Bond, CommissionChange, Redelegation, Withdraw,
 };
 use namada::types::transaction::EllipticCurve;
-use namada_apps::wallet::defaults;
-use namada_benches::{
+use namada_apps::bench_utils::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
@@ -34,6 +33,7 @@ use namada_benches::{
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
     VP_VALIDATOR_WASM,
 };
+use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use sha2::Digest;

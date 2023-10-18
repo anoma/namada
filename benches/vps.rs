@@ -19,14 +19,14 @@ use namada::types::storage::{Key, TxIndex};
 use namada::types::transaction::governance::VoteProposalData;
 use namada::types::transaction::pos::{Bond, CommissionChange};
 use namada::vm::wasm::run;
-use namada_apps::wallet::defaults;
-use namada_benches::{
+use namada_apps::bench_utils::{
     generate_foreign_key_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
     TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
 };
+use namada_apps::wallet::defaults;
 use sha2::Digest;
 
 const VP_USER_WASM: &str = "vp_user.wasm";

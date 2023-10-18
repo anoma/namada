@@ -1,18 +1,5 @@
-//! Benchmarks module based on criterion.
-//!
-//! Measurements are taken on the elapsed wall-time.
-//!
-//! The benchmarks only focus on sucessfull transactions and vps: in case of
-//! failure, the bench function shall panic to avoid timing incomplete execution
-//! paths.
-//!
-//! In addition, this module also contains benchmarks for
-//! [`WrapperTx`][`namada::core::types::transaction::wrapper::WrapperTx`]
-//! validation and [`host_env`][`namada::vm::host_env`] exposed functions that
-//! define the gas constants of [`gas`][`namada::core::ledger::gas`].
-//!
-//! For more realistic results these benchmarks should be run on all the
-//! combination of supported OS/architecture.
+//! Library code for benchmarks provides a wrapper of the ledger's shell
+//! `BenchShell` and helper functions to generate transactions.
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -87,14 +74,6 @@ use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::InitProposalData;
 use namada::types::transaction::pos::Bond;
 use namada::vm::wasm::run;
-use namada_apps::cli::context::FromContext;
-use namada_apps::cli::Context;
-use namada_apps::config::TendermintMode;
-use namada_apps::facade::tendermint_proto::abci::RequestInitChain;
-use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
-use namada_apps::node::ledger::shell::Shell;
-use namada_apps::wallet::{defaults, CliWalletUtils};
-use namada_apps::{config, wasm_loader};
 use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
@@ -104,6 +83,15 @@ use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+
+use crate::cli::context::FromContext;
+use crate::cli::Context;
+use crate::config::TendermintMode;
+use crate::facade::tendermint_proto::abci::RequestInitChain;
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+use crate::node::ledger::shell::Shell;
+use crate::wallet::{defaults, CliWalletUtils};
+use crate::{config, wasm_loader};
 
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -695,7 +683,7 @@ impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
 
-        let mut ctx = Context::new::<StdIo>(namada_apps::cli::args::Global {
+        let mut ctx = Context::new::<StdIo>(crate::cli::args::Global {
             chain_id: None,
             base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
             wasm_dir: Some(WASM_DIR.into()),
@@ -713,7 +701,7 @@ impl Default for BenchShieldedCtx {
             None,
             true,
         );
-        namada_apps::wallet::save(&ctx.wallet).unwrap();
+        crate::wallet::save(&ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha
         for (alias, viewing_alias) in [
@@ -745,7 +733,7 @@ impl Default for BenchShieldedCtx {
                 .unwrap();
         }
 
-        namada_apps::wallet::save(&ctx.wallet).unwrap();
+        crate::wallet::save(&ctx.wallet).unwrap();
         namada::ledger::storage::update_allowed_conversions(
             &mut shell.wl_storage,
         )
