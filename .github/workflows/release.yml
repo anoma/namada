@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, macos-latest, windows-latest, ubuntu-22.04]
+        os: [macos-latest, windows-latest, ubuntu-latest]
         make:
           - name: Build package
             command: package
@@ -75,7 +75,7 @@ jobs:
       - name: Install cargo-about (only windows)
         if: startsWith(runner.os, 'Windows')
         run: |
-          curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7 | bash
+          curl -L https://github.com/EmbarkStudios/cargo-about/releases/download/0.5.7/cargo-about-0.5.7-x86_64-pc-windows-msvc.tar.gz -o cargo-about
           echo "::add-path::$GITHUB_WORKSPACE"
         env:
           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
