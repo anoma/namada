@@ -32,12 +32,12 @@ use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
-use namada_apps::wallet::defaults;
-use namada_benches::{
+use namada_apps::bench_utils::{
     generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
     generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
     TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
 };
+use namada_apps::wallet::defaults;
 
 fn replay_protection(c: &mut Criterion) {
     // Write a random key under the replay protection subspace

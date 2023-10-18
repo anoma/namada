@@ -57,7 +57,7 @@ mainnet = [
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std"]
 # for integration tests and test utilies
 testing = []
-benches = ["testing"]
+benches = ["testing", "namada_test_utils"]
 integration = []
 abciplus = [
     "namada/abciplus",
@@ -67,6 +67,7 @@ abciplus = [
 
 [dependencies]
 namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}
+namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true
 ark-std.workspace = true
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }

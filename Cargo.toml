@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
   "apps",
+  "benches",
   "core",
   "ethereum_bridge",
   "proof_of_stake",
@@ -18,7 +19,6 @@ members = [
 
 # wasm packages have to be built separately
 exclude = [
-  "benches",
   "wasm",
   "wasm_for_tests",
   "test_fixtures",
