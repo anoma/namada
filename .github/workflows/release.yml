@@ -72,11 +72,13 @@ jobs:
       - name: Install cargo-about
         if: "!startsWith(runner.os, 'Windows')"
         run: curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7! | bash
-      - name: Install cargo-about
+      - name: Install cargo-about (only windows)
         if: startsWith(runner.os, 'Windows')
         run: |
           curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7 | bash
           echo "::add-path::$GITHUB_WORKSPACE"
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package
