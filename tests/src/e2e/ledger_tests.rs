@@ -25,12 +25,9 @@ use namada::types::io::DefaultIo;
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::client::tx::CLIShieldedUtils;
-use namada_apps::client::utils::validator_pre_genesis_dir;
-use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{ethereum_bridge, genesis};
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_apps::wallet;
 use namada_core::ledger::governance::cli::onchain::{
     PgfFunding, PgfFundingTarget, StewardsUpdate,
 };
@@ -50,9 +47,7 @@ use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
     is_debug_mode, parse_reached_epoch,
 };
-use crate::e2e::setup::{
-    self, default_port_offset, run_cmd, set_validators, sleep, Bin, Who,
-};
+use crate::e2e::setup::{self, default_port_offset, run_cmd, set_validators, sleep, Bin, Who, allow_duplicate_ips};
 use crate::{run, run_as};
 
 fn start_namada_ledger_node(
@@ -136,6 +131,9 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         None,
     )?;
 
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -217,7 +215,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
         let mut client =
             run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string("nam: 1000010.1")?;
+        client.exp_string("nam: 980010.1")?;
         client.assert_success();
     }
 
@@ -2575,437 +2573,6 @@ fn generate_proposal_json_file(
     serde_json::to_writer(intent_writer, proposal_content).unwrap();
 }
 
-// In this test we:
-// 1. Setup 2 genesis validators
-// 2. Initialize a new network with the 2 validators
-// 3. Setup and start the 2 genesis validator nodes and a non-validator node
-// 4. Submit a valid token transfer tx from one validator to the other
-// 5. Check that all the nodes processed the tx with the same result
-#[test]
-fn test_genesis_validators() -> Result<()> {
-    use std::net::SocketAddr;
-    use std::str::FromStr;
-
-    use namada::types::chain::ChainId;
-
-    // This test is not using the `setup::network`, because we're setting up
-    // custom genesis validators
-    setup::INIT.call_once(|| {
-        if let Err(err) = color_eyre::install() {
-            eprintln!("Failed setting up colorful error reports {}", err);
-        }
-    });
-
-    let working_dir = setup::working_dir();
-    let test_dir = setup::TestDir::new();
-    let templates_dir = working_dir.join(setup::SINGLE_NODE_NET_GENESIS);
-    let checksums_path = working_dir
-        .join("wasm/checksums.json")
-        .to_string_lossy()
-        .into_owned();
-    // Copy the main wallet from templates dir into the base dir.
-    {
-        let base_dir = test_dir.path();
-        let src_path =
-            wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
-        let dest_dir = base_dir.join("pre-genesis");
-        let dest_path = wallet::wallet_file(&dest_dir);
-        std::fs::create_dir_all(&dest_dir)?;
-        std::fs::copy(&src_path, &dest_path)?;
-    }
-    // Same as in `genesis/src/pre-genesis/` for `validator-0`
-    let net_address_0 = SocketAddr::from_str("127.0.0.1:27656").unwrap();
-    let net_address_port_0 = net_address_0.port();
-    // Find the first port (ledger P2P) that should be used for a validator at
-    // the given index
-    // 6 ports for each validator
-    let get_first_port = |ix: u8| net_address_port_0 + 6 * (ix as u16 + 1);
-
-    // 1. Setup two genesis validators, one with ed25519 keys (0) and one with
-    // secp256k1 keys (1)
-    let validator_0_alias = "validator-0";
-    let validator_1_alias = "validator-1";
-
-    let mut init_genesis_validator_0 = setup::run_cmd(
-        Bin::Client,
-        [
-            "utils",
-            "init-genesis-validator",
-            "--unsafe-dont-encrypt",
-            "--alias",
-            validator_0_alias,
-            "--scheme",
-            "ed25519",
-            "--source",
-            "validator-0-balance-key",
-            "--transfer-from-source-amount",
-            "50000",
-            "--self-bond-amount",
-            "25000",
-            "--commission-rate",
-            "0.05",
-            "--max-commission-rate-change",
-            "0.01",
-            "--net-address",
-            &format!("127.0.0.1:{}", get_first_port(0)),
-        ],
-        Some(5),
-        &working_dir,
-        &test_dir,
-        format!("{}:{}", std::file!(), std::line!()),
-    )?;
-    init_genesis_validator_0.assert_success();
-
-    let mut init_genesis_validator_1 = setup::run_cmd(
-        Bin::Client,
-        [
-            "utils",
-            "init-genesis-validator",
-            "--unsafe-dont-encrypt",
-            "--alias",
-            validator_1_alias,
-            "--scheme",
-            "secp256k1",
-            "--source",
-            "validator-0-balance-key",
-            "--transfer-from-source-amount",
-            "50000",
-            "--self-bond-amount",
-            "25000",
-            "--commission-rate",
-            "0.05",
-            "--max-commission-rate-change",
-            "0.01",
-            "--net-address",
-            &format!("127.0.0.1:{}", get_first_port(1)),
-        ],
-        Some(5),
-        &working_dir,
-        &test_dir,
-        format!("{}:{}", std::file!(), std::line!()),
-    )?;
-    init_genesis_validator_1.assert_success();
-
-    // 2. Initialize a new network with the 2 validators
-    let mut templates = genesis::templates::All::read_toml_files(
-        &working_dir.join(setup::SINGLE_NODE_NET_GENESIS),
-    )?;
-
-    // add in the non-validator signed transactions
-    let signed_txs: genesis::transactions::Transactions<
-        templates::Unvalidated,
-    > = genesis::toml_utils::read_toml(
-        &working_dir
-            .join(setup::SINGLE_NODE_NET_GENESIS)
-            .join("src/pre-genesis/signed-transactions.toml"),
-        "signed-transactions.toml",
-    )?;
-    templates.transactions = signed_txs;
-
-    // add validator transactions to the genesis transactions
-    let update_validator_config =
-        |config: &mut templates::All<templates::Unvalidated>, alias: &str| {
-            let base_dir = test_dir.path();
-            let pre_genesis_path =
-                namada_apps::client::utils::validator_pre_genesis_dir(
-                    base_dir, alias,
-                );
-            let pre_genesis_tx_path =
-                namada_apps::client::utils::validator_pre_genesis_txs_file(
-                    &pre_genesis_path,
-                );
-            let pre_genesis_txs = genesis::toml_utils::read_toml(
-                &pre_genesis_tx_path,
-                "transactions.toml",
-            )
-            .unwrap();
-            config.transactions.merge(pre_genesis_txs);
-        };
-    update_validator_config(&mut templates, validator_0_alias);
-    update_validator_config(&mut templates, validator_1_alias);
-
-    let templates_dir = test_dir.path().join("templates");
-    let templates_path = templates_dir.to_string_lossy();
-    std::fs::create_dir_all(&templates_dir)?;
-    templates.write_toml_files(&templates_dir)?;
-
-    let archive_dir = test_dir.path().to_string_lossy().to_string();
-    let args = vec![
-        "utils",
-        "init-network",
-        "--templates-path",
-        &templates_path,
-        "--chain-prefix",
-        "e2e-test",
-        "--wasm-checksums-path",
-        &checksums_path,
-        "--genesis-time",
-        "2023-08-30T00:00:00Z",
-        "--archive-dir",
-        &archive_dir,
-    ];
-    let mut init_network = setup::run_cmd(
-        Bin::Client,
-        args,
-        Some(5),
-        &working_dir,
-        &test_dir,
-        format!("{}:{}", std::file!(), std::line!()),
-    )?;
-
-    // Get the generated chain_id` from result of the last command
-    let (unread, matched) =
-        init_network.exp_regex(r"Derived chain ID: .*\n")?;
-    let chain_id_raw =
-        matched.trim().split_once("Derived chain ID: ").unwrap().1;
-    let chain_id = ChainId::from_str(chain_id_raw.trim())?;
-    println!("'init-network' output: {}", unread);
-    let net = setup::Network {
-        chain_id: chain_id.clone(),
-    };
-    init_network.assert_success();
-    drop(init_network);
-    let test = setup::Test {
-        working_dir: working_dir.clone(),
-        test_dir,
-        net: net.clone(),
-        async_runtime: Default::default(),
-    };
-
-    // Host the network archive to make it available for `join-network` commands
-    let network_archive_server = file_serve::Server::new(&working_dir);
-    let network_archive_addr = network_archive_server.addr().to_owned();
-    std::thread::spawn(move || {
-        network_archive_server.serve().unwrap();
-    });
-
-    // 3. Setup and start the 2 genesis validator nodes and a non-validator node
-
-    // Clean-up the chain dir from the existing validator dir that were created
-    // by `init-network`, because we want to set them up with `join-network`
-    // instead
-    let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
-    let validator_1_base_dir = test.get_base_dir(&Who::Validator(1));
-
-    // move pre-genesis wallets into validators directors
-    let validator_0_pregen_dir =
-        validator_pre_genesis_dir(&validator_0_base_dir, validator_0_alias);
-    let validator_1_pregen_dir =
-        validator_pre_genesis_dir(&validator_1_base_dir, validator_1_alias);
-    std::fs::create_dir_all(&validator_0_pregen_dir)?;
-    std::fs::create_dir_all(&validator_1_pregen_dir)?;
-    std::fs::copy(
-        test.test_dir
-            .path()
-            .join("pre-genesis")
-            .join(validator_0_alias)
-            .join("validator-wallet.toml"),
-        validator_0_pregen_dir.join("validator-wallet.toml"),
-    )?;
-    std::fs::copy(
-        test.test_dir
-            .path()
-            .join("pre-genesis")
-            .join(validator_1_alias)
-            .join("validator-wallet.toml"),
-        validator_1_pregen_dir.join("validator-wallet.toml"),
-    )?;
-
-    std::env::set_var(
-        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_SERVER,
-        format!("http://{network_archive_addr}/{}", archive_dir),
-    );
-    let mut join_network_val_0 = run_cmd(
-        Bin::Client,
-        [
-            "utils",
-            "join-network",
-            "--chain-id",
-            net.chain_id.as_str(),
-            "--genesis-validator",
-            validator_0_alias,
-            "--dont-prefetch-wasm",
-        ],
-        Some(5),
-        &working_dir,
-        &validator_0_base_dir,
-        format!("{}:{}", std::file!(), std::line!()),
-    )?;
-    join_network_val_0.exp_string("Successfully configured for chain")?;
-
-    let mut join_network_val_1 = run_cmd(
-        Bin::Client,
-        [
-            "utils",
-            "join-network",
-            "--chain-id",
-            net.chain_id.as_str(),
-            "--genesis-validator",
-            validator_1_alias,
-            "--dont-prefetch-wasm",
-        ],
-        Some(5),
-        &working_dir,
-        &validator_1_base_dir,
-        format!("{}:{}", std::file!(), std::line!()),
-    )?;
-    join_network_val_1.exp_string("Successfully configured for chain")?;
-
-    // Copy WASMs to each node's chain dir
-    setup::copy_wasm_to_chain_dir(
-        &working_dir,
-        &validator_0_base_dir,
-        &chain_id,
-    );
-    setup::copy_wasm_to_chain_dir(
-        &working_dir,
-        &validator_1_base_dir,
-        &chain_id,
-    );
-
-    // We have to update the ports in the configs again, because the ones from
-    // `join-network` use the defaults
-
-    // TODO: use `update_actor_config` from `setup`, instead
-
-    // let update_config = |ix: u8, mut config: Config| {
-    // let first_port = net_address_port_0 + 6 * (ix as u16 + 1);
-    // let p2p_addr =
-    // convert_tm_addr_to_socket_addr(&config.ledger.cometbft.p2p.laddr)
-    // .ip()
-    // .to_string();
-    //
-    // config.ledger.cometbft.p2p.laddr = TendermintAddress::from_str(
-    // &format!("{}:{}", p2p_addr, first_port),
-    // )
-    // .unwrap();
-    // let rpc_addr =
-    // convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr)
-    // .ip()
-    // .to_string();
-    // config.ledger.cometbft.rpc.laddr = TendermintAddress::from_str(
-    // &format!("{}:{}", rpc_addr, first_port + 1),
-    // )
-    // .unwrap();
-    // let proxy_app_addr =
-    // convert_tm_addr_to_socket_addr(&config.ledger.cometbft.proxy_app)
-    // .ip()
-    // .to_string();
-    // config.ledger.cometbft.proxy_app = TendermintAddress::from_str(
-    // &format!("{}:{}", proxy_app_addr, first_port + 2),
-    // )
-    // .unwrap();
-    // config
-    // };
-    //
-    // let validator_0_config = update_config(
-    // 0,
-    // Config::load(&validator_0_base_dir, &test.net.chain_id, None),
-    // );
-    // validator_0_config
-    // .write(&validator_0_base_dir, &chain_id, true)
-    // .unwrap();
-    //
-    // let validator_1_config = update_config(
-    // 1,
-    // Config::load(&validator_1_base_dir, &test.net.chain_id, None),
-    // );
-    // validator_1_config
-    // .write(&validator_1_base_dir, &chain_id, true)
-    // .unwrap();
-
-    let mut validator_0 =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
-    let mut validator_1 =
-        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?;
-
-    // Give the non-validator a wallet
-    {
-        let src_path =
-            wallet::wallet_file(test.test_dir.path().join("pre-genesis"));
-        let dest_dir =
-            test.test_dir.path().join(format!("{}", test.net.chain_id));
-        let dest_path = wallet::wallet_file(&dest_dir);
-        std::fs::create_dir_all(&dest_dir)?;
-        std::fs::copy(&src_path, &dest_path)?;
-    }
-    let mut non_validator =
-        start_namada_ledger_node_wait_wasm(&test, None, Some(40))?;
-
-    // Wait for a first block
-    validator_0.exp_string("Committed block hash")?;
-    validator_1.exp_string("Committed block hash")?;
-    non_validator.exp_string("Committed block hash")?;
-
-    let bg_validator_0 = validator_0.background();
-    let bg_validator_1 = validator_1.background();
-    let _bg_non_validator = non_validator.background();
-
-    // 4. Submit a valid token transfer tx
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let tx_args = [
-        "transfer",
-        "--source",
-        validator_0_alias,
-        "--target",
-        validator_1_alias,
-        "--token",
-        NAM,
-        "--amount",
-        "10.1",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Transaction applied with result:")?;
-    client.exp_string("Transaction is valid.")?;
-    client.assert_success();
-
-    // 3. Check that all the nodes processed the tx with the same result
-    let mut validator_0 = bg_validator_0.foreground();
-    let mut validator_1 = bg_validator_1.foreground();
-
-    let expected_result = "successful inner txs: 1";
-    // We cannot check this on non-validator node as it might sync without
-    // applying the tx itself, but its state should be the same, checked below.
-    validator_0.exp_string(expected_result)?;
-    validator_1.exp_string(expected_result)?;
-    let _bg_validator_0 = validator_0.background();
-    let _bg_validator_1 = validator_1.background();
-
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
-    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
-    let non_validator_rpc = get_actor_rpc(&test, &Who::NonValidator);
-
-    // Find the block height on the validator
-    let after_tx_height = get_height(&test, &validator_0_rpc)?;
-
-    // Wait for the second validator and non-validator to be synced to at least
-    // the same height
-    wait_for_block_height(&test, &validator_1_rpc, after_tx_height, 10)?;
-    wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
-
-    let query_balance_args = |ledger_rpc| {
-        vec![
-            "balance",
-            "--owner",
-            validator_1_alias,
-            "--token",
-            NAM,
-            "--node",
-            ledger_rpc,
-        ]
-    };
-    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
-        let mut client =
-            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
-        client.exp_string(r"nam: 1000000000010.1")?;
-        client.assert_success();
-    }
-    Ok(())
-}
-
 /// In this test we intentionally make a validator node double sign blocks
 /// to test that slashing evidence is received and processed by the ledger
 /// correctly:
@@ -3044,6 +2611,9 @@ fn double_signing_gets_slashed() -> Result<()> {
         None,
     )?;
 
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(0));
+    allow_duplicate_ips(&test, &test.net.chain_id, &Who::Validator(1));
+
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -3079,6 +2649,28 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_3.exp_string("Namada ledger node started")?;
     validator_3.exp_string("This node is a validator")?;
     let _bg_validator_3 = validator_3.background();
+
+    let validator_zero_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    // put money in the validator account from its balance account so that it
+    // can pay gas fees
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        "validator-0-balance-key",
+        "--target",
+        "validator-0-validator-key",
+        "--amount",
+        "100.0",
+        "--token",
+        "NAM",
+        "--node",
+        &validator_zero_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+
+    client.assert_success();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(&Who::Validator(0));
@@ -3201,6 +2793,8 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
         .unwrap();
     println!("\n{res}\n");
+    // Wait to commit a block
+    validator_1.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_validator_1 = validator_1.background();
 
     let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
@@ -3210,8 +2804,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         + 1u64;
 
     // Query slashes
-    // let tx_args = ["slashes", "--node", &validator_one_rpc];
-    // let client = run!(test, Bin::Client, tx_args, Some(40))?;
 
     let mut client = run!(
         test,
