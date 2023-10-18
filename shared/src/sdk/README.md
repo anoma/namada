@@ -16,14 +16,9 @@ The Namada SDK is a set of tools and libraries that allow you to use the Namada 
 
 ## Installation
 
-The Namada SDK can be installed into any rust project using cargo. Add the following to your `Cargo.toml` file:
+The Namada SDK can be added into any Rust project using cargo by adding the following to your `Cargo.toml` file `[dependencies]` section:
 
 ```toml
-[package]
-name = "sdk"
-version = "0.1.0"
-edition = "2021"
- 
 [dependencies]
 borsh = "0.9.0"
 masp_primitives = { git = "https://github.com/anoma/masp" }
