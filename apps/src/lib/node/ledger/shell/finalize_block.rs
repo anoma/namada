@@ -641,7 +641,7 @@ where
             .read_storage_key(&params_storage::get_pos_inflation_amount_key())
             .expect("PoS inflation amount should exist in storage");
         // Read from PoS storage
-        let total_tokens = self
+        let total_tokens: token::Amount = self
             .read_storage_key(&token::minted_balance_key(
                 &staking_token_address(&self.wl_storage),
             ))
@@ -653,13 +653,13 @@ where
 
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
-            locked_tokens: pos_locked_supply,
-            total_tokens,
-            total_native_tokens: total_tokens,
+            locked_tokens: pos_locked_supply.raw_amount(),
+            total_tokens: total_tokens.raw_amount(),
+            total_native_tokens: total_tokens.raw_amount(),
             locked_ratio_target: pos_locked_ratio_target,
             locked_ratio_last: pos_last_staked_ratio,
             max_reward_rate: pos_max_inflation_rate,
-            last_inflation_amount: pos_last_inflation_amount,
+            last_inflation_amount: pos_last_inflation_amount.raw_amount(),
             p_gain_nom: pos_p_gain_nom,
             d_gain_nom: pos_d_gain_nom,
             epochs_per_year,
@@ -689,6 +689,9 @@ where
         // for the previous epoch
         //
         // TODO: think about changing the reward to Decimal
+        let inflation = token::Amount::from_uint(inflation, 0)
+            .expect("Should not fail Uint -> Amount conversion");
+
         let mut reward_tokens_remaining = inflation;
         let mut new_rewards_products: HashMap<Address, (Dec, Dec)> =
             HashMap::new();

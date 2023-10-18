@@ -102,13 +102,13 @@ where
 
     // Creating the PD controller for handing out tokens
     let controller = RewardsController {
-        locked_tokens: total_token_in_masp,
-        total_tokens,
-        total_native_tokens,
+        locked_tokens: total_token_in_masp.raw_amount(),
+        total_tokens: total_tokens.raw_amount(),
+        total_native_tokens: total_native_tokens.raw_amount(),
         locked_ratio_target: locked_target_ratio,
         locked_ratio_last: last_locked_ratio,
         max_reward_rate,
-        last_inflation_amount: last_inflation,
+        last_inflation_amount: last_inflation.raw_amount(),
         p_gain_nom: kp_gain_nom,
         d_gain_nom: kd_gain_nom,
         epochs_per_year,
@@ -127,8 +127,7 @@ where
         0u128
     } else {
         crate::types::uint::Uint::try_into(
-            (inflation.raw_amount()
-                * crate::types::uint::Uint::from(precision))
+            (inflation * crate::types::uint::Uint::from(precision))
                 / total_token_in_masp.raw_amount(),
         )
         .unwrap()
