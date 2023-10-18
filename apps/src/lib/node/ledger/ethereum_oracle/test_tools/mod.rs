@@ -57,7 +57,7 @@ pub mod event_log {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub mod mock_web3_client {
     use std::borrow::Cow;
     use std::fmt::Debug;
@@ -102,7 +102,7 @@ pub mod mock_web3_client {
     /// reason is for interior mutability.
     pub struct Web3Client(Arc<Mutex<Web3ClientInner>>);
 
-    /// Command sender for [`Web3`] instances.
+    /// Command sender for [`TestOracle`] instances.
     pub struct Web3Controller(Arc<Mutex<Web3ClientInner>>);
 
     impl Web3Controller {
@@ -148,8 +148,6 @@ pub mod mock_web3_client {
     impl RpcClient for Web3Client {
         type Log = ethabi::RawLog;
 
-        const EXIT_ON_EVENTS_FAILURE: bool = false;
-
         #[cold]
         fn new_client(_: &str) -> Self
         where
@@ -184,14 +182,15 @@ pub mod mock_web3_client {
                 }
                 if client.last_block_processed.as_ref() < Some(&block_to_check)
                 {
-                    client
-                        .blocks_processed
-                        .send(block_to_check.clone())
-                        .unwrap();
+                    _ = client.blocks_processed.send(block_to_check.clone());
                     client.last_block_processed = Some(block_to_check);
                 }
                 Ok(logs)
             } else {
+                tracing::debug!(
+                    "No events to be processed by the Test Ethereum oracle, \
+                     as it has been artificially set as unresponsive"
+                );
                 Err(Error::CheckEvents(
                     ty.into(),
                     addr,
@@ -208,6 +207,11 @@ pub mod mock_web3_client {
         ) -> Result<SyncStatus, Error> {
             let height = self.0.lock().unwrap().latest_block_height.clone();
             Ok(SyncStatus::AtHeight(height))
+        }
+
+        #[inline(always)]
+        fn may_recover(&self, _: &Error) -> bool {
+            true
         }
     }
 
