@@ -62,7 +62,13 @@ jobs:
       - name: Start sccache server
         run: sccache --start-server
       - name: Install cargo-about
+        if: "!startsWith(runner.os, 'Windows')"
         run: curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7! | bash
+      - name: Install cargo-about
+        if: startsWith(runner.os, 'Windows')
+        run: |
+          curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7 | bash
+          echo "::add-path::$GITHUB_WORKSPACE"
       - name: ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload binaries package
@@ -84,6 +90,7 @@ jobs:
   release:
     needs: build
     runs-on: ${{ matrix.os }}
+    if: success() || failure()
     strategy:
       fail-fast: false
       matrix:
