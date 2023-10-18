@@ -82,7 +82,6 @@ jobs:
           echo $env.GITHUB_PATH
           echo GITHUB_WORKSPACE
           echo $env.GITHUB_WORKSPACE
-          echo 
           echo "${GITHUB_WORKSPACE}" >> $env.GITHUB_PATH
         env:
           ACTIONS_ALLOW_UNSECURE_COMMANDS: true
