@@ -5,6 +5,11 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-[a-z]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to release."
+        required: true
 
 permissions:
   id-token: write
@@ -38,6 +43,9 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
+      - name: Switch to tag if specified
+        if: "${{ github.event.inputs.tag != '' }}"
+        run: git checkout ${{ github.event.inputs.tag }}
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
