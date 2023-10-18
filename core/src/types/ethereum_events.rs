@@ -216,56 +216,85 @@ pub trait GetEventNonce {
     fn get_event_nonce(&self) -> Uint;
 }
 
-/// Event transferring batches of ether or Ethereum based ERC20 tokens
-/// from Ethereum to wrapped assets on Namada
-#[derive(
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Hash,
-    Ord,
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-pub struct TransfersToNamada {
-    /// Monotonically increasing nonce
-    pub nonce: Uint,
-    /// The batch of transfers
-    pub transfers: Vec<TransferToNamada>,
+macro_rules! ethereum_event_derives {
+    ($($tt:tt)*) => {
+        #[derive(
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Hash,
+            Ord,
+            Clone,
+            Debug,
+            BorshSerialize,
+            BorshDeserialize,
+            BorshSchema,
+        )]
+        $( $tt )*
+    };
 }
 
-impl GetEventNonce for TransfersToNamada {
-    #[inline]
-    fn get_event_nonce(&self) -> Uint {
-        self.nonce
-    }
+macro_rules! ethereum_event_declare {
+    (
+        $(
+            $( #[$variant_attrs:meta] )*
+            $variant:ident {
+                $(
+                    $( #[$field_attrs:meta] )*
+                    $field_ident:ident : $field_ty:ty
+                ),* $(,)?
+            }
+        ),* $(,)?
+    ) => {
+        ethereum_event_derives! {
+            /// An Ethereum event to be processed by the Namada ledger
+            pub enum EthereumEvent {
+                $(
+                    $( #[$variant_attrs] )*
+                    $variant {
+                        $(
+                            $(#[$field_attrs])*
+                            $field_ident : $field_ty
+                        ),*
+                    }
+                ),*
+            }
+        }
+
+        $(
+            ethereum_event_derives! {
+                $( #[$variant_attrs] )*
+                pub struct $variant {
+                    $(
+                        $( #[$field_attrs] )*
+                        pub $field_ident : $field_ty
+                    ),*
+                }
+            }
+
+            impl GetEventNonce for $variant {
+                #[inline]
+                fn get_event_nonce(&self) -> Uint {
+                    self.nonce
+                }
+            }
+
+            impl From<$variant> for EthereumEvent {
+                #[inline]
+                fn from(event: $variant) -> Self {
+                    let $variant {
+                        $( $field_ident ),*
+                    } = event;
+                    Self::$variant {
+                        $( $field_ident ),*
+                    }
+                }
+            }
+        )*
+    };
 }
 
-impl From<TransfersToNamada> for EthereumEvent {
-    #[inline]
-    fn from(event: TransfersToNamada) -> Self {
-        let TransfersToNamada { nonce, transfers } = event;
-        Self::TransfersToNamada { nonce, transfers }
-    }
-}
-
-/// An Ethereum event to be processed by the Namada ledger
-#[derive(
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Hash,
-    Ord,
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-)]
-pub enum EthereumEvent {
+ethereum_event_declare! {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
     /// from Ethereum to wrapped assets on Namada
     TransfersToNamada {
