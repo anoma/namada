@@ -999,7 +999,7 @@ impl ConcretePosState {
             .total_unbonded
             .get(&id.validator)
             .cloned()
-            .unwrap();
+            .unwrap_or_default();
         abs_total_unbonded.retain(|_, inner_map| {
             inner_map.retain(|_, value| !value.is_zero());
             !inner_map.is_empty()
