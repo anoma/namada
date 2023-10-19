@@ -144,11 +144,8 @@ where
     /// an [`ethereum_events::Vext`].
     ///
     /// The supplied Ethereum events must be ordered in
-    /// ascending ordering, and must not contain any dupes.
-    ///
-    /// A detailed description of the validation applied
-    /// to each event kind can be found in the docstring
-    /// of [`Shell::validate_eth_event`].
+    /// ascending ordering, must not contain any dupes
+    /// and must have valid nonces.
     fn validate_eth_events(
         &self,
         ext: &ethereum_events::Vext,
@@ -170,79 +167,17 @@ where
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
-        ext.ethereum_events
-            .iter()
-            .try_for_each(|event| self.validate_eth_event(event))
-    }
-
-    /// Valdidate an [`EthereumEvent`] against the current state
-    /// of the ledger.
-    ///
-    /// # Event kinds
-    ///
-    /// In this section, we shall describe the checks perform for
-    /// each kind of relevant Ethereum event.
-    ///
-    /// ## Transfers to Ethereum
-    ///
-    /// We need to check if the nonce in the event corresponds to
-    /// the most recent bridge pool nonce. Unless the nonces match,
-    /// no state updates derived from the event should be applied.
-    /// In case the nonces are different, we reject the event, and
-    /// thus the inclusion of its container Ethereum events vote
-    /// extension.
-    ///
-    /// ## Transfers to Namada
-    ///
-    /// For a transfers to Namada event to be considered valid,
-    /// the nonce of this kind of event must not be lower than
-    /// the one stored in Namada.
-    fn validate_eth_event(
-        &self,
-        event: &EthereumEvent,
-    ) -> std::result::Result<(), VoteExtensionError> {
-        // TODO: on the transfer events, maybe perform additional checks:
-        // - some token asset is not whitelisted
-        // - do we have enough balance for the transfer
-        // in practice, some events may have a variable degree of garbage
-        // data in them; we can simply rely on quorum decisions to filter
-        // out such events, which will time out in storage
-        match event {
-            EthereumEvent::TransfersToEthereum {
-                nonce: ext_nonce, ..
-            } => {
-                let current_bp_nonce =
-                    self.wl_storage.ethbridge_queries().get_bridge_pool_nonce();
-                if &current_bp_nonce != ext_nonce {
-                    tracing::debug!(
-                        %current_bp_nonce,
-                        %ext_nonce,
-                        "The Ethereum events vote extension's BP nonce is \
-                         invalid"
-                    );
-                    return Err(VoteExtensionError::InvalidBpNonce);
-                }
+        ext.ethereum_events.iter().try_for_each(|event| {
+            if self
+                .wl_storage
+                .ethbridge_queries()
+                .validate_eth_event_nonce(event)
+            {
+                Ok(())
+            } else {
+                Err(VoteExtensionError::InvalidEthEventNonce)
             }
-            EthereumEvent::TransfersToNamada {
-                nonce: ext_nonce, ..
-            } => {
-                let next_nam_transfers_nonce = self
-                    .wl_storage
-                    .ethbridge_queries()
-                    .get_next_nam_transfers_nonce();
-                if &next_nam_transfers_nonce > ext_nonce {
-                    tracing::debug!(
-                        ?event,
-                        %next_nam_transfers_nonce,
-                        "Attempt to replay a transfer to Namada event"
-                    );
-                    return Err(VoteExtensionError::InvalidNamNonce);
-                }
-            }
-            // consider other ethereum event kinds valid
-            _ => {}
-        }
-        Ok(())
+        })
     }
 
     /// Checks the channel from the Ethereum oracle monitoring
@@ -416,6 +351,7 @@ mod test_vote_extensions {
         NestedSubKey, SubKey,
     };
     use namada::eth_bridge::storage::bridge_pool;
+    use namada::ledger::eth_bridge::EthBridgeQueries;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::{
@@ -474,55 +410,83 @@ mod test_vote_extensions {
         // eth transfers with the same nonce as the bp nonce in storage are
         // valid
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce,
                 transfers: vec![],
                 relayer: gen_established_address(),
             })
+            .then_some(())
+            .ok_or(())
             .expect("Test failed");
 
         // eth transfers with different nonces are invalid
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce + 1,
                 transfers: vec![],
                 relayer: gen_established_address(),
             })
+            .then_some(())
+            .ok_or(())
             .expect_err("Test failed");
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToEthereum {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToEthereum {
                 nonce: nonce - 1,
                 transfers: vec![],
                 relayer: gen_established_address(),
             })
+            .then_some(())
+            .ok_or(())
             .expect_err("Test failed");
 
         // nam transfers with nonces >= the nonce in storage are valid
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce,
                 transfers: vec![],
             })
+            .then_some(())
+            .ok_or(())
             .expect("Test failed");
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce + 5,
                 transfers: vec![],
             })
+            .then_some(())
+            .ok_or(())
             .expect("Test failed");
 
         // nam transfers with lower nonces are invalid
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 1,
                 transfers: vec![],
             })
+            .then_some(())
+            .ok_or(())
             .expect_err("Test failed");
         shell
-            .validate_eth_event(&EthereumEvent::TransfersToNamada {
+            .wl_storage
+            .ethbridge_queries()
+            .validate_eth_event_nonce(&EthereumEvent::TransfersToNamada {
                 nonce: nonce - 2,
                 transfers: vec![],
             })
+            .then_some(())
+            .ok_or(())
             .expect_err("Test failed");
     }
 
