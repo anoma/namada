@@ -183,6 +183,7 @@ where
     /// Checks the channel from the Ethereum oracle monitoring
     /// the fullnode and retrieves all seen Ethereum events.
     pub fn new_ethereum_events(&mut self) -> Vec<EthereumEvent> {
+        let queries = self.wl_storage.ethbridge_queries();
         match &mut self.mode {
             ShellMode::Validator {
                 eth_oracle:
@@ -191,7 +192,9 @@ where
                     }),
                 ..
             } => {
-                ethereum_receiver.fill_queue();
+                ethereum_receiver.fill_queue(|event| {
+                    queries.validate_eth_event_nonce(event)
+                });
                 ethereum_receiver.get_events()
             }
             _ => vec![],

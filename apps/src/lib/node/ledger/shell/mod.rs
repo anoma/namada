@@ -256,18 +256,32 @@ impl EthereumReceiver {
         }
     }
 
-    /// Pull messages from the channel and add to queue
-    /// Since vote extensions require ordering of ethereum
-    /// events, we do that here. We also de-duplicate events
-    pub fn fill_queue(&mut self) {
+    /// Pull Ethereum events from the oracle and queue them to
+    /// be voted on.
+    ///
+    /// Since vote extensions require ordering of Ethereum
+    /// events, we do that here. We also de-duplicate events.
+    /// Events may be filtered out of the queue with a provided
+    /// predicate.
+    pub fn fill_queue<F>(&mut self, mut keep_event: F)
+    where
+        F: FnMut(&EthereumEvent) -> bool,
+    {
         let mut new_events = 0;
+        let mut filtered_events = 0;
         while let Ok(eth_event) = self.channel.try_recv() {
-            if self.queue.insert(eth_event) {
+            if keep_event(&eth_event) && self.queue.insert(eth_event) {
                 new_events += 1;
-            };
+            } else {
+                filtered_events += 1;
+            }
         }
-        if new_events > 0 {
-            tracing::info!(n = new_events, "received Ethereum events");
+        if new_events + filtered_events > 0 {
+            tracing::info!(
+                new_events,
+                filtered_events,
+                "received Ethereum events"
+            );
         }
     }
 
