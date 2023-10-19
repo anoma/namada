@@ -217,7 +217,7 @@ test-pos-sm:
 	RUST_BACKTRACE=1 \
 		PROPTEST_CASES=$(PROPTEST_CASES) \
 		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
-		cargo test pos_state_machine_test --release 
+		cargo test pos_state_machine_test --release
 
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:

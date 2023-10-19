@@ -4,12 +4,10 @@ on:
   push:
     branches:
       - main
-      - "!eth-bridge-integration"
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
     branches:
       - main
-      - "!eth-bridge-integration"
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
@@ -23,8 +21,14 @@ permissions:
   packages: read
 
 env:
+  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
   GIT_LFS_SKIP_SMUDGE: 1
-
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+  SCCACHE_BUCKET: namada-cache
+  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
 
 jobs:
   build-wasm:
@@ -38,14 +42,14 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request_target' }}
         # From https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target:
         # "This event runs in the context of the base of the pull request, 
@@ -57,10 +61,21 @@ jobs:
         # to disallow that.
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target
+            wasm/wasm_source/target
+          key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-
       - name: Build WASM
-        run: |
-          make build-wasm-scripts
-      - name: Upload wasm artifacts
+        run: make build-wasm-scripts
+      - name: Upload wasm artifacts (github)
         uses: actions/upload-artifact@v3
         with:
           name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
@@ -68,6 +83,10 @@ jobs:
             wasm/tx_*.wasm
             wasm/vp_*.wasm
             wasm/checksums.json
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
   test-wasm:
     timeout-minutes: 30
@@ -82,14 +101,14 @@ jobs:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request_target' }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -111,6 +130,18 @@ jobs:
         with:
           toolchain: ${{ matrix.nightly_version }}
           profile: default
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target
+            wasm/wasm_source/target
+          key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-wasm-
       - name: Test Wasm
         run: make test-wasm
       - name: Check wasm up-to-date
@@ -118,101 +149,74 @@ jobs:
       - name: Print diff
         if: failure()
         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
-  update-wasm:
+  upload-wasm:
+    timeout-minutes: 5
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-wasm.result == 'success' }}
-    timeout-minutes: 30
     needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
+        wasm_cache_version: ["v2"]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [2.1.0]
 
     steps:
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
-          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
           path: ./wasm
-      - name: Update WASM
-        run: aws s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+      - name: Upload wasm artifacts (minio)
+        run: |
+          unset AWS_SESSION_TOKEN
+          aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --region $AWS_REGION
         env:
-          BUCKET_NAME: namada-wasm-master
-          AWS_REGION: eu-west-1
+          BUCKET_NAME: namada-wasm
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: https://minio.heliax.click
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
 
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 80
+    timeout-minutes: 50
     needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.11.0]
+        mold_version: [2.1.0]
         make:
           - name: ABCI
-            suffix: ''
-            cache_key: namada
-            cache_version: v2
-            tendermint_artifact: tendermint-unreleased-v0.1.4-abciplus
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -228,10 +232,11 @@ jobs:
         continue-on-error: false
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
@@ -253,221 +258,60 @@ jobs:
       - name: Check crates build with default features
         run: make check-crates
       - name: Run unit and integration tests
-        run: make test-coverage${{ matrix.make.suffix }}
+        run: make test-coverage
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
         uses: actions/upload-artifact@v3
         with:
-          name: coverage${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: coverage-${{ github.event.pull_request.head.sha || github.sha }}
           path: target/html
           retention-days: 3
-      - name: Run benchmarks tests
-        run: make test-benches${{ matrix.make.suffix }}
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Print sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
 
-  namada-release:
-    runs-on: 
+  run-benchmarks:
+    runs-on:
       group: gians-runners
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-20.04]
-        mold_version: [1.11.0]
-        make:
-          - name: ABCI Release build
-            suffix: ''
-            cache_key: namada-e2e-release
-            cache_version: "v2"
-
-    env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
-      RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v3
-        if: ${{ github.event_name == 'pull_request_target' }}
-        # See comment in build-and-test.yml
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
-      - name: Setup rust toolchain
-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
-        with:
-          profile: default
-          override: true
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
-      - name: Install mold linker
-        run: |
-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
-      - name: Start sccache server
-        run: sccache --start-server
-      - name: Build
-        run: make build-release${{ matrix.make.suffix }}
-        env:
-          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Upload target binaries
-        uses: actions/upload-artifact@v3
-        with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            target/release/namada
-            target/release/namadac
-            target/release/namadaw
-            target/release/namadan
-      - name: Upload build timing report
-        if: success() || failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            target/cargo-timings/cargo-timing.html
-          retention-days: 5
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats
-      - name: Stop sccache server
-        if: always()
-        run: sccache --stop-server || true
-
-
-  namada-e2e:
-    runs-on: 
-      group: gians-runners
-    # timeout-minutes: 80
+    timeout-minutes: 30
+    needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [1.7.0]
-        comet_bft: [0.37.2]
-        hermes: [1.6.0-namada-beta1]
+        mold_version: [2.1.0]
         make:
-          - name: e2e
-            suffix: ''
-            index: 0
-            cache_key: namada
-            cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
-          - name: e2e
-            suffix: ''
-            index: 1
-            cache_key: namada
-            cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
-          - name: e2e
-            suffix: ''
-            index: 2
-            cache_key: namada
-            cache_version: v2
-            wait_for: namada-release (ubuntu-20.04, 1.11.0, ABCI Release build, namada-e2e-release, v2)
+          - name: ABCI
 
     env:
-      CARGO_INCREMENTAL: 0
-      RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
-      SCCACHE_CACHE_SIZE: 100G
-      SCCACHE_BUCKET: namada-sccache-master
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request_target' }}
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request_target' }}
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Remove some unused data in github runners
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: arn:aws:iam::375643557360:role/anoma-github-action-ci-master
-          aws-region: eu-west-1
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install sccache (ubuntu-20.04)
-        if: matrix.os == 'ubuntu-20.04'
-        env:
-          LINK: https://github.com/mozilla/sccache/releases/download
-          SCCACHE_VERSION: v0.3.0
-        run: |
-          SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
-          mkdir -p $HOME/.local/bin
-          curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
-          mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
-          chmod +x $HOME/.local/bin/sccache
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install sccache (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install sccache
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
@@ -483,38 +327,210 @@ jobs:
         continue-on-error: false
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.make.cache_key }}-${{ matrix.make.cache_version }}-cargo-
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         run: sccache --start-server
       - name: Install mold linker
         run: |
           wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
           mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
-      - name: Build 
-        run: make build
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Build test
-        run: make build-test
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Download MASP parameters
         run: |
           mkdir -p /home/runner/.masp-params
           curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
           curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
           curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
-      - name: Wait for release binaries
-        uses: lewagon/wait-on-check-action@v1.2.0
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v3
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          check-name: ${{ matrix.make.wait_for }}
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: ./wasm
+      - name: Run benchmarks tests
+        run: make test-benches
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
+
+  namada-release:
+    runs-on: 
+      group: gians-runners
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04]
+        mold_version: [2.1.0]
+        make:
+          - name: ABCI Release build
+
+    env:
+      RUSTC_WRAPPER: sccache
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 42
-          allowed-conclusions: success
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Build
+        run: make build-release
+        env:
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Upload target binaries (github)
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/release/namada
+            target/release/namadac
+            target/release/namadaw
+            target/release/namadan
+            target/release/namadar
+      - name: Upload namada binaries (minio)
+        run: |
+          unset AWS_SESSION_TOKEN
+          zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
+          aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
+        env:
+          BUCKET_NAME: namada-binaries
+          AWS_REGION: us-east-1
+          S3_ENDPOINT_URL: https://minio.heliax.click
+          ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
+          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      - name: Upload build timing report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 3
+      - name: Print sccache stats
+        if: always()
+        run: sccache --show-stats || true
+      - name: Stop sccache server
+        if: always()
+        run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
+
+
+  namada-e2e:
+    runs-on: 
+      group: gians-runners
+    needs: [build-wasm, namada-release]
+    # timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04]
+        nightly_version: [nightly-2023-06-01]
+        mold_version: [2.1.0]
+        comet_bft: [0.37.2]
+        hermes: [1.6.0-namada-beta1]
+        make:
+          - index: 0
+          - index: 1
+          - index: 2
+          - index: 3
+
+    env:
+      RUSTC_WRAPPER: sccache
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        # See comment in build-and-test.yml
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Setup rust toolchain
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          profile: default
+          override: true
+      - name: Setup rust nightly
+        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        with:
+          toolchain: ${{ matrix.nightly_version }}
+          profile: default
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Install mold linker
+        run: |
+          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
+      - name: Download MASP parameters
+        run: |
+          mkdir -p /home/runner/.masp-params
+          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -523,7 +539,7 @@ jobs:
       - name: Download namada binaries
         uses: actions/download-artifact@v3
         with:
-          name: binaries${{ matrix.make.suffix }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
           path: ./target/release/
       - name: Download CometBFT
         run: |
@@ -541,11 +557,11 @@ jobs:
           chmod +x target/release/namadaw
           chmod +x target/release/namadan
           chmod +x target/release/namadac
+          chmod +x target/release/namadar
           chmod +x /usr/local/bin/cometbft
           chmod +x /usr/local/bin/hermes
       - name: Run e2e test
-        run: |
-          python3 .github/workflows/scripts/schedule-e2e.py
+        run: python3 .github/workflows/scripts/schedule-e2e.py
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
@@ -566,7 +582,11 @@ jobs:
           retention-days: 5
       - name: Print sccache stats
         if: always()
-        run: sccache --show-stats
+        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
+      - name: Clean cargo cache
+        run: |
+          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+          cargo-cache
