@@ -3929,9 +3929,7 @@ impl AbstractPosState {
         // `updatedSlashedAmountMap`
         let validator_slashes =
             val_slash_amounts.entry(validator.clone()).or_default();
-        for (epoch, slash) in result_slash {
-            *validator_slashes.entry(epoch).or_default() += slash;
-        }
+        *validator_slashes = result_slash;
 
         let dest_validators = self
             .outgoing_redelegations

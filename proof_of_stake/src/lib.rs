@@ -4554,9 +4554,7 @@ where
     // `updatedSlashedAmountMap`
     let validator_slashes =
         slashed_amount_map.entry(validator.clone()).or_default();
-    for (epoch, slash) in result_slash {
-        *validator_slashes.entry(epoch).or_default() += slash;
-    }
+    *validator_slashes = result_slash;
 
     // `outgoingRedelegation`
     let outgoing_redelegations =
