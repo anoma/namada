@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use color_eyre::eyre::{eyre, Report, Result};
-use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::ledger::eth_bridge::{bridge_pool, validator_set};
 use namada::types::control_flow::ProceedOrElse;
 use namada::types::io::Io;
@@ -10,6 +7,7 @@ use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::{CliToSdk, CliToSdkCtxless};
 use crate::cli::cmds::*;
+use crate::cli::utils::get_eth_rpc_client;
 
 fn error() -> Report {
     eyre!("Fatal error")
@@ -74,10 +72,8 @@ impl<IO: Io> CliApi<IO> {
                         .wait_until_node_is_synced::<IO>()
                         .await
                         .proceed_or_else(error)?;
-                    let eth_client = Arc::new(
-                        Provider::<Http>::try_from(&args.eth_rpc_endpoint)
-                            .unwrap(),
-                    );
+                    let eth_client =
+                        get_eth_rpc_client(&args.eth_rpc_endpoint, None);
                     let args = args.to_sdk_ctxless();
                     bridge_pool::relay_bridge_pool_proof::<_, _, IO>(
                         eth_client, &client, args,
@@ -191,10 +187,8 @@ impl<IO: Io> CliApi<IO> {
                         .wait_until_node_is_synced::<IO>()
                         .await
                         .proceed_or_else(error)?;
-                    let eth_client = Arc::new(
-                        Provider::<Http>::try_from(&args.eth_rpc_endpoint)
-                            .unwrap(),
-                    );
+                    let eth_client =
+                        get_eth_rpc_client(&args.eth_rpc_endpoint, None);
                     let args = args.to_sdk_ctxless();
                     validator_set::relay_validator_set_update::<_, _, IO>(
                         eth_client, &client, args,
