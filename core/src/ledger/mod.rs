@@ -5,6 +5,7 @@ pub mod gas;
 pub mod governance;
 #[cfg(any(feature = "abciplus", feature = "abcipp"))]
 pub mod ibc;
+pub mod inflation;
 pub mod parameters;
 pub mod pgf;
 pub mod replay_protection;

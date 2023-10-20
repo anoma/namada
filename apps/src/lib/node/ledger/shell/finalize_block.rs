@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use data_encoding::HEXUPPER;
+use namada::core::ledger::inflation;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
 use namada::ledger::events::EventType;
 use namada::ledger::gas::{GasMetering, TxGasMeter};
@@ -11,7 +12,7 @@ use namada::ledger::pos::{namada_proof_of_stake, staking_token_address};
 use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
-use namada::ledger::{inflation, protocol, replay_protection};
+use namada::ledger::{protocol, replay_protection};
 use namada::proof_of_stake::{
     delegator_rewards_products_handle, find_validator_by_raw_hash,
     read_last_block_proposer_address, read_pos_params, read_total_stake,
@@ -614,10 +615,8 @@ where
     /// with respect to the previous epoch.
     fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
         let last_epoch = current_epoch.prev();
-        // Get input values needed for the PD controller for PoS and MASP.
+        // Get input values needed for the PD controller for PoS.
         // Run the PD controllers to calculate new rates.
-        //
-        // MASP is included below just for some completeness.
 
         let params = read_pos_params(&self.wl_storage)?;
 
@@ -639,7 +638,7 @@ where
             .read_storage_key(&params_storage::get_pos_inflation_amount_key())
             .expect("PoS inflation amount should exist in storage");
         // Read from PoS storage
-        let total_tokens = self
+        let total_tokens: token::Amount = self
             .read_storage_key(&token::minted_balance_key(
                 &staking_token_address(&self.wl_storage),
             ))
@@ -649,38 +648,17 @@ where
         let pos_locked_ratio_target = params.target_staked_ratio;
         let pos_max_inflation_rate = params.max_inflation_rate;
 
-        // TODO: properly fetch these values (arbitrary for now)
-        let masp_locked_supply: Amount = Amount::default();
-        let masp_locked_ratio_target = Dec::new(5, 1).expect("Cannot fail");
-        let masp_locked_ratio_last = Dec::new(5, 1).expect("Cannot fail");
-        let masp_max_inflation_rate = Dec::new(2, 1).expect("Cannot fail");
-        let masp_last_inflation_rate = Dec::new(12, 2).expect("Cannot fail");
-        let masp_p_gain = Dec::new(1, 1).expect("Cannot fail");
-        let masp_d_gain = Dec::new(1, 1).expect("Cannot fail");
-
         // Run rewards PD controller
         let pos_controller = inflation::RewardsController {
-            locked_tokens: pos_locked_supply,
-            total_tokens,
+            locked_tokens: pos_locked_supply.raw_amount(),
+            total_tokens: total_tokens.raw_amount(),
+            total_native_tokens: total_tokens.raw_amount(),
             locked_ratio_target: pos_locked_ratio_target,
             locked_ratio_last: pos_last_staked_ratio,
             max_reward_rate: pos_max_inflation_rate,
-            last_inflation_amount: pos_last_inflation_amount,
+            last_inflation_amount: pos_last_inflation_amount.raw_amount(),
             p_gain_nom: pos_p_gain_nom,
             d_gain_nom: pos_d_gain_nom,
-            epochs_per_year,
-        };
-        let _masp_controller = inflation::RewardsController {
-            locked_tokens: masp_locked_supply,
-            total_tokens,
-            locked_ratio_target: masp_locked_ratio_target,
-            locked_ratio_last: masp_locked_ratio_last,
-            max_reward_rate: masp_max_inflation_rate,
-            last_inflation_amount: token::Amount::from(
-                masp_last_inflation_rate,
-            ),
-            p_gain_nom: masp_p_gain,
-            d_gain_nom: masp_d_gain,
             epochs_per_year,
         };
 
@@ -689,7 +667,6 @@ where
             locked_ratio,
             inflation,
         } = pos_controller.run();
-        // let new_masp_vals = _masp_controller.run();
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch = self
@@ -709,6 +686,9 @@ where
         // for the previous epoch
         //
         // TODO: think about changing the reward to Decimal
+        let inflation = token::Amount::from_uint(inflation, 0)
+            .expect("Should not fail Uint -> Amount conversion");
+
         let mut reward_tokens_remaining = inflation;
         let mut new_rewards_products: HashMap<Address, (Dec, Dec)> =
             HashMap::new();

@@ -118,6 +118,7 @@ mod tests {
         assert_eq!(result, None);
     }
 
+    #[cfg(feature = "testing")]
     #[test]
     fn test_commit_block() {
         let db_path =
@@ -144,6 +145,7 @@ mod tests {
         storage.block.pred_epochs.new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
         let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
+        namada::types::token::testing::init_token_storage(&mut wl_storage, 60);
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");
