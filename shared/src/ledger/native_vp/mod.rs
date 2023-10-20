@@ -3,6 +3,7 @@
 
 pub mod ethereum_bridge;
 pub mod ibc;
+pub mod masp;
 pub mod multitoken;
 pub mod parameters;
 

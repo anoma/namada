@@ -80,6 +80,8 @@ mod internal {
         "ano::Multitoken                              ";
     pub const PGF: &str =
         "ano::Pgf                                     ";
+    pub const MASP: &str =
+        "ano::MASP                                    ";
 }
 
 /// Error from decoding address from string
@@ -204,6 +206,7 @@ impl Address {
                         internal::MULTITOKEN.to_string()
                     }
                     InternalAddress::Pgf => internal::PGF.to_string(),
+                    InternalAddress::Masp => internal::MASP.to_string(),
                 };
                 debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
                 string
@@ -287,6 +290,7 @@ impl Address {
                     Ok(Address::Internal(InternalAddress::Multitoken))
                 }
                 internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
+                internal::MASP => Ok(Address::Internal(InternalAddress::Masp)),
                 _ => Err(DecodeError::InvalidInnerEncoding(
                     ErrorKind::InvalidData,
                     "Invalid internal address".to_string(),
@@ -546,6 +550,8 @@ pub enum InternalAddress {
     Multitoken,
     /// Pgf
     Pgf,
+    /// Masp
+    Masp,
 }
 
 impl Display for InternalAddress {
@@ -566,6 +572,7 @@ impl Display for InternalAddress {
                 Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
+                Self::Masp => "MASP".to_string(),
             }
         )
     }
@@ -622,7 +629,7 @@ pub fn kartoffel() -> Address {
 
 /// Temporary helper for testing
 pub fn masp() -> Address {
-    Address::decode("atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5").expect("The token address decoding shouldn't fail")
+    Address::Internal(InternalAddress::Masp)
 }
 
 /// Sentinel secret key to indicate a MASP source
@@ -857,6 +864,7 @@ pub mod testing {
             InternalAddress::Erc20(_) => {}
             InternalAddress::Nut(_) => {}
             InternalAddress::Pgf => {}
+            InternalAddress::Masp => {}
             InternalAddress::Multitoken => {} /* Add new addresses in the
                                                * `prop_oneof` below. */
         };
@@ -873,6 +881,7 @@ pub mod testing {
             Just(arb_nut()),
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
+            Just(InternalAddress::Masp),
         ]
     }
 
