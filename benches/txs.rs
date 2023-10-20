@@ -1,18 +1,23 @@
+use std::collections::HashMap;
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
 use namada::core::types::key::{
     common, SecretKey as SecretKeyInterface, SigScheme,
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada::core::types::transaction::pos::InitValidator;
+use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, read_pos_params};
 use namada::proto::{Code, Section};
+use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
 use namada::types::masp::{TransferSource, TransferTarget};
@@ -27,18 +32,19 @@ use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_BOND_WASM, TX_BRIDGE_POOL_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
-    VP_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
+    TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use sha2::Digest;
 
-// TODO: need to benchmark tx_bridge_pool.wasm
+const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
+
 fn transfer(c: &mut Criterion) {
     let mut group = c.benchmark_group("transfer");
     let amount = Amount::native_whole(500);
@@ -287,7 +293,7 @@ fn withdraw(c: &mut Criterion) {
 }
 
 fn redelegate(c: &mut Criterion) {
-    let mut group = c.benchmark_group("redelegate");
+    let shell = BenchShell::default();
 
     let redelegation = |dest_validator| {
         generate_tx(
@@ -304,7 +310,7 @@ fn redelegate(c: &mut Criterion) {
         )
     };
 
-    group.bench_function("redelegate", |b| {
+    c.bench_function("redelegate", |b| {
         b.iter_batched_ref(
             || {
                 let shell = BenchShell::default();
@@ -316,11 +322,9 @@ fn redelegate(c: &mut Criterion) {
                 (shell, redelegation(validator_2))
             },
             |(shell, tx)| shell.execute_tx(tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
-
-    group.finish();
 }
 
 fn reveal_pk(c: &mut Criterion) {
@@ -347,7 +351,7 @@ fn reveal_pk(c: &mut Criterion) {
     });
 }
 
-fn update_vp(c: &mut Criterion) {
+fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
@@ -718,6 +722,105 @@ fn unjail_validator(c: &mut Criterion) {
     });
 }
 
+fn tx_bridge_pool(c: &mut Criterion) {
+    let shell = BenchShell::default();
+
+    let data = PendingTransfer {
+        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
+            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+            asset: read_native_erc20_address(&shell.wl_storage).unwrap(),
+            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+            sender: defaults::albert_address(),
+            amount: Amount::from(1),
+        },
+        gas_fee: GasFee {
+            amount: Amount::from(100),
+            payer: defaults::albert_address(),
+            token: shell.wl_storage.storage.native_token.clone(),
+        },
+    };
+    let tx = generate_tx(
+        TX_BRIDGE_POOL_WASM,
+        data,
+        None,
+        None,
+        Some(&defaults::albert_keypair()),
+    );
+    c.bench_function("bridge pool", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
+fn resign_steward(c: &mut Criterion) {
+    c.bench_function("resign steward", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                    .insert(
+                        &mut shell.wl_storage,
+                        defaults::albert_address(),
+                        StewardDetail::base(defaults::albert_address()),
+                    )
+                    .unwrap();
+
+                let tx = generate_tx(
+                    TX_RESIGN_STEWARD,
+                    defaults::albert_address(),
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                );
+
+                (shell, tx)
+            },
+            |(shell, tx)| shell.execute_tx(tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
+fn update_steward_commission(c: &mut Criterion) {
+    c.bench_function("update steward commission", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+                namada::core::ledger::pgf::storage::keys::stewards_handle()
+                    .insert(
+                        &mut shell.wl_storage,
+                        defaults::albert_address(),
+                        StewardDetail::base(defaults::albert_address()),
+                    )
+                    .unwrap();
+
+                let data =
+                    namada::types::transaction::pgf::UpdateStewardCommission {
+                        steward: defaults::albert_address(),
+                        commission: HashMap::from([(
+                            defaults::albert_address(),
+                            namada::types::dec::Dec::zero(),
+                        )]),
+                    };
+                let tx = generate_tx(
+                    TX_UPDATE_STEWARD_COMMISSION,
+                    data,
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                );
+
+                (shell, tx)
+            },
+            |(shell, tx)| shell.execute_tx(tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 criterion_group!(
     whitelisted_txs,
     transfer,
@@ -726,13 +829,16 @@ criterion_group!(
     withdraw,
     redelegate,
     reveal_pk,
-    update_vp,
+    update_account,
     init_account,
     init_proposal,
     vote_proposal,
     init_validator,
     change_validator_commission,
     ibc,
-    unjail_validator
+    unjail_validator,
+    tx_bridge_pool,
+    resign_steward,
+    update_steward_commission
 );
 criterion_main!(whitelisted_txs);

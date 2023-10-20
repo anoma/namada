@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::ledger::gas::{
-    self, GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
+    self, GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS,
 };
 use namada_core::ledger::storage::write_log::StorageModification;
 use parity_wasm::elements;
@@ -541,7 +541,7 @@ where
 /// Get the gas rules used to meter wasm operations
 fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
     let instruction_cost = 0;
-    let memory_grow_cost = WASM_MEMORY_PAGE_GAS_COST;
+    let memory_grow_cost = WASM_MEMORY_PAGE_GAS;
     let call_per_local_cost = 0;
     wasm_instrument::gas_metering::ConstantCostRules::new(
         instruction_cost,

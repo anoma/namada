@@ -34,9 +34,10 @@ pub const DATA_ACCESS_GAS_PER_BYTE: u64 = 1;
 /// The cost of writing to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
 /// The cost of verifying a signle signature of a transaction
-pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
-/// The cost for requesting one more page in wasm (64KB)
-pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
+pub const VERIFY_TX_SIG_GAS: u64 = 10;
+/// The cost for requesting one more page in wasm (64KiB)
+pub const WASM_MEMORY_PAGE_GAS: u32 =
+    DATA_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
