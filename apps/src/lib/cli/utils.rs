@@ -376,28 +376,26 @@ pub fn safe_exit(_: i32) -> ! {
 }
 
 /// Load an Ethereum wallet from the environment.
-///
-/// If no chain id is provided, Ethereum main net is assumed.
-fn get_eth_signer_from_env(chain_id: Option<u64>) -> Option<impl Signer> {
+fn get_eth_signer_from_env(chain_id: u64) -> Option<impl Signer> {
     let relayer_key = std::env::var(RELAYER_KEY_ENV_VAR).ok()?;
     let relayer_key = HEXLOWER_PERMISSIVE.decode(relayer_key.as_ref()).ok()?;
     let relayer_key = Secp256k1Sk::from_slice(&relayer_key).ok()?;
 
     let wallet: Wallet<_> = relayer_key.into();
-    let wallet = wallet.with_chain_id(chain_id.unwrap_or(1));
+    let wallet = wallet.with_chain_id(chain_id);
 
     Some(wallet)
 }
 
 /// Return an Ethereum RPC client.
-///
-/// If no chain id is provided, Ethereum main net is assumed.
-pub fn get_eth_rpc_client(
-    url: &str,
-    chain_id: Option<u64>,
-) -> Arc<impl Middleware> {
+pub async fn get_eth_rpc_client(url: &str) -> Arc<impl Middleware> {
     let client = Provider::<Http>::try_from(url)
         .expect("Failed to instantiate Ethereum RPC client");
+    let chain_id = client
+        .get_chainid()
+        .await
+        .expect("Failed to query chain id")
+        .as_u64();
     let signer = get_eth_signer_from_env(chain_id).unwrap_or_else(|| {
         panic!("Failed to get Ethereum key from {RELAYER_KEY_ENV_VAR} env var")
     });

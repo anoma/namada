@@ -73,7 +73,7 @@ impl<IO: Io> CliApi<IO> {
                         .await
                         .proceed_or_else(error)?;
                     let eth_client =
-                        get_eth_rpc_client(&args.eth_rpc_endpoint, None);
+                        get_eth_rpc_client(&args.eth_rpc_endpoint).await;
                     let args = args.to_sdk_ctxless();
                     bridge_pool::relay_bridge_pool_proof::<_, _, IO>(
                         eth_client, &client, args,
@@ -188,7 +188,7 @@ impl<IO: Io> CliApi<IO> {
                         .await
                         .proceed_or_else(error)?;
                     let eth_client =
-                        get_eth_rpc_client(&args.eth_rpc_endpoint, None);
+                        get_eth_rpc_client(&args.eth_rpc_endpoint).await;
                     let args = args.to_sdk_ctxless();
                     validator_set::relay_validator_set_update::<_, _, IO>(
                         eth_client, &client, args,
