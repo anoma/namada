@@ -748,13 +748,8 @@ pub async fn build_unjail_validator<'a>(
         validator,
         Some(pipeline_epoch),
     )
-    .await?
-    .ok_or_else(|| {
-        Error::from(TxError::Other(
-            "Validator state should be defined.".to_string(),
-        ))
-    })?;
-    if validator_state_at_pipeline != ValidatorState::Jailed {
+    .await?;
+    if validator_state_at_pipeline != Some(ValidatorState::Jailed) {
         edisplay_line!(
             context.io(),
             "The given validator address {} is not jailed at the pipeline \
