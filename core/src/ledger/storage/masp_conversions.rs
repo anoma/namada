@@ -16,6 +16,7 @@ use crate::types::address::Address;
 use crate::types::dec::Dec;
 use crate::types::storage::Epoch;
 use crate::types::token::MaspDenom;
+use crate::types::uint::Uint;
 use crate::types::{address, token};
 
 /// A representation of the conversion state
@@ -43,13 +44,15 @@ where
     D: 'static + super::DB + for<'iter> super::DBIter<'iter>,
     H: 'static + super::StorageHasher,
 {
-    let denomination = read_denom(wl_storage, addr).unwrap().unwrap();
+    let denomination = read_denom(wl_storage, addr)?
+        .expect("failed to read token denomination");
     // Inflation is implicitly denominated by this value. The lower this
     // figure, the less precise inflation computations are. This is especially
     // problematic when inflation is coming from a token with much higher
     // denomination than the native token. The higher this figure, the higher
     // the threshold of holdings required in order to receive non-zero rewards.
-    // This value should be fixed constant for each asset type.
+    // This value should be fixed constant for each asset type. Here we choose
+    // a thousandth of the given asset.
     let precision = 10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3);
 
     let masp_addr = address::masp();
@@ -126,11 +129,21 @@ where
     let noterized_inflation = if total_token_in_masp.is_zero() {
         0u128
     } else {
-        crate::types::uint::Uint::try_into(
-            (inflation * crate::types::uint::Uint::from(precision))
-                / total_token_in_masp.raw_amount(),
-        )
-        .unwrap()
+        inflation
+            .checked_mul_div(
+                Uint::from(precision),
+                total_token_in_masp.raw_amount(),
+            )
+            .and_then(|x| x.0.try_into().ok())
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "MASP inflation for {} assumed to be 0 because the \
+                     computed value is too large. Please check the inflation \
+                     parameters.",
+                    *addr
+                );
+                0u128
+            })
     };
 
     tracing::debug!(
@@ -159,21 +172,17 @@ where
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    wl_storage
-        .write(
-            &token::masp_last_inflation_key(addr),
-            token::Amount::from_uint(
-                (total_token_in_masp.raw_amount() / precision)
-                    * crate::types::uint::Uint::from(noterized_inflation),
-                0,
-            )
-            .unwrap(),
+    wl_storage.write(
+        &token::masp_last_inflation_key(addr),
+        token::Amount::from_uint(
+            (total_token_in_masp.raw_amount() / precision)
+                * Uint::from(noterized_inflation),
+            0,
         )
-        .expect("unable to encode new inflation rate (Decimal)");
+        .unwrap(),
+    )?;
 
-    wl_storage
-        .write(&token::masp_last_locked_ratio_key(addr), locked_ratio)
-        .expect("unable to encode new locked ratio (Decimal)");
+    wl_storage.write(&token::masp_last_locked_ratio_key(addr), locked_ratio)?;
 
     Ok((noterized_inflation, precision))
 }
@@ -238,8 +247,7 @@ where
     let mut ref_inflation = 0;
     // Reward all tokens according to above reward rates
     for addr in &masp_reward_keys {
-        let reward = calculate_masp_rewards(wl_storage, addr)
-            .expect("Calculating the masp rewards should not fail");
+        let reward = calculate_masp_rewards(wl_storage, addr)?;
         if *addr == native_token {
             // The reference inflation is the denominator of the native token
             // inflation, which is always a constant
@@ -273,8 +281,21 @@ where
                 // The amount that will be given of the new native token for
                 // every amount of the native token given in the
                 // previous epoch
-                let new_normed_inflation = *normed_inflation
-                    + (*normed_inflation * reward.0) / reward.1;
+                let new_normed_inflation = Uint::from(*normed_inflation)
+                    .checked_add(
+                        (Uint::from(*normed_inflation) * Uint::from(reward.0))
+                            / reward.1,
+                    )
+                    .and_then(|x| x.try_into().ok())
+                    .unwrap_or_else(|| {
+                        tracing::warn!(
+                            "MASP reward for {} assumed to be 0 because the \
+                             computed value is too large. Please check the \
+                             inflation parameters.",
+                            *addr
+                        );
+                        *normed_inflation
+                    });
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate native tokens cancel/
@@ -308,8 +329,19 @@ where
                 // Express the inflation reward in real terms, that is, with
                 // respect to the native asset in the zeroth
                 // epoch
-                let real_reward =
-                    (reward.0 * ref_inflation) / *normed_inflation;
+                let real_reward = ((Uint::from(reward.0)
+                    * Uint::from(ref_inflation))
+                    / *normed_inflation)
+                    .try_into()
+                    .unwrap_or_else(|_| {
+                        tracing::warn!(
+                            "MASP reward for {} assumed to be 0 because the \
+                             computed value is too large. Please check the \
+                             inflation parameters.",
+                            *addr
+                        );
+                        0u128
+                    });
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
