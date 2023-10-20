@@ -526,7 +526,12 @@ mod test_vote_extensions {
             nonce: 0.into(),
             transfers: vec![],
         };
+        let event_4 = EthereumEvent::TransfersToNamada {
+            nonce: 1.into(),
+            transfers: vec![],
+        };
 
+        // send valid events
         tokio_test::block_on(oracle.send(event_1.clone()))
             .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
@@ -542,16 +547,22 @@ mod test_vote_extensions {
         .collect();
         assert_eq!(expected_events, got_events);
 
+        // we cannot get two transfer to ethereum events within
+        // the same block height on ethereum. this is because we
+        // require a confirmation eth event on namada to increment
+        // the bridge pool nonce. this event should get ignored
+        tokio_test::block_on(oracle.send(event_2)).expect("Test failed");
+
         // check that we queue and de-duplicate events
-        tokio_test::block_on(oracle.send(event_2.clone()))
-            .expect("Test failed");
         tokio_test::block_on(oracle.send(event_3.clone()))
+            .expect("Test failed");
+        tokio_test::block_on(oracle.send(event_4.clone()))
             .expect("Test failed");
 
         let got_events: [EthereumEvent; 3] =
             shell.new_ethereum_events().try_into().expect("Test failed");
         let expected_events: Vec<_> =
-            std::collections::BTreeSet::from([event_1, event_2, event_3])
+            std::collections::BTreeSet::from([event_1, event_3, event_4])
                 .into_iter()
                 .collect();
         assert_eq!(expected_events, got_events);
