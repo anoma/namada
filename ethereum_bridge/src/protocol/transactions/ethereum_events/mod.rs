@@ -23,6 +23,7 @@ use super::ChangedKeys;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};
+use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::vote_tallies::{self, Keys};
 
 impl utils::GetVoters for &HashSet<EthMsgUpdate> {
@@ -63,7 +64,16 @@ where
          protocol transaction"
     );
 
-    let updates = events.into_iter().map(Into::<EthMsgUpdate>::into).collect();
+    let updates = events
+        .into_iter()
+        .filter_map(|multisigned| {
+            // NB: discard events with outdated nonces
+            wl_storage
+                .ethbridge_queries()
+                .validate_eth_event_nonce(&multisigned.event)
+                .then(|| EthMsgUpdate::from(multisigned))
+        })
+        .collect();
 
     let voting_powers = utils::get_voting_powers(wl_storage, &updates)?;
 
