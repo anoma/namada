@@ -26,6 +26,7 @@ struct Keys {
     min_grace_epoch: &'static str,
     counter: &'static str,
     pending: &'static str,
+    result: &'static str,
 }
 
 /// Check if key is inside governance address space
@@ -456,6 +457,15 @@ pub fn get_proposal_execution_key(id: u64) -> Key {
         .push(&Keys::VALUES.pending.to_owned())
         .expect("Cannot obtain a storage key")
         .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the proposal result key
+pub fn get_proposal_result_key(id: u64) -> Key {
+    proposal_prefix()
+        .push(&id.to_string())
+        .expect("Cannot obtain a storage key")
+        .push(&Keys::VALUES.result.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
