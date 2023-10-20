@@ -426,8 +426,20 @@ where
                 }
             };
             match (&tx).try_into().ok()? {
-                EthereumTxData::EthEventsVext(_)
-                | EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
+                EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
+                EthereumTxData::EthEventsVext(ext) => {
+                    // NB: only propose events with at least
+                    // one valid nonce
+                    ext.data
+                        .ethereum_events
+                        .iter()
+                        .any(|event| {
+                            self.wl_storage
+                                .ethbridge_queries()
+                                .validate_eth_event_nonce(event)
+                        })
+                        .then(|| tx_bytes.clone())
+                }
                 EthereumTxData::ValSetUpdateVext(ext) => {
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long

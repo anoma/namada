@@ -167,17 +167,17 @@ where
             );
             return Err(VoteExtensionError::HaveDupesOrNonSorted);
         }
-        ext.ethereum_events.iter().try_for_each(|event| {
-            if self
-                .wl_storage
+        // for the proposal to be valid, at least one of the
+        // event's nonces must be valid
+        if ext.ethereum_events.iter().any(|event| {
+            self.wl_storage
                 .ethbridge_queries()
                 .validate_eth_event_nonce(event)
-            {
-                Ok(())
-            } else {
-                Err(VoteExtensionError::InvalidEthEventNonce)
-            }
-        })
+        }) {
+            Ok(())
+        } else {
+            Err(VoteExtensionError::InvalidEthEventNonce)
+        }
     }
 
     /// Checks the channel from the Ethereum oracle monitoring
