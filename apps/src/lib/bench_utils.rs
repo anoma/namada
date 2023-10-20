@@ -111,6 +111,10 @@ pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
+pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
+pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+    "tx_update_steward_commission.wasm";
+pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
@@ -127,8 +131,8 @@ static SHELL_INIT: Once = Once::new();
 
 pub struct BenchShell {
     pub inner: Shell,
-    /// NOTE: Temporary directory should be dropped last since Shell need to
-    /// flush data on drop
+    // NOTE: Temporary directory should be dropped last since Shell need to
+    // flush data on drop
     tempdir: TempDir,
 }
 
