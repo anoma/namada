@@ -2130,6 +2130,7 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
+    use namada::core::ledger::replay_protection;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
     };

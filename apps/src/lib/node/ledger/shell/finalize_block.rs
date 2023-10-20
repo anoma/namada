@@ -2054,9 +2054,11 @@ mod test_finalize_block {
         // won't receive votes from TM since we receive votes at a 1-block
         // delay, so votes will be empty here
         next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
 
         // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
         // Include votes that correspond to block 1. Make val2 the next block's
@@ -2066,9 +2068,11 @@ mod test_finalize_block {
         assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
         assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
-        assert!(!rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            !rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         // Val1 was the proposer, so its reward should be larger than all
         // others, which should themselves all be equal
         let acc_sum = get_rewards_sum(&shell.wl_storage);
@@ -2182,9 +2186,11 @@ mod test_finalize_block {
                 None,
             );
         }
-        assert!(rewards_accumulator_handle()
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
         let rp1 = rewards_prod_1
             .get(&shell.wl_storage, &Epoch::default())
             .unwrap()
@@ -2269,21 +2275,25 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(shell
-            .shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&decrypted_tx.header_hash())
-            .unwrap_or_default());
+        assert!(
+            shell
+                .shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_tx.header_hash())
+                .unwrap_or_default()
+        );
         // Check that the hash is present in the merkle tree
-        assert!(!shell
-            .shell
-            .wl_storage
-            .storage
-            .block
-            .tree
-            .has_key(&decrypted_hash_key)
-            .unwrap());
+        assert!(
+            !shell
+                .shell
+                .wl_storage
+                .storage
+                .block
+                .tree
+                .has_key(&decrypted_hash_key)
+                .unwrap()
+        );
     }
 
     /// Test replay protection hash handling
@@ -2418,36 +2428,48 @@ mod test_finalize_block {
             .as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&invalid_wrapper_hash)
-            .unwrap_or_default());
-        assert!(!shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&decrypted_3_hash)
-            .unwrap_or_default());
-        assert!(!shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&decrypted_hash)
-            .unwrap_or_default());
-        assert!(shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&wrapper_hash)
-            .unwrap_or_default());
-        assert!(shell
-            .wl_storage
-            .storage
-            .has_replay_protection_entry(&decrypted_2_hash)
-            .expect("test failed"));
-        assert!(!shell
-            .wl_storage
-            .write_log
-            .has_replay_protection_entry(&wrapper_2_hash)
-            .unwrap_or_default());
+        assert!(
+            shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&invalid_wrapper_hash)
+                .unwrap_or_default()
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_3_hash)
+                .unwrap_or_default()
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&decrypted_hash)
+                .unwrap_or_default()
+        );
+        assert!(
+            shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&wrapper_hash)
+                .unwrap_or_default()
+        );
+        assert!(
+            shell
+                .wl_storage
+                .storage
+                .has_replay_protection_entry(&decrypted_2_hash)
+                .expect("test failed")
+        );
+        assert!(
+            !shell
+                .wl_storage
+                .write_log
+                .has_replay_protection_entry(&wrapper_2_hash)
+                .unwrap_or_default()
+        );
     }
 
     // Test that if the fee payer doesn't have enough funds for fee payment the
@@ -2735,9 +2757,11 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(enqueued_slashes_handle()
-            .at(&Epoch::default())
-            .is_empty(&shell.wl_storage)?);
+        assert!(
+            enqueued_slashes_handle()
+                .at(&Epoch::default())
+                .is_empty(&shell.wl_storage)?
+        );
         assert_eq!(
             get_num_consensus_validators(&shell.wl_storage, Epoch::default())
                 .unwrap(),
@@ -2756,17 +2780,21 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(enqueued_slashes_handle()
-                .at(&epoch)
-                .is_empty(&shell.wl_storage)?);
+            assert!(
+                enqueued_slashes_handle()
+                    .at(&epoch)
+                    .is_empty(&shell.wl_storage)?
+            );
             assert_eq!(
                 get_num_consensus_validators(&shell.wl_storage, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(!enqueued_slashes_handle()
-            .at(&processing_epoch)
-            .is_empty(&shell.wl_storage)?);
+        assert!(
+            !enqueued_slashes_handle()
+                .at(&processing_epoch)
+                .is_empty(&shell.wl_storage)?
+        );
 
         // Advance to the processing epoch
         loop {
@@ -2789,9 +2817,11 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(enqueued_slashes_handle()
-                    .at(&shell.wl_storage.storage.block.epoch)
-                    .is_empty(&shell.wl_storage)?);
+                assert!(
+                    enqueued_slashes_handle()
+                        .at(&shell.wl_storage.storage.block.epoch)
+                        .is_empty(&shell.wl_storage)?
+                );
                 let stake1 = read_validator_stake(
                     &shell.wl_storage,
                     &params,
@@ -3350,13 +3380,15 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(namada_proof_of_stake::is_validator_frozen(
-            &shell.wl_storage,
-            &val1.address,
-            current_epoch,
-            &params
-        )
-        .unwrap());
+        assert!(
+            namada_proof_of_stake::is_validator_frozen(
+                &shell.wl_storage,
+                &val1.address,
+                current_epoch,
+                &params
+            )
+            .unwrap()
+        );
         assert!(
             namada_proof_of_stake::validator_slashes_handle(&val1.address)
                 .is_empty(&shell.wl_storage)
@@ -3865,14 +3897,12 @@ mod test_finalize_block {
                 assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
                 // assert!(!below_cap_val_set.at(&ep).is_empty(storage).
                 // unwrap());
-                assert!(!validator_positions
-                    .at(&ep)
-                    .is_empty(storage)
-                    .unwrap());
-                assert!(!all_validator_addresses
-                    .at(&ep)
-                    .is_empty(storage)
-                    .unwrap());
+                assert!(
+                    !validator_positions.at(&ep).is_empty(storage).unwrap()
+                );
+                assert!(
+                    !all_validator_addresses.at(&ep).is_empty(storage).unwrap()
+                );
             }
         };
 
@@ -3911,25 +3941,33 @@ mod test_finalize_block {
             Epoch(1),
             Epoch(params.pipeline_len + default_past_epochs + 1),
         );
-        assert!(!consensus_val_set
-            .at(&Epoch(0))
-            .is_empty(&shell.wl_storage)
-            .unwrap());
-        assert!(validator_positions
-            .at(&Epoch(0))
-            .is_empty(&shell.wl_storage)
-            .unwrap());
-        assert!(all_validator_addresses
-            .at(&Epoch(0))
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            !consensus_val_set
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+        assert!(
+            validator_positions
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+        assert!(
+            all_validator_addresses
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
 
         // Advance to the epoch `consensus_val_set_len` + 1
         loop {
-            assert!(!consensus_val_set
-                .at(&Epoch(0))
-                .is_empty(&shell.wl_storage)
-                .unwrap());
+            assert!(
+                !consensus_val_set
+                    .at(&Epoch(0))
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
             let votes = get_default_true_votes(
                 &shell.wl_storage,
                 shell.wl_storage.storage.block.epoch,
@@ -3940,10 +3978,12 @@ mod test_finalize_block {
             }
         }
 
-        assert!(consensus_val_set
-            .at(&Epoch(0))
-            .is_empty(&shell.wl_storage)
-            .unwrap());
+        assert!(
+            consensus_val_set
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
 
         // Advance one more epoch
         let votes = get_default_true_votes(
@@ -3952,19 +3992,23 @@ mod test_finalize_block {
         );
         current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
         for ep in Epoch::default().iter_range(2) {
-            assert!(consensus_val_set
-                .at(&ep)
-                .is_empty(&shell.wl_storage)
-                .unwrap());
+            assert!(
+                consensus_val_set
+                    .at(&ep)
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
         }
         for ep in Epoch::iter_bounds_inclusive(
             Epoch(2),
             current_epoch + params.pipeline_len,
         ) {
-            assert!(!consensus_val_set
-                .at(&ep)
-                .is_empty(&shell.wl_storage)
-                .unwrap());
+            assert!(
+                !consensus_val_set
+                    .at(&ep)
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
         }
 
         Ok(())
