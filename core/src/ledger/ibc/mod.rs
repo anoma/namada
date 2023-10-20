@@ -25,12 +25,13 @@ use crate::ibc::applications::transfer::{
     PrefixedDenom, TracePrefix,
 };
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
-use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
+use crate::ibc::core::ics24_host::identifier::{
+    ChannelId, IdentifierError, PortId,
+};
 use crate::ibc::core::router::ModuleId;
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
 use crate::types::address::{masp, Address};
-use crate::types::chain::ChainId;
 use crate::types::ibc::{
     get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
     EVENT_TYPE_PACKET,
@@ -57,7 +58,7 @@ pub enum Error {
     #[error("Denom error: {0}")]
     Denom(String),
     #[error("Invalid chain ID: {0}")]
-    ChainId(ChainId),
+    ChainId(IdentifierError),
     #[error("Handling MASP transaction error: {0}")]
     MaspTx(String),
 }

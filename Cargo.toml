@@ -41,7 +41,7 @@ ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "df7ec062e7c40d5e76b136064e9aaf8bd2490750", default-features = false, features = ["std", "borsh"]}
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "03c41c102e5e8540525b9dd4c304c8eb6b8d7d7d", default-features = false, features = ["std", "borsh"]}
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
 async-trait = {version = "0.1.51"}
@@ -83,7 +83,7 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = "0.13.25"
-ics23 = "0.9.0"
+ics23 = "0.10.2"
 index-set = {git = "https://github.com/heliaxdev/index-set", tag = "v0.8.0", features = ["serialize-borsh", "serialize-serde"]}
 itertools = "0.10.0"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}

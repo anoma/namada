@@ -714,7 +714,7 @@ version = "1.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41898277107b0d3f027593697912977397eba6ac39a55bdd2eb02c1d5d5013b5"
 dependencies = [
- "borsh-derive 1.1.1",
+ "borsh-derive 1.0.0-alpha.4",
  "cfg_aliases",
 ]
 
@@ -733,9 +733,9 @@ dependencies = [
 
 [[package]]
 name = "borsh-derive"
-version = "1.1.1"
+version = "1.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "318d18ba283f9aa5bfef1405996ce66c584127f401be1403729ec88b10adc772"
+checksum = "413cb435569fe499e89235f758304e0e7198016baa351d8f5827ea0f40526ce0"
 dependencies = [
  "once_cell",
  "proc-macro-crate 1.3.1",
@@ -3107,7 +3107,7 @@ dependencies = [
  "displaydoc",
  "ibc-derive",
  "ibc-proto",
- "ics23 0.10.2",
+ "ics23",
  "num-traits 0.2.15",
  "parking_lot",
  "primitive-types",
@@ -3148,26 +3148,11 @@ dependencies = [
  "base64 0.21.0",
  "bytes",
  "flex-error",
- "ics23 0.10.2",
+ "ics23",
  "prost",
  "serde 1.0.163",
  "subtle-encoding",
  "tendermint-proto 0.33.2",
-]
-
-[[package]]
-name = "ics23"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca44b684ce1859cff746ff46f5765ab72e12e3c06f76a8356db8f9a2ecf43f17"
-dependencies = [
- "anyhow",
- "bytes",
- "hex",
- "prost",
- "ripemd",
- "sha2 0.10.6",
- "sha3",
 ]
 
 [[package]]
@@ -4115,7 +4100,7 @@ dependencies = [
  "ibc",
  "ibc-derive",
  "ibc-proto",
- "ics23 0.9.0",
+ "ics23",
  "impl-num-traits",
  "index-set",
  "itertools 0.10.5",
@@ -4180,9 +4165,9 @@ dependencies = [
  "rand 0.8.5",
  "serde 1.0.163",
  "serde_json",
- "tendermint 0.23.6",
- "tendermint-proto 0.23.6",
- "tendermint-rpc 0.23.6",
+ "tendermint 0.33.2",
+ "tendermint-proto 0.33.2",
+ "tendermint-rpc 0.33.2",
  "toml 0.5.9",
  "tracing",
 ]
@@ -6354,12 +6339,12 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=df7ec062e7c40d5e76b136064e9aaf8bd2490750#df7ec062e7c40d5e76b136064e9aaf8bd2490750"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=03c41c102e5e8540525b9dd4c304c8eb6b8d7d7d#03c41c102e5e8540525b9dd4c304c8eb6b8d7d7d"
 dependencies = [
  "blake2b-rs",
  "borsh 1.0.0-alpha.4",
  "cfg-if 1.0.0",
- "ics23 0.9.0",
+ "ics23",
  "sha2 0.9.9",
 ]
 

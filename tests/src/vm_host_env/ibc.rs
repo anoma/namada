@@ -1,15 +1,11 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
-use namada::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
 use namada::ibc::applications::transfer::coin::PrefixedCoin;
 use namada::ibc::applications::transfer::error::TokenTransferError;
 use namada::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use namada::ibc::applications::transfer::packet::PacketData;
-use namada::ibc::applications::transfer::VERSION;
-use namada::ibc::core::ics02_client::client_state::ClientState;
-use namada::ibc::core::ics02_client::client_type::ClientType;
-use namada::ibc::core::ics02_client::consensus_state::ConsensusState;
+use namada::ibc::applications::transfer::{ack_success_b64, VERSION};
 use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
 use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
 use namada::ibc::core::ics02_client::msgs::upgrade_client::MsgUpgradeClient;
@@ -21,6 +17,9 @@ use namada::ibc::core::ics03_connection::msgs::conn_open_confirm::MsgConnectionO
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
 use namada::ibc::core::ics03_connection::msgs::conn_open_try::MsgConnectionOpenTry;
 use namada::ibc::core::ics03_connection::version::Version as ConnVersion;
+use namada::ibc::core::ics04_channel::acknowledgement::{
+    AcknowledgementStatus, StatusValue,
+};
 use namada::ibc::core::ics04_channel::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
@@ -39,14 +38,12 @@ pub use namada::ibc::core::ics24_host::identifier::{
     ChannelId, ClientId, ConnectionId, PortId,
 };
 use namada::ibc::core::timestamp::Timestamp;
-use namada::ibc::mock::client_state::{MockClientState, MOCK_CLIENT_TYPE};
+use namada::ibc::mock::client_state::{client_type, MockClientState};
 use namada::ibc::mock::consensus_state::MockConsensusState;
 use namada::ibc::mock::header::MockHeader;
 use namada::ibc::Height;
 use namada::ibc_proto::google::protobuf::Any;
-use namada::ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
-use namada::ibc_proto::ics23::CommitmentProof;
 use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::gas::VpGasMeter;
 pub use namada::ledger::ibc::storage::{
@@ -294,8 +291,7 @@ pub fn init_storage() -> (Address, Address) {
 }
 
 pub fn client_id() -> ClientId {
-    let (client_state, _) = dummy_client();
-    ClientId::new(client_state.client_type(), 0).expect("invalid client ID")
+    ClientId::new(client_type(), 0).expect("invalid client ID")
 }
 
 pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
@@ -305,12 +301,12 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     // client state
     let client_id = client_id();
     let key = client_state_key(&client_id);
-    let bytes = client_state.into_box().encode_vec();
+    let bytes = Protobuf::<Any>::encode_vec(&client_state);
     writes.insert(key, bytes);
     // consensus state
     let height = client_state.latest_height();
     let key = consensus_state_key(&client_id, height);
-    let bytes = consensus_state.into_box().encode_vec();
+    let bytes = Protobuf::<Any>::encode_vec(&consensus_state);
     writes.insert(key, bytes);
     // client update time
     let key = client_update_timestamp_key(&client_id);
@@ -324,10 +320,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
             .unwrap();
         header.time
     });
-    let bytes = TmTime::try_from(time)
-        .unwrap()
-        .encode_vec()
-        .expect("encoding failed");
+    let bytes = TmTime::try_from(time).unwrap().encode_vec();
     writes.insert(key, bytes);
     // client update height
     let key = client_update_height_key(&client_id);
@@ -346,7 +339,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
 }
 
 fn dummy_client() -> (MockClientState, MockConsensusState) {
-    let height = Height::new(0, 1).expect("invalid height");
+    let height = Height::new(0, 1).unwrap();
     let header = MockHeader {
         height,
         timestamp: Timestamp::now(),
@@ -422,7 +415,7 @@ pub fn msg_create_client() -> MsgCreateClient {
 }
 
 pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
-    let height = Height::new(0, 2).expect("invalid height");
+    let height = Height::new(0, 2).unwrap();
     let header = MockHeader {
         height,
         timestamp: Timestamp::now(),
@@ -430,37 +423,25 @@ pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
     .into();
     MsgUpdateClient {
         client_id,
-        header,
+        client_message: header,
         signer: "test".to_string().into(),
     }
 }
 
 pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
-    let height = Height::new(0, 1).expect("invalid height");
-    let header = MockHeader {
-        height,
-        timestamp: Timestamp::now(),
-    };
-    let client_state = MockClientState::new(header).into();
-    let consensus_state = MockConsensusState::new(header).into();
-    let proof_upgrade_client = MerkleProof {
-        proofs: vec![CommitmentProof { proof: None }],
-    };
-    let proof_upgrade_consensus_state = MerkleProof {
-        proofs: vec![CommitmentProof { proof: None }],
-    };
+    let (client_state, consensus_state) = dummy_client();
     MsgUpgradeClient {
         client_id,
-        client_state,
-        consensus_state,
-        proof_upgrade_client,
-        proof_upgrade_consensus_state,
+        upgraded_client_state: client_state.into(),
+        upgraded_consensus_state: consensus_state.into(),
+        proof_upgrade_client: dummy_proof(),
+        proof_upgrade_consensus_state: dummy_proof(),
         signer: "test".to_string().into(),
     }
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
-    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string()).unwrap();
+    let client_type = client_type();
     let counterparty_client_id = ClientId::new(client_type, 42).unwrap();
     let commitment_prefix =
         CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
@@ -486,17 +467,18 @@ pub fn msg_connection_open_try(
     #[allow(deprecated)]
     RawMsgConnectionOpenTry {
         client_id: client_id.as_str().to_string(),
+        previous_connection_id: ConnectionId::default().to_string(),
         client_state: Some(client_state),
         counterparty: Some(dummy_connection_counterparty().into()),
         delay_period: 0,
         counterparty_versions: vec![ConnVersion::default().into()],
-        proof_init: dummy_proof().into(),
         proof_height: Some(dummy_proof_height().into()),
+        proof_init: dummy_proof().into(),
+        proof_client: dummy_proof().into(),
         proof_consensus: dummy_proof().into(),
         consensus_height: Some(consensus_height.into()),
-        proof_client: dummy_proof().into(),
         signer: "test".to_string(),
-        previous_connection_id: ConnectionId::default().to_string(),
+        host_consensus_state_proof: dummy_proof().into(),
     }
     .try_into()
     .expect("invalid message")
@@ -519,6 +501,7 @@ pub fn msg_connection_open_ack(
         consensus_height_of_a_on_b: consensus_height,
         version: ConnVersion::default(),
         signer: "test".to_string().into(),
+        proof_consensus_state_of_a: None,
     }
 }
 
@@ -542,7 +525,7 @@ fn dummy_proof_height() -> Height {
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
-    let client_type = ClientType::new(MOCK_CLIENT_TYPE.to_string()).unwrap();
+    let client_type = client_type();
     let client_id = ClientId::new(client_type, 42).expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
     let commitment_prefix =
@@ -690,10 +673,10 @@ pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
 }
 
 pub fn msg_packet_ack(packet: Packet) -> MsgAcknowledgement {
-    let packet_ack = TokenTransferAcknowledgement::success();
+    let packet_ack = AcknowledgementStatus::success(ack_success_b64()).into();
     MsgAcknowledgement {
         packet,
-        acknowledgement: packet_ack.into(),
+        acknowledgement: packet_ack,
         proof_acked_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
         signer: "test".to_string().into(),
@@ -791,8 +774,11 @@ pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
     token::balance_key(&ibc_token, owner)
 }
 
-pub fn transfer_ack_with_error() -> TokenTransferAcknowledgement {
-    TokenTransferAcknowledgement::Error(
-        TokenTransferError::PacketDataDeserialization.to_string(),
+pub fn transfer_ack_with_error() -> AcknowledgementStatus {
+    AcknowledgementStatus::error(
+        StatusValue::new(
+            TokenTransferError::PacketDataDeserialization.to_string(),
+        )
+        .expect("Empty message"),
     )
 }

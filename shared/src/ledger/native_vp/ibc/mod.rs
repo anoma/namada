@@ -19,6 +19,7 @@ use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
 
+use crate::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::parameters::read_epoch_duration_parameter;
@@ -103,7 +104,7 @@ where
 
         let mut actions = IbcActions::new(ctx.clone());
         let module = TransferModule::new(ctx.clone());
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -145,7 +146,7 @@ where
         actions.set_validation_params(self.validation_params()?);
 
         let module = TransferModule::new(ctx);
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 
@@ -160,7 +161,8 @@ where
         let unbonding_period_secs =
             pipeline_len * epoch_duration.min_duration.0;
         Ok(ValidationParams {
-            chain_id: chain_id.into(),
+            chain_id: IbcChainId::new(&chain_id, 0)
+                .map_err(|e| Error::IbcAction(ActionError::ChainId(e)))?,
             proof_specs: proof_specs.into(),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
             upgrade_path: Vec::new(),
