@@ -9,6 +9,7 @@ use crate::ledger::storage::{DBIter, Storage, StorageHasher, DB};
 use crate::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use crate::ledger::{gas, parameters, storage_api};
 use crate::types::address::Address;
+use crate::types::hash::Hash;
 use crate::types::storage::{self, BlockHeight};
 use crate::types::time::DateTimeUtc;
 
@@ -55,6 +56,19 @@ where
             storage,
         }
     }
+
+    /// Check if the given tx hash has already been processed
+    pub fn has_replay_protection_entry(
+        &self,
+        hash: &Hash,
+    ) -> Result<bool, super::Error> {
+        if let Some(present) = self.write_log.has_replay_protection_entry(hash)
+        {
+            return Ok(present);
+        }
+
+        self.storage.has_replay_protection_entry(hash)
+    }
 }
 
 /// Common trait for [`WlStorage`] and [`TempWlStorage`], used to implement
@@ -78,6 +92,12 @@ pub trait WriteLogAndStorage {
     /// reference to `WriteLog` when in need of both (avoids complain from the
     /// borrow checker)
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>);
+
+    /// Write the provided tx hash to storage.
+    fn write_tx_hash(
+        &mut self,
+        hash: Hash,
+    ) -> crate::ledger::storage::write_log::Result<()>;
 }
 
 impl<D, H> WriteLogAndStorage for WlStorage<D, H>
@@ -103,6 +123,13 @@ where
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
         (&mut self.write_log, &self.storage)
     }
+
+    fn write_tx_hash(
+        &mut self,
+        hash: Hash,
+    ) -> crate::ledger::storage::write_log::Result<()> {
+        self.write_log.write_tx_hash(hash)
+    }
 }
 
 impl<D, H> WriteLogAndStorage for TempWlStorage<'_, D, H>
@@ -127,6 +154,13 @@ where
 
     fn split_borrow(&mut self) -> (&mut WriteLog, &Storage<Self::D, Self::H>) {
         (&mut self.write_log, (self.storage))
+    }
+
+    fn write_tx_hash(
+        &mut self,
+        hash: Hash,
+    ) -> crate::ledger::storage::write_log::Result<()> {
+        self.write_log.write_tx_hash(hash)
     }
 }
 
@@ -220,6 +254,14 @@ where
             tracing::info!("Began a new epoch {}", self.storage.block.epoch);
         }
         Ok(new_epoch)
+    }
+
+    /// Delete the provided transaction's hash from storage.
+    pub fn delete_tx_hash(
+        &mut self,
+        hash: Hash,
+    ) -> crate::ledger::storage::write_log::Result<()> {
+        self.write_log.delete_tx_hash(hash)
     }
 }
 
