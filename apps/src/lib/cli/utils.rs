@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
+use data_encoding::HEXLOWER_PERMISSIVE;
+use namada::eth_bridge::ethers::core::k256::elliptic_curve::SecretKey as Secp256k1Sk;
+use namada::eth_bridge::ethers::signers::{Signer, Wallet};
 
 use super::args;
 use super::context::{Context, FromContext};
@@ -361,4 +364,21 @@ pub fn safe_exit(_: i32) -> ! {
     let _ = std::io::stderr().lock().flush();
 
     panic!("Test failed because the client exited unexpectedly.")
+}
+
+/// Load an Ethereum wallet from the environment.
+///
+/// If no chain id is provided, Ethereum main net is assumed.
+#[allow(dead_code)]
+pub fn get_eth_signer_from_env(chain_id: Option<u64>) -> Option<impl Signer> {
+    const RELAYER_KEY: &str = "NAMADA_RELAYER_KEY";
+
+    let relayer_key = std::env::var(RELAYER_KEY).ok()?;
+    let relayer_key = HEXLOWER_PERMISSIVE.decode(relayer_key.as_ref()).ok()?;
+    let relayer_key = Secp256k1Sk::from_slice(&relayer_key).ok()?;
+
+    let wallet: Wallet<_> = relayer_key.into();
+    let wallet = wallet.with_chain_id(chain_id.unwrap_or(1));
+
+    Some(wallet)
 }
