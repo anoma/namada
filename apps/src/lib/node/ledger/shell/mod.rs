@@ -947,8 +947,7 @@ where
             .write_tx_hash(wrapper_hash)
             .map_err(|e| Error::ReplayAttempt(e.to_string()))?;
 
-        let inner_tx_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_tx_hash = wrapper.raw_header_hash();
         if temp_wl_storage
             .has_replay_protection_entry(&inner_tx_hash)
             .expect("Error while checking inner tx hash key in storage")
@@ -1249,13 +1248,11 @@ where
                 }
 
                 // Replay protection check
-                let mut inner_tx = tx;
-                inner_tx.update_header(TxType::Raw);
-                let inner_tx_hash = &inner_tx.header_hash();
+                let inner_tx_hash = tx.raw_header_hash();
                 if self
                     .wl_storage
                     .storage
-                    .has_replay_protection_entry(inner_tx_hash)
+                    .has_replay_protection_entry(&tx.raw_header_hash())
                     .expect("Error while checking inner tx hash key in storage")
                 {
                     response.code = ErrorCodes::ReplayTx.into();
