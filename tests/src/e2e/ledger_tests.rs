@@ -1049,13 +1049,16 @@ fn invalid_transactions() -> Result<()> {
 /// PoS bonding, unbonding and withdrawal tests. In this test we:
 ///
 /// 1. Run the ledger node with shorter epochs for faster progression
-/// 2. Submit a self-bond for the genesis validator
-/// 3. Submit a delegation to the genesis validator
-/// 4. Submit an unbond of the self-bond
-/// 5. Submit an unbond of the delegation
-/// 6. Wait for the unbonding epoch
-/// 7. Submit a withdrawal of the self-bond
-/// 8. Submit a withdrawal of the delegation
+/// 2. Submit a self-bond for the first genesis validator
+/// 3. Submit a delegation to the first genesis validator
+/// 4. Submit a re-delegation from the first to the second genesis validator
+/// 5. Submit an unbond of the self-bond
+/// 6. Submit an unbond of the delegation from the first validator
+/// 7. Submit an unbond of the re-delegation from the second validator
+/// 8. Wait for the unbonding epoch
+/// 9. Submit a withdrawal of the self-bond
+/// 10. Submit a withdrawal of the delegation
+/// 11. Submit an withdrawal of the re-delegation
 #[test]
 fn pos_bonds() -> Result<()> {
     let pipeline_len = 2;
@@ -1073,11 +1076,17 @@ fn pos_bonds() -> Result<()> {
                 unbonding_len,
                 ..genesis.pos_params
             };
-            GenesisConfig {
+            let genesis = GenesisConfig {
                 parameters,
                 pos_params,
                 ..genesis
-            }
+            };
+            let mut genesis =
+                setup::set_validators(2, genesis, default_port_offset);
+            // Remove stake from the 2nd validator so chain can run with a
+            // single node
+            genesis.validator.get_mut("validator-1").unwrap().tokens = None;
+            genesis
         },
         None,
     )?;
@@ -1091,13 +1100,13 @@ fn pos_bonds() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let _bg_ledger =
+    let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
 
-    let validator_one_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
-    // 2. Submit a self-bond for the genesis validator
+    // 2. Submit a self-bond for the first genesis validator
     let tx_args = vec![
         "bond",
         "--validator",
@@ -1107,7 +1116,7 @@ fn pos_bonds() -> Result<()> {
         "--signing-keys",
         "validator-0-account-key",
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
@@ -1115,7 +1124,7 @@ fn pos_bonds() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 3. Submit a delegation to the genesis validator
+    // 3. Submit a delegation to the first genesis validator
     let tx_args = vec![
         "bond",
         "--validator",
@@ -1127,14 +1136,35 @@ fn pos_bonds() -> Result<()> {
         "--signing-keys",
         BERTHA_KEY,
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 4. Submit an unbond of the self-bond
+    // 4. Submit a re-delegation from the first to the second genesis validator
+    let tx_args = vec![
+        "redelegate",
+        "--source-validator",
+        "validator-0",
+        "--destination-validator",
+        "validator-1",
+        "--owner",
+        BERTHA,
+        "--amount",
+        "2500.0",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 5. Submit an unbond of the self-bond
     let tx_args = vec![
         "unbond",
         "--validator",
@@ -1144,7 +1174,7 @@ fn pos_bonds() -> Result<()> {
         "--signing-keys",
         "validator-0-account-key",
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
@@ -1152,7 +1182,7 @@ fn pos_bonds() -> Result<()> {
         .exp_string("Amount 5100.000000 withdrawable starting from epoch ")?;
     client.assert_success();
 
-    // 5. Submit an unbond of the delegation
+    // 6. Submit an unbond of the delegation from the first validator
     let tx_args = vec![
         "unbond",
         "--validator",
@@ -1160,22 +1190,41 @@ fn pos_bonds() -> Result<()> {
         "--source",
         BERTHA,
         "--amount",
-        "3200.",
+        "1600.",
         "--signing-keys",
         BERTHA_KEY,
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 3200.000000 withdrawable starting from epoch ";
+    let expected = "Amount 1600.000000 withdrawable starting from epoch ";
+    let _ = client.exp_regex(&format!("{expected}.*\n"))?;
+    client.assert_success();
+
+    // 7. Submit an unbond of the re-delegation from the second validator
+    let tx_args = vec![
+        "unbond",
+        "--validator",
+        "validator-1",
+        "--source",
+        BERTHA,
+        "--amount",
+        "1600.",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let expected = "Amount 1600.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched.trim().split_once(expected).unwrap().1;
     let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
     client.assert_success();
 
-    // 6. Wait for the delegation withdrawable epoch (the self-bond was unbonded
+    // 8. Wait for the delegation withdrawable epoch (the self-bond was unbonded
     // before it)
-    let epoch = get_epoch(&test, &validator_one_rpc)?;
+    let epoch = get_epoch(&test, &validator_0_rpc)?;
 
     println!(
         "Current epoch: {}, earliest epoch for withdrawal: {}",
@@ -1190,13 +1239,13 @@ fn pos_bonds() -> Result<()> {
                 delegation_withdrawable_epoch
             );
         }
-        let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
+        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
         if epoch >= delegation_withdrawable_epoch {
             break;
         }
     }
 
-    // 7. Submit a withdrawal of the self-bond
+    // 9. Submit a withdrawal of the self-bond
     let tx_args = vec![
         "withdraw",
         "--validator",
@@ -1204,7 +1253,7 @@ fn pos_bonds() -> Result<()> {
         "--signing-keys",
         "validator-0-account-key",
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
@@ -1212,7 +1261,7 @@ fn pos_bonds() -> Result<()> {
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    // 8. Submit a withdrawal of the delegation
+    // 10. Submit a withdrawal of the delegation
     let tx_args = vec![
         "withdraw",
         "--validator",
@@ -1222,12 +1271,30 @@ fn pos_bonds() -> Result<()> {
         "--signing-keys",
         BERTHA_KEY,
         "--node",
-        &validator_one_rpc,
+        &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
+
+    // 11. Submit an withdrawal of the re-delegation
+    let tx_args = vec![
+        "withdraw",
+        "--validator",
+        "validator-1",
+        "--source",
+        BERTHA,
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
     Ok(())
 }
 
@@ -3246,6 +3313,8 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
         .unwrap();
     println!("\n{res}\n");
+    // Wait to commit a block
+    validator_1.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_validator_1 = validator_1.background();
 
     let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
@@ -3255,9 +3324,6 @@ fn double_signing_gets_slashed() -> Result<()> {
         + 1u64;
 
     // Query slashes
-    // let tx_args = ["slashes", "--node", &validator_one_rpc];
-    // let client = run!(test, Bin::Client, tx_args, Some(40))?;
-
     let mut client = run!(
         test,
         Bin::Client,

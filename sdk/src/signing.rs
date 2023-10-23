@@ -355,7 +355,7 @@ pub async fn wrap_tx<'a, N: Namada<'a>>(
             if !args.force {
                 return Err(e);
             } else {
-                token::Amount::default()
+                token::Amount::zero()
             }
         }
     };

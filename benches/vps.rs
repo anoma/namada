@@ -277,7 +277,7 @@ fn vp_implicit(c: &mut Criterion) {
             shell.commit();
         }
 
-        if bench_name == "transfer" {
+        if bench_name == "transfer" || bench_name == "pos" {
             // Transfer some tokens to the implicit address
             shell.execute_tx(&received_transfer);
             shell.wl_storage.commit_tx();

@@ -11,6 +11,7 @@ use num_integer::Integer;
 use num_traits::CheckedMul;
 use uint::construct_uint;
 
+use super::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::types::token;
 use crate::types::token::{Amount, AmountParseError, MaspDenom};
 
@@ -337,6 +338,22 @@ impl I256 {
             Err(AmountParseError::InvalidRange)
         }
     }
+
+    /// Multiply by a decimal [`Dec`] with the result rounded up.
+    #[must_use]
+    pub fn mul_ceil(&self, dec: Dec) -> Self {
+        let is_res_negative = self.is_negative() ^ dec.is_negative();
+        let tot = self.abs() * dec.0.abs();
+        let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
+        let floor_div = tot / denom;
+        let rem = tot % denom;
+        let abs_res = Self(if !rem.is_zero() && !is_res_negative {
+            floor_div + Uint::from(1_u64)
+        } else {
+            floor_div
+        });
+        if is_res_negative { -abs_res } else { abs_res }
+    }
 }
 
 impl From<u64> for I256 {
@@ -554,6 +571,8 @@ impl TryFrom<I256> for i128 {
 
 #[cfg(test)]
 mod test_uint {
+    use std::str::FromStr;
+
     use super::*;
 
     /// Test that dividing two [`Uint`]s with the specified precision
@@ -709,5 +728,21 @@ mod test_uint {
 
         let amount: Result<Uint, _> = serde_json::from_str(r#""1000000000.2""#);
         assert!(amount.is_err());
+    }
+
+    #[test]
+    fn test_i256_mul_ceil() {
+        let one = I256::from(1);
+        let two = I256::from(2);
+        let dec = Dec::from_str("0.25").unwrap();
+        assert_eq!(one.mul_ceil(dec), one);
+        assert_eq!(two.mul_ceil(dec), one);
+        assert_eq!(I256::from(4).mul_ceil(dec), one);
+        assert_eq!(I256::from(5).mul_ceil(dec), two);
+
+        assert_eq!((-one).mul_ceil(-dec), one);
+
+        assert_eq!((-one).mul_ceil(dec), I256::zero());
+        assert_eq!(one.mul_ceil(-dec), I256::zero());
     }
 }
