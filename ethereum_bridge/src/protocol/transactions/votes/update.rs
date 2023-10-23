@@ -376,6 +376,7 @@ mod tests {
     #[test]
     fn test_apply_duplicate_votes() -> Result<()> {
         let mut wl_storage = TestWlStorage::default();
+        test_utils::init_default_storage(&mut wl_storage);
 
         let validator = address::testing::established_address_1();
         let already_voted_height = BlockHeight(100);
@@ -411,6 +412,7 @@ mod tests {
     #[test]
     fn test_calculate_already_seen() -> Result<()> {
         let mut wl_storage = TestWlStorage::default();
+        test_utils::init_default_storage(&mut wl_storage);
         let event = default_event();
         let keys = vote_tallies::Keys::from(&event);
         let tally_pre = TallyParams {
