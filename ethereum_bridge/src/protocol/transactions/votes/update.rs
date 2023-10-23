@@ -263,6 +263,7 @@ mod tests {
                     votes,
                     total_stake,
                 } = self;
+
                 let keys = vote_tallies::Keys::from(event);
                 let seen_voting_power: token::Amount = votes
                     .iter()

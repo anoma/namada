@@ -235,7 +235,7 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::types::storage::Key;
     use namada_core::types::vote_extensions::bridge_pool_roots;
     use namada_core::types::voting_power::FractionalVotingPower;
-    use namada_proof_of_stake::parameters::PosParams;
+    use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::write_pos_params;
 
     use super::*;
@@ -754,11 +754,11 @@ mod test_apply_bp_roots_to_storage {
         );
 
         // update the pos params
-        let params = PosParams {
+        let params = OwnedPosParams {
             pipeline_len: 1,
             ..Default::default()
         };
-        write_pos_params(&mut wl_storage, params).expect("Test failed");
+        write_pos_params(&mut wl_storage, &params).expect("Test failed");
 
         // insert validators 2 and 3 at epoch 1
         test_utils::append_validators_to_storage(

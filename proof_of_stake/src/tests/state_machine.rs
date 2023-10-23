@@ -165,6 +165,7 @@ enum Transition {
     InitValidator {
         address: Address,
         consensus_key: PublicKey,
+        protocol_key: PublicKey,
         eth_cold_key: PublicKey,
         eth_hot_key: PublicKey,
         commission_rate: Dec,
@@ -216,9 +217,9 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
-        crate::init_genesis(
+        crate::test_init_genesis(
             &mut s,
-            &initial_state.params,
+            initial_state.params.owned.clone(),
             initial_state.genesis_validators.clone().into_iter(),
             initial_state.epoch,
         )
@@ -254,6 +255,7 @@ impl StateMachineTest for ConcretePosState {
             Transition::InitValidator {
                 address,
                 consensus_key,
+                protocol_key,
                 eth_cold_key,
                 eth_hot_key,
                 commission_rate,
@@ -267,6 +269,7 @@ impl StateMachineTest for ConcretePosState {
                     params: &params,
                     address: &address,
                     consensus_key: &consensus_key,
+                    protocol_key: &protocol_key,
                     eth_cold_key: &eth_cold_key,
                     eth_hot_key: &eth_hot_key,
                     current_epoch,
@@ -1979,6 +1982,7 @@ impl ReferenceStateMachine for AbstractPosState {
         tracing::debug!("\nInitializing abstract state machine");
         arb_params_and_genesis_validators(Some(8), 8..10)
             .prop_map(|(params, genesis_validators)| {
+                let params = params.with_default_gov_params();
                 let epoch = Epoch::default();
                 let mut state = Self {
                     epoch,
@@ -2013,6 +2017,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     address,
                     tokens,
                     consensus_key: _,
+                    protocol_key: _,
                     eth_cold_key: _,
                     eth_hot_key: _,
                     commission_rate: _,
@@ -2156,6 +2161,7 @@ impl ReferenceStateMachine for AbstractPosState {
             1 => (
                 address::testing::arb_established_address(),
                 key::testing::arb_common_keypair(),
+                key::testing::arb_common_keypair(),
                 key::testing::arb_common_secp256k1_keypair(),
                 key::testing::arb_common_secp256k1_keypair(),
                 arb_rate(),
@@ -2165,6 +2171,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     |(
                         addr,
                         consensus_key,
+                        protocol_key,
                         eth_hot_key,
                         eth_cold_key,
                         commission_rate,
@@ -2173,6 +2180,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         Transition::InitValidator {
                             address: Address::Established(addr),
                             consensus_key: consensus_key.to_public(),
+                            protocol_key: protocol_key.to_public(),
                             eth_hot_key: eth_hot_key.to_public(),
                             eth_cold_key: eth_cold_key.to_public(),
                             commission_rate,
@@ -2311,6 +2319,7 @@ impl ReferenceStateMachine for AbstractPosState {
             Transition::InitValidator {
                 address,
                 consensus_key: _,
+                protocol_key: _,
                 eth_cold_key: _,
                 eth_hot_key: _,
                 commission_rate: _,
@@ -2743,6 +2752,7 @@ impl ReferenceStateMachine for AbstractPosState {
             Transition::InitValidator {
                 address,
                 consensus_key: _,
+                protocol_key: _,
                 eth_cold_key: _,
                 eth_hot_key: _,
                 commission_rate: _,
