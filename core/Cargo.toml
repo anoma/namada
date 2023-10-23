@@ -25,11 +25,6 @@ ferveo-tpke = [
 wasm-runtime = [
   "rayon",
 ]
-# secp256k1 key signing, disabled in WASM build by default as it bloats the 
-# build a lot
-secp256k1-sign = [
-  "libsecp256k1/hmac",
-]
 
 abciplus = [
   "ibc",
@@ -78,7 +73,7 @@ ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
 itertools.workspace = true
-libsecp256k1.workspace = true
+k256.workspace = true
 masp_primitives.workspace = true
 num256.workspace = true
 num-integer = "0.1.45"
@@ -104,7 +99,6 @@ zeroize.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true
-libsecp256k1 = {workspace = true, features = ["hmac"]}
 pretty_assertions.workspace = true
 proptest.workspace = true
 rand.workspace = true
