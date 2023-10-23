@@ -30,7 +30,7 @@ use super::block_alloc::states::{
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
-use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
+use crate::facade::tendermint_proto::v0_37::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
@@ -310,11 +310,11 @@ where
                             ));
                             tx
                         },
-                    }.to_bytes()
+                    }.to_bytes().into()
                 },
             )
             // TODO: make sure all decrypted txs are accepted
-            .take_while(|tx_bytes| {
+            .take_while(|tx_bytes: &TxBytes| {
                 alloc.try_alloc(&tx_bytes[..]).map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_resource_left: bin_space_left } => {

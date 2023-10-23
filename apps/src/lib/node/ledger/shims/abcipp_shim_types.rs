@@ -7,8 +7,8 @@ pub mod shim {
 
     use super::{Request as Req, Response as Resp};
     #[cfg(not(feature = "abcipp"))]
-    use crate::facade::tendermint_proto::abci::ResponseEndBlock;
-    use crate::facade::tendermint_proto::abci::{
+    use crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock;
+    use crate::facade::tendermint_proto::v0_37::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
@@ -25,7 +25,7 @@ pub mod shim {
     };
     use crate::node::ledger::shell;
 
-    pub type TxBytes = Vec<u8>;
+    pub type TxBytes = prost::bytes::Bytes;
 
     #[derive(Error, Debug)]
     #[allow(clippy::large_enum_variant)]
@@ -185,7 +185,7 @@ pub mod shim {
         use std::convert::TryFrom;
 
         #[cfg(not(feature = "abcipp"))]
-        use namada::tendermint_proto::abci::RequestBeginBlock;
+        use namada::tendermint_proto::v0_37::abci::RequestBeginBlock;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
@@ -196,7 +196,7 @@ pub mod shim {
 
         use super::VoteInfo;
         #[cfg(not(feature = "abcipp"))]
-        use crate::facade::tendermint_proto::abci::Misbehavior as Evidence;
+        use crate::facade::tendermint_proto::v0_37::abci::Misbehavior as Evidence;
 
         pub struct VerifyHeader;
 
@@ -271,12 +271,12 @@ pub mod shim {
         #[cfg(feature = "abcipp")]
         use namada::ledger::events::EventLevel;
 
-        use crate::facade::tendermint_proto::abci::{
+        use crate::facade::tendermint_proto::v0_37::abci::{
             Event as TmEvent, ResponsePrepareProposal, ResponseProcessProposal,
             ValidatorUpdate,
         };
         #[cfg(not(feature = "abcipp"))]
-        use crate::facade::tendermint_proto::types::ConsensusParams;
+        use crate::facade::tendermint_proto::v0_37::types::ConsensusParams;
         #[cfg(feature = "abcipp")]
         use crate::facade::tendermint_proto::{
             abci::{ExecTxResult, ResponseFinalizeBlock},
@@ -415,7 +415,7 @@ pub mod shim {
 
         #[cfg(not(feature = "abcipp"))]
         impl From<FinalizeBlock>
-            for crate::facade::tendermint_proto::abci::ResponseEndBlock
+            for crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock
         {
             fn from(resp: FinalizeBlock) -> Self {
                 Self {

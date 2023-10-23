@@ -30,7 +30,7 @@ use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
 use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::{ethereum_bridge, TendermintMode};
-use crate::facade::tendermint_proto::abci::CheckTxType;
+use crate::facade::tendermint_proto::v0_37::abci::CheckTxType;
 use crate::facade::tower_abci::{response, split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::ethereum_oracle as oracle;

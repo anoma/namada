@@ -139,7 +139,7 @@ tonic = "0.8.3"
 tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-tower-abci = "0.10.0"
+tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "f275fffe1d4e167caa7c8d1958bc312bffa39d2c"}
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"

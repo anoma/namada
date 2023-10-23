@@ -303,7 +303,7 @@ pub async fn broadcast_tx<'a>(
     let response = lift_rpc_error(
         context
             .client()
-            .broadcast_tx_sync(tx.to_bytes().into())
+            .broadcast_tx_sync(tx.to_bytes())
             .await,
     )?;
 

@@ -58,7 +58,7 @@ use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
-use crate::facade::tendermint::merkle::proof::Proof;
+use crate::facade::tendermint::merkle::proof::ProofOps;
 use crate::facade::tendermint_rpc::error::Error as TError;
 
 /// Query the status of a given transaction.
@@ -2336,7 +2336,7 @@ pub async fn query_storage_value_bytes<
     key: &storage::Key,
     height: Option<BlockHeight>,
     prove: bool,
-) -> (Option<Vec<u8>>, Option<Proof>) {
+) -> (Option<Vec<u8>>, Option<ProofOps>) {
     namada_sdk::rpc::query_storage_value_bytes(client, key, height, prove)
         .await
         .unwrap()

@@ -33,7 +33,7 @@ use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
 
 use super::governance::execute_governance_proposals;
 use super::*;
-use crate::facade::tendermint_proto::abci::{
+use crate::facade::tendermint_proto::v0_37::abci::{
     Misbehavior as Evidence, VoteInfo,
 };
 use crate::node::ledger::shell::stats::InternalStats;
@@ -960,7 +960,7 @@ fn pos_votes_from_abci(
                  signed_last_block,
              }| {
                 if let Some(
-                    crate::facade::tendermint_proto::abci::Validator {
+                    crate::facade::tendermint_proto::v0_37::abci::Validator {
                         address,
                         power,
                     },
@@ -1070,7 +1070,7 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::facade::tendermint_proto::abci::{
+    use crate::facade::tendermint_proto::v0_37::abci::{
         Misbehavior, Validator, VoteInfo,
     };
     use crate::node::ledger::oracle::control::Command;

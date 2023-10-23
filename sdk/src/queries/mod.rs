@@ -209,6 +209,7 @@ use tendermint_rpc::endpoint::{
 use tendermint_rpc::query::Query;
 use tendermint_rpc::{Error as RpcError, Order};
 
+use crate::tendermint::abci::response::Info;
 use crate::tendermint::block::Height;
 
 /// A client with async request dispatcher method, which can be used to invoke
@@ -243,7 +244,7 @@ pub trait Client {
     ) -> Result<EncodedResponseQuery, Self::Error>;
 
     /// `/abci_info`: get information about the ABCI application.
-    async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
+    async fn abci_info(&self) -> Result<Info, RpcError> {
         Ok(self.perform(abci_info::Request).await?.response)
     }
 
@@ -251,7 +252,7 @@ pub trait Client {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: crate::tendermint::abci::Transaction,
+        tx: impl Into<Vec<u8>>,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.perform(
@@ -320,7 +321,7 @@ pub trait Client {
     /// `/abci_query`: query the ABCI application
     async fn abci_query<V>(
         &self,
-        path: Option<crate::tendermint::abci::Path>,
+        path: Option<String>,
         data: V,
         height: Option<Height>,
         prove: bool,
@@ -423,7 +424,7 @@ pub trait Client {
     }
 
     /// Perform a request against the RPC endpoint
-    async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
+    async fn perform<R>(&self, request: R) -> Result<R::Output, RpcError>
     where
         R: tendermint_rpc::SimpleRequest;
 }
@@ -463,11 +464,11 @@ impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
                 info: response.info,
                 proof: response.proof,
             }),
-            Code::Err(code) => Err(Error::Query(response.info, code)),
+            Code::Err(code) => Err(Error::Query(response.info, code.into())),
         }
     }
 
-    async fn perform<R>(&self, request: R) -> Result<R::Response, RpcError>
+    async fn perform<R>(&self, request: R) -> Result<R::Output, RpcError>
     where
         R: tendermint_rpc::SimpleRequest,
     {

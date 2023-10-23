@@ -26,7 +26,7 @@ use super::abcipp_shim_types::shim::{Error, Request, Response};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
 #[cfg(not(feature = "abcipp"))]
-use crate::facade::tendermint_proto::abci::{
+use crate::facade::tendermint_proto::v0_37::abci::{
     RequestBeginBlock, ResponseDeliverTx,
 };
 #[cfg(not(feature = "abcipp"))]

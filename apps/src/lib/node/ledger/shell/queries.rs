@@ -57,7 +57,7 @@ where
         };
         match result {
             Ok(ResponseQuery { data, info, proof }) => response::Query {
-                value: data,
+                value: data.into(),
                 info,
                 proof_ops: proof.map(Into::into),
                 ..Default::default()

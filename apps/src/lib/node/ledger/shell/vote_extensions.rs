@@ -416,7 +416,7 @@ where
         txs: &'shell [TxBytes],
     ) -> impl Iterator<Item = TxBytes> + 'shell {
         txs.iter().filter_map(move |tx_bytes| {
-            let tx = match Tx::try_from(tx_bytes.as_slice()) {
+            let tx = match Tx::try_from(tx_bytes.as_ref()) {
                 Ok(tx) => tx,
                 Err(err) => {
                     tracing::warn!(

@@ -25,8 +25,8 @@ use namada::proof_of_stake::{
     read_consensus_validator_set_addresses_with_stake,
     validator_consensus_key_handle,
 };
+use namada::tendermint::abci::response::Info;
 use namada::tendermint_proto::abci::VoteInfo;
-use namada::tendermint_rpc::endpoint::abci_info;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
@@ -612,7 +612,7 @@ impl<'a> Client for &'a MockNode {
     }
 
     /// `/abci_info`: get information about the ABCI application.
-    async fn abci_info(&self) -> Result<abci_info::AbciInfo, RpcError> {
+    async fn abci_info(&self) -> Result<Info, RpcError> {
         self.drive_mock_services_bg().await;
         let locked = self.shell.lock().unwrap();
         Ok(AbciInfo {
@@ -642,7 +642,7 @@ impl<'a> Client for &'a MockNode {
     /// from `CheckTx`.
     async fn broadcast_tx_sync(
         &self,
-        tx: namada::tendermint::abci::Transaction,
+        tx: impl Into<Vec<u8>>,
     ) -> Result<tendermint_rpc::endpoint::broadcast::tx_sync::Response, RpcError>
     {
         self.drive_mock_services_bg().await;
