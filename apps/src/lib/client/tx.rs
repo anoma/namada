@@ -6,8 +6,6 @@ use namada::core::ledger::governance::cli::offline::{
 use namada::core::ledger::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal, ProposalVote,
 };
-use namada::ledger::pos;
-use namada::proof_of_stake::parameters::PosParams;
 use namada::proto::Tx;
 use namada::types::address::{Address, ImplicitAddress};
 use namada::types::dec::Dec;
@@ -469,11 +467,7 @@ pub async fn submit_init_validator<'a>(
                 )
                 .unwrap();
 
-            let key = pos::params_key();
-            let pos_params: PosParams =
-                rpc::query_storage_value(namada.client(), &key)
-                    .await
-                    .expect("Pos parameter should be defined.");
+            let pos_params = rpc::query_pos_parameters(namada.client()).await;
 
             display_line!(namada.io(), "");
             display_line!(

@@ -11,7 +11,7 @@ pub use namada_core::types::dec::Dec;
 pub use namada_core::types::key::common;
 pub use namada_core::types::token;
 pub use namada_proof_of_stake;
-pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::parameters::{OwnedPosParams, PosParams};
 pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
 pub use namada_proof_of_stake::{staking_token_address, types};
@@ -42,7 +42,7 @@ pub fn into_tm_voting_power(
 /// Initialize storage in the genesis block.
 pub fn init_genesis_storage<S>(
     storage: &mut S,
-    params: &PosParams,
+    params: &OwnedPosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
     current_epoch: Epoch,
 ) where

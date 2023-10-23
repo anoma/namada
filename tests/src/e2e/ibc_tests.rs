@@ -53,7 +53,6 @@ use namada::ibc_proto::google::protobuf::Any;
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::{self, PosParams};
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::ledger::storage::traits::Sha256Hasher;
@@ -64,7 +63,7 @@ use namada::types::key::PublicKey;
 use namada::types::storage::{BlockHeight, Key};
 use namada::types::token::Amount;
 use namada_apps::client::rpc::{
-    query_storage_value, query_storage_value_bytes,
+    query_pos_parameters, query_storage_value, query_storage_value_bytes,
 };
 use namada_apps::client::utils::id_from_pk;
 use namada_apps::config::ethereum_bridge;
@@ -249,11 +248,8 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
     let ledger_address = TendermintAddress::from_str(&rpc).unwrap();
     let client = HttpClient::new(ledger_address).unwrap();
 
-    let key = pos::params_key();
-    let pos_params = test
-        .async_runtime()
-        .block_on(query_storage_value::<HttpClient, PosParams>(&client, &key))
-        .unwrap();
+    let pos_params =
+        test.async_runtime().block_on(query_pos_parameters(&client));
     let pipeline_len = pos_params.pipeline_len;
 
     let key = param_storage::get_epoch_duration_storage_key();

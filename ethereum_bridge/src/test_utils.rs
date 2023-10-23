@@ -6,6 +6,7 @@ use std::num::NonZeroU64;
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
+use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::token::credit_tokens;
@@ -17,7 +18,7 @@ use namada_core::types::keccak::KeccakHash;
 use namada_core::types::key::{self, protocol_pk_key, RefTo};
 use namada_core::types::storage::{BlockHeight, Key};
 use namada_core::types::token;
-use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
@@ -199,6 +200,7 @@ pub fn init_storage_with_validators(
         .map(|(address, tokens)| {
             let keys = TestValidatorKeys::generate();
             let consensus_key = keys.consensus.ref_to();
+            let protocol_key = keys.protocol.ref_to();
             let eth_cold_key = keys.eth_gov.ref_to();
             let eth_hot_key = keys.eth_bridge.ref_to();
             all_keys.insert(address.clone(), keys);
@@ -206,6 +208,7 @@ pub fn init_storage_with_validators(
                 address,
                 tokens,
                 consensus_key,
+                protocol_key,
                 eth_cold_key,
                 eth_hot_key,
                 commission_rate: Dec::new(5, 2).unwrap(),
@@ -214,9 +217,11 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
+    let gov_params = GovernanceParameters::default();
+    gov_params.init_storage(wl_storage).unwrap();
     namada_proof_of_stake::init_genesis(
         wl_storage,
-        &PosParams::default(),
+        &OwnedPosParams::default(),
         validators.into_iter(),
         0.into(),
     )
@@ -271,6 +276,7 @@ pub fn append_validators_to_storage(
         let keys = TestValidatorKeys::generate();
 
         let consensus_key = &keys.consensus.ref_to();
+        let protocol_key = &&keys.protocol.ref_to();
         let eth_cold_key = &keys.eth_gov.ref_to();
         let eth_hot_key = &keys.eth_bridge.ref_to();
 
@@ -279,6 +285,7 @@ pub fn append_validators_to_storage(
             params: &params,
             address: &validator,
             consensus_key,
+            protocol_key,
             eth_cold_key,
             eth_hot_key,
             current_epoch,

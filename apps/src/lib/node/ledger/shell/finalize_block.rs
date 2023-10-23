@@ -100,14 +100,11 @@ where
                 namada_proof_of_stake::read_pos_params(&self.wl_storage)?;
             namada_proof_of_stake::copy_validator_sets_and_positions(
                 &mut self.wl_storage,
+                &pos_params,
                 current_epoch,
                 current_epoch + pos_params.pipeline_len,
             )?;
             namada_proof_of_stake::store_total_consensus_stake(
-                &mut self.wl_storage,
-                current_epoch,
-            )?;
-            namada_proof_of_stake::purge_validator_sets_for_old_epoch(
                 &mut self.wl_storage,
                 current_epoch,
             )?;
@@ -2639,8 +2636,8 @@ mod test_finalize_block {
             ..Default::default()
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
-        params.unbonding_len = 4;
-        write_pos_params(&mut shell.wl_storage, params.clone())?;
+        params.owned.unbonding_len = 4;
+        write_pos_params(&mut shell.wl_storage, &params.owned)?;
 
         let validator_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
@@ -3029,9 +3026,9 @@ mod test_finalize_block {
             ..Default::default()
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
-        params.unbonding_len = 4;
-        params.max_validator_slots = 4;
-        write_pos_params(&mut shell.wl_storage, params.clone())?;
+        params.owned.unbonding_len = 4;
+        params.owned.max_validator_slots = 4;
+        write_pos_params(&mut shell.wl_storage, &params.owned)?;
 
         // Slash pool balance
         let nam_address = shell.wl_storage.storage.native_token.clone();
@@ -3826,6 +3823,180 @@ mod test_finalize_block {
         //         - slash_pool_balance_pre_withdraw
         //         - exp_del_withdraw_slashed_amount
         // );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_purge_validator_information() -> storage_api::Result<()> {
+        // Setup the network with pipeline_len = 2, unbonding_len = 4
+        let num_validators = 4_u64;
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators,
+            ..Default::default()
+        });
+        let mut params = read_pos_params(&shell.wl_storage).unwrap();
+        params.owned.unbonding_len = 4;
+        // params.owned.max_validator_slots = 3;
+        // params.owned.validator_stake_threshold = token::Amount::zero();
+        write_pos_params(&mut shell.wl_storage, &params.owned)?;
+
+        let max_proposal_period = params.max_proposal_period;
+        let default_past_epochs = 2;
+        let consensus_val_set_len = max_proposal_period + default_past_epochs;
+
+        let consensus_val_set =
+            namada_proof_of_stake::consensus_validator_set_handle();
+        // let below_cap_val_set =
+        //     namada_proof_of_stake::below_capacity_validator_set_handle();
+        let validator_positions =
+            namada_proof_of_stake::validator_set_positions_handle();
+        let all_validator_addresses =
+            namada_proof_of_stake::validator_addresses_handle();
+
+        let consensus_set: Vec<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+        let val1 = consensus_set[0].clone();
+        let pkh1 = get_pkh_from_address(
+            &shell.wl_storage,
+            &params,
+            val1.address,
+            Epoch::default(),
+        );
+
+        // Finalize block 1
+        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+
+        let votes = get_default_true_votes(&shell.wl_storage, Epoch::default());
+        assert!(!votes.is_empty());
+
+        let check_is_data = |storage: &WlStorage<_, _>,
+                             start: Epoch,
+                             end: Epoch| {
+            for ep in Epoch::iter_bounds_inclusive(start, end) {
+                assert!(!consensus_val_set.at(&ep).is_empty(storage).unwrap());
+                // assert!(!below_cap_val_set.at(&ep).is_empty(storage).
+                // unwrap());
+                assert!(
+                    !validator_positions.at(&ep).is_empty(storage).unwrap()
+                );
+                assert!(
+                    !all_validator_addresses.at(&ep).is_empty(storage).unwrap()
+                );
+            }
+        };
+
+        // Check that there is validator data for epochs 0 - pipeline_len
+        check_is_data(&shell.wl_storage, Epoch(0), Epoch(params.pipeline_len));
+
+        // Advance to epoch `default_past_epochs`
+        let mut current_epoch = Epoch(0);
+        for _ in 0..default_past_epochs {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        }
+        assert_eq!(shell.wl_storage.storage.block.epoch.0, default_past_epochs);
+        assert_eq!(current_epoch.0, default_past_epochs);
+
+        check_is_data(
+            &shell.wl_storage,
+            Epoch(0),
+            Epoch(params.pipeline_len + default_past_epochs),
+        );
+
+        // Advance one more epoch, which should purge the data for epoch 0 in
+        // everything except the consensus validator set
+        let votes = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
+        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        assert_eq!(current_epoch.0, default_past_epochs + 1);
+
+        check_is_data(
+            &shell.wl_storage,
+            Epoch(1),
+            Epoch(params.pipeline_len + default_past_epochs + 1),
+        );
+        assert!(
+            !consensus_val_set
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+        assert!(
+            validator_positions
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+        assert!(
+            all_validator_addresses
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+
+        // Advance to the epoch `consensus_val_set_len` + 1
+        loop {
+            assert!(
+                !consensus_val_set
+                    .at(&Epoch(0))
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+            if current_epoch.0 == consensus_val_set_len + 1 {
+                break;
+            }
+        }
+
+        assert!(
+            consensus_val_set
+                .at(&Epoch(0))
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+
+        // Advance one more epoch
+        let votes = get_default_true_votes(
+            &shell.wl_storage,
+            shell.wl_storage.storage.block.epoch,
+        );
+        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        for ep in Epoch::default().iter_range(2) {
+            assert!(
+                consensus_val_set
+                    .at(&ep)
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
+        }
+        for ep in Epoch::iter_bounds_inclusive(
+            Epoch(2),
+            current_epoch + params.pipeline_len,
+        ) {
+            assert!(
+                !consensus_val_set
+                    .at(&ep)
+                    .is_empty(&shell.wl_storage)
+                    .unwrap()
+            );
+        }
 
         Ok(())
     }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use namada::ledger::parameters::{self, Parameters};
-use namada::ledger::pos::{staking_token_address, PosParams};
+use namada::ledger::pos::{staking_token_address, OwnedPosParams};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{
@@ -395,10 +395,6 @@ where
             .unwrap();
 
             self.wl_storage
-                .write(&protocol_pk_key(addr), &validator.protocol_key)
-                .expect("Unable to set genesis user protocol public key");
-
-            self.wl_storage
                 .write(
                     &dkg_session_keys::dkg_pk_key(addr),
                     &validator.dkg_public_key,
@@ -412,7 +408,7 @@ where
         &mut self,
         staking_token: &Address,
         validators: Vec<genesis::Validator>,
-        pos_params: &PosParams,
+        pos_params: &OwnedPosParams,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         // PoS system depends on epoch being initialized. Write the total

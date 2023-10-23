@@ -24,15 +24,14 @@ pub use rev_order::ReverseOrdTokenAmount;
 
 use crate::parameters::PosParams;
 
-// TODO: add this to the spec
+// TODO: review the offsets for each epoched type!!
+
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
     LazyMap<Address, Position>,
     crate::epoched::OffsetPipelineLen,
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
-
-// TODO: check the offsets for each epoched type!!
 
 /// Epoched validator's consensus key.
 pub type ValidatorConsensusKeys = crate::epoched::Epoched<
@@ -41,18 +40,25 @@ pub type ValidatorConsensusKeys = crate::epoched::Epoched<
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
+/// Epoched validator's protocol key.
+pub type ValidatorProtocolKeys = crate::epoched::Epoched<
+    common::PublicKey,
+    crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
+>;
+
 /// Epoched validator's eth hot key.
 pub type ValidatorEthHotKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched validator's eth cold key.
 pub type ValidatorEthColdKeys = crate::epoched::Epoched<
     common::PublicKey,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched validator's state.
@@ -77,7 +83,7 @@ pub type BelowCapacityValidatorSet =
 pub type ConsensusValidatorSets = crate::epoched::NestedEpoched<
     ConsensusValidatorSet,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// Epoched below-capacity validator sets.
@@ -87,7 +93,7 @@ pub type BelowCapacityValidatorSets = crate::epoched::NestedEpoched<
     crate::epoched::OffsetDefaultNumPastEpochs,
 >;
 
-/// Epoched total consensus validator stake
+/// Epoched total consensus validator set stake
 pub type TotalConsensusStakes = crate::epoched::Epoched<
     Amount,
     crate::epoched::OffsetZero,
@@ -98,14 +104,14 @@ pub type TotalConsensusStakes = crate::epoched::Epoched<
 pub type ValidatorDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
 /// Epoched total deltas.
 pub type TotalDeltas = crate::epoched::EpochedDelta<
     token::Change,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus,
 >;
 
 /// Epoched validator commission rate
@@ -123,7 +129,7 @@ pub type Bonds = crate::epoched::EpochedDelta<
 >;
 
 /// An epoched lazy set of all known active validator addresses (consensus,
-/// below-capacity, jailed)
+/// below-capacity, below-threshold, jailed)
 pub type ValidatorAddresses = crate::epoched::NestedEpoched<
     LazySet<Address>,
     crate::epoched::OffsetPipelineLen,
@@ -141,7 +147,7 @@ pub type ValidatorSlashes = NestedMap<Address, Slashes>;
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
     ValidatorSlashes,
     crate::epoched::OffsetUnbondingLen,
-    crate::epoched::OffsetSlashProcessingLen,
+    crate::epoched::OffsetSlashProcessingLenPlus,
 >;
 
 /// Epoched validator's unbonds
@@ -311,6 +317,8 @@ pub struct GenesisValidator {
     pub tokens: token::Amount,
     /// A public key used for signing validator's consensus actions
     pub consensus_key: common::PublicKey,
+    /// A public key used for signing protocol transactions
+    pub protocol_key: common::PublicKey,
     /// An Eth bridge governance public key
     pub eth_cold_key: common::PublicKey,
     /// An Eth bridge hot signing public key used for validator set updates and
