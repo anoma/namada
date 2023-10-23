@@ -35,7 +35,6 @@ use namada::ledger::queries::RPC;
 use namada::ledger::storage::ConversionState;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address};
-use namada::types::control_flow::ProceedOrElse;
 use namada::types::hash::Hash;
 use namada::types::io::Io;
 use namada::types::key::*;
@@ -67,7 +66,7 @@ pub async fn query_tx_status<'a>(
 ) -> Event {
     rpc::query_tx_status(namada, status, deadline)
         .await
-        .proceed()
+        .unwrap()
 }
 
 /// Query and print the epoch of the last committed block
