@@ -444,7 +444,7 @@ pub fn generate_tx(
 
     if let Some(signer) = signer {
         tx.add_section(Section::Signature(Signature::new(
-            tx.sechashes(),
+            vec![tx.raw_header_hash()],
             [(0, signer.clone())].into_iter().collect(),
             None,
         )));
@@ -486,7 +486,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         .serialize_to_vec(),
     ));
     tx.add_section(Section::Signature(Signature::new(
-        tx.sechashes(),
+        vec![tx.raw_header_hash()],
         [(0, signer.clone())].into_iter().collect(),
         None,
     )));

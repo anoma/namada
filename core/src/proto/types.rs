@@ -640,6 +640,9 @@ impl CompressedSignature {
             if idx == 0 {
                 // The "zeroth" section is the header
                 targets.push(tx.header_hash());
+            } else if idx == 255 {
+                // The 255th section is the raw header
+                targets.push(tx.raw_header_hash());
             } else {
                 targets.push(tx.sections[idx as usize - 1].get_hash());
             }
@@ -1257,6 +1260,14 @@ impl Tx {
         Section::Header(self.header.clone()).get_hash()
     }
 
+    /// Gets the hash of the decrypted transaction's header
+    pub fn raw_header_hash(&self) -> crate::types::hash::Hash {
+        let mut raw_header = self.header();
+        raw_header.tx_type = TxType::Raw;
+
+        Section::Header(raw_header).get_hash()
+    }
+
     /// Get hashes of all the sections in this transaction
     pub fn sechashes(&self) -> Vec<crate::types::hash::Hash> {
         let mut hashes = vec![self.header_hash()];
@@ -1279,6 +1290,10 @@ impl Tx {
     ) -> Option<Cow<Section>> {
         if self.header_hash() == *hash {
             return Some(Cow::Owned(Section::Header(self.header.clone())));
+        } else if self.raw_header_hash() == *hash {
+            let mut header = self.header();
+            header.tx_type = TxType::Raw;
+            return Some(Cow::Owned(Section::Header(header)));
         }
         for section in &self.sections {
             if section.get_hash() == *hash {
@@ -1363,20 +1378,6 @@ impl Tx {
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
         bytes
-    }
-
-    /// Get the inner section hashes
-    pub fn inner_section_targets(&self) -> Vec<crate::types::hash::Hash> {
-        let mut sections_hashes = self
-            .sections
-            .iter()
-            .filter_map(|section| match section {
-                Section::Data(_) | Section::Code(_) => Some(section.get_hash()),
-                _ => None,
-            })
-            .collect::<Vec<crate::types::hash::Hash>>();
-        sections_hashes.sort();
-        sections_hashes
     }
 
     /// Verify that the section with the given hash has been signed by the given
@@ -1489,7 +1490,7 @@ impl Tx {
         public_keys_index_map: &AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> Vec<SignatureIndex> {
-        let targets = self.inner_section_targets();
+        let targets = vec![self.raw_header_hash()];
         let mut signatures = Vec::new();
         let section = Signature::new(
             targets,
@@ -1767,8 +1768,10 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
+        // The inner tx signer signs the Decrypted version of the Header
+        let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
-        let hashes = self.inner_section_targets();
+
         self.add_section(Section::Signature(Signature::new(
             hashes,
             account_public_keys_map.index_secret_keys(keypairs),
@@ -1784,7 +1787,7 @@ impl Tx {
     ) -> &mut Self {
         self.protocol_filter();
         let mut pk_section = Signature {
-            targets: self.inner_section_targets(),
+            targets: vec![self.raw_header_hash()],
             signatures: BTreeMap::new(),
             signer: Signer::PubKeys(vec![]),
         };
@@ -1795,7 +1798,7 @@ impl Tx {
                 // Add the signature under the given multisig address
                 let section =
                     sections.entry(addr.clone()).or_insert_with(|| Signature {
-                        targets: self.inner_section_targets(),
+                        targets: vec![self.raw_header_hash()],
                         signatures: BTreeMap::new(),
                         signer: Signer::Address(addr.clone()),
                     });
