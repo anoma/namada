@@ -74,13 +74,13 @@ pub struct TestingIo;
 
 #[async_trait::async_trait(?Send)]
 impl Io for TestingIo {
-    fn print(output: impl AsRef<str>) {
+    fn print(&self, output: impl AsRef<str>) {
         let mut testout = TESTOUT.lock().unwrap();
         testout.append(output.as_ref().as_bytes().to_vec());
         print!("{}", output.as_ref());
     }
 
-    fn println(output: impl AsRef<str>) {
+    fn println(&self, output: impl AsRef<str>) {
         let mut testout = TESTOUT.lock().unwrap();
         let mut bytes = output.as_ref().as_bytes().to_vec();
         bytes.extend_from_slice("\n".as_bytes());
@@ -89,22 +89,24 @@ impl Io for TestingIo {
     }
 
     fn write<W: std::io::Write>(
+        &self,
         _: W,
         output: impl AsRef<str>,
     ) -> std::io::Result<()> {
-        Self::print(output);
+        self.print(output);
         Ok(())
     }
 
     fn writeln<W: std::io::Write>(
+        &self,
         _: W,
         output: impl AsRef<str>,
     ) -> std::io::Result<()> {
-        Self::println(output);
+        self.println(output);
         Ok(())
     }
 
-    fn eprintln(output: impl AsRef<str>) {
+    fn eprintln(&self, output: impl AsRef<str>) {
         let mut testout = TESTOUT.lock().unwrap();
         let mut bytes = output.as_ref().as_bytes().to_vec();
         bytes.extend_from_slice("\n".as_bytes());
@@ -112,11 +114,11 @@ impl Io for TestingIo {
         eprintln!("{}", output.as_ref());
     }
 
-    async fn read() -> tokio::io::Result<String> {
+    async fn read(&self) -> tokio::io::Result<String> {
         read_aux(&*TESTIN).await
     }
 
-    async fn prompt(question: impl AsRef<str>) -> String {
+    async fn prompt(&self, question: impl AsRef<str>) -> String {
         prompt_aux(&*TESTIN, tokio::io::stdout(), question.as_ref()).await
     }
 }

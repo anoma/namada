@@ -2,6 +2,7 @@
 
 use borsh::BorshSerialize;
 use ferveo_common::TendermintValidator;
+use namada::ledger::dry_run_tx;
 use namada::ledger::pos::into_tm_voting_power;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
 use namada::ledger::storage_api::token;
@@ -49,7 +50,11 @@ where
         };
 
         // Invoke the root RPC handler - returns borsh-encoded data on success
-        let result = namada::ledger::queries::handle_path(ctx, &request);
+        let result = if request.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &request)
+        } else {
+            namada::ledger::queries::handle_path(ctx, &request)
+        };
         match result {
             Ok(ResponseQuery { data, info, proof }) => response::Query {
                 value: data,
@@ -137,10 +142,10 @@ where
 #[cfg(not(feature = "abcipp"))]
 mod test_queries {
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
-    use namada::ledger::eth_bridge::{EthBridgeQueries, SendValsetUpd};
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::types::storage::Epoch;
+    use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
     use super::*;
     use crate::facade::tendermint_proto::abci::VoteInfo;

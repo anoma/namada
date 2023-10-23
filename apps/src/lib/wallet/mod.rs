@@ -9,14 +9,16 @@ use std::str::FromStr;
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
-pub use namada::sdk::wallet::alias::Alias;
-use namada::sdk::wallet::{
-    AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
-    Wallet, WalletUtils,
-};
-pub use namada::sdk::wallet::{ValidatorData, ValidatorKeys};
 use namada::types::address::Address;
 use namada::types::key::*;
+pub use namada_sdk::wallet::alias::Alias;
+use namada_sdk::wallet::fs::FsWalletStorage;
+use namada_sdk::wallet::store::Store;
+use namada_sdk::wallet::{
+    AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
+    Wallet, WalletIo,
+};
+pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
 pub use store::wallet_file;
 use zeroize::Zeroizing;
@@ -24,32 +26,28 @@ use zeroize::Zeroizing;
 use crate::cli;
 use crate::config::genesis::genesis_config::GenesisConfig;
 
-#[derive(Debug)]
-pub struct CliWalletUtils;
+#[derive(Debug, Clone)]
+pub struct CliWalletUtils {
+    store_dir: PathBuf,
+}
 
-impl WalletUtils for CliWalletUtils {
-    type Rng = OsRng;
-    type Storage = PathBuf;
-
-    fn read_decryption_password() -> Zeroizing<String> {
-        match env::var("NAMADA_WALLET_PASSWORD_FILE") {
-            Ok(path) => Zeroizing::new(
-                fs::read_to_string(path)
-                    .expect("Something went wrong reading the file"),
-            ),
-            Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
-                Ok(password) => Zeroizing::new(password),
-                Err(_) => {
-                    let prompt = "Enter your decryption password: ";
-                    rpassword::read_password_from_tty(Some(prompt))
-                        .map(Zeroizing::new)
-                        .expect("Failed reading password from tty.")
-                }
-            },
-        }
+impl CliWalletUtils {
+    /// Initialize a wallet at the given directory
+    pub fn new(store_dir: PathBuf) -> Wallet<Self> {
+        Wallet::new(Self { store_dir }, Store::default())
     }
+}
 
-    fn read_encryption_password() -> Zeroizing<String> {
+impl FsWalletStorage for CliWalletUtils {
+    fn store_dir(&self) -> &PathBuf {
+        &self.store_dir
+    }
+}
+
+impl WalletIo for CliWalletUtils {
+    type Rng = OsRng;
+
+    fn read_password(confirm: bool) -> Zeroizing<String> {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
             Ok(path) => Zeroizing::new(
                 fs::read_to_string(path)
@@ -57,7 +55,7 @@ impl WalletUtils for CliWalletUtils {
             ),
             Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
                 Ok(password) => Zeroizing::new(password),
-                Err(_) => {
+                Err(_) if confirm => {
                     let prompt = "Enter your encryption password: ";
                     read_and_confirm_passphrase_tty(prompt).unwrap_or_else(
                         |e| {
@@ -69,9 +67,15 @@ impl WalletUtils for CliWalletUtils {
                         },
                     )
                 }
+                Err(_) => {
+                    let prompt = "Enter your decryption password: ";
+                    rpassword::read_password_from_tty(Some(prompt))
+                        .map(Zeroizing::new)
+                        .expect("Failed reading password from tty.")
+                }
             },
         };
-        if pwd.as_str().is_empty() {
+        if confirm && pwd.as_str().is_empty() {
             eprintln!("Password cannot be empty");
             eprintln!("Action cancelled, no changes persisted.");
             cli::safe_exit(1)
@@ -190,7 +194,7 @@ pub fn read_and_confirm_passphrase_tty(
 /// for signing protocol txs and for the DKG (which will also be stored)
 /// A protocol keypair may be optionally provided, indicating that
 /// we should re-use a keypair already in the wallet
-pub fn gen_validator_keys<U: WalletUtils>(
+pub fn gen_validator_keys<U: WalletIo>(
     wallet: &mut Wallet<U>,
     eth_bridge_pk: Option<common::PublicKey>,
     protocol_pk: Option<common::PublicKey>,
@@ -221,7 +225,7 @@ fn find_secret_key<F, U>(
 ) -> Result<Option<common::SecretKey>, FindKeyError>
 where
     F: Fn(&ValidatorData) -> common::SecretKey,
-    U: WalletUtils,
+    U: WalletIo,
 {
     maybe_pk
         .map(|pk| {
@@ -254,19 +258,19 @@ pub fn add_genesis_addresses(
 
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
-    self::store::save(wallet.store(), wallet.store_dir())
+    wallet
+        .save()
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
 }
 
 /// Load a wallet from the store file.
 pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
-    let store = self::store::load(store_dir).unwrap_or_else(|err| {
+    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
+    wallet.load().unwrap_or_else(|err| {
         eprintln!("Unable to load the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Some(Wallet::<CliWalletUtils>::new(
-        store_dir.to_path_buf(),
-        store,
-    ))
+    Some(wallet)
 }
 
 /// Load a wallet from the store file or create a new wallet without any
@@ -276,7 +280,9 @@ pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
         eprintln!("Unable to load the wallet: {}", err);
         cli::safe_exit(1)
     });
-    Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
+    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
+    *wallet.store_mut() = store;
+    wallet
 }
 
 /// Load a wallet from the store file or create a new one with the default
@@ -290,7 +296,9 @@ pub fn load_or_new_from_genesis(
             eprintln!("Unable to load the wallet: {}", err);
             cli::safe_exit(1)
         });
-    Wallet::<CliWalletUtils>::new(store_dir.to_path_buf(), store)
+    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
+    *wallet.store_mut() = store;
+    wallet
 }
 
 /// Read the password for encryption from the file/env/stdin, with
@@ -302,14 +310,14 @@ pub fn read_and_confirm_encryption_password(
         println!("Warning: The keypair will NOT be encrypted.");
         None
     } else {
-        Some(CliWalletUtils::read_encryption_password())
+        Some(CliWalletUtils::read_password(true))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use namada::bip39::MnemonicType;
-    use namada::sdk::wallet::WalletUtils;
+    use namada_sdk::wallet::WalletIo;
     use rand_core;
 
     use super::CliWalletUtils;

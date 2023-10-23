@@ -63,6 +63,7 @@ use namada::ibc::core::Msg;
 use namada::ibc::Height as IbcHeight;
 use namada::ibc_proto::google::protobuf::Any;
 use namada::ibc_proto::protobuf::Protobuf;
+use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
 use namada::ledger::queries::{
@@ -71,16 +72,11 @@ use namada::ledger::queries::{
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proto::{Code, Data, Section, Signature, Tx};
-use namada::sdk::args::InputAmount;
-use namada::sdk::masp::{
-    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
-use namada::sdk::wallet::Wallet;
 use namada::tendermint::Hash;
 use namada::tendermint_rpc::{self};
 use namada::types::address::InternalAddress;
 use namada::types::chain::ChainId;
-use namada::types::io::DefaultIo;
+use namada::types::io::StdIo;
 use namada::types::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
 };
@@ -100,6 +96,12 @@ use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
+use namada_sdk::args::InputAmount;
+use namada_sdk::masp::{
+    self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+};
+use namada_sdk::wallet::Wallet;
+use namada_sdk::NamadaImpl;
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
 use sha2::{Digest, Sha256};
@@ -585,22 +587,29 @@ impl ShieldedUtils for BenchShieldedUtils {
 
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
-    async fn load(self) -> std::io::Result<ShieldedContext<Self>> {
+    async fn load<U: ShieldedUtils>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+    ) -> std::io::Result<()> {
         // Try to load shielded context from file
         let mut ctx_file = File::open(
             self.context_dir.0.path().to_path_buf().join(FILE_NAME),
         )?;
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
-        let mut new_ctx = ShieldedContext::deserialize(&mut &bytes[..])?;
-        // Associate the originating context directory with the
-        // shielded context under construction
-        new_ctx.utils = self;
-        Ok(new_ctx)
+        // Fill the supplied context with the deserialized object
+        *ctx = ShieldedContext {
+            utils: ctx.utils.clone(),
+            ..ShieldedContext::deserialize(&mut &bytes[..])?
+        };
+        Ok(())
     }
 
     /// Save this shielded context into its associated context directory
-    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
+    async fn save<U: ShieldedUtils>(
+        &self,
+        ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()> {
         let tmp_path =
             self.context_dir.0.path().to_path_buf().join(TMP_FILE_NAME);
         {
@@ -662,8 +671,12 @@ impl Client for BenchShell {
             storage_read_past_height_limit: None,
         };
 
-        RPC.handle(ctx, &request)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
+        if request.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &request)
+        } else {
+            RPC.handle(ctx, &request)
+        }
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
     }
 
     async fn perform<R>(
@@ -681,13 +694,12 @@ impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
 
-        let mut ctx =
-            Context::new::<DefaultIo>(namada_apps::cli::args::Global {
-                chain_id: None,
-                base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
-                wasm_dir: Some(WASM_DIR.into()),
-            })
-            .unwrap();
+        let mut ctx = Context::new::<StdIo>(namada_apps::cli::args::Global {
+            chain_id: None,
+            base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
+            wasm_dir: Some(WASM_DIR.into()),
+        })
+        .unwrap();
 
         // Generate spending key for Albert and Bertha
         ctx.wallet.gen_spending_key(
@@ -720,7 +732,7 @@ impl Default for BenchShieldedCtx {
                     .fvk
                     .vk;
             let (div, _g_d) =
-                namada::sdk::masp::find_valid_diversifier(&mut OsRng);
+                namada_sdk::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = ctx
                 .wallet
@@ -803,10 +815,18 @@ impl BenchShieldedCtx {
                 &[],
             ))
             .unwrap();
+        let namada = NamadaImpl::native_new(
+            &self.shell,
+            &mut self.wallet,
+            &mut self.shielded,
+            &StdIo,
+            self.shell.wl_storage.storage.native_token.clone(),
+        );
         let shielded = async_runtime
             .block_on(
-                self.shielded
-                    .gen_shielded_transfer::<_, DefaultIo>(&self.shell, args),
+                ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
+                    &namada, &args,
+                ),
             )
             .unwrap()
             .map(

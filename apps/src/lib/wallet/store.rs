@@ -1,36 +1,21 @@
-use std::fs;
-use std::io::prelude::*;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 #[cfg(not(feature = "dev"))]
 use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
-use fd_lock::RwLock;
-#[cfg(not(feature = "dev"))]
-use namada::sdk::wallet::store::AddressVpType;
-#[cfg(feature = "dev")]
-use namada::sdk::wallet::StoredKeypair;
-use namada::sdk::wallet::{gen_sk_rng, Store, ValidatorKeys};
 #[cfg(not(feature = "dev"))]
 use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
-use thiserror::Error;
+#[cfg(not(feature = "dev"))]
+use namada_sdk::wallet::store::AddressVpType;
+#[cfg(feature = "dev")]
+use namada_sdk::wallet::StoredKeypair;
+use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
-
-#[derive(Error, Debug)]
-pub enum LoadStoreError {
-    #[error("Failed decoding the wallet store: {0}")]
-    Decode(toml::de::Error),
-    #[error("Failed to read the wallet store from {0}: {1}")]
-    ReadWallet(String, String),
-    #[error("Failed to write the wallet store: {0}")]
-    StoreNewWallet(String),
-}
 
 /// Wallet file name
 const FILE_NAME: &str = "wallet.toml";
@@ -40,28 +25,12 @@ pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
     store_dir.as_ref().join(FILE_NAME)
 }
 
-/// Save the wallet store to a file.
-pub fn save(store: &Store, store_dir: &Path) -> std::io::Result<()> {
-    let data = store.encode();
-    let wallet_path = wallet_file(store_dir);
-    // Make sure the dir exists
-    let wallet_dir = wallet_path.parent().unwrap();
-    fs::create_dir_all(wallet_dir)?;
-    // Write the file
-    let mut options = fs::OpenOptions::new();
-    options.create(true).write(true).truncate(true);
-    let mut lock = RwLock::new(options.open(wallet_path)?);
-    let mut guard = lock.write()?;
-    guard.write_all(&data)
-}
-
 /// Load the store file or create a new one without any keys or addresses.
 pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
     load(store_dir).or_else(|_| {
-        let store = Store::default();
-        save(&store, store_dir)
-            .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
-        Ok(store)
+        let wallet = CliWalletUtils::new(store_dir.to_path_buf());
+        wallet.save()?;
+        Ok(wallet.into())
     })
 }
 
@@ -80,37 +49,18 @@ pub fn load_or_new_from_genesis(
             let _ = genesis_cfg;
             new()
         };
-        save(&store, store_dir)
-            .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))?;
-        Ok(store)
+        let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
+        *wallet.store_mut() = store;
+        wallet.save()?;
+        Ok(wallet.into())
     })
 }
 
 /// Attempt to load the store file.
 pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
-    let wallet_file = wallet_file(store_dir);
-    let mut options = fs::OpenOptions::new();
-    options.read(true).write(false);
-    let lock = RwLock::new(options.open(&wallet_file).map_err(|err| {
-        LoadStoreError::ReadWallet(
-            wallet_file.to_string_lossy().into_owned(),
-            err.to_string(),
-        )
-    })?);
-    let guard = lock.read().map_err(|err| {
-        LoadStoreError::ReadWallet(
-            wallet_file.to_string_lossy().into_owned(),
-            err.to_string(),
-        )
-    })?;
-    let mut store = Vec::<u8>::new();
-    (&*guard).read_to_end(&mut store).map_err(|err| {
-        LoadStoreError::ReadWallet(
-            store_dir.to_str().unwrap().parse().unwrap(),
-            err.to_string(),
-        )
-    })?;
-    Store::decode(store).map_err(LoadStoreError::Decode)
+    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
+    wallet.load()?;
+    Ok(wallet.into())
 }
 
 /// Add addresses from a genesis configuration.

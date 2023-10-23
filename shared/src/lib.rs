@@ -24,7 +24,7 @@ pub use {
 };
 pub mod ledger;
 pub use namada_core::proto;
-pub mod sdk;
+pub use namada_sdk;
 pub mod types;
 pub mod vm;
 

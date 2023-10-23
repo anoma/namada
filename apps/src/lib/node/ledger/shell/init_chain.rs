@@ -2,7 +2,6 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::eth_bridge::EthBridgeStatus;
 use namada::ledger::parameters::{self, Parameters};
 use namada::ledger::pos::{staking_token_address, PosParams};
 use namada::ledger::storage::traits::StorageHasher;
@@ -17,6 +16,7 @@ use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
+use namada_sdk::eth_bridge::EthBridgeStatus;
 
 use super::*;
 use crate::facade::tendermint_proto::google::protobuf;

@@ -1049,7 +1049,6 @@ mod test_finalize_block {
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
     use namada::eth_bridge::storage::min_confirmations_key;
-    use namada::ledger::eth_bridge::MinimumConfirmations;
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::native_vp::parameters::ParametersVp;
     use namada::ledger::native_vp::NativeVp;
@@ -1087,6 +1086,7 @@ mod test_finalize_block {
     use namada::types::transaction::{Fee, WrapperTx};
     use namada::types::uint::Uint;
     use namada::types::vote_extensions::ethereum_events;
+    use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_test_utils::TestWasms;
     use test_log::test;
 

@@ -15,6 +15,7 @@ members = [
   "macros",
   "vp_prelude",
   "encoding_spec",
+  "sdk",
 ]
 
 # wasm packages have to be built separately

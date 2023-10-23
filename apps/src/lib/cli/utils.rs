@@ -8,8 +8,9 @@ use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
 
 use super::args;
-use super::context::{Context, FromContext};
+use super::context::Context;
 use crate::cli::api::CliIo;
+use crate::cli::context::FromContext;
 
 // We only use static strings
 pub type App = clap::Command;

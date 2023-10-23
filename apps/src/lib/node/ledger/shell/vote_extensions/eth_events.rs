@@ -2,7 +2,6 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use namada::ledger::eth_bridge::EthBridgeQueries;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
@@ -15,6 +14,7 @@ use namada::types::vote_extensions::ethereum_events::{
 };
 #[cfg(feature = "abcipp")]
 use namada::types::voting_power::FractionalVotingPower;
+use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
 use crate::node::ledger::shell::{Shell, ShellMode};
