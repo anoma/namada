@@ -879,6 +879,7 @@ mod test_prepare_proposal {
             test_utils::setup_with_cfg(test_utils::SetupCfg {
                 last_height: FIRST_HEIGHT,
                 num_validators: 2,
+                ..Default::default()
             });
 
         let params = shell.wl_storage.pos_queries().get_pos_params();

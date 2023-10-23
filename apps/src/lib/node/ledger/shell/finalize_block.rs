@@ -1982,6 +1982,7 @@ mod test_finalize_block {
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators: 4,
+            ..Default::default()
         });
 
         let mut validator_set: BTreeSet<WeightedValidator> =
@@ -2651,6 +2652,7 @@ mod test_finalize_block {
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators,
+            ..Default::default()
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
         params.unbonding_len = 4;
@@ -3029,6 +3031,7 @@ mod test_finalize_block {
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators,
+            ..Default::default()
         });
         let mut params = read_pos_params(&shell.wl_storage).unwrap();
         params.unbonding_len = 4;
