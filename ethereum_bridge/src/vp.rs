@@ -1,4 +1,4 @@
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::ledger::storage_api::StorageWrite;
 use namada_core::types::token::{balance_key, Amount};
@@ -17,12 +17,7 @@ where
         &namada_core::ledger::eth_bridge::ADDRESS,
     );
     wl_storage
-        .write_bytes(
-            &escrow_key,
-            Amount::default()
-                .try_to_vec()
-                .expect("Serializing an amount shouldn't fail."),
-        )
+        .write_bytes(&escrow_key, Amount::default().serialize_to_vec())
         .expect(
             "Initializing the escrow balance of the Ethereum Bridge VP \
              shouldn't fail.",

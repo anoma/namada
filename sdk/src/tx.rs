@@ -2134,8 +2134,6 @@ where
 }
 
 fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>> {
-    proposal
-        .content
-        .try_to_vec()
+    borsh::to_vec(&proposal.content)
         .map_err(|e| Error::from(EncodingError::Conversion(e.to_string())))
 }

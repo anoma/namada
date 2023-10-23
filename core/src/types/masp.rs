@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use bech32::{FromBase32, ToBase32};
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use sha2::{Digest, Sha256};
 
 use crate::types::address::{
@@ -147,9 +148,7 @@ impl PaymentAddress {
 
     /// Hash this payment address
     pub fn hash(&self) -> String {
-        let bytes = (self.0, self.1)
-            .try_to_vec()
-            .expect("Payment address encoding shouldn't fail");
+        let bytes = (self.0, self.1).serialize_to_vec();
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash

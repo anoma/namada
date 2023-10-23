@@ -90,7 +90,7 @@ macro_rules! handle_match {
         // queries::Storage`, you're probably missing the marker `(sub _)`
         let data = $handle($ctx, $( $matched_args ),* )?;
         // Encode the returned data with borsh
-        let data = borsh::BorshSerialize::try_to_vec(&data).into_storage_result()?;
+        let data = borsh::to_vec(&data).into_storage_result()?;
         return Ok($crate::queries::EncodedResponseQuery {
             data,
             info: Default::default(),
@@ -834,9 +834,9 @@ macro_rules! router {
 /// ```
 #[cfg(test)]
 mod test_rpc_handlers {
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::storage::{DBIter, StorageHasher, DB};
-    use namada_core::ledger::storage_api::{self, ResultExt};
+    use namada_core::ledger::storage_api;
     use namada_core::types::storage::Epoch;
     use namada_core::types::token;
 
@@ -949,7 +949,7 @@ mod test_rpc_handlers {
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
     {
-        let data = "c".to_owned().try_to_vec().into_storage_result()?;
+        let data = "c".to_owned().serialize_to_vec();
         Ok(ResponseQuery {
             data,
             ..ResponseQuery::default()

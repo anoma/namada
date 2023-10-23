@@ -121,7 +121,7 @@ mod test_nuts {
     use std::env::temp_dir;
 
     use assert_matches::assert_matches;
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::StorageWrite;
     use namada_core::types::address::testing::arb_non_internal_address;
@@ -157,13 +157,13 @@ mod test_nuts {
             wl.write_log
                 .write(
                     &src_balance_key,
-                    Amount::from(100_u64).try_to_vec().expect("Test failed"),
+                    Amount::from(100_u64).serialize_to_vec(),
                 )
                 .expect("Test failed");
             wl.write_log
                 .write(
                     &dst_balance_key,
-                    Amount::from(200_u64).try_to_vec().expect("Test failed"),
+                    Amount::from(200_u64).serialize_to_vec(),
                 )
                 .expect("Test failed");
 

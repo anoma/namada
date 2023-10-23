@@ -44,6 +44,7 @@ path = "host_env.rs"
 [dependencies]
 async-trait.workspace = true
 borsh.workspace = true
+borsh-ext.workspace = true
 ferveo-common.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true

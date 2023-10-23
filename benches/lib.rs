@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use std::sync::Once;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
@@ -438,7 +439,7 @@ pub fn generate_tx(
         WASM_DIR,
         wasm_code_path,
     )));
-    tx.set_data(Data::new(data.try_to_vec().unwrap()));
+    tx.set_data(Data::new(data.serialize_to_vec()));
 
     if let Some(transaction) = shielded {
         tx.add_section(Section::MaspTx(transaction));
@@ -493,8 +494,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
             key: Key::from("bench_foreign_key".to_string().to_db_key()),
             value: vec![0; 64],
         }
-        .try_to_vec()
-        .unwrap(),
+        .serialize_to_vec(),
     ));
     tx.add_section(Section::Signature(Signature::new(
         tx.sechashes(),
@@ -565,7 +565,7 @@ impl Clone for WrapperTempDir {
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, Default)]
 pub struct BenchShieldedUtils {
-    #[borsh_skip]
+    #[borsh(skip)]
     context_dir: WrapperTempDir,
 }
 

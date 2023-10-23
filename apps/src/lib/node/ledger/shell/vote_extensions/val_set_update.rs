@@ -419,8 +419,7 @@ mod test_vote_extensions {
                     bridge_pool_root: Some(bp_root),
                     validator_set_update,
                 }
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
                 ..Default::default()
             };
 
@@ -506,8 +505,7 @@ mod test_vote_extensions {
                     bridge_pool_root: Some(bp_root),
                     validator_set_update,
                 }
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
                 ..Default::default()
             };
             assert_eq!(
@@ -715,8 +713,7 @@ mod test_vote_extensions {
                     bridge_pool_root: Some(bp_root),
                     validator_set_update: validator_set_update.clone(),
                 }
-                .try_to_vec()
-                .expect("Test failed"),
+                .serialize_to_vec(),
                 ..Default::default()
             };
             assert_eq!(

@@ -32,6 +32,7 @@ mod tests {
         arb_established_address, arb_non_internal_address,
     };
     use namada_tx_prelude::address::InternalAddress;
+    use namada_tx_prelude::borsh_ext::BorshSerializeExt;
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
@@ -106,7 +107,7 @@ mod tests {
         });
 
         let tx_code = vec![];
-        let tx_data = bond.try_to_vec().unwrap();
+        let tx_data = bond.serialize_to_vec();
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(tx_code)
             .add_serialized_data(tx_data)

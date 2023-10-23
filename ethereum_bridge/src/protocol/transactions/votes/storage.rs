@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use eyre::{Result, WrapErr};
 use namada_core::hints;
 use namada_core::ledger::storage::{
@@ -23,16 +24,19 @@ where
     H: 'static + StorageHasher + Sync,
     T: BorshSerialize,
 {
-    wl_storage.write_bytes(&keys.body(), &body.try_to_vec()?)?;
-    wl_storage.write_bytes(&keys.seen(), &tally.seen.try_to_vec()?)?;
-    wl_storage.write_bytes(&keys.seen_by(), &tally.seen_by.try_to_vec()?)?;
+    wl_storage.write_bytes(&keys.body(), &body.serialize_to_vec())?;
+    wl_storage.write_bytes(&keys.seen(), &tally.seen.serialize_to_vec())?;
     wl_storage
-        .write_bytes(&keys.voting_power(), &tally.voting_power.try_to_vec()?)?;
+        .write_bytes(&keys.seen_by(), &tally.seen_by.serialize_to_vec())?;
+    wl_storage.write_bytes(
+        &keys.voting_power(),
+        &tally.voting_power.serialize_to_vec(),
+    )?;
     if !already_present {
         // add the current epoch for the inserted event
         wl_storage.write_bytes(
             &keys.voting_started_epoch(),
-            &wl_storage.storage.get_current_epoch().0.try_to_vec()?,
+            &wl_storage.storage.get_current_epoch().0.serialize_to_vec(),
         )?;
     }
     Ok(())
@@ -205,28 +209,18 @@ mod tests {
 
         assert!(result.is_ok());
         let body = wl_storage.read_bytes(&keys.body()).unwrap();
-        assert_eq!(body, Some(event.try_to_vec().unwrap()));
+        assert_eq!(body, Some(event.serialize_to_vec()));
         let seen = wl_storage.read_bytes(&keys.seen()).unwrap();
-        assert_eq!(seen, Some(tally.seen.try_to_vec().unwrap()));
+        assert_eq!(seen, Some(tally.seen.serialize_to_vec()));
         let seen_by = wl_storage.read_bytes(&keys.seen_by()).unwrap();
-        assert_eq!(seen_by, Some(tally.seen_by.try_to_vec().unwrap()));
+        assert_eq!(seen_by, Some(tally.seen_by.serialize_to_vec()));
         let voting_power = wl_storage.read_bytes(&keys.voting_power()).unwrap();
-        assert_eq!(
-            voting_power,
-            Some(tally.voting_power.try_to_vec().unwrap())
-        );
+        assert_eq!(voting_power, Some(tally.voting_power.serialize_to_vec()));
         let epoch =
             wl_storage.read_bytes(&keys.voting_started_epoch()).unwrap();
         assert_eq!(
             epoch,
-            Some(
-                wl_storage
-                    .storage
-                    .get_current_epoch()
-                    .0
-                    .try_to_vec()
-                    .unwrap()
-            )
+            Some(wl_storage.storage.get_current_epoch().0.serialize_to_vec())
         );
     }
 
@@ -249,29 +243,24 @@ mod tests {
             seen: false,
         };
         wl_storage
-            .write_bytes(&keys.body(), &event.try_to_vec().unwrap())
+            .write_bytes(&keys.body(), &event.serialize_to_vec())
             .unwrap();
         wl_storage
-            .write_bytes(&keys.seen(), &tally.seen.try_to_vec().unwrap())
+            .write_bytes(&keys.seen(), &tally.seen.serialize_to_vec())
             .unwrap();
         wl_storage
-            .write_bytes(&keys.seen_by(), &tally.seen_by.try_to_vec().unwrap())
+            .write_bytes(&keys.seen_by(), &tally.seen_by.serialize_to_vec())
             .unwrap();
         wl_storage
             .write_bytes(
                 &keys.voting_power(),
-                &tally.voting_power.try_to_vec().unwrap(),
+                &tally.voting_power.serialize_to_vec(),
             )
             .unwrap();
         wl_storage
             .write_bytes(
                 &keys.voting_started_epoch(),
-                &wl_storage
-                    .storage
-                    .get_block_height()
-                    .0
-                    .try_to_vec()
-                    .unwrap(),
+                &wl_storage.storage.get_block_height().0.serialize_to_vec(),
             )
             .unwrap();
 

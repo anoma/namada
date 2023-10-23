@@ -1,6 +1,6 @@
 //! Functionality for accessing keys to do with tallying votes
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -199,11 +199,11 @@ impl BorshSerialize for BridgePoolRoot {
 }
 
 impl BorshDeserialize for BridgePoolRoot {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        <EthereumProof<(KeccakHash, Uint)> as BorshDeserialize>::deserialize(
-            buf,
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        <EthereumProof<(KeccakHash, Uint)> as BorshDeserialize>::deserialize_reader(
+            reader,
         )
-        .map(BridgePoolRoot)
+            .map(BridgePoolRoot)
     }
 }
 

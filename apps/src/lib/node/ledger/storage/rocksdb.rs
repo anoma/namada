@@ -40,7 +40,8 @@ use std::str::FromStr;
 use std::sync::Mutex;
 
 use ark_serialize::Write;
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use namada::core::types::ethereum_structs;
 use namada::ledger::storage::types::PrefixIterator;
@@ -903,11 +904,9 @@ impl DB for RocksDB {
                 let key = prefix_key
                     .push(&"header".to_owned())
                     .map_err(Error::KeyError)?;
-                batch.0.put_cf(
-                    block_cf,
-                    key.to_string(),
-                    h.try_to_vec().expect("serialization failed"),
-                );
+                batch
+                    .0
+                    .put_cf(block_cf, key.to_string(), h.serialize_to_vec());
             }
         }
         // Block hash

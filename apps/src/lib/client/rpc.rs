@@ -7,7 +7,8 @@ use std::io;
 use std::iter::Iterator;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use masp_primitives::asset_type::AssetType;
@@ -839,10 +840,7 @@ pub async fn query_shielded_balance<'a>(
             // Compute the unique asset identifier from the token address
             let token = token;
             let _asset_type = AssetType::new(
-                (token.clone(), epoch.0)
-                    .try_to_vec()
-                    .expect("token addresses should serialize")
-                    .as_ref(),
+                (token.clone(), epoch.0).serialize_to_vec().as_ref(),
             )
             .unwrap();
             let token_alias = context.wallet().await.lookup_alias(&token);

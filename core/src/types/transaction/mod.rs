@@ -22,6 +22,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 pub use decrypted::*;
 #[cfg(feature = "ferveo-tpke")]
 pub use encrypted::EncryptionKey;
@@ -160,7 +161,7 @@ pub enum TxType {
 impl TxType {
     /// Produce a SHA-256 hash of this header  
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(self.try_to_vec().expect("unable to serialize header"));
+        hasher.update(self.serialize_to_vec());
         hasher
     }
 }

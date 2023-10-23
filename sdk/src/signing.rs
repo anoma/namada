@@ -2,7 +2,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -863,9 +864,7 @@ pub async fn to_ledger_vector<'a>(
         .collect();
 
     let mut tv = LedgerVector {
-        blob: HEXLOWER.encode(&tx.try_to_vec().map_err(|_| {
-            Error::Other("unable to serialize transaction".to_string())
-        })?),
+        blob: HEXLOWER.encode(&tx.serialize_to_vec()),
         index: 0,
         valid: true,
         name: "Custom 0".to_string(),

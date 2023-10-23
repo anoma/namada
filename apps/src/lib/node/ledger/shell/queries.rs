@@ -1,6 +1,6 @@
 //! Shell methods for querying state
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use ferveo_common::TendermintValidator;
 use namada::ledger::dry_run_tx;
 use namada::ledger::pos::into_tm_voting_power;
@@ -89,9 +89,7 @@ where
         &self,
         pk: &common::PublicKey,
     ) -> Option<TendermintValidator<EllipticCurve>> {
-        let pk_bytes = pk
-            .try_to_vec()
-            .expect("Serializing public key should not fail");
+        let pk_bytes = pk.serialize_to_vec();
         // get the current epoch
         let (current_epoch, _) = self.wl_storage.storage.get_current_epoch();
 

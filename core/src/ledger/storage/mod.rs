@@ -15,6 +15,7 @@ use std::cmp::Ordering;
 use std::format;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 pub use merkle_tree::{
     MerkleTree, MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
@@ -664,8 +665,7 @@ where
         if is_pending_transfer_key(key) {
             // The tree of the bright pool stores the current height for the
             // pending transfer
-            let height =
-                self.block.height.try_to_vec().expect("Encoding failed");
+            let height = self.block.height.serialize_to_vec();
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
             // Update the merkle tree for all but replay-protection entries
@@ -801,10 +801,7 @@ where
                                     tree.update(
                                         &new_key,
                                         if is_pending_transfer_key(&new_key) {
-                                            target_height.try_to_vec().expect(
-                                                "Serialization should never \
-                                                 fail",
-                                            )
+                                            target_height.serialize_to_vec()
                                         } else {
                                             new.1.clone()
                                         },
@@ -826,10 +823,7 @@ where
                                     tree.update(
                                         &new_key,
                                         if is_pending_transfer_key(&new_key) {
-                                            target_height.try_to_vec().expect(
-                                                "Serialization should never \
-                                                 fail",
-                                            )
+                                            target_height.serialize_to_vec()
                                         } else {
                                             new.1.clone()
                                         },
@@ -857,9 +851,7 @@ where
                             tree.update(
                                 &key,
                                 if is_pending_transfer_key(&key) {
-                                    target_height.try_to_vec().expect(
-                                        "Serialization should never fail",
-                                    )
+                                    target_height.serialize_to_vec()
                                 } else {
                                     new.1.clone()
                                 },
@@ -1055,8 +1047,7 @@ where
         if is_pending_transfer_key(key) {
             // The tree of the bright pool stores the current height for the
             // pending transfer
-            let height =
-                self.block.height.try_to_vec().expect("Encoding failed");
+            let height = self.block.height.serialize_to_vec();
             self.block.tree.update(key, height)?;
         } else if !is_replay_protection_key(key) {
             // Update the merkle tree for all but replay-protection entries

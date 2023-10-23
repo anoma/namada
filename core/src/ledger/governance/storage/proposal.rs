@@ -55,6 +55,7 @@ impl StoragePgfFunding {
     PartialEq,
     Eq,
     PartialOrd,
+    Ord,
     BorshSerialize,
     BorshDeserialize,
     Serialize,

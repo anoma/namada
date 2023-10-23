@@ -3,6 +3,7 @@ use std::fs::{File, ReadDir};
 use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use serde::{Deserialize, Serialize};
 
 use super::onchain::ProposalVote;
@@ -214,14 +215,8 @@ impl OfflineVote {
         keypairs: Vec<common::SecretKey>,
         account_public_keys_map: &AccountPublicKeysMap,
     ) -> Self {
-        let proposal_vote_data = self
-            .vote
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = self
-            .delegations
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
+        let proposal_vote_data = self.vote.serialize_to_vec();
+        let delegations_hash = self.delegations.serialize_to_vec();
 
         let vote_hash = Hash::sha256(
             [
@@ -248,18 +243,9 @@ impl OfflineVote {
 
     /// compute the hash of a proposal
     pub fn compute_hash(&self) -> Hash {
-        let proposal_hash_data = self
-            .proposal_hash
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-        let proposal_vote_data = self
-            .vote
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
-        let delegations_hash = self
-            .delegations
-            .try_to_vec()
-            .expect("Conversion to bytes shouldn't fail.");
+        let proposal_hash_data = self.proposal_hash.serialize_to_vec();
+        let proposal_vote_data = self.vote.serialize_to_vec();
+        let delegations_hash = self.delegations.serialize_to_vec();
         let vote_serialized =
             &[proposal_hash_data, proposal_vote_data, delegations_hash]
                 .concat();

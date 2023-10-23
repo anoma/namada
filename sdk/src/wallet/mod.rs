@@ -203,7 +203,7 @@ pub mod fs {
     /// For a non-interactive filesystem based wallet
     #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
     pub struct FsWalletUtils {
-        #[borsh_skip]
+        #[borsh(skip)]
         store_dir: PathBuf,
     }
 

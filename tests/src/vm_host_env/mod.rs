@@ -21,6 +21,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::panic;
 
+    use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
     use namada::ibc::core::Msg;
     use namada::ledger::ibc::storage as ibc_storage;
@@ -41,9 +42,7 @@ mod tests {
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
-    use namada_tx_prelude::{
-        Address, BorshSerialize, StorageRead, StorageWrite,
-    };
+    use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::VpEnv;
     use prost::Message;
@@ -577,7 +576,7 @@ mod tests {
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).try_to_vec().unwrap();
+        let code_len = (code.len() as u64).serialize_to_vec();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
@@ -600,7 +599,7 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).try_to_vec().unwrap();
+        let code_len = (code.len() as u64).serialize_to_vec();
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
@@ -1250,20 +1249,18 @@ mod tests {
         let ibc_token = ibc_storage::ibc_token(&denom);
         let balance_key = token::balance_key(&ibc_token, &sender);
         let init_bal = Amount::from_u64(100);
-        writes.insert(balance_key.clone(), init_bal.try_to_vec().unwrap());
+        writes.insert(balance_key.clone(), init_bal.serialize_to_vec());
         let minted_key = token::minted_balance_key(&ibc_token);
-        writes.insert(minted_key.clone(), init_bal.try_to_vec().unwrap());
+        writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
         let minter_key = token::minter_key(&ibc_token);
         writes.insert(
             minter_key,
-            Address::Internal(InternalAddress::Ibc)
-                .try_to_vec()
-                .unwrap(),
+            Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         );
         // original denom
         let hash = ibc_storage::calc_hash(&denom);
         let denom_key = ibc_storage::ibc_denom_key(hash);
-        writes.insert(denom_key, denom.try_to_vec().unwrap());
+        writes.insert(denom_key, denom.serialize_to_vec());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.wl_storage
@@ -1505,8 +1502,7 @@ mod tests {
         );
         let val = Amount::from_uint(100, ibc::ANY_DENOMINATION)
             .unwrap()
-            .try_to_vec()
-            .unwrap();
+            .serialize_to_vec();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage
@@ -1608,7 +1604,7 @@ mod tests {
             denom,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::from_u64(100).try_to_vec().unwrap();
+        let val = Amount::from_u64(100).serialize_to_vec();
         tx_host_env::with(|env| {
             env.wl_storage
                 .storage

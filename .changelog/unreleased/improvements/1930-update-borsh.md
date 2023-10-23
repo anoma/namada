@@ -1,0 +1,1 @@
+- Migrate to upstream borsh ([\#1930](https://github.com/anoma/namada/pull/1930))

@@ -35,7 +35,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::gas::{Gas, GasMetering, TxGasMeter};
     use namada_core::ledger::storage::TempWlStorage;
     use namada_core::proto::Tx;
@@ -126,7 +126,7 @@ where
     data.gas_used = cumulated_gas;
     // NOTE: the keys changed by the wrapper transaction (if any) are not
     // returned from this function
-    let data = data.try_to_vec().into_storage_result()?;
+    let data = data.serialize_to_vec();
     Ok(EncodedResponseQuery {
         data,
         proof: None,
@@ -136,7 +136,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::storage::testing::TestWlStorage;
     use namada_core::ledger::storage_api::{self, StorageWrite};
     use namada_core::types::hash::Hash;
@@ -285,7 +286,7 @@ mod test {
         client
             .wl_storage
             .storage
-            .write(&len_key, (tx_no_op.len() as u64).try_to_vec().unwrap())
+            .write(&len_key, (tx_no_op.len() as u64).serialize_to_vec())
             .unwrap();
 
         // Request last committed epoch

@@ -564,7 +564,7 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use borsh::BorshSerialize;
+    use borsh_ext::BorshSerializeExt;
     use eyre::Result;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::get_pending_key;
     use namada_core::ledger::parameters::{
@@ -702,7 +702,7 @@ mod tests {
             let key = get_pending_key(&transfer);
             wl_storage
                 .storage
-                .write(&key, transfer.try_to_vec().expect("Test failed"))
+                .write(&key, transfer.serialize_to_vec())
                 .expect("Test failed");
 
             pending_transfers.push(transfer);
@@ -743,10 +743,7 @@ mod tests {
             let payer_key = balance_key(&transfer.gas_fee.token, &payer);
             let payer_balance = Amount::from(0);
             wl_storage
-                .write_bytes(
-                    &payer_key,
-                    payer_balance.try_to_vec().expect("Test failed"),
-                )
+                .write_bytes(&payer_key, payer_balance.serialize_to_vec())
                 .expect("Test failed");
             let escrow_key =
                 balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
@@ -761,36 +758,24 @@ mod tests {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
-                    .write_bytes(
-                        &sender_key,
-                        sender_balance.try_to_vec().expect("Test failed"),
-                    )
+                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
                     .expect("Test failed");
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
                 let escrow_balance = Amount::from(10);
                 wl_storage
-                    .write_bytes(
-                        &escrow_key,
-                        escrow_balance.try_to_vec().expect("Test failed"),
-                    )
+                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
                     .expect("Test failed");
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
                 wl_storage
-                    .write_bytes(
-                        &sender_key,
-                        sender_balance.try_to_vec().expect("Test failed"),
-                    )
+                    .write_bytes(&sender_key, sender_balance.serialize_to_vec())
                     .expect("Test failed");
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let escrow_balance = Amount::from(10);
                 wl_storage
-                    .write_bytes(
-                        &escrow_key,
-                        escrow_balance.try_to_vec().expect("Test failed"),
-                    )
+                    .write_bytes(&escrow_key, escrow_balance.serialize_to_vec())
                     .expect("Test failed");
                 update::amount(
                     wl_storage,
@@ -1162,7 +1147,7 @@ mod tests {
         let key = get_pending_key(&transfer);
         wl_storage
             .storage
-            .write(&key, transfer.try_to_vec().expect("Test failed"))
+            .write(&key, transfer.serialize_to_vec())
             .expect("Test failed");
         wl_storage
             .storage

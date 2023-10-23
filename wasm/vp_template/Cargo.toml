@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 namada_vp_prelude = {path = "../../vp_prelude"}
-borsh = "0.9.0"
+borsh = "1.0.0-alpha.4"
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 

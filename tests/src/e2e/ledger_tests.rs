@@ -16,7 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::types::address::Address;
@@ -436,8 +436,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         key: None,
         shielded: None,
     }
-    .try_to_vec()
-    .unwrap();
+    .serialize_to_vec();
     let tx_data_path = test.test_dir.path().join("tx.data");
     std::fs::write(&tx_data_path, transfer).unwrap();
     let tx_data_path = tx_data_path.to_string_lossy();
@@ -664,7 +663,7 @@ fn ledger_txs_and_queries() -> Result<()> {
                 &validator_one_rpc,
             ],
             // expect hex encoded of borsh encoded bytes
-            HEXLOWER.encode(&christel_balance.try_to_vec().unwrap()),
+            HEXLOWER.encode(&christel_balance.serialize_to_vec()),
         ),
     ];
     for (query_args, expected) in &query_args_and_expected_response {

@@ -10,6 +10,7 @@ pub mod wrapper_tx {
     #[cfg(feature = "ferveo-tpke")]
     pub use ark_ec::{AffineCurve, PairingEngine};
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use borsh_ext::BorshSerializeExt;
     use masp_primitives::transaction::Transaction;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
@@ -225,9 +226,7 @@ pub mod wrapper_tx {
 
         /// Produce a SHA-256 hash of this section
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(
-                self.try_to_vec().expect("unable to serialize wrapper"),
-            );
+            hasher.update(self.serialize_to_vec());
             hasher
         }
 
@@ -305,12 +304,7 @@ pub mod wrapper_tx {
                 key: None,
                 shielded: Some(masp_hash),
             };
-            let data = transfer.try_to_vec().map_err(|_| {
-                WrapperTxErr::InvalidUnshield(
-                    "Error while serializing the unshield transfer data"
-                        .to_string(),
-                )
-            })?;
+            let data = transfer.serialize_to_vec();
             tx.set_data(Data::new(data));
             tx.set_code(Code::from_hash(transfer_code_hash));
 
@@ -349,7 +343,7 @@ pub mod wrapper_tx {
             );
 
             // Test borsh roundtrip
-            let borsh = limit.try_to_vec().expect("Test failed");
+            let borsh = limit.serialize_to_vec();
             assert_eq!(
                 limit,
                 BorshDeserialize::deserialize(&mut borsh.as_ref())

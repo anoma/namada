@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-use borsh::BorshSerialize;
+use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
@@ -241,7 +241,7 @@ pub fn commit_bridge_pool_root_at_height(
     root: &KeccakHash,
     height: BlockHeight,
 ) {
-    let value = height.try_to_vec().expect("Encoding failed");
+    let value = height.serialize_to_vec();
     storage
         .block
         .tree

@@ -74,6 +74,7 @@ testing = [
 async-trait = {version = "0.1.51", optional = true}
 bimap.workspace = true
 borsh.workspace = true
+borsh-ext.workspace = true
 circular-queue.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true

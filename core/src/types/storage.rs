@@ -2,13 +2,14 @@
 use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::num::ParseIntError;
 use std::ops::{Add, AddAssign, Deref, Div, Drop, Mul, Rem, Sub};
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use ics23::CommitmentProof;
 use index_set::vec::VecIndexSet;
@@ -320,7 +321,7 @@ pub struct Header {
 impl Header {
     /// The number of bytes when this header is encoded
     pub fn encoded_len(&self) -> usize {
-        self.try_to_vec().unwrap().len()
+        self.serialize_to_vec().len()
     }
 }
 
@@ -404,13 +405,13 @@ impl BorshSerialize for StringKey {
 }
 
 impl BorshDeserialize for StringKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         use std::io::ErrorKind;
         let (original, tree_key, length): (
             Vec<u8>,
             InternalKey<IBC_KEY_LIMIT>,
             usize,
-        ) = BorshDeserialize::deserialize(buf)?;
+        ) = BorshDeserialize::deserialize_reader(reader)?;
         let original: [u8; IBC_KEY_LIMIT] =
             original.try_into().map_err(|_| {
                 std::io::Error::new(

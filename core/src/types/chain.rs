@@ -95,7 +95,7 @@ impl<'de> Deserialize<'de> for ProposalBytes {
 
 impl BorshSchema for ProposalBytes {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut std::collections::BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,

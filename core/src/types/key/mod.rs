@@ -11,6 +11,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use lazy_map::LazyMap;
 use namada_macros::StorageKeys;
@@ -211,7 +212,7 @@ pub trait Signature:
         sig: &SIG,
     ) -> Result<Self, ParseSignatureError> {
         if SIG::TYPE == Self::TYPE {
-            let sig_arr = sig.try_to_vec().unwrap();
+            let sig_arr = sig.serialize_to_vec();
             let res = Self::try_from_slice(sig_arr.as_ref());
             res.map_err(ParseSignatureError::InvalidEncoding)
         } else {
@@ -247,7 +248,7 @@ pub trait PublicKey:
         pk: &PK,
     ) -> Result<Self, ParsePublicKeyError> {
         if Self::TYPE == PK::TYPE {
-            let pk_arr = pk.try_to_vec().unwrap();
+            let pk_arr = pk.serialize_to_vec();
             let res = Self::try_from_slice(pk_arr.as_ref());
             res.map_err(ParsePublicKeyError::InvalidEncoding)
         } else {
@@ -283,7 +284,7 @@ pub trait SecretKey:
         sk: &SK,
     ) -> Result<Self, ParseSecretKeyError> {
         if SK::TYPE == Self::TYPE {
-            let sk_vec = sk.try_to_vec().unwrap();
+            let sk_vec = sk.serialize_to_vec();
             let res = Self::try_from_slice(sk_vec.as_ref());
             res.map_err(ParseSecretKeyError::InvalidEncoding)
         } else {
@@ -440,8 +441,7 @@ pub enum PkhFromStringError {
 
 impl<PK: PublicKey> From<&PK> for PublicKeyHash {
     fn from(pk: &PK) -> Self {
-        let pk_bytes =
-            pk.try_to_vec().expect("Public key encoding shouldn't fail");
+        let pk_bytes = pk.serialize_to_vec();
         let full_hash = Sha256::digest(&pk_bytes);
         // take first 20 bytes of the hash
         let mut hash: [u8; PKH_LEN] = Default::default();
@@ -630,10 +630,7 @@ macro_rules! sigscheme_test {
 
                 let mut rng: ThreadRng = thread_rng();
                 let keypair = <$type>::generate(&mut rng);
-                println!(
-                    "keypair {:?}",
-                    keypair.try_to_vec().unwrap().as_slice()
-                );
+                println!("keypair {:?}", keypair.serialize_to_vec().as_slice());
             }
             /// Run `cargo test gen_keypair -- --nocapture` to generate a
             /// new keypair.

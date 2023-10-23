@@ -7,6 +7,7 @@ pub mod decrypted_tx {
     #[cfg(feature = "ferveo-tpke")]
     use ark_ec::PairingEngine;
     use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+    use borsh_ext::BorshSerializeExt;
     use sha2::{Digest, Sha256};
 
     #[derive(
@@ -32,9 +33,7 @@ pub mod decrypted_tx {
     impl DecryptedTx {
         /// Produce a SHA-256 hash of this header
         pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-            hasher.update(
-                self.try_to_vec().expect("unable to serialize decrypted tx"),
-            );
+            hasher.update(self.serialize_to_vec());
             hasher
         }
     }

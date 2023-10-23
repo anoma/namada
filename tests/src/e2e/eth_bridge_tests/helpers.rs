@@ -55,7 +55,7 @@ impl EventsEndpointClient {
     /// Sends an Ethereum event to the Namada node. Returns `Ok` iff the event
     /// was successfully sent.
     pub async fn send(&mut self, event: &EthereumEvent) -> Result<()> {
-        let event = event.try_to_vec()?;
+        let event = event.serialize_to_vec()?;
 
         let req = Request::builder()
             .method(Method::POST)

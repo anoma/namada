@@ -1,12 +1,14 @@
 //! Utilities around the DKG session keys
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Read};
 use std::str::FromStr;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 
@@ -51,8 +53,8 @@ impl BorshSerialize for DkgKeypair {
 }
 
 impl BorshDeserialize for DkgKeypair {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let kp_bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let kp_bytes: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
         let kp: ferveo_common::Keypair<EllipticCurve> =
             CanonicalDeserialize::deserialize(kp_bytes.as_slice())
                 .map_err(|err| Error::new(ErrorKind::InvalidInput, err))?;
@@ -111,8 +113,8 @@ impl BorshSerialize for DkgPublicKey {
 }
 
 impl BorshDeserialize for DkgPublicKey {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let pk_bytes: Vec<u8> = BorshDeserialize::deserialize(buf)?;
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let pk_bytes: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
         let pk: ferveo_common::PublicKey<EllipticCurve> =
             CanonicalDeserialize::deserialize(pk_bytes.as_slice())
                 .map_err(|err| Error::new(ErrorKind::InvalidInput, err))?;
@@ -122,7 +124,7 @@ impl BorshDeserialize for DkgPublicKey {
 
 impl BorshSchema for DkgPublicKey {
     fn add_definitions_recursively(
-        definitions: &mut std::collections::HashMap<
+        definitions: &mut BTreeMap<
             borsh::schema::Declaration,
             borsh::schema::Definition,
         >,
@@ -140,9 +142,7 @@ impl BorshSchema for DkgPublicKey {
 
 impl Display for DkgPublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let vec = self
-            .try_to_vec()
-            .expect("Encoding public key shouldn't fail");
+        let vec = self.serialize_to_vec();
         write!(f, "{}", HEXLOWER.encode(&vec))
     }
 }

@@ -18,7 +18,6 @@ use crate::protocol::transactions::{utils, votes, ChangedKeys};
 use crate::storage::eth_bridge_queries::EthBridgeQueries;
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::vote_tallies::{self, BridgePoolRoot};
-
 /// Applies a tally of signatures on over the Ethereum
 /// bridge pool root and nonce. Note that every signature
 /// passed into this function will be for the same
@@ -222,7 +221,8 @@ mod test_apply_bp_roots_to_storage {
     use std::collections::BTreeSet;
 
     use assert_matches::assert_matches;
-    use borsh::{BorshDeserialize, BorshSerialize};
+    use borsh::BorshDeserialize;
+    use borsh_ext::BorshSerializeExt;
     use namada_core::ledger::eth_bridge::storage::bridge_pool::{
         get_key_from_hash, get_nonce_key,
     };
@@ -281,7 +281,7 @@ mod test_apply_bp_roots_to_storage {
             &KeccakHash([1; 32]),
             100.into(),
         );
-        let value = BlockHeight(101).try_to_vec().expect("Test failed");
+        let value = BlockHeight(101).serialize_to_vec();
         wl_storage
             .storage
             .block
@@ -289,10 +289,7 @@ mod test_apply_bp_roots_to_storage {
             .update(&get_key_from_hash(&KeccakHash([1; 32])), value)
             .expect("Test failed");
         wl_storage
-            .write_bytes(
-                &get_nonce_key(),
-                Uint::from(42).try_to_vec().expect("Test failed"),
-            )
+            .write_bytes(&get_nonce_key(), Uint::from(42).serialize_to_vec())
             .expect("Test failed");
         TestPackage {
             validators: [validator_a, validator_b, validator_c],

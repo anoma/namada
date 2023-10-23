@@ -1,6 +1,7 @@
 pub(super) mod eth_bridge;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -325,7 +326,7 @@ where
     } else {
         None
     };
-    let data = data.try_to_vec().into_storage_result()?;
+    let data = data.serialize_to_vec();
     Ok(EncodedResponseQuery {
         data,
         proof,

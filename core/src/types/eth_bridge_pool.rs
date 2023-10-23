@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +69,7 @@ pub enum TransferToEthereumKind {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
-    BorshSchema,
+    /* BorshSchema, */
 )]
 pub struct PendingTransferAppendix<'transfer> {
     /// The kind of the pending transfer to Ethereum.
@@ -105,9 +106,7 @@ impl<'t> From<&'t PendingTransfer> for PendingTransferAppendix<'t> {
 impl<'transfer> PendingTransferAppendix<'transfer> {
     /// Calculate the checksum of this [`PendingTransferAppendix`].
     pub fn checksum(&self) -> HashDigest {
-        let serialized = self
-            .try_to_vec()
-            .expect("Serializing a PendingTransferAppendix should not fail");
+        let serialized = self.serialize_to_vec();
         HashDigest::sha256(serialized)
     }
 }

@@ -11,6 +11,7 @@ pub mod token;
 pub mod validation;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 
 use crate::types::address::Address;
@@ -109,7 +110,7 @@ pub trait StorageWrite {
         key: &storage::Key,
         val: T,
     ) -> Result<()> {
-        let bytes = val.try_to_vec().into_storage_result()?;
+        let bytes = val.serialize_to_vec();
         self.write_bytes(key, bytes)
     }
 

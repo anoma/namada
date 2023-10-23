@@ -1,7 +1,7 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use namada_core::ledger::parameters::storage::get_max_proposal_bytes_key;
 use namada_core::ledger::parameters::EpochDuration;
 use namada_core::ledger::storage::WlStorage;
@@ -172,9 +172,8 @@ where
         pk: &key::common::PublicKey,
         epoch: Option<Epoch>,
     ) -> Result<WeightedValidator> {
-        let pk_bytes = pk
-            .try_to_vec()
-            .expect("Serializing public key should not fail");
+        let pk_bytes =
+            borsh::to_vec(pk).expect("Serializing public key should not fail");
         let epoch = epoch
             .unwrap_or_else(|| self.wl_storage.storage.get_current_epoch().0);
         self.get_consensus_validators(Some(epoch))
