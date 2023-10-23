@@ -5,7 +5,10 @@ pub use namada_core::proto;
 pub use tendermint_rpc;
 #[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
-pub use {bip39, namada_core as core, namada_proof_of_stake as proof_of_stake};
+pub use {
+    bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
+    namada_proof_of_stake as proof_of_stake, zeroize,
+};
 #[cfg(feature = "abcipp")]
 pub use {
     ibc_abcipp as ibc, ibc_proto_abcipp as ibc_proto,
