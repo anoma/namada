@@ -628,6 +628,9 @@ impl CompressedSignature {
             if idx == 0 {
                 // The "zeroth" section is the header
                 targets.push(tx.header_hash());
+            } else if idx == 255 {
+                // The 255th section is the raw header
+                targets.push(tx.raw_header_hash());
             } else {
                 targets.push(tx.sections[idx as usize - 1].get_hash());
             }
