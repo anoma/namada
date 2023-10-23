@@ -1,7 +1,6 @@
 use color_eyre::eyre::Result;
 use namada::types::io::Io;
-use namada_sdk::tx::dump_tx;
-use namada_sdk::{signing, Namada, NamadaImpl};
+use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -220,28 +219,7 @@ impl CliApi {
                         client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(&client, io);
-                        let tx_args = args.tx.clone();
-                        let (mut tx, signing_data, _epoch) =
-                            args.clone().build(&namada).await?;
-
-                        signing::generate_test_vector(&namada, &tx).await?;
-
-                        if args.tx.dump_tx {
-                            dump_tx::<IO>(io, &args.tx, tx);
-                        } else {
-                            tx::submit_reveal_aux(
-                                &namada,
-                                tx_args.clone(),
-                                &args.sender,
-                            )
-                            .await?;
-
-                            namada
-                                .sign(&mut tx, &tx_args, signing_data)
-                                .await?;
-
-                            namada.submit(tx, &tx_args).await?;
-                        }
+                        tx::submit_bridge_pool_tx(&namada, args).await?;
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(mut args)) => {
                         let client = client.unwrap_or_else(|| {

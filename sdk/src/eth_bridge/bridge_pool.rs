@@ -8,15 +8,18 @@ use std::sync::Arc;
 use borsh::BorshSerialize;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
+use futures::future::FutureExt;
+use namada_core::ledger::eth_bridge::storage::bridge_pool::get_pending_key;
 use namada_core::ledger::eth_bridge::storage::wrapped_erc20s;
-use namada_core::types::address::Address;
+use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::eth_abi::Encode;
 use namada_core::types::eth_bridge_pool::{
     GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
 };
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::keccak::KeccakHash;
 use namada_core::types::storage::Epoch;
-use namada_core::types::token::{Amount, DenominatedAmount};
+use namada_core::types::token::{balance_key, Amount, DenominatedAmount};
 use namada_core::types::voting_power::FractionalVotingPower;
 use owo_colors::OwoColorize;
 use serde::Serialize;
@@ -24,7 +27,9 @@ use serde::Serialize;
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
 use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{Duration, Instant};
-use crate::error::{EncodingError, Error, EthereumBridgeError, QueryError};
+use crate::error::{
+    EncodingError, Error, EthereumBridgeError, QueryError, TxError,
+};
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
@@ -33,7 +38,7 @@ use crate::queries::{
     Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
     RPC,
 };
-use crate::rpc::{query_wasm_code_hash, validate_amount};
+use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::aux_signing_data;
 use crate::tx::prepare_tx;
 use crate::{
@@ -41,8 +46,8 @@ use crate::{
 };
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
-pub async fn build_bridge_pool_tx<'a>(
-    context: &impl Namada<'a>,
+pub async fn build_bridge_pool_tx(
+    context: &impl Namada<'_>,
     args::EthereumBridgePool {
         tx: tx_args,
         nut,
@@ -56,33 +61,94 @@ pub async fn build_bridge_pool_tx<'a>(
         code_path,
     }: args::EthereumBridgePool,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>), Error> {
-    let default_signer = Some(sender.clone());
-    let signing_data = aux_signing_data(
+    let sender_ = sender.clone();
+    let (transfer, tx_code_hash, signing_data) = futures::try_join!(
+        validate_bridge_pool_tx(
+            context,
+            tx_args.force,
+            nut,
+            asset,
+            recipient,
+            sender,
+            amount,
+            fee_amount,
+            fee_payer,
+            fee_token,
+        ),
+        query_wasm_code_hash(context, code_path.to_string_lossy()),
+        aux_signing_data(
+            context,
+            &tx_args,
+            // token owner
+            Some(sender_.clone()),
+            // tx signer
+            Some(sender_),
+        ),
+    )?;
+
+    let chain_id = tx_args
+        .chain_id
+        .clone()
+        .ok_or_else(|| Error::Other("No chain id available".into()))?;
+
+    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
+
+    let epoch = prepare_tx(
         context,
         &tx_args,
-        Some(sender.clone()),
-        default_signer,
+        &mut tx,
+        signing_data.fee_payer.clone(),
+        None,
     )
     .await?;
+
+    Ok((tx, signing_data, epoch))
+}
+
+/// Perform client validation checks on a Bridge pool transfer.
+#[allow(clippy::too_many_arguments)]
+async fn validate_bridge_pool_tx(
+    context: &impl Namada<'_>,
+    force: bool,
+    nut: bool,
+    asset: EthAddress,
+    recipient: EthAddress,
+    sender: Address,
+    amount: args::InputAmount,
+    fee_amount: args::InputAmount,
+    fee_payer: Option<Address>,
+    fee_token: Address,
+) -> Result<PendingTransfer, Error> {
+    let token_addr = wrapped_erc20s::token(&asset);
+    let validate_token_amount =
+        validate_amount(context, amount, &token_addr, force).map(|result| {
+            result.map_err(|e| {
+                Error::Other(format!(
+                    "Failed to validate Bridge pool transfer amount: {e}"
+                ))
+            })
+        });
+
+    let validate_fee_amount =
+        validate_amount(context, fee_amount, &fee_token, force).map(|result| {
+            result.map_err(|e| {
+                Error::Other(format!(
+                    "Failed to validate Bridge pool fee amount: {e}",
+                ))
+            })
+        });
+
+    // validate amounts
+    let (
+        tok_denominated @ DenominatedAmount { amount, .. },
+        fee_denominated @ DenominatedAmount {
+            amount: fee_amount, ..
+        },
+    ) = futures::try_join!(validate_token_amount, validate_fee_amount)?;
+
+    // build pending Bridge pool transfer
     let fee_payer = fee_payer.unwrap_or_else(|| sender.clone());
-    let DenominatedAmount { amount, .. } = validate_amount(
-        context,
-        amount,
-        &wrapped_erc20s::token(&asset),
-        tx_args.force,
-    )
-    .await
-    .map_err(|e| Error::Other(format!("Failed to validate amount. {}", e)))?;
-    let DenominatedAmount {
-        amount: fee_amount, ..
-    } = validate_amount(context, fee_amount, &fee_token, tx_args.force)
-        .await
-        .map_err(|e| {
-            Error::Other(format!(
-                "Failed to validate Bridge pool fee amount. {}",
-                e
-            ))
-        })?;
     let transfer = PendingTransfer {
         transfer: TransferToEthereum {
             asset,
@@ -102,28 +168,139 @@ pub async fn build_bridge_pool_tx<'a>(
         },
     };
 
-    let tx_code_hash =
-        query_wasm_code_hash(context, code_path.to_string_lossy()).await?;
+    if force {
+        return Ok(transfer);
+    }
 
-    let chain_id = tx_args
-        .chain_id
-        .clone()
-        .ok_or_else(|| Error::Other("No chain id available".into()))?;
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-    tx.add_code_from_hash(tx_code_hash).add_data(transfer);
+    //======================================================
+    // XXX: the following validations should be kept in sync
+    // with the validations performed by the Bridge pool VP!
+    //======================================================
 
-    // TODO(namada#1800): validate the tx on the client side
+    // check if an identical transfer is already in the Bridge pool
+    let transfer_in_pool = RPC
+        .shell()
+        .storage_has_key(context.client(), &get_pending_key(&transfer))
+        .await
+        .map_err(|e| Error::Query(QueryError::General(e.to_string())))?;
+    if transfer_in_pool {
+        return Err(Error::EthereumBridge(
+            EthereumBridgeError::TransferAlreadyInPool,
+        ));
+    }
 
-    let epoch = prepare_tx(
-        context,
-        &tx_args,
-        &mut tx,
-        signing_data.fee_payer.clone(),
-        None,
-    )
-    .await?;
+    let wnam_addr = RPC
+        .shell()
+        .eth_bridge()
+        .read_native_erc20_contract(context.client())
+        .await
+        .map_err(|e| {
+            Error::EthereumBridge(EthereumBridgeError::RetrieveContract(
+                e.to_string(),
+            ))
+        })?;
 
-    Ok((tx, signing_data, epoch))
+    // validate gas fee token
+    match &transfer.gas_fee.token {
+        Address::Internal(InternalAddress::Nut(_)) => {
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::InvalidFeeToken(transfer.gas_fee.token),
+            ));
+        }
+        fee_token if fee_token == &wrapped_erc20s::token(&wnam_addr) => {
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::InvalidFeeToken(transfer.gas_fee.token),
+            ));
+        }
+        _ => {}
+    }
+
+    // validate wnam token caps + whitelist
+    if transfer.transfer.asset == wnam_addr {
+        let flow_control = RPC
+            .shell()
+            .eth_bridge()
+            .get_erc20_flow_control(context.client(), &wnam_addr)
+            .await
+            .map_err(|e| {
+                Error::Query(QueryError::General(format!(
+                    "Failed to read wrapped NAM flow control data: {e}"
+                )))
+            })?;
+
+        if !flow_control.whitelisted {
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::Erc20NotWhitelisted(wnam_addr),
+            ));
+        }
+
+        if flow_control.exceeds_token_caps(transfer.transfer.amount) {
+            return Err(Error::EthereumBridge(
+                EthereumBridgeError::Erc20TokenCapsExceeded(wnam_addr),
+            ));
+        }
+    }
+
+    // validate balances
+    let maybe_balance_error = if token_addr == transfer.gas_fee.token {
+        let expected_debit = transfer.transfer.amount + transfer.gas_fee.amount;
+        let balance: Amount = query_storage_value(
+            context.client(),
+            &balance_key(&token_addr, &transfer.transfer.sender),
+        )
+        .await?;
+
+        balance
+            .checked_sub(expected_debit)
+            .is_none()
+            .then_some((token_addr, tok_denominated))
+    } else {
+        let check_tokens = async {
+            let balance: Amount = query_storage_value(
+                context.client(),
+                &balance_key(&token_addr, &transfer.transfer.sender),
+            )
+            .await?;
+            Result::<_, Error>::Ok(
+                balance
+                    .checked_sub(transfer.transfer.amount)
+                    .is_none()
+                    .then_some((token_addr, tok_denominated)),
+            )
+        };
+        let check_fees = async {
+            let balance: Amount = query_storage_value(
+                context.client(),
+                &balance_key(
+                    &transfer.gas_fee.token,
+                    &transfer.transfer.sender,
+                ),
+            )
+            .await?;
+            Result::<_, Error>::Ok(
+                balance
+                    .checked_sub(transfer.gas_fee.amount)
+                    .is_none()
+                    .then_some((
+                        transfer.gas_fee.token.clone(),
+                        fee_denominated,
+                    )),
+            )
+        };
+
+        let (err_tokens, err_fees) =
+            futures::try_join!(check_tokens, check_fees)?;
+        err_tokens.or(err_fees)
+    };
+    if let Some((token, amount)) = maybe_balance_error {
+        return Err(Error::Tx(TxError::NegativeBalanceAfterTransfer(
+            Box::new(transfer.transfer.sender),
+            amount.to_string(),
+            Box::new(token),
+        )));
+    }
+
+    Ok(transfer)
 }
 
 /// A json serializable representation of the Ethereum
@@ -999,7 +1176,6 @@ mod recommendations {
     #[cfg(test)]
     mod test_recommendations {
         use namada_core::types::address::Address;
-        use namada_core::types::ethereum_events::EthAddress;
 
         use super::*;
         use crate::io::StdIo;

@@ -3,6 +3,7 @@
 use namada_core::proto::Tx;
 use namada_core::types::address::Address;
 use namada_core::types::dec::Dec;
+use namada_core::types::ethereum_events::EthAddress;
 use namada_core::types::storage;
 use namada_core::types::storage::Epoch;
 use prost::EncodeError;
@@ -324,6 +325,18 @@ pub enum EthereumBridgeError {
     /// Invalid Bridge pool nonce error.
     #[error("The Bridge pool nonce is invalid")]
     InvalidBpNonce,
+    /// Invalid fee token error.
+    #[error("An invalid fee token was provided: {0}")]
+    InvalidFeeToken(Address),
+    /// Not whitelisted error.
+    #[error("ERC20 is not whitelisted: {0}")]
+    Erc20NotWhitelisted(EthAddress),
+    /// Exceeded token caps error.
+    #[error("ERC20 token caps exceeded: {0}")]
+    Erc20TokenCapsExceeded(EthAddress),
+    /// Transfer already in pool error.
+    #[error("An identical transfer is already present in the Bridge pool")]
+    TransferAlreadyInPool,
 }
 
 /// Checks if the given error is an invalid viewing key
