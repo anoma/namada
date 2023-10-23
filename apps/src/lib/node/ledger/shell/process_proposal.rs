@@ -1087,11 +1087,13 @@ mod test_process_proposal {
                     shell.chain_id.clone(),
                 )
                 .to_bytes();
-        assert!(shell
-            .process_proposal(ProcessProposal {
-                txs: vec![tx.clone(), tx]
-            })
-            .is_err());
+        assert!(
+            shell
+                .process_proposal(ProcessProposal {
+                    txs: vec![tx.clone(), tx]
+                })
+                .is_err()
+        );
     }
 
     #[cfg(feature = "abcipp")]
@@ -1248,9 +1250,11 @@ mod test_process_proposal {
             sig,
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        let mut txs = vec![EthereumTxData::BridgePool(vote_ext.into())
-            .sign(protocol_key, shell.chain_id.clone())
-            .to_bytes()];
+        let mut txs = vec![
+            EthereumTxData::BridgePool(vote_ext.into())
+                .sign(protocol_key, shell.chain_id.clone())
+                .to_bytes(),
+        ];
 
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
@@ -2176,15 +2180,12 @@ mod test_process_proposal {
                     response[1].result.code,
                     u32::from(ErrorCodes::ReplayTx)
                 );
-                // The checks happens on the inner hash first, so the tx is
-                // rejected because of this hash, not the
-                // wrapper one
                 assert_eq!(
                     response[1].result.info,
                     format!(
                         "Transaction replay attempt: Wrapper transaction hash \
                          {} already in storage",
-                        wrapper.raw_header_hash()
+                        wrapper.header_hash()
                     )
                 );
             }
@@ -2247,7 +2248,7 @@ mod test_process_proposal {
                     format!(
                         "Transaction replay attempt: Inner transaction hash \
                          {} already in storage",
-                        inner_unsigned_hash
+                        wrapper.raw_header_hash()
                     )
                 );
             }
