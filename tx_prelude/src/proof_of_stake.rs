@@ -7,8 +7,8 @@ use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, change_validator_commission_rate,
-    read_pos_params, redelegate_tokens, unbond_tokens, unjail_validator,
-    withdraw_tokens, BecomeValidator,
+    change_validator_metadata, read_pos_params, redelegate_tokens,
+    unbond_tokens, unjail_validator, withdraw_tokens, BecomeValidator,
 };
 pub use namada_proof_of_stake::{parameters, types, ResultSlashing};
 
@@ -136,5 +136,31 @@ impl Ctx {
         })?;
 
         Ok(validator_address)
+    }
+
+    /// Change validator metadata.
+    #[allow(clippy::too_many_arguments)]
+    pub fn change_validator_metadata(
+        &mut self,
+        validator: &Address,
+        email: Option<String>,
+        description: Option<String>,
+        website: Option<String>,
+        alias: Option<String>,
+        discord_handle: Option<String>,
+        commission_rate: Option<Dec>,
+    ) -> TxResult {
+        let current_epoch = self.get_block_epoch()?;
+        change_validator_metadata(
+            self,
+            validator,
+            email,
+            description,
+            website,
+            alias,
+            discord_handle,
+            commission_rate,
+            current_epoch,
+        )
     }
 }

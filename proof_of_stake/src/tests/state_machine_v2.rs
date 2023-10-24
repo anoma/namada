@@ -3606,6 +3606,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     eth_hot_key: _,
                     commission_rate: _,
                     max_commission_rate_change: _,
+                    metadata: _,
                 } in state.genesis_validators.clone()
                 {
                     let records = state.records_mut(&address, &address);

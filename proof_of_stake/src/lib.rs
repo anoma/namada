@@ -51,8 +51,10 @@ use storage::{
     get_validator_address_from_bond, is_bond_key, is_unbond_key,
     is_validator_slashes_key, last_block_proposer_key, params_key,
     slashes_prefix, unbonds_for_source_prefix, unbonds_prefix,
-    validator_address_raw_hash_key, validator_last_slash_key,
-    validator_max_commission_rate_change_key,
+    validator_address_raw_hash_key, validator_alias_key,
+    validator_description_key, validator_discord_key, validator_email_key,
+    validator_last_slash_key, validator_max_commission_rate_change_key,
+    validator_website_key,
 };
 use types::{
     into_tm_voting_power, BelowCapacityValidatorSet,
@@ -67,9 +69,10 @@ use types::{
     TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
     TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
     ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
-    ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorProtocolKeys,
-    ValidatorSetPositions, ValidatorSetUpdate, ValidatorState, ValidatorStates,
-    ValidatorTotalUnbonded, VoteInfo, WeightedValidator,
+    ValidatorEthHotKeys, ValidatorMetaData, ValidatorPositionAddresses,
+    ValidatorProtocolKeys, ValidatorSetPositions, ValidatorSetUpdate,
+    ValidatorState, ValidatorStates, ValidatorTotalUnbonded, VoteInfo,
+    WeightedValidator,
 };
 
 /// Address of the PoS account implemented as a native VP
@@ -5422,4 +5425,220 @@ pub mod test_utils {
         init_genesis_helper(storage, &params, validators, current_epoch)?;
         Ok(params)
     }
+}
+
+/// Read PoS validator's email.
+pub fn read_validator_email<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&validator_email_key(validator))
+}
+
+/// Write PoS validator's email. The email cannot be removed, so an empty string
+/// will result in an error.
+pub fn write_validator_email<S>(
+    storage: &mut S,
+    validator: &Address,
+    email: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = validator_email_key(validator);
+    if email.is_empty() {
+        Err(MetadataError::CannotRemoveEmail.into())
+    } else {
+        storage.write(&key, email)
+    }
+}
+
+/// Read PoS validator's description.
+pub fn read_validator_description<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&validator_description_key(validator))
+}
+
+/// Write PoS validator's description. If the provided arg is an empty string,
+/// remove the data.
+pub fn write_validator_description<S>(
+    storage: &mut S,
+    validator: &Address,
+    description: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = validator_description_key(validator);
+    if description.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, description)
+    }
+}
+
+/// Read PoS validator's website.
+pub fn read_validator_website<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&validator_website_key(validator))
+}
+
+/// Write PoS validator's website. If the provided arg is an empty string,
+/// remove the data.
+pub fn write_validator_website<S>(
+    storage: &mut S,
+    validator: &Address,
+    website: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = validator_website_key(validator);
+    if website.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, website)
+    }
+}
+
+/// Read PoS validator's alias.
+pub fn read_validator_alias<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&validator_alias_key(validator))
+}
+
+/// Write PoS validator's alias. If the provided arg is an empty string,
+/// remove the data.
+pub fn write_validator_alias<S>(
+    storage: &mut S,
+    validator: &Address,
+    alias: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = validator_alias_key(validator);
+    if alias.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, alias)
+    }
+}
+
+/// Read PoS validator's discord handle.
+pub fn read_validator_discord_handle<S>(
+    storage: &S,
+    validator: &Address,
+) -> storage_api::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&validator_discord_key(validator))
+}
+
+/// Write PoS validator's discord handle. If the provided arg is an empty
+/// string, remove the data.
+pub fn write_validator_discord_handle<S>(
+    storage: &mut S,
+    validator: &Address,
+    discord_handle: &String,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = validator_discord_key(validator);
+    if discord_handle.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, discord_handle)
+    }
+}
+
+/// Write validator's metadata.
+pub fn write_validator_metadata<S>(
+    storage: &mut S,
+    validator: &Address,
+    metadata: &ValidatorMetaData,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Email is the only required field in the metadata
+    write_validator_email(storage, validator, &metadata.email)?;
+
+    if let Some(description) = metadata.description.as_ref() {
+        write_validator_description(storage, validator, description)?;
+    }
+    if let Some(website) = metadata.website.as_ref() {
+        write_validator_website(storage, validator, website)?;
+    }
+    if let Some(alias) = metadata.alias.as_ref() {
+        write_validator_alias(storage, validator, alias)?;
+    }
+    if let Some(discord) = metadata.discord_handle.as_ref() {
+        write_validator_discord_handle(storage, validator, discord)?;
+    }
+    Ok(())
+}
+
+/// Change validator's metadata. In addition to changing any of the data from
+/// [`ValidatorMetaData`], the validator's commission rate can be changed within
+/// here as well.
+#[allow(clippy::too_many_arguments)]
+pub fn change_validator_metadata<S>(
+    storage: &mut S,
+    validator: &Address,
+    email: Option<String>,
+    description: Option<String>,
+    website: Option<String>,
+    alias: Option<String>,
+    discord_handle: Option<String>,
+    commission_rate: Option<Dec>,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    if let Some(email) = email {
+        write_validator_email(storage, validator, &email)?;
+    }
+    if let Some(description) = description {
+        write_validator_description(storage, validator, &description)?;
+    }
+    if let Some(website) = website {
+        write_validator_website(storage, validator, &website)?;
+    }
+    if let Some(alias) = alias {
+        write_validator_alias(storage, validator, &alias)?;
+    }
+    if let Some(discord) = discord_handle {
+        write_validator_discord_handle(storage, validator, &discord)?;
+    }
+    if let Some(commission_rate) = commission_rate {
+        change_validator_commission_rate(
+            storage,
+            validator,
+            commission_rate,
+            current_epoch,
+        )?;
+    }
+    Ok(())
 }

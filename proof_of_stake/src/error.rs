@@ -140,6 +140,13 @@ pub enum RedelegationError {
     NotAValidator(Address),
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum MetadataError {
+    #[error("The validator email cannot be removed")]
+    CannotRemoveEmail,
+}
+
 impl From<BecomeValidatorError> for storage_api::Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
@@ -184,6 +191,12 @@ impl From<UnjailValidatorError> for storage_api::Error {
 
 impl From<RedelegationError> for storage_api::Error {
     fn from(err: RedelegationError) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<MetadataError> for storage_api::Error {
+    fn from(err: MetadataError) -> Self {
         Self::new(err)
     }
 }

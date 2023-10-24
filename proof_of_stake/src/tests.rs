@@ -1282,6 +1282,7 @@ fn test_validator_sets() {
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
                 max_commission_rate_change: Dec::new(1, 1)
                     .expect("Dec creation failed"),
+                metadata: Default::default(),
             },
             GenesisValidator {
                 address: val2.clone(),
@@ -1299,6 +1300,7 @@ fn test_validator_sets() {
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
                 max_commission_rate_change: Dec::new(1, 1)
                     .expect("Dec creation failed"),
+                metadata: Default::default(),
             },
         ]
         .into_iter(),
@@ -1946,6 +1948,7 @@ fn test_validator_sets_swap() {
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
                 max_commission_rate_change: Dec::new(1, 1)
                     .expect("Dec creation failed"),
+                metadata: Default::default(),
             },
             GenesisValidator {
                 address: val2.clone(),
@@ -1963,6 +1966,7 @@ fn test_validator_sets_swap() {
                 commission_rate: Dec::new(1, 1).expect("Dec creation failed"),
                 max_commission_rate_change: Dec::new(1, 1)
                     .expect("Dec creation failed"),
+                metadata: Default::default(),
             },
         ]
         .into_iter(),
@@ -2197,6 +2201,7 @@ fn arb_genesis_validators(
                         eth_cold_key,
                         commission_rate,
                         max_commission_rate_change,
+                        metadata: Default::default(),
                     }
                 })
                 .collect()

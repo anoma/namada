@@ -13,7 +13,7 @@ use namada_core::types::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, ValidatorState, WeightedValidator,
+    Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
 };
 use namada_proof_of_stake::{
     self, bond_amount, bond_handle, find_all_enqueued_slashes,
@@ -21,8 +21,10 @@ use namada_proof_of_stake::{
     read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_max_commission_rate_change,
-    read_validator_stake, unbond_handle, validator_commission_rate_handle,
+    read_total_stake, read_validator_alias, read_validator_description,
+    read_validator_discord_handle, read_validator_email,
+    read_validator_max_commission_rate_change, read_validator_stake,
+    read_validator_website, unbond_handle, validator_commission_rate_handle,
     validator_incoming_redelegations_handle, validator_slashes_handle,
     validator_state_handle,
 };
@@ -45,6 +47,9 @@ router! {POS,
 
         ( "commission" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<CommissionPair> = validator_commission,
+
+        ( "metadata" / [validator: Address] )
+            -> Option<ValidatorMetaData> = validator_metadata,
 
         ( "state" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<ValidatorState> = validator_state,
@@ -226,6 +231,35 @@ where
                 max_commission_change_per_epoch,
             }))
         }
+        _ => Ok(None),
+    }
+}
+
+/// Get the validator metadata
+fn validator_metadata<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    validator: Address,
+) -> storage_api::Result<Option<ValidatorMetaData>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let email = read_validator_email(ctx.wl_storage, &validator)?;
+    let description = read_validator_description(ctx.wl_storage, &validator)?;
+    let website = read_validator_website(ctx.wl_storage, &validator)?;
+    let alias = read_validator_alias(ctx.wl_storage, &validator)?;
+    let discord_handle =
+        read_validator_discord_handle(ctx.wl_storage, &validator)?;
+
+    // Email is the only required field for a validator in storage
+    match email {
+        Some(email) => Ok(Some(ValidatorMetaData {
+            email,
+            description,
+            website,
+            alias,
+            discord_handle,
+        })),
         _ => Ok(None),
     }
 }

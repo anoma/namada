@@ -95,6 +95,7 @@ mod tests {
                 eth_hot_key: eth_hot_key.clone(),
                 commission_rate,
                 max_commission_rate_change,
+                metadata: Default::default(),
             },
             GenesisValidator {
                 address: redelegation.dest_validator.clone(),
@@ -105,6 +106,7 @@ mod tests {
                 eth_hot_key,
                 commission_rate,
                 max_commission_rate_change,
+                metadata: Default::default(),
             },
         ];
 

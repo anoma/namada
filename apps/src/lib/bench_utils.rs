@@ -105,6 +105,8 @@ pub const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
 pub const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
+pub const TX_CHANGE_VALIDATOR_METADATA_WASM: &str =
+    "tx_change_validator_metadata.wasm";
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";

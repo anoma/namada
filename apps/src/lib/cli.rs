@@ -230,6 +230,7 @@ pub mod cmds {
                 .subcommand(Withdraw::def().display_order(2))
                 .subcommand(Redelegate::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
+                .subcommand(TxMetadataChange::def().display_order(2))
                 // Ethereum bridge transactions
                 .subcommand(AddToEthBridgePool::def().display_order(3))
                 // PGF transactions
@@ -254,6 +255,8 @@ pub mod cmds {
                 .subcommand(QueryProtocolParameters::def().display_order(5))
                 .subcommand(QueryPgf::def().display_order(5))
                 .subcommand(QueryValidatorState::def().display_order(5))
+                .subcommand(QueryCommissionRate::def().display_order(5))
+                .subcommand(QueryMetaData::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(GenIbcShieldedTransafer::def().display_order(6))
@@ -284,6 +287,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxResignSteward);
             let tx_commission_rate_change =
                 Self::parse_with_ctx(matches, TxCommissionRateChange);
+            let tx_change_metadata =
+                Self::parse_with_ctx(matches, TxMetadataChange);
             let bond = Self::parse_with_ctx(matches, Bond);
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
@@ -313,6 +318,9 @@ pub mod cmds {
             let query_pgf = Self::parse_with_ctx(matches, QueryPgf);
             let query_validator_state =
                 Self::parse_with_ctx(matches, QueryValidatorState);
+            let query_commission =
+                Self::parse_with_ctx(matches, QueryCommissionRate);
+            let query_metadata = Self::parse_with_ctx(matches, QueryMetaData);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
@@ -329,6 +337,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
+                .or(tx_change_metadata)
                 .or(tx_unjail_validator)
                 .or(bond)
                 .or(unbond)
@@ -354,6 +363,8 @@ pub mod cmds {
                 .or(query_protocol_parameters)
                 .or(query_pgf)
                 .or(query_validator_state)
+                .or(query_commission)
+                .or(query_metadata)
                 .or(query_account)
                 .or(sign_tx)
                 .or(gen_ibc_shielded)
@@ -402,6 +413,7 @@ pub mod cmds {
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
+        TxMetadataChange(TxMetadataChange),
         TxUnjailValidator(TxUnjailValidator),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
@@ -422,6 +434,7 @@ pub mod cmds {
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
+        QueryMetaData(QueryMetaData),
         QuerySlashes(QuerySlashes),
         QueryDelegations(QueryDelegations),
         QueryFindValidator(QueryFindValidator),
@@ -1675,6 +1688,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryMetaData(pub args::QueryMetaData<args::CliTypes>);
+
+    impl SubCmd for QueryMetaData {
+        const CMD: &'static str = "validator-metadata";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryMetaData(args::QueryMetaData::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query a validator's metadata.")
+                .add_args::<args::QueryMetaData<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QuerySlashes(pub args::QuerySlashes<args::CliTypes>);
 
     impl SubCmd for QuerySlashes {
@@ -1852,6 +1884,31 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Change commission raate.")
                 .add_args::<args::CommissionRateChange<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxMetadataChange(pub args::MetaDataChange<args::CliTypes>);
+
+    impl SubCmd for TxMetadataChange {
+        const CMD: &'static str = "change-metadata";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxMetadataChange(args::MetaDataChange::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Change validator's metadata, including the commission \
+                     rate if desired.",
+                )
+                .add_args::<args::MetaDataChange<args::CliTypes>>()
         }
     }
 
@@ -2648,6 +2705,8 @@ pub mod args {
     pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
     pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
+    pub const TX_CHANGE_METADATA_WASM: &str =
+        "tx_change_validator_metadata.wasm";
     pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
     pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
     pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
@@ -2708,6 +2767,7 @@ pub mod args {
     pub const CODE_PATH: Arg<PathBuf> = arg("code-path");
     pub const CODE_PATH_OPT: ArgOpt<PathBuf> = CODE_PATH.opt();
     pub const COMMISSION_RATE: Arg<Dec> = arg("commission-rate");
+    pub const COMMISSION_RATE_OPT: ArgOpt<Dec> = COMMISSION_RATE.opt();
     pub const CONSENSUS_TIMEOUT_COMMIT: ArgDefault<Timeout> = arg_default(
         "consensus-timeout-commit",
         DefaultFn(|| Timeout::from_str("1s").unwrap()),
@@ -2720,9 +2780,11 @@ pub mod args {
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DECRYPT: ArgFlag = flag("decrypt");
+    pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
     pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DESTINATION_VALIDATOR: Arg<WalletAddress> =
         arg("destination-validator");
+    pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
@@ -2741,6 +2803,8 @@ pub mod args {
     );
     pub const ETH_SYNC: ArgFlag = flag("sync");
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
+    pub const EMAIL: Arg<String> = arg("email");
+    pub const EMAIL_OPT: ArgOpt<String> = EMAIL.opt();
     pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
         arg_opt("gas-spending-key");
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
@@ -2787,6 +2851,7 @@ pub mod args {
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    pub const NEW_ALIAS: ArgOpt<String> = arg_opt("new-alias");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NUT: ArgFlag = flag("nut");
@@ -2876,6 +2941,7 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
@@ -4890,6 +4956,81 @@ pub mod args {
         }
     }
 
+    impl CliToSdk<MetaDataChange<SdkTypes>> for MetaDataChange<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> MetaDataChange<SdkTypes> {
+            MetaDataChange::<SdkTypes> {
+                tx: self.tx.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+                email: self.email,
+                description: self.description,
+                website: self.website,
+                alias: self.alias,
+                discord_handle: self.discord_handle,
+                commission_rate: self.commission_rate,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for MetaDataChange<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let email = EMAIL_OPT.parse(matches);
+            let description = DESCRIPTION_OPT.parse(matches);
+            let website = WEBSITE_OPT.parse(matches);
+            let alias = NEW_ALIAS.parse(matches);
+            let discord_handle = DISCORD_OPT.parse(matches);
+            let commission_rate = COMMISSION_RATE_OPT.parse(matches);
+            let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
+            Self {
+                tx,
+                validator,
+                email,
+                description,
+                website,
+                alias,
+                discord_handle,
+                commission_rate,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(VALIDATOR.def().help(
+                    "The validator's address whose commission rate to change.",
+                ))
+                .arg(EMAIL_OPT.def().help(
+                    "The desired new validator email. To remove the existing \
+                     email, pass an empty string to this argument.",
+                ))
+                .arg(DESCRIPTION_OPT.def().help(
+                    "The desired new validator description. To remove the \
+                     existing description, pass an empty string to this \
+                     argument.",
+                ))
+                .arg(WEBSITE_OPT.def().help(
+                    "The desired new validator website. To remove the \
+                     existing website, pass an empty string to this argument.",
+                ))
+                .arg(NEW_ALIAS.def().help(
+                    "The desired new validator alias. To remove the existing \
+                     website, pass an empty string to this argument.",
+                ))
+                .arg(DISCORD_OPT.def().help(
+                    "The desired new validator discord handle. To remove the \
+                     existing discord handle, pass an empty string to this \
+                     argument.",
+                ))
+                .arg(
+                    COMMISSION_RATE_OPT
+                        .def()
+                        .help("The desired new commission rate."),
+                )
+        }
+    }
+
     impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
             TxUnjailValidator::<SdkTypes> {
@@ -5047,6 +5188,31 @@ pub mod args {
                     "The epoch at which to query (corresponding to the last \
                      committed block, if not specified).",
                 ))
+        }
+    }
+
+    impl CliToSdk<QueryMetaData<SdkTypes>> for QueryMetaData<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryMetaData<SdkTypes> {
+            QueryMetaData::<SdkTypes> {
+                query: self.query.to_sdk(ctx),
+                validator: ctx.get(&self.validator),
+            }
+        }
+    }
+
+    impl Args for QueryMetaData<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            Self { query, validator }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                VALIDATOR
+                    .def()
+                    .help("The validator's address whose metadata to query."),
+            )
         }
     }
 
@@ -6085,6 +6251,10 @@ pub mod args {
         pub key_scheme: SchemeType,
         pub transfer_from_source_amount: token::DenominatedAmount,
         pub self_bond_amount: token::DenominatedAmount,
+        pub email: String,
+        pub description: Option<String>,
+        pub website: Option<String>,
+        pub discord_handle: Option<String>,
     }
 
     impl Args for InitGenesisValidator {
@@ -6105,6 +6275,10 @@ pub mod args {
                 TRANSFER_FROM_SOURCE_AMOUNT.parse(matches);
             // this must be an amount of native tokens
             let self_bond_amount = SELF_BOND_AMOUNT.parse(matches);
+            let email = EMAIL.parse(matches);
+            let description = DESCRIPTION_OPT.parse(matches);
+            let website = WEBSITE_OPT.parse(matches);
+            let discord_handle = DISCORD_OPT.parse(matches);
             Self {
                 source,
                 alias,
@@ -6115,6 +6289,10 @@ pub mod args {
                 max_commission_rate_change,
                 transfer_from_source_amount,
                 self_bond_amount,
+                email,
+                description,
+                website,
+                discord_handle,
             }
         }
 
@@ -6163,6 +6341,21 @@ pub mod args {
                     )
                     .requires(TRANSFER_FROM_SOURCE_AMOUNT.name),
             )
+            .arg(EMAIL.def().help(
+                "The email address of the validator. This is a required \
+                parameter.",
+            ))
+            .arg(DESCRIPTION_OPT.def().help(
+                "The validator's description. This is an optional \
+                parameter.",
+            ))
+            .arg(WEBSITE_OPT.def().help(
+                "The validator's website. This is an optional parameter.",
+            ))
+            .arg(DISCORD_OPT.def().help(
+                "The validator's discord handle. This is an optional \
+                parameter.",
+            ))
         }
     }
 

@@ -403,6 +403,7 @@ mod tests {
             max_commission_rate_change,
             eth_hot_key,
             eth_cold_key,
+            metadata: Default::default(),
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
@@ -488,6 +489,7 @@ mod tests {
                 key::testing::gen_keypair::<key::secp256k1::SigScheme>()
                     .ref_to(),
             ),
+            metadata: Default::default(),
         }];
 
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));

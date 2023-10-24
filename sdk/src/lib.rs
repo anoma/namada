@@ -65,11 +65,11 @@ use crate::signing::SigningTxData;
 use crate::token::DenominatedAmount;
 use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-    VP_USER_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM, TX_IBC_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK,
+    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
@@ -293,6 +293,32 @@ pub trait Namada<'a>: Sized {
             rate,
             validator,
             tx_code_path: PathBuf::from(TX_CHANGE_COMMISSION_WASM),
+            tx: self.tx_builder(),
+        }
+    }
+
+    /// Make a CommissionRateChange builder from the given minimum set of
+    /// arguments
+    #[allow(clippy::too_many_arguments)]
+    fn new_change_metadata(
+        &self,
+        validator: Address,
+        email: Option<String>,
+        description: Option<String>,
+        website: Option<String>,
+        alias: Option<String>,
+        discord_handle: Option<String>,
+        commission_rate: Option<Dec>,
+    ) -> args::MetaDataChange {
+        args::MetaDataChange {
+            validator,
+            email,
+            description,
+            website,
+            alias,
+            discord_handle,
+            commission_rate,
+            tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
         }
     }

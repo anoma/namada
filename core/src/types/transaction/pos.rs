@@ -138,3 +138,33 @@ pub struct CommissionChange {
     /// The new commission rate
     pub new_rate: Dec,
 }
+
+/// A change to the validator metadata.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct MetaDataChange {
+    /// Validator address
+    pub validator: Address,
+    /// Validator's email
+    pub email: Option<String>,
+    /// Validator description
+    pub description: Option<String>,
+    /// Validator website
+    pub website: Option<String>,
+    /// Validator alias
+    pub alias: Option<String>,
+    /// Validator's discord handle
+    pub discord_handle: Option<String>,
+    /// Validator's commission rate
+    pub commission_rate: Option<Dec>,
+}

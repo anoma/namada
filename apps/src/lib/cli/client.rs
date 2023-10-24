@@ -221,6 +221,18 @@ impl CliApi {
                         tx::submit_validator_commission_change(&namada, args)
                             .await?;
                     }
+                    Sub::TxMetadataChange(TxMetadataChange(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        tx::submit_validator_metadata_change(&namada, args)
+                            .await?;
+                    }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {
                         let mut args = args.0;
@@ -367,6 +379,17 @@ impl CliApi {
                         let namada = ctx.to_sdk(&client, io);
                         rpc::query_and_print_commission_rate(&namada, args)
                             .await;
+                    }
+                    Sub::QueryMetaData(QueryMetaData(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.query.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        rpc::query_and_print_metadata(&namada, args).await;
                     }
                     Sub::QuerySlashes(QuerySlashes(mut args)) => {
                         let client = client.unwrap_or_else(|| {

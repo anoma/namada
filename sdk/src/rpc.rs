@@ -28,7 +28,7 @@ use namada_core::types::token::{
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorState,
+    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
 use serde::Serialize;
 
@@ -733,6 +733,25 @@ pub async fn query_commission_rate<C: crate::queries::Client + Sync>(
             .validator_commission(client, validator, &epoch)
             .await,
     )
+}
+
+/// Query and return validator's metadata, including the commission rate and max
+/// commission rate change
+pub async fn query_metadata<C: crate::queries::Client + Sync>(
+    client: &C,
+    validator: &Address,
+    epoch: Option<Epoch>,
+) -> Result<(Option<ValidatorMetaData>, Option<CommissionPair>), Error> {
+    let metadata = convert_response::<C, Option<ValidatorMetaData>>(
+        RPC.vp().pos().validator_metadata(client, validator).await,
+    )?;
+    let commission_info = convert_response::<C, Option<CommissionPair>>(
+        RPC.vp()
+            .pos()
+            .validator_commission(client, validator, &epoch)
+            .await,
+    )?;
+    Ok((metadata, commission_info))
 }
 
 /// Query and return the incoming redelegation epoch for a given pair of source

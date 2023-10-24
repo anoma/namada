@@ -3199,3 +3199,119 @@ fn prepare_proposal_data(
     );
     valid_proposal_json_path
 }
+
+/// Change validator metadata
+#[test]
+fn change_validator_metadata() -> Result<()> {
+    let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // 2. Query the validator metadata loaded from genesis
+    let metadata_query_args = vec![
+        "validator-metadata",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run!(test, Bin::Client, metadata_query_args.clone(), Some(40))?;
+    client.exp_string("Email:")?;
+    client.exp_string("No description")?;
+    client.exp_string("No website")?;
+    client.exp_string("No alias")?;
+    client.exp_string("No discord handle")?;
+    client.exp_string("commission rate:")?;
+    client.exp_string("max change per epoch:")?;
+    client.assert_success();
+
+    // 3. Add some metadata to the validator
+    let metadata_change_args = vec![
+        "change-metadata",
+        "--validator",
+        "validator-0",
+        "--email",
+        "theokayestvalidator@namada.net",
+        "--description",
+        "We are just an okay validator node trying to get by",
+        "--website",
+        "theokayestvalidator.com",
+        "--new-alias",
+        "okaydingus",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        metadata_change_args,
+        Some(40)
+    )?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 4. Query the metadata after the change
+    let mut client =
+        run!(test, Bin::Client, metadata_query_args.clone(), Some(40))?;
+    client.exp_string("Email: theokayestvalidator@namada.net")?;
+    client.exp_string(
+        "Description: We are just an okay validator node trying to get by",
+    )?;
+    client.exp_string("Website: theokayestvalidator.com")?;
+    client.exp_string("Alias: okaydingus")?;
+    client.exp_string("No discord handle")?;
+    client.exp_string("commission rate:")?;
+    client.exp_string("max change per epoch:")?;
+    client.assert_success();
+
+    // 5. Remove the validator website
+    let metadata_change_args = vec![
+        "change-metadata",
+        "--validator",
+        "validator-0",
+        "--website",
+        "",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        metadata_change_args,
+        Some(40)
+    )?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    // 6. Query the metadata to see that the validator website is removed
+    let mut client =
+        run!(test, Bin::Client, metadata_query_args.clone(), Some(40))?;
+    client.exp_string("Email: theokayestvalidator@namada.net")?;
+    client.exp_string(
+        "Description: We are just an okay validator node trying to get by",
+    )?;
+    client.exp_string("No website")?;
+    client.exp_string("Alias: okaydingus")?;
+    client.exp_string("No discord handle")?;
+    client.exp_string("commission rate:")?;
+    client.exp_string("max change per epoch:")?;
+    client.assert_success();
+
+    Ok(())
+}

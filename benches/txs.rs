@@ -8,7 +8,7 @@ use namada::core::types::key::{
 };
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
-use namada::core::types::transaction::pos::InitValidator;
+use namada::core::types::transaction::pos::{InitValidator, MetaDataChange};
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::SlashType;
 use namada::proof_of_stake::{self, read_pos_params};
@@ -27,7 +27,8 @@ use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
+    TX_CHANGE_VALIDATOR_METADATA_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM, TX_REDELEGATE_WASM,
     TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
@@ -656,6 +657,35 @@ fn change_validator_commission(c: &mut Criterion) {
     });
 }
 
+fn change_validator_metadata(c: &mut Criterion) {
+    // Choose just one piece of data arbitrarily to change
+    let metadata_change = MetaDataChange {
+        validator: defaults::validator_address(),
+        email: None,
+        description: Some("I will change this piece of data".to_string()),
+        website: None,
+        alias: None,
+        discord_handle: None,
+        commission_rate: None,
+    };
+
+    let signed_tx = generate_tx(
+        TX_CHANGE_VALIDATOR_METADATA_WASM,
+        metadata_change,
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("change_validator_metadata", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 fn ibc(c: &mut Criterion) {
     let signed_tx = generate_ibc_transfer_tx();
 
@@ -733,6 +763,7 @@ criterion_group!(
     init_validator,
     change_validator_commission,
     ibc,
-    unjail_validator
+    unjail_validator,
+    change_validator_metadata
 );
 criterion_main!(whitelisted_txs);

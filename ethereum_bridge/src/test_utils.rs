@@ -212,6 +212,7 @@ pub fn init_storage_with_validators(
                 eth_hot_key,
                 commission_rate: Dec::new(5, 2).unwrap(),
                 max_commission_rate_change: Dec::new(1, 2).unwrap(),
+                metadata: Default::default(),
             }
         })
         .collect();

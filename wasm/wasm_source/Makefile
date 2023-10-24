@@ -8,6 +8,7 @@ nightly := $(shell cat ../../rust-nightly-version)
 wasms := tx_bond
 wasms += tx_bridge_pool
 wasms += tx_change_validator_commission
+wasms += tx_change_validator_metadata
 wasms += tx_ibc
 wasms += tx_init_account
 wasms += tx_init_proposal

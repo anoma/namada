@@ -605,6 +605,10 @@ pub fn init_genesis_validator(
         key_scheme,
         transfer_from_source_amount,
         self_bond_amount,
+        email,
+        description,
+        website,
+        discord_handle,
     }: args::InitGenesisValidator,
 ) {
     let (mut source_wallet, wallet_file) =
@@ -661,6 +665,10 @@ pub fn init_genesis_validator(
             net_address,
             transfer_from_source_amount,
             self_bond_amount,
+            email,
+                description,
+                website,
+                discord_handle,
         },
         &mut source_wallet,
         &validator_wallet,

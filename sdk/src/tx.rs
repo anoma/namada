@@ -101,6 +101,8 @@ pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 /// Change commission WASM path
 pub const TX_CHANGE_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
+/// Change validator metadata WASM path
+pub const TX_CHANGE_METADATA_WASM: &str = "tx_change_validator_metadata.wasm";
 /// Resign steward WASM path
 pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 /// Update steward commission WASM path
@@ -592,6 +594,137 @@ pub async fn build_validator_commission_change<'a>(
     let data = pos::CommissionChange {
         validator: validator.clone(),
         new_rate: *rate,
+    };
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    )
+    .await
+    .map(|(tx, epoch)| (tx, signing_data, epoch))
+}
+
+/// Submit validator metadata change
+pub async fn build_validator_metadata_change<'a>(
+    context: &impl Namada<'a>,
+    args::MetaDataChange {
+        tx: tx_args,
+        validator,
+        email,
+        description,
+        website,
+        alias,
+        discord_handle,
+        commission_rate,
+        tx_code_path,
+    }: &args::MetaDataChange,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(validator.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(validator.clone()),
+        default_signer,
+    )
+    .await?;
+
+    let epoch = rpc::query_epoch(context.client()).await?;
+
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
+
+    // The validator must actually be a validator
+    let validator =
+        known_validator_or_err(validator.clone(), tx_args.force, context)
+            .await?;
+
+    // If there is a new email, it cannot be an empty string that indicates to
+    // remove the data (email data cannot be removed)
+    if let Some(email) = email.as_ref() {
+        if email.is_empty() {
+            edisplay_line!(
+                context.io(),
+                "Cannot remove a validator's email, which was implied by the \
+                 empty string"
+            );
+            return Err(Error::from(TxError::InvalidEmail));
+        }
+    }
+
+    // If there's a new commission rate, it must be valid
+    if let Some(rate) = commission_rate.as_ref() {
+        if *rate < Dec::zero() || *rate > Dec::one() {
+            edisplay_line!(
+                context.io(),
+                "Invalid new commission rate, received {}",
+                rate
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxError::InvalidCommissionRate(*rate)));
+            }
+        }
+        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
+
+        match rpc::query_commission_rate(
+            context.client(),
+            &validator,
+            Some(pipeline_epoch_minus_one),
+        )
+        .await?
+        {
+            Some(CommissionPair {
+                commission_rate,
+                max_commission_change_per_epoch,
+            }) => {
+                if rate.is_negative() || *rate > Dec::one() {
+                    edisplay_line!(
+                        context.io(),
+                        "New rate is outside of the allowed range of values \
+                         between 0.0 and 1.0."
+                    );
+                    if !tx_args.force {
+                        return Err(Error::from(
+                            TxError::InvalidCommissionRate(*rate),
+                        ));
+                    }
+                }
+                if rate.abs_diff(&commission_rate)
+                    > max_commission_change_per_epoch
+                {
+                    edisplay_line!(
+                        context.io(),
+                        "New rate is too large of a change with respect to \
+                         the predecessor epoch in which the rate will take \
+                         effect."
+                    );
+                    if !tx_args.force {
+                        return Err(Error::from(
+                            TxError::InvalidCommissionRate(*rate),
+                        ));
+                    }
+                }
+            }
+            None => {
+                edisplay_line!(context.io(), "Error retrieving from storage");
+                if !tx_args.force {
+                    return Err(Error::from(TxError::Retrieval));
+                }
+            }
+        }
+    }
+
+    let data = pos::MetaDataChange {
+        validator: validator.clone(),
+        email: email.clone(),
+        website: website.clone(),
+        description: description.clone(),
+        alias: alias.clone(),
+        discord_handle: discord_handle.clone(),
+        commission_rate: *commission_rate,
     };
 
     build(

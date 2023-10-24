@@ -24,6 +24,7 @@ use namada::types::key::*;
 use namada::types::time::{DateTimeUtc, DurationSecs};
 use namada::types::token::Denomination;
 use namada::types::{storage, token};
+use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
