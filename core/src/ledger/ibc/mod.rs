@@ -26,7 +26,11 @@ use crate::ibc::core::ics24_host::identifier::{ChainId as IbcChainId, PortId};
 use crate::ibc::core::router::{Module, ModuleId, Router};
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
+use crate::types::address::Address;
 use crate::types::chain::ChainId;
+use crate::types::ibc::{
+    is_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -135,20 +139,8 @@ where
     fn store_denom(&mut self, envelope: MsgEnvelope) -> Result<(), Error> {
         match envelope {
             MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
-                let result = self
-                    .ctx
-                    .borrow()
-                    .get_ibc_event("denomination_trace")
-                    .map_err(|_| {
-                        Error::Denom("Reading the IBC event failed".to_string())
-                    })?;
-                if let Some((trace_hash, ibc_denom)) =
-                    result.as_ref().and_then(|event| {
-                        event
-                            .attributes
-                            .get("trace_hash")
-                            .zip(event.attributes.get("denom"))
-                    })
+                if let Some((trace_hash, ibc_denom, receiver)) =
+                    self.get_minted_token_info()?
                 {
                     // If the denomination trace event has the trace hash and
                     // the IBC denom, a token has been minted. The raw IBC denom
@@ -157,13 +149,28 @@ where
                     // denomination is also set for the minting.
                     self.ctx
                         .borrow_mut()
-                        .store_ibc_denom(trace_hash, ibc_denom)
+                        .store_ibc_denom(
+                            &receiver.to_string(),
+                            &trace_hash,
+                            &ibc_denom,
+                        )
                         .map_err(|e| {
                             Error::Denom(format!(
                                 "Writing the IBC denom failed: {}",
                                 e
                             ))
                         })?;
+                    if let Some((_, base_token)) = is_ibc_denom(&ibc_denom) {
+                        self.ctx
+                            .borrow_mut()
+                            .store_ibc_denom(base_token, trace_hash, &ibc_denom)
+                            .map_err(|e| {
+                                Error::Denom(format!(
+                                    "Writing the IBC denom failed: {}",
+                                    e
+                                ))
+                            })?;
+                    }
                     let token = storage::ibc_token(ibc_denom);
                     self.ctx.borrow_mut().store_token_denom(&token).map_err(
                         |e| {
@@ -180,6 +187,43 @@ where
             // other messages
             _ => Ok(()),
         }
+    }
+
+    /// Get the minted IBC denom, the trace hash, and the receiver from IBC
+    /// events
+    fn get_minted_token_info(
+        &self,
+    ) -> Result<Option<(String, String, Address)>, Error> {
+        let receive_event =
+            self.ctx.borrow().get_ibc_event(EVENT_TYPE_PACKET).map_err(
+                |_| Error::Denom("Reading the IBC event failed".to_string()),
+            )?;
+        let receiver = match receive_event
+            .as_ref()
+            .and_then(|event| event.attributes.get("receiver"))
+        {
+            Some(receiver) => {
+                Some(Address::decode(receiver).map_err(|_| {
+                    Error::Denom(format!(
+                        "Decoding the receiver address failed: {:?}",
+                        receive_event
+                    ))
+                })?)
+            }
+            None => None,
+        };
+        let denom_event = self
+            .ctx
+            .borrow()
+            .get_ibc_event(EVENT_TYPE_DENOM_TRACE)
+            .map_err(|_| {
+                Error::Denom("Reading the IBC event failed".to_string())
+            })?;
+        Ok(denom_event.as_ref().and_then(|event| {
+            let trace_hash = event.attributes.get("trace_hash").cloned()?;
+            let denom = event.attributes.get("denom").cloned()?;
+            Some((trace_hash, denom, receiver?))
+        }))
     }
 
     /// Validate according to the message in IBC VP

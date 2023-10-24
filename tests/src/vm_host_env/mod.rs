@@ -1257,10 +1257,6 @@ mod tests {
             minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         );
-        // original denom
-        let hash = ibc_storage::calc_hash(&denom);
-        let denom_key = ibc_storage::ibc_denom_key(hash);
-        writes.insert(denom_key, denom.serialize_to_vec());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.wl_storage
