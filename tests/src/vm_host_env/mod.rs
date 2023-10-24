@@ -482,7 +482,7 @@ mod tests {
                         &None,
                         1,
                         None,
-                        Some(&mut VpGasMeter::new_from_tx_meter(
+                        &mut Some(&mut VpGasMeter::new_from_tx_meter(
                             &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                         ))
                     )
@@ -503,7 +503,7 @@ mod tests {
                         &None,
                         1,
                         None,
-                        Some(&mut VpGasMeter::new_from_tx_meter(
+                        &mut Some(&mut VpGasMeter::new_from_tx_meter(
                             &TxGasMeter::new_from_sub_limit(u64::MAX.into())
                         ))
                     )
