@@ -32,7 +32,7 @@ fn masp_incentives() -> Result<()> {
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
-    let mut node = setup::setup()?;
+    let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
     let ep0 = node.next_epoch();
     // Send 20 BTC from Albert to PA
@@ -766,7 +766,7 @@ fn masp_pinned_txs() -> Result<()> {
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
 
-    let mut node = setup::setup()?;
+    let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
     let _ep0 = node.next_epoch();
 
@@ -934,7 +934,7 @@ fn masp_txs_and_queries() -> Result<()> {
         Err(&'static str),
     }
 
-    let mut node = setup::setup()?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
     let txs_args = vec![
         // 0. Attempt to spend 10 BTC at SK(A) to PA(B)
@@ -1229,7 +1229,7 @@ fn masp_txs_and_queries() -> Result<()> {
 /// 3. Submit a new wrapper with an invalid unshielding tx and assert the
 /// failure
 #[test]
-fn wrapper_fee_unshielding() {
+fn wrapper_fee_unshielding() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
@@ -1237,7 +1237,7 @@ fn wrapper_fee_unshielding() {
     // Lengthen epoch to ensure that a transaction can be constructed and
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
-    let mut node = setup::setup().unwrap();
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
 
     // 1. Shield some tokens
@@ -1261,8 +1261,7 @@ fn wrapper_fee_unshielding() {
             "--ledger-address",
             validator_one_rpc,
         ],
-    )
-    .unwrap();
+    )?;
     node.assert_success();
 
     _ = node.next_epoch();
@@ -1287,8 +1286,7 @@ fn wrapper_fee_unshielding() {
             "--ledger-address",
             validator_one_rpc,
         ],
-    )
-    .unwrap();
+    )?;
     node.assert_success();
 
     // 3. Invalid unshielding
@@ -1319,4 +1317,5 @@ fn wrapper_fee_unshielding() {
     .is_err();
 
     assert!(tx_run);
+    Ok(())
 }
