@@ -241,7 +241,7 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     Address,
     MaspDenom,
     Epoch,
-    masp_primitives::transaction::components::I32Sum,
+    masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 )> {
     Some(unwrap_client_response::<C, _>(

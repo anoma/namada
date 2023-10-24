@@ -92,8 +92,8 @@ lazy_static = "1.4.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "449a7295fe24d96456ece24c223ca9eb76b0e6ba" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "449a7295fe24d96456ece24c223ca9eb76b0e6ba", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "77e009626f3f52fe83c81ec6ee38fc2547d38da3" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "77e009626f3f52fe83c81ec6ee38fc2547d38da3", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"

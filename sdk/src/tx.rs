@@ -15,7 +15,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
-use masp_primitives::transaction::components::I32Sum;
+use masp_primitives::transaction::components::I128Sum;
 use namada_core::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use namada_core::ibc::applications::transfer::packet::PacketData;
 use namada_core::ibc::applications::transfer::PrefixedCoin;
@@ -1782,7 +1782,7 @@ async fn used_asset_types<'a, P, R, K, N>(
     // Collect all the asset types used in the Sapling converts
     for output in builder.sapling_converts() {
         for (asset_type, _) in
-            I32Sum::from(output.conversion().clone()).components()
+            I128Sum::from(output.conversion().clone()).components()
         {
             add_asset_type(&mut asset_types, context, *asset_type).await;
         }
