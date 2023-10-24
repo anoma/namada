@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use color_eyre::eyre::Result;
-use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::io::Io;
 use namada_sdk::eth_bridge::{bridge_pool, validator_set};
 
@@ -9,6 +6,7 @@ use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::{CliToSdk, CliToSdkCtxless};
 use crate::cli::cmds::*;
+use crate::cli::utils::get_eth_rpc_client;
 
 impl CliApi {
     pub async fn handle_relayer_command<C>(
@@ -58,10 +56,8 @@ impl CliApi {
                         )
                     });
                     client.wait_until_node_is_synced(io).await?;
-                    let eth_client = Arc::new(
-                        Provider::<Http>::try_from(&args.eth_rpc_endpoint)
-                            .unwrap(),
-                    );
+                    let eth_client =
+                        get_eth_rpc_client(&args.eth_rpc_endpoint).await;
                     let args = args.to_sdk_ctxless();
                     bridge_pool::relay_bridge_pool_proof(
                         eth_client, &client, io, args,
@@ -151,10 +147,8 @@ impl CliApi {
                         )
                     });
                     client.wait_until_node_is_synced(io).await?;
-                    let eth_client = Arc::new(
-                        Provider::<Http>::try_from(&args.eth_rpc_endpoint)
-                            .unwrap(),
-                    );
+                    let eth_client =
+                        get_eth_rpc_client(&args.eth_rpc_endpoint).await;
                     let args = args.to_sdk_ctxless();
                     validator_set::relay_validator_set_update(
                         eth_client, &client, io, args,
