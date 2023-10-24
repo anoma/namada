@@ -265,7 +265,7 @@ mod tests {
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![]));
         tx.add_section(Section::Signature(Signature::new(
-            vec![*tx.data_sechash(), *tx.code_sechash()],
+            vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
@@ -275,10 +275,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx,
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .unwrap());
     }
 
     prop_compose! {
@@ -398,7 +402,7 @@ mod tests {
         tx_data.set_data(Data::new(solution_bytes));
         tx_data.set_code(Code::new(vec![]));
         tx_data.add_section(Section::Signature(Signature::new(
-            vec![*tx_data.data_sechash(), *tx_data.code_sechash()],
+            vec![tx_data.raw_header_hash()],
             [(0, target_key)].into_iter().collect(),
             None,
         )));
@@ -452,7 +456,7 @@ mod tests {
             tx.set_data(Data::new(vec![]));
             tx.set_code(Code::new(vec![]));
             tx.add_section(Section::Signature(Signature::new(
-                vec![*tx.data_sechash(), *tx.code_sechash()],
+                vec![tx.raw_header_hash()],
                 pks_map.index_secret_keys(vec![keypair]),
                 None,
             )));

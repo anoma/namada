@@ -331,11 +331,7 @@ mod protocol_txs {
             outer_tx.set_code(Code::new(code));
             outer_tx.set_data(Data::new(data.serialize_to_vec()));
             outer_tx.add_section(Section::Signature(Signature::new(
-                vec![
-                    outer_tx.header_hash(),
-                    *outer_tx.code_sechash(),
-                    *outer_tx.data_sechash(),
-                ],
+                vec![outer_tx.header_hash()],
                 [(0, signing_key.clone())].into_iter().collect(),
                 None,
             )));

@@ -930,13 +930,13 @@ where
 
     // Allow to replay a specific wasm transaction. Needs as argument the
     // corresponding wrapper transaction to avoid replay of that in the process
-    fn allow_tx_replay(&mut self, mut wrapper_tx: Tx) {
+    fn allow_tx_replay(&mut self, wrapper_tx: Tx) {
         self.wl_storage
             .write_tx_hash(wrapper_tx.header_hash())
             .expect("Error while deleting tx hash from storage");
 
         self.wl_storage
-            .delete_tx_hash(wrapper_tx.update_header(TxType::Raw).header_hash())
+            .delete_tx_hash(wrapper_tx.raw_header_hash())
             .expect("Error while deleting tx hash from storage");
     }
 }
@@ -2236,12 +2236,10 @@ mod test_finalize_block {
 
         let (wrapper_tx, processed_tx) =
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
-        let mut decrypted_tx = wrapper_tx;
 
-        decrypted_tx.update_header(TxType::Raw);
         let decrypted_hash_key =
             replay_protection::get_replay_protection_last_key(
-                &decrypted_tx.header_hash(),
+                &wrapper_tx.raw_header_hash(),
             );
 
         // merkle tree root before finalize_block
@@ -2274,7 +2272,7 @@ mod test_finalize_block {
                 .shell
                 .wl_storage
                 .write_log
-                .has_replay_protection_entry(&decrypted_tx.header_hash())
+                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
                 .unwrap_or_default()
         );
         // Check that the hash is present in the merkle tree
@@ -2331,16 +2329,9 @@ mod test_finalize_block {
 
         decrypted_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         decrypted_tx_2.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        let decrypted_hash =
-            wrapper_tx.clone().update_header(TxType::Raw).header_hash();
-        let decrypted_2_hash = wrapper_tx_2
-            .clone()
-            .update_header(TxType::Raw)
-            .header_hash();
-        let decrypted_3_hash = invalid_wrapper_tx
-            .clone()
-            .update_header(TxType::Raw)
-            .header_hash();
+        let decrypted_hash = wrapper_tx.raw_header_hash();
+        let decrypted_2_hash = wrapper_tx_2.raw_header_hash();
+        let decrypted_3_hash = invalid_wrapper_tx.raw_header_hash();
 
         // Write inner hashes in storage
         for hash in [&decrypted_hash, &decrypted_2_hash] {

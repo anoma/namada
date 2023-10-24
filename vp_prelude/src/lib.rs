@@ -90,12 +90,10 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let threshold =
         storage_api::account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
 
-    let targets = [*tx.data_sechash(), *tx.code_sechash()];
-
     // Serialize parameters
     let max_signatures = max_signatures_per_transaction.serialize_to_vec();
     let public_keys_map = public_keys_index_map.serialize_to_vec();
-    let targets = targets.serialize_to_vec();
+    let targets = [tx.raw_header_hash()].serialize_to_vec();
     let signer = owner.serialize_to_vec();
 
     let valid = unsafe {

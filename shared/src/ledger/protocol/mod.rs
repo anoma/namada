@@ -217,7 +217,7 @@ where
 /// Returns the set of changed storage keys. The caller should write the hash of
 /// the wrapper header to storage in case of failure.
 pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
-    mut tx: Tx,
+    tx: Tx,
     wrapper: &WrapperTx,
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
@@ -247,10 +247,10 @@ where
     // If wrapper was succesful, write inner tx hash to storage
     shell_params
         .wl_storage
-        .write_tx_hash(tx.update_header(TxType::Raw).header_hash())
+        .write_tx_hash(tx.raw_header_hash())
         .expect("Error while writing tx hash to storage");
     changed_keys.insert(replay_protection::get_replay_protection_last_key(
-        &tx.header_hash(),
+        &tx.raw_header_hash(),
     ));
 
     Ok(changed_keys)
