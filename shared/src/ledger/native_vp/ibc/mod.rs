@@ -169,7 +169,7 @@ where
 
     fn validate_denom(&self, keys_changed: &BTreeSet<Key>) -> VpResult<()> {
         for key in keys_changed {
-            if let Some(hash) = is_ibc_denom_key(key) {
+            if let Some((_, hash)) = is_ibc_denom_key(key) {
                 match self.ctx.read_post::<String>(key).map_err(|e| {
                     Error::Denom(format!(
                         "Getting the denom failed: Key {}, Error {}",
@@ -2198,7 +2198,14 @@ mod tests {
             packet.chan_id_on_b.clone(),
         ));
         let trace_hash = calc_hash(coin.denom.to_string());
-        let denom_key = ibc_denom_key(&trace_hash);
+        let denom_key = ibc_denom_key(receiver.to_string(), &trace_hash);
+        let bytes = coin.denom.to_string().serialize_to_vec();
+        wl_storage
+            .write_log
+            .write(&denom_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(denom_key);
+        let denom_key = ibc_denom_key(nam().to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
         wl_storage
             .write_log

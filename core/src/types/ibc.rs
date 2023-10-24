@@ -5,6 +5,11 @@ use std::collections::HashMap;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 
+/// The event type defined in ibc-rs for receiving a token
+pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
+/// The event type defined in ibc-rs for IBC denom
+pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
+
 /// Wrapped IbcEvent
 #[derive(
     Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
@@ -48,10 +53,12 @@ impl std::fmt::Display for IbcEvent {
 #[cfg(any(feature = "abciplus", feature = "abcipp"))]
 mod ibc_rs_conversion {
     use std::collections::HashMap;
+    use std::str::FromStr;
 
     use thiserror::Error;
 
     use super::IbcEvent;
+    use crate::ibc::applications::transfer::{PrefixedDenom, TracePath};
     use crate::ibc::core::events::{
         Error as IbcEventError, IbcEvent as RawIbcEvent,
     };
@@ -83,6 +90,20 @@ mod ibc_rs_conversion {
                 attributes,
             })
         }
+    }
+
+    /// Returns the trace path and the token string if the denom is an IBC
+    /// denom.
+    pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
+        let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
+        if prefixed_denom.trace_path.is_empty() {
+            return None;
+        }
+        // The base token isn't decoded because it could be non Namada token
+        Some((
+            prefixed_denom.trace_path,
+            prefixed_denom.base_denom.to_string(),
+        ))
     }
 }
 

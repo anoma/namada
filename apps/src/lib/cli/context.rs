@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use namada::ledger::ibc::storage::ibc_token;
 use namada::types::address::{Address, InternalAddress};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
+use namada::types::ibc::is_ibc_denom;
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::*;
@@ -386,6 +388,20 @@ impl ArgFromContext for Address {
                             .map_err(|_| Skip)
                     })
                     .unwrap_or(Err(Skip))
+            })
+            // An IBC token
+            .or_else(|_| {
+                is_ibc_denom(raw)
+                    .map(|(trace_path, base_denom)| {
+                        let base_token = ctx
+                            .wallet
+                            .find_address(&base_denom)
+                            .map(|addr| addr.to_string())
+                            .unwrap_or(base_denom);
+                        let ibc_denom = format!("{trace_path}/{base_token}");
+                        ibc_token(ibc_denom)
+                    })
+                    .ok_or(Skip)
             })
             // Or it can be an alias that may be found in the wallet
             .or_else(|_| ctx.wallet.find_address(raw).cloned().ok_or(Skip))
