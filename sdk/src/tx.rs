@@ -45,7 +45,7 @@ use namada_core::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_core::types::transaction::pgf::UpdateStewardCommission;
-use namada_core::types::transaction::{pos, TxType};
+use namada_core::types::transaction::pos;
 use namada_core::types::{storage, token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
@@ -200,11 +200,7 @@ pub async fn process_tx<'a>(
         let wrapper_hash = tx.header_hash().to_string();
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
-        let decrypted_hash = tx
-            .clone()
-            .update_header(TxType::Raw)
-            .header_hash()
-            .to_string();
+        let decrypted_hash = tx.raw_header_hash().to_string();
         let to_broadcast = TxBroadcastData::Live {
             tx,
             wrapper_hash,

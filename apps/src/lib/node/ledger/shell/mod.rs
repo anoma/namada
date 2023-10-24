@@ -148,22 +148,19 @@ impl From<Error> for TxResult {
 #[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq, Eq)]
 pub enum ErrorCodes {
     Ok = 0,
-    InvalidDecryptedChainId = 1,
-    ExpiredDecryptedTx = 2,
-    DecryptedTxGasLimit = 3,
-    WasmRuntimeError = 4,
-    InvalidTx = 5,
-    InvalidSig = 6,
-    InvalidOrder = 7,
-    ExtraTxs = 8,
-    Undecryptable = 9,
-    AllocationError = 10,
-    ReplayTx = 11,
-    InvalidChainId = 12,
-    ExpiredTx = 13,
-    TxGasLimit = 14,
-    FeeError = 15,
-    InvalidVoteExtension = 16,
+    WasmRuntimeError = 1,
+    InvalidTx = 2,
+    InvalidSig = 3,
+    InvalidOrder = 4,
+    ExtraTxs = 5,
+    Undecryptable = 6,
+    AllocationError = 7,
+    ReplayTx = 8,
+    InvalidChainId = 9,
+    ExpiredTx = 10,
+    TxGasLimit = 11,
+    FeeError = 12,
+    InvalidVoteExtension = 13,
 }
 
 impl ErrorCodes {
@@ -174,11 +171,7 @@ impl ErrorCodes {
         // NOTE: pattern match on all `ErrorCodes` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok
-            | InvalidDecryptedChainId
-            | ExpiredDecryptedTx
-            | WasmRuntimeError
-            | DecryptedTxGasLimit => true,
+            Ok | WasmRuntimeError => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
             | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension => false,
@@ -949,13 +942,12 @@ where
             )));
         }
 
-        // Write wrapper hash to tx WAL
+        // Write wrapper hash to WAL
         temp_wl_storage
             .write_tx_hash(wrapper_hash)
             .map_err(|e| Error::ReplayAttempt(e.to_string()))?;
 
-        let inner_tx_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_tx_hash = wrapper.raw_header_hash();
         if temp_wl_storage
             .has_replay_protection_entry(&inner_tx_hash)
             .expect("Error while checking inner tx hash key in storage")
@@ -966,7 +958,7 @@ where
             )));
         }
 
-        // Write inner hash to tx WAL
+        // Write inner hash to WAL
         temp_wl_storage
             .write_tx_hash(inner_tx_hash)
             .map_err(|e| Error::ReplayAttempt(e.to_string()))
@@ -1085,22 +1077,19 @@ where
             }
         };
 
-        let tx_chain_id = tx.header.chain_id.clone();
-        let tx_expiration = tx.header.expiration;
-
         // Tx chain id
-        if tx_chain_id != self.chain_id {
+        if tx.header.chain_id != self.chain_id {
             response.code = ErrorCodes::InvalidChainId.into();
             response.log = format!(
                 "{INVALID_MSG}: Tx carries a wrong chain id: expected {}, \
                  found {}",
-                self.chain_id, tx_chain_id
+                self.chain_id, tx.header.chain_id
             );
             return response;
         }
 
         // Tx expiration
-        if let Some(exp) = tx_expiration {
+        if let Some(exp) = tx.header.expiration {
             let last_block_timestamp = self.get_block_timestamp(None);
 
             if last_block_timestamp > exp {
@@ -1259,13 +1248,11 @@ where
                 }
 
                 // Replay protection check
-                let mut inner_tx = tx;
-                inner_tx.update_header(TxType::Raw);
-                let inner_tx_hash = &inner_tx.header_hash();
+                let inner_tx_hash = tx.raw_header_hash();
                 if self
                     .wl_storage
                     .storage
-                    .has_replay_protection_entry(inner_tx_hash)
+                    .has_replay_protection_entry(&tx.raw_header_hash())
                     .expect("Error while checking inner tx hash key in storage")
                 {
                     response.code = ErrorCodes::ReplayTx.into();
@@ -2537,8 +2524,7 @@ mod shell_tests {
             )
         );
 
-        let inner_tx_hash =
-            wrapper.clone().update_header(TxType::Raw).header_hash();
+        let inner_tx_hash = wrapper.raw_header_hash();
         // Write inner hash in storage
         let inner_hash_key =
             replay_protection::get_replay_protection_last_subkey(
