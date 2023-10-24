@@ -1,6 +1,8 @@
 //! Implements transparent addresses as described in [Accounts
 //! Addresses](docs/src/explore/design/ledger/accounts.md#addresses).
 
+mod raw;
+
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
