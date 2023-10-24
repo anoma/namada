@@ -3,14 +3,26 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
+use data_encoding::HEXLOWER_PERMISSIVE;
+use namada::eth_bridge::ethers::core::k256::elliptic_curve::SecretKey as Secp256k1Sk;
+use namada::eth_bridge::ethers::middleware::SignerMiddleware;
+use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
+use namada::eth_bridge::ethers::signers::{Signer, Wallet};
 
 use super::args;
 use super::context::Context;
 use crate::cli::api::CliIo;
 use crate::cli::context::FromContext;
+
+/// Environment variable where Ethereum relayer private
+/// keys are stored.
+// TODO: remove this in favor of getting eth keys from
+// namadaw, ledger, or something more secure
+const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";
 
 // We only use static strings
 pub type App = clap::Command;
@@ -362,4 +374,31 @@ pub fn safe_exit(_: i32) -> ! {
     let _ = std::io::stderr().lock().flush();
 
     panic!("Test failed because the client exited unexpectedly.")
+}
+
+/// Load an Ethereum wallet from the environment.
+fn get_eth_signer_from_env(chain_id: u64) -> Option<impl Signer> {
+    let relayer_key = std::env::var(RELAYER_KEY_ENV_VAR).ok()?;
+    let relayer_key = HEXLOWER_PERMISSIVE.decode(relayer_key.as_ref()).ok()?;
+    let relayer_key = Secp256k1Sk::from_slice(&relayer_key).ok()?;
+
+    let wallet: Wallet<_> = relayer_key.into();
+    let wallet = wallet.with_chain_id(chain_id);
+
+    Some(wallet)
+}
+
+/// Return an Ethereum RPC client.
+pub async fn get_eth_rpc_client(url: &str) -> Arc<impl Middleware> {
+    let client = Provider::<Http>::try_from(url)
+        .expect("Failed to instantiate Ethereum RPC client");
+    let chain_id = client
+        .get_chainid()
+        .await
+        .expect("Failed to query chain id")
+        .as_u64();
+    let signer = get_eth_signer_from_env(chain_id).unwrap_or_else(|| {
+        panic!("Failed to get Ethereum key from {RELAYER_KEY_ENV_VAR} env var")
+    });
+    Arc::new(SignerMiddleware::new(client, signer))
 }
