@@ -2996,13 +2996,21 @@ pub fn change_validator_commission_rate<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // if new_rate < Uint::zero() {
-    //     return Err(CommissionRateChangeError::NegativeRate(
-    //         new_rate,
-    //         validator.clone(),
-    //     )
-    //     .into());
-    // }
+    if new_rate.is_negative() {
+        return Err(CommissionRateChangeError::NegativeRate(
+            new_rate,
+            validator.clone(),
+        )
+        .into());
+    }
+
+    if new_rate > Dec::one() {
+        return Err(CommissionRateChangeError::LargerThanOne(
+            new_rate,
+            validator.clone(),
+        )
+        .into());
+    }
 
     let max_change =
         read_validator_max_commission_rate_change(storage, validator)?;
@@ -3027,14 +3035,7 @@ where
         .get(storage, pipeline_epoch.prev(), &params)?
         .expect("Could not find a rate in given epoch");
 
-    // TODO: change this back if we use `Dec` type with a signed integer
-    // let change_from_prev = new_rate - rate_before_pipeline;
-    // if change_from_prev.abs() > max_change.unwrap() {
-    let change_from_prev = if new_rate > rate_before_pipeline {
-        new_rate - rate_before_pipeline
-    } else {
-        rate_before_pipeline - new_rate
-    };
+    let change_from_prev = new_rate.abs_diff(&rate_before_pipeline);
     if change_from_prev > max_change.unwrap() {
         return Err(CommissionRateChangeError::RateChangeTooLarge(
             change_from_prev,
