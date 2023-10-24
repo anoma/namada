@@ -245,8 +245,11 @@ where
             let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
-            // Check replay protection
-            self.replay_protection_checks(&tx, tx_bytes, temp_wl_storage)
+            // Check replay protection, safe to do here. Even if the tx is a
+            // replay attempt, we can leave its hashes in the write log since,
+            // having we already checked the signature, no other tx with the
+            // same hash can ba deemed valid
+            self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
             // Check fees
@@ -1184,7 +1187,7 @@ mod test_prepare_proposal {
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::get_replay_protection_key(
+        let hash_key = replay_protection::get_replay_protection_last_key(
             &wrapper_unsigned_hash,
         );
         shell
@@ -1279,8 +1282,9 @@ mod test_prepare_proposal {
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
-        let hash_key =
-            replay_protection::get_replay_protection_key(&inner_unsigned_hash);
+        let hash_key = replay_protection::get_replay_protection_last_key(
+            &inner_unsigned_hash,
+        );
         shell
             .wl_storage
             .storage
@@ -1309,7 +1313,7 @@ mod test_prepare_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
-        let keypair_2 = crate::wallet::defaults::daewon_keypair();
+        let keypair_2 = crate::wallet::defaults::albert_keypair();
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {

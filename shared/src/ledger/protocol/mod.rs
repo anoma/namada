@@ -7,7 +7,7 @@ use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::TxGasMeter;
 use namada_core::ledger::storage::wl_storage::WriteLogAndStorage;
-use namada_core::ledger::storage_api::{StorageRead, StorageWrite};
+use namada_core::ledger::storage_api::StorageRead;
 use namada_core::proto::Section;
 use namada_core::types::hash::Hash;
 use namada_core::types::storage::Key;
@@ -24,7 +24,6 @@ use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
 use crate::ledger::native_vp::ibc::Ibc;
 use crate::ledger::native_vp::multitoken::MultitokenVp;
 use crate::ledger::native_vp::parameters::{self, ParametersVp};
-use crate::ledger::native_vp::replay_protection::ReplayProtectionVp;
 use crate::ledger::native_vp::{self, NativeVp};
 use crate::ledger::pgf::PgfVp;
 use crate::ledger::pos::{self, PosVP};
@@ -33,10 +32,10 @@ use crate::ledger::storage::{DBIter, Storage, StorageHasher, WlStorage, DB};
 use crate::ledger::{replay_protection, storage_api};
 use crate::proto::{self, Tx};
 use crate::types::address::{Address, InternalAddress};
+use crate::types::storage;
 use crate::types::storage::TxIndex;
 use crate::types::transaction::protocol::{EthereumTxData, ProtocolTxType};
 use crate::types::transaction::{DecryptedTx, TxResult, TxType, VpsResult};
-use crate::types::{hash, storage};
 use crate::vm::wasm::{TxCache, VpCache};
 use crate::vm::{self, wasm, WasmCacheAccess};
 
@@ -83,10 +82,6 @@ pub enum Error {
     EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
     #[error("Ethereum bridge pool native VP error: {0}")]
     BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
-    #[error("Replay protection native VP error: {0}")]
-    ReplayProtectionNativeVpError(
-        crate::ledger::native_vp::replay_protection::Error,
-    ),
     #[error("Non usable tokens native VP error: {0}")]
     NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
     #[error("Access to an internal address {0} is forbidden")]
@@ -169,9 +164,12 @@ where
             apply_protocol_tx(protocol_tx.tx, tx.data(), wl_storage)
         }
         TxType::Wrapper(ref wrapper) => {
+            let fee_unshielding_transaction =
+                get_fee_unshielding_transaction(&tx, wrapper);
             let changed_keys = apply_wrapper_tx(
+                tx,
                 wrapper,
-                get_fee_unshielding_transaction(&tx, wrapper),
+                fee_unshielding_transaction,
                 tx_bytes,
                 ShellParams {
                     tx_gas_meter,
@@ -212,12 +210,14 @@ where
 }
 
 /// Performs the required operation on a wrapper transaction:
-///  - replay protection
 ///  - fee payment
 ///  - gas accounting
+///  - replay protection
 ///
-/// Returns the set of changed storage keys.
+/// Returns the set of changed storage keys. The caller should write the hash of
+/// the wrapper header to storage in case of failure.
 pub(crate) fn apply_wrapper_tx<'a, D, H, CA, WLS>(
+    mut tx: Tx,
     wrapper: &WrapperTx,
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
@@ -231,18 +231,6 @@ where
     WLS: WriteLogAndStorage<D = D, H = H>,
 {
     let mut changed_keys = BTreeSet::default();
-    let mut tx: Tx = tx_bytes.try_into().unwrap();
-
-    // Writes wrapper tx hash to block write log (changes must be persisted even
-    // in case of failure)
-    let wrapper_hash_key = replay_protection::get_replay_protection_key(
-        &hash::Hash(tx.header_hash().0),
-    );
-    shell_params
-        .wl_storage
-        .write(&wrapper_hash_key, ())
-        .expect("Error while writing tx hash to storage");
-    changed_keys.insert(wrapper_hash_key);
 
     // Charge fee before performing any fallible operations
     charge_fee(
@@ -257,14 +245,13 @@ where
     shell_params.tx_gas_meter.add_tx_size_gas(tx_bytes)?;
 
     // If wrapper was succesful, write inner tx hash to storage
-    let inner_hash_key = replay_protection::get_replay_protection_key(
-        &hash::Hash(tx.update_header(TxType::Raw).header_hash().0),
-    );
     shell_params
         .wl_storage
-        .write(&inner_hash_key, ())
+        .write_tx_hash(tx.update_header(TxType::Raw).header_hash())
         .expect("Error while writing tx hash to storage");
-    changed_keys.insert(inner_hash_key);
+    changed_keys.insert(replay_protection::get_replay_protection_last_key(
+        &tx.header_hash(),
+    ));
 
     Ok(changed_keys)
 }
@@ -932,16 +919,6 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::BridgePoolNativeVpError);
                             gas_meter = bridge_pool.ctx.gas_meter.into_inner();
-                            result
-                        }
-                        InternalAddress::ReplayProtection => {
-                            let replay_protection_vp =
-                                ReplayProtectionVp { ctx };
-                            let result = replay_protection_vp
-                                .validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::ReplayProtectionNativeVpError);
-                            gas_meter =
-                                replay_protection_vp.ctx.gas_meter.into_inner();
                             result
                         }
                         InternalAddress::Pgf => {
