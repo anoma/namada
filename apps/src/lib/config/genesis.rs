@@ -212,6 +212,8 @@ pub mod genesis_config {
         pub vp: Option<String>,
         // Initial balances held by accounts defined elsewhere.
         pub balances: Option<HashMap<String, token::Amount>>,
+        // Token parameters
+        pub parameters: Option<token::Parameters>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -403,6 +405,9 @@ pub mod genesis_config {
         implicit_accounts: &HashMap<String, ImplicitAccount>,
     ) -> TokenAccount {
         TokenAccount {
+            last_locked_ratio: Dec::zero(),
+            last_inflation: token::Amount::zero(),
+            parameters: config.parameters.as_ref().unwrap().to_owned(),
             address: Address::decode(config.address.as_ref().unwrap()).unwrap(),
             denom: config.denom,
             balances: config
@@ -814,6 +819,12 @@ pub struct TokenAccount {
     /// Accounts' balances of this token
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
+    /// Token parameters
+    pub parameters: token::Parameters,
+    /// Token inflation from the last epoch (read + write for every epoch)
+    pub last_inflation: token::Amount,
+    /// Token shielded ratio from the last epoch (read + write for every epoch)
+    pub last_locked_ratio: Dec,
 }
 
 #[derive(
@@ -998,8 +1009,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
         implicit_vp_code_path: vp_implicit_path.into(),
         implicit_vp_sha256: Default::default(),
         max_signatures_per_transaction: 15,
-        epochs_per_year: 525_600, /* seconds in yr (60*60*24*365) div seconds
-                                   * per epoch (60 = min_duration) */
+        epochs_per_year: 365, /* seconds in yr (60*60*24*365) div seconds
+                               * per epoch (60 = min_duration) */
         pos_gain_p: Dec::new(1, 1).expect("This can't fail"),
         pos_gain_d: Dec::new(1, 1).expect("This can't fail"),
         staked_ratio: Dec::zero(),
@@ -1097,6 +1108,9 @@ pub fn genesis(num_validators: u64) -> Genesis {
                 .into_iter()
                 .map(|(k, v)| (k, token::Amount::from_uint(v, denom).unwrap()))
                 .collect(),
+            parameters: token::Parameters::default(),
+            last_inflation: token::Amount::zero(),
+            last_locked_ratio: Dec::zero(),
         })
         .collect();
     Genesis {

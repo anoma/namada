@@ -31,7 +31,7 @@ type Conversion = (
     Address,
     MaspDenom,
     Epoch,
-    masp_primitives::transaction::components::I32Sum,
+    masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 );
 
@@ -164,7 +164,7 @@ where
             addr.clone(),
             *denom,
             *epoch,
-            Into::<masp_primitives::transaction::components::I32Sum>::into(
+            Into::<masp_primitives::transaction::components::I128Sum>::into(
                 conv.clone(),
             ),
             ctx.wl_storage.storage.conversion_state.tree.path(*pos),

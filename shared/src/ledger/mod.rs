@@ -3,7 +3,6 @@
 pub use namada_sdk::{eth_bridge, events};
 pub mod governance;
 pub mod ibc;
-pub mod inflation;
 pub mod native_vp;
 pub mod pgf;
 pub mod pos;
