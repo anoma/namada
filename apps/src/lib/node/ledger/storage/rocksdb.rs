@@ -48,6 +48,9 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use namada::core::types::ethereum_structs;
+use namada::ledger::storage::merkle_tree::{
+    base_tree_key_prefix, subtree_key_prefix,
+};
 use namada::ledger::storage::types::PrefixIterator;
 use namada::ledger::storage::{
     types, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error,
@@ -55,8 +58,8 @@ use namada::ledger::storage::{
 };
 use namada::types::internal::TxQueue;
 use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
-    KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use namada::types::time::DateTimeUtc;
 use rayon::prelude::*;
@@ -527,7 +530,7 @@ impl RocksDB {
             let mut batch_guard = batch.lock().unwrap();
             let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
             for (key, val, _) in
-                iter_diffs_prefix(self, last_block.height, true)
+                iter_diffs_prefix(self, last_block.height, None, true)
             {
                 let key = Key::parse(key).unwrap();
                 let diff_new_key = diff_new_key_prefix.join(&key);
@@ -702,7 +705,7 @@ impl DB for RocksDB {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
         let mut time = None;
-        let mut epoch = None;
+        let mut epoch: Option<Epoch> = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
         for value in self.0.iterator_cf_opt(
@@ -726,6 +729,7 @@ impl DB for RocksDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
+                    // Restore the base tree of Merkle tree
                     "tree" => match segments.get(2) {
                         Some(s) => {
                             let st = StoreType::from_str(s)?;
@@ -773,6 +777,35 @@ impl DB for RocksDB {
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
+            }
+        }
+        // Restore subtrees of Merkle tree
+        if let Some(epoch) = epoch {
+            for st in StoreType::iter_subtrees() {
+                let key_prefix = subtree_key_prefix(st, epoch);
+                let root_key = key_prefix
+                    .push(&"root".to_owned())
+                    .map_err(Error::KeyError)?;
+                if let Some(bytes) = self
+                    .0
+                    .get_cf(block_cf, &root_key.to_string())
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                {
+                    merkle_tree_stores.set_root(
+                        &st,
+                        types::decode(bytes).map_err(Error::CodingError)?,
+                    );
+                }
+                let store_key = key_prefix
+                    .push(&"store".to_owned())
+                    .map_err(Error::KeyError)?;
+                if let Some(bytes) = self
+                    .0
+                    .get_cf(block_cf, &store_key.to_string())
+                    .map_err(|e| Error::DBError(e.into_string()))?
+                {
+                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
+                }
             }
         }
         match (hash, time, epoch, pred_epochs, address_gen) {
@@ -911,11 +944,13 @@ impl DB for RocksDB {
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
-            let prefix_key = prefix_key
-                .push(&"tree".to_owned())
-                .map_err(Error::KeyError)?;
             for st in StoreType::iter() {
                 if *st == StoreType::Base || is_full_commit {
+                    let prefix_key = if *st == StoreType::Base {
+                        base_tree_key_prefix(height)
+                    } else {
+                        subtree_key_prefix(st, epoch)
+                    };
                     let prefix_key = prefix_key
                         .push(&st.to_string())
                         .map_err(Error::KeyError)?;
@@ -1033,35 +1068,18 @@ impl DB for RocksDB {
 
     fn read_merkle_tree_stores(
         &self,
-        height: BlockHeight,
-    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
+        epoch: Epoch,
+        epoch_start_height: BlockHeight,
+    ) -> Result<Option<MerkleTreeStoresRead>> {
         // Get the latest height at which the tree stores were written
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let height_key = Key::from(height.to_db_key());
-        let key = height_key
-            .push(&"pred_epochs".to_owned())
-            .expect("Cannot obtain a storage key");
-        let pred_epochs: Epochs = match self
-            .0
-            .get_cf(block_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(b) => types::decode(b).map_err(Error::CodingError)?,
-            None => return Ok(None),
-        };
-        // Read the tree at the first height if no epoch update
-        let stored_height = match pred_epochs.get_epoch_start_height(height) {
-            Some(BlockHeight(0)) | None => BlockHeight(1),
-            Some(h) => h,
-        };
-
-        let tree_key = Key::from(stored_height.to_db_key())
-            .push(&"tree".to_owned())
-            .map_err(Error::KeyError)?;
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         for st in StoreType::iter() {
-            let prefix_key =
-                tree_key.push(&st.to_string()).map_err(Error::KeyError)?;
+            let prefix_key = if *st == StoreType::Base {
+                base_tree_key_prefix(epoch_start_height)
+            } else {
+                subtree_key_prefix(st, epoch)
+            };
             let root_key = prefix_key
                 .push(&"root".to_owned())
                 .map_err(Error::KeyError)?;
@@ -1091,7 +1109,7 @@ impl DB for RocksDB {
                 None => return Ok(None),
             }
         }
-        Ok(Some((stored_height, merkle_tree_stores)))
+        Ok(Some(merkle_tree_stores))
     }
 
     fn has_replay_protection_entry(
@@ -1372,37 +1390,23 @@ impl DB for RocksDB {
         Ok(prev_len)
     }
 
-    fn prune_merkle_tree_stores(
+    fn prune_merkle_tree_store(
         &mut self,
         batch: &mut Self::WriteBatch,
+        store_type: &StoreType,
         epoch: Epoch,
-        pred_epochs: &Epochs,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        match pred_epochs.get_start_height_of_epoch(epoch) {
-            Some(height) => {
-                let prefix_key = Key::from(height.to_db_key())
-                    .push(&"tree".to_owned())
-                    .map_err(Error::KeyError)?;
-                for st in StoreType::iter() {
-                    if *st != StoreType::Base {
-                        let prefix_key = prefix_key
-                            .push(&st.to_string())
-                            .map_err(Error::KeyError)?;
-                        let root_key = prefix_key
-                            .push(&"root".to_owned())
-                            .map_err(Error::KeyError)?;
-                        batch.0.delete_cf(block_cf, root_key.to_string());
-                        let store_key = prefix_key
-                            .push(&"store".to_owned())
-                            .map_err(Error::KeyError)?;
-                        batch.0.delete_cf(block_cf, store_key.to_string());
-                    }
-                }
-                Ok(())
-            }
-            None => Ok(()),
-        }
+        let prefix_key = subtree_key_prefix(store_type, epoch);
+        let root_key = prefix_key
+            .push(&"root".to_owned())
+            .map_err(Error::KeyError)?;
+        batch.0.delete_cf(block_cf, root_key.to_string());
+        let store_key = prefix_key
+            .push(&"store".to_owned())
+            .map_err(Error::KeyError)?;
+        batch.0.delete_cf(block_cf, store_key.to_string());
+        Ok(())
     }
 
     fn write_replay_protection_entry(
@@ -1463,15 +1467,17 @@ impl<'iter> DBIter<'iter> for RocksDB {
     fn iter_old_diffs(
         &'iter self,
         height: BlockHeight,
+        prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, true)
+        iter_diffs_prefix(self, height, prefix, true)
     }
 
     fn iter_new_diffs(
         &'iter self,
         height: BlockHeight,
+        prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, false)
+        iter_diffs_prefix(self, height, prefix, false)
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
@@ -1505,18 +1511,26 @@ fn iter_subspace_prefix<'iter>(
     )
 }
 
-fn iter_diffs_prefix(
-    db: &RocksDB,
+fn iter_diffs_prefix<'a>(
+    db: &'a RocksDB,
     height: BlockHeight,
+    prefix: Option<&'a Key>,
     is_old: bool,
-) -> PersistentPrefixIterator {
+) -> PersistentPrefixIterator<'a> {
     let diffs_cf = db
         .get_column_family(DIFFS_CF)
         .expect("{DIFFS_CF} column family should exist");
-    let prefix = if is_old { "old" } else { "new" };
-    let db_prefix = format!("{}/{}/", height.0.raw(), prefix);
+    let kind = if is_old { "old" } else { "new" };
+    let db_prefix = format!("{}/{}/", height.0.raw(), kind);
+    let prefix = prefix.map(|k| {
+        if k == &Key::default() {
+            db_prefix.clone()
+        } else {
+            format!("{db_prefix}{k}/")
+        }
+    });
     // get keys without a prefix
-    iter_prefix(db, diffs_cf, db_prefix.clone(), Some(db_prefix))
+    iter_prefix(db, diffs_cf, db_prefix.clone(), prefix)
 }
 
 fn iter_prefix<'a>(

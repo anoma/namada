@@ -54,9 +54,10 @@ mod tests {
     use std::collections::HashMap;
 
     use itertools::Itertools;
+    use namada::ledger::ibc::storage::ibc_key;
     use namada::ledger::storage::write_log::WriteLog;
     use namada::ledger::storage::{
-        types, update_allowed_conversions, WlStorage,
+        types, update_allowed_conversions, StoreType, WlStorage,
     };
     use namada::ledger::storage_api::{self, StorageWrite};
     use namada::types::chain::ChainId;
@@ -396,8 +397,8 @@ mod tests {
             |(index, write_type)| {
                 // try to update some keys at each height
                 let height = BlockHeight::from(index as u64 / num_keys + 1);
-                let key = Key::parse(format!("key{}", index as u64 % num_keys))
-                    .unwrap();
+                let key =
+                    ibc_key(format!("key{}", index as u64 % num_keys)).unwrap();
                 (height, key, write_type)
             },
         );
@@ -406,7 +407,7 @@ mod tests {
 
         // write values at Height 0 like init_storage
         for i in 0..num_keys {
-            let key = Key::parse(format!("key{}", i)).unwrap();
+            let key = ibc_key(format!("key{}", i)).unwrap();
             let value_bytes = types::encode(&storage.block.height);
             storage.write(&key, value_bytes)?;
         }
@@ -459,12 +460,12 @@ mod tests {
 
         let mut current_state = HashMap::new();
         for i in 0..num_keys {
-            let key = Key::parse(format!("key{}", i)).unwrap();
+            let key = ibc_key(format!("key{}", i)).unwrap();
             current_state.insert(key, true);
         }
         // Check a Merkle tree
         for (height, key, write_type) in blocks_write_type {
-            let tree = storage.get_merkle_tree(height)?;
+            let tree = storage.get_merkle_tree(height, Some(StoreType::Ibc))?;
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
@@ -504,7 +505,7 @@ mod tests {
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
 
-        let key = Key::parse("key").expect("cannot parse the key string");
+        let key = ibc_key("key").unwrap();
         let value: u64 = 1;
         storage
             .write(&key, types::encode(&value))
@@ -519,7 +520,7 @@ mod tests {
             .begin_block(BlockHash::default(), BlockHeight(6))
             .expect("begin_block failed");
 
-        let key = Key::parse("key2").expect("cannot parse the key string");
+        let key = ibc_key("key2").unwrap();
         let value: u64 = 2;
         storage
             .write(&key, types::encode(&value))
@@ -530,7 +531,7 @@ mod tests {
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
-        let result = storage.get_merkle_tree(1.into());
+        let result = storage.get_merkle_tree(1.into(), Some(StoreType::Ibc));
         assert!(result.is_ok(), "The tree at Height 1 should be restored");
 
         storage
@@ -541,14 +542,14 @@ mod tests {
         let batch = PersistentStorage::batch();
         storage.commit_block(batch).expect("commit failed");
 
-        let result = storage.get_merkle_tree(1.into());
+        let result = storage.get_merkle_tree(1.into(), Some(StoreType::Ibc));
         assert!(result.is_err(), "The tree at Height 1 should be pruned");
-        let result = storage.get_merkle_tree(5.into());
+        let result = storage.get_merkle_tree(5.into(), Some(StoreType::Ibc));
         assert!(
             result.is_err(),
             "The tree at Height 5 shouldn't be able to be restored"
         );
-        let result = storage.get_merkle_tree(6.into());
+        let result = storage.get_merkle_tree(6.into(), Some(StoreType::Ibc));
         assert!(result.is_ok(), "The tree should be restored");
     }
 

@@ -295,7 +295,7 @@ where
     let merkle_tree = ctx
         .wl_storage
         .storage
-        .get_merkle_tree(height)
+        .get_merkle_tree(height, Some(StoreType::BridgePool))
         .expect("We should always be able to read the database");
     let stores = merkle_tree.stores();
     let store = match stores.store(&StoreType::BridgePool) {
@@ -365,7 +365,7 @@ where
         let tree = ctx
             .wl_storage
             .storage
-            .get_merkle_tree(height)
+            .get_merkle_tree(height, Some(StoreType::BridgePool))
             .into_storage_result()?;
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];

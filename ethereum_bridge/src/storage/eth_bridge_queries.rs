@@ -244,7 +244,11 @@ where
         self,
         height: BlockHeight,
     ) -> Option<KeccakHash> {
-        let base_tree = self.wl_storage.storage.get_merkle_tree(height).ok()?;
+        let base_tree = self
+            .wl_storage
+            .storage
+            .get_merkle_tree(height, Some(StoreType::BridgePool))
+            .ok()?;
         Some(base_tree.sub_root(&StoreType::BridgePool).into())
     }
 

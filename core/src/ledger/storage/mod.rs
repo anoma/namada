@@ -282,11 +282,12 @@ pub trait DB: std::fmt::Debug {
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
-    /// Read the merkle tree stores with the given height
+    /// Read the merkle tree stores with the start height of the given epoch
     fn read_merkle_tree_stores(
         &self,
-        height: BlockHeight,
-    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>>;
+        epoch: Epoch,
+        epoch_start_height: BlockHeight,
+    ) -> Result<Option<MerkleTreeStoresRead>>;
 
     /// Check if the given replay protection entry exists
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool>;
@@ -352,11 +353,11 @@ pub trait DB: std::fmt::Debug {
     ) -> Result<i64>;
 
     /// Prune Merkle tree stores at the given epoch
-    fn prune_merkle_tree_stores(
+    fn prune_merkle_tree_store(
         &mut self,
         batch: &mut Self::WriteBatch,
+        store_type: &StoreType,
         pruned_epoch: Epoch,
-        pred_epochs: &Epochs,
     ) -> Result<()>;
 
     /// Write a replay protection entry
@@ -391,10 +392,18 @@ pub trait DBIter<'iter> {
     fn iter_results(&'iter self) -> Self::PrefixIter;
 
     /// Read subspace old diffs at a given height
-    fn iter_old_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
+    fn iter_old_diffs(
+        &'iter self,
+        height: BlockHeight,
+        prefix: Option<&'iter Key>,
+    ) -> Self::PrefixIter;
 
     /// Read subspace new diffs at a given height
-    fn iter_new_diffs(&'iter self, height: BlockHeight) -> Self::PrefixIter;
+    fn iter_new_diffs(
+        &'iter self,
+        height: BlockHeight,
+        prefix: Option<&'iter Key>,
+    ) -> Self::PrefixIter;
 
     /// Read replay protection storage from the last block
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
@@ -483,7 +492,7 @@ where
             self.address_gen = address_gen;
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
-                .or_else(|_| self.get_merkle_tree(height))?;
+                .or_else(|_| self.rebuild_full_merkle_tree(height))?;
             if self.last_epoch.0 > 0 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
@@ -776,23 +785,46 @@ where
         )
     }
 
-    /// Get the Merkle tree with stores and diffs in the DB
-    /// Use `self.block.tree` if you want that of the current block height
-    pub fn get_merkle_tree(
+    /// Rebuild full Merkle tree after [`read_last_block()`]
+    fn rebuild_full_merkle_tree(
         &self,
         height: BlockHeight,
     ) -> Result<MerkleTree<H>> {
-        let (stored_height, stores) = self
-            .db
-            .read_merkle_tree_stores(height)?
+        self.get_merkle_tree(height, None)
+    }
+
+    /// Rebuild Merkle tree with diffs in the DB.
+    /// Base tree and the specified `store_type` subtree is rebuilt.
+    /// If `store_type` isn't given, full Merkle tree is restored.
+    pub fn get_merkle_tree(
+        &self,
+        height: BlockHeight,
+        store_type: Option<StoreType>,
+    ) -> Result<MerkleTree<H>> {
+        let epoch = self
+            .block
+            .pred_epochs
+            .get_epoch(height)
             .ok_or(Error::NoMerkleTree { height })?;
+        let epoch_start_height = self
+            .block
+            .pred_epochs
+            .get_start_height_of_epoch(epoch)
+            .unwrap_or(BlockHeight(1));
+        let stores = self
+            .db
+            .read_merkle_tree_stores(epoch, epoch_start_height)?
+            .ok_or(Error::NoMerkleTree { height })?;
+        let prefix = store_type.and_then(|st| st.provable_prefix());
         // Restore the tree state with diffs
         let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
-        let mut target_height = stored_height;
+        let mut target_height = epoch_start_height;
         while target_height < height {
             target_height = target_height.next_height();
-            let mut old_diff_iter = self.db.iter_old_diffs(target_height);
-            let mut new_diff_iter = self.db.iter_new_diffs(target_height);
+            let mut old_diff_iter =
+                self.db.iter_old_diffs(target_height, prefix.as_ref());
+            let mut new_diff_iter =
+                self.db.iter_new_diffs(target_height, prefix.as_ref());
 
             let mut old_diff = old_diff_iter.next();
             let mut new_diff = new_diff_iter.next();
@@ -897,7 +929,8 @@ where
                 Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
             }
         } else {
-            let tree = self.get_merkle_tree(height)?;
+            let (store_type, _) = StoreType::sub_key(key)?;
+            let tree = self.get_merkle_tree(height, Some(store_type))?;
             if let MembershipProof::ICS23(proof) = tree
                 .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
                 .map_err(Error::MerkleTreeError)?
@@ -925,7 +958,8 @@ where
                 ),
             })
         } else {
-            self.get_merkle_tree(height)?
+            let (store_type, _) = StoreType::sub_key(key)?;
+            self.get_merkle_tree(height, Some(store_type))?
                 .get_non_existence_proof(key)
                 .map(Into::into)
                 .map_err(Error::MerkleTreeError)
@@ -1086,18 +1120,22 @@ where
             if let Some(epoch) = self.block.pred_epochs.get_epoch(min_height) {
                 if epoch.0 == 0 {
                     return Ok(());
-                } else {
-                    // get the start height of the previous epoch because the
-                    // Merkle tree stores at the starting
-                    // height of the epoch would be used
-                    // to restore stores at a height (> min_height) in the epoch
-                    self.db.prune_merkle_tree_stores(
-                        batch,
-                        epoch.prev(),
-                        &self.block.pred_epochs,
-                    )?;
+                }
+                // Remove stores at the previous epoch because the Merkle tree
+                // stores at the starting height of the epoch would be used to
+                // restore stores at a height (> min_height) in the epoch
+                for st in StoreType::iter_provable() {
+                    self.db.prune_merkle_tree_store(batch, st, epoch.prev())?;
                 }
             }
+        }
+        // remove non-provable stores at the previous epoch
+        for st in StoreType::iter_non_provable() {
+            self.db.prune_merkle_tree_store(
+                batch,
+                st,
+                self.block.epoch.prev(),
+            )?;
         }
         Ok(())
     }

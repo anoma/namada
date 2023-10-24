@@ -9,7 +9,9 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 
-use super::merkle_tree::{MerkleTreeStoresRead, StoreType};
+use super::merkle_tree::{
+    base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
+};
 use super::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
@@ -19,8 +21,8 @@ use crate::types::hash::Hash;
 #[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
-    KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
+    KEY_SEGMENT_SEPARATOR,
 };
 use crate::types::time::DateTimeUtc;
 
@@ -121,7 +123,7 @@ impl DB for MockDB {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
         let mut time = None;
-        let mut epoch = None;
+        let mut epoch: Option<Epoch> = None;
         let mut pred_epochs = None;
         let mut address_gen = None;
         for (path, bytes) in self
@@ -180,6 +182,29 @@ impl DB for MockDB {
                     _ => unknown_key_error(path)?,
                 },
                 None => unknown_key_error(path)?,
+            }
+        }
+        // Restore subtrees of Merkle tree
+        if let Some(epoch) = epoch {
+            for st in StoreType::iter_subtrees() {
+                let key_prefix = subtree_key_prefix(st, epoch);
+                let root_key = key_prefix
+                    .push(&"root".to_owned())
+                    .map_err(Error::KeyError)?;
+                if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
+                {
+                    merkle_tree_stores.set_root(
+                        &st,
+                        types::decode(bytes).map_err(Error::CodingError)?,
+                    );
+                }
+                let store_key = key_prefix
+                    .push(&"store".to_owned())
+                    .map_err(Error::KeyError)?;
+                if let Some(bytes) = self.0.borrow().get(&store_key.to_string())
+                {
+                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
+                }
             }
         }
         match (hash, time, epoch, pred_epochs, address_gen) {
@@ -268,13 +293,12 @@ impl DB for MockDB {
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
-            let prefix_key = prefix_key
-                .push(&"tree".to_owned())
-                .map_err(Error::KeyError)?;
             for st in StoreType::iter() {
-                let prefix_key = prefix_key
-                    .push(&st.to_string())
-                    .map_err(Error::KeyError)?;
+                let prefix_key = if *st == StoreType::Base {
+                    base_tree_key_prefix(height)
+                } else {
+                    subtree_key_prefix(st, epoch)
+                };
                 let root_key = prefix_key
                     .push(&"root".to_owned())
                     .map_err(Error::KeyError)?;
@@ -378,16 +402,16 @@ impl DB for MockDB {
 
     fn read_merkle_tree_stores(
         &self,
-        height: BlockHeight,
-    ) -> Result<Option<(BlockHeight, MerkleTreeStoresRead)>> {
+        epoch: Epoch,
+        epoch_start_height: BlockHeight,
+    ) -> Result<Option<MerkleTreeStoresRead>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        let height_key = Key::from(height.to_db_key());
-        let tree_key = height_key
-            .push(&"tree".to_owned())
-            .map_err(Error::KeyError)?;
         for st in StoreType::iter() {
-            let prefix_key =
-                tree_key.push(&st.to_string()).map_err(Error::KeyError)?;
+            let prefix_key = if *st == StoreType::Base {
+                base_tree_key_prefix(epoch_start_height)
+            } else {
+                subtree_key_prefix(st, epoch)
+            };
             let root_key = prefix_key
                 .push(&"root".to_owned())
                 .map_err(Error::KeyError)?;
@@ -411,7 +435,7 @@ impl DB for MockDB {
                 None => return Ok(None),
             }
         }
-        Ok(Some((height, merkle_tree_stores)))
+        Ok(Some(merkle_tree_stores))
     }
 
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
@@ -528,36 +552,22 @@ impl DB for MockDB {
         })
     }
 
-    fn prune_merkle_tree_stores(
+    fn prune_merkle_tree_store(
         &mut self,
         _batch: &mut Self::WriteBatch,
+        store_type: &StoreType,
         epoch: Epoch,
-        pred_epochs: &Epochs,
     ) -> Result<()> {
-        match pred_epochs.get_start_height_of_epoch(epoch) {
-            Some(height) => {
-                let prefix_key = Key::from(height.to_db_key())
-                    .push(&"tree".to_owned())
-                    .map_err(Error::KeyError)?;
-                for st in StoreType::iter() {
-                    if *st != StoreType::Base {
-                        let prefix_key = prefix_key
-                            .push(&st.to_string())
-                            .map_err(Error::KeyError)?;
-                        let root_key = prefix_key
-                            .push(&"root".to_owned())
-                            .map_err(Error::KeyError)?;
-                        self.0.borrow_mut().remove(&root_key.to_string());
-                        let store_key = prefix_key
-                            .push(&"store".to_owned())
-                            .map_err(Error::KeyError)?;
-                        self.0.borrow_mut().remove(&store_key.to_string());
-                    }
-                }
-                Ok(())
-            }
-            None => Ok(()),
-        }
+        let prefix_key = subtree_key_prefix(store_type, epoch);
+        let root_key = prefix_key
+            .push(&"root".to_owned())
+            .map_err(Error::KeyError)?;
+        self.0.borrow_mut().remove(&root_key.to_string());
+        let store_key = prefix_key
+            .push(&"store".to_owned())
+            .map_err(Error::KeyError)?;
+        self.0.borrow_mut().remove(&store_key.to_string());
+        Ok(())
     }
 
     fn write_replay_protection_entry(
@@ -622,12 +632,20 @@ impl<'iter> DBIter<'iter> for MockDB {
         MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }
 
-    fn iter_old_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+    fn iter_old_diffs(
+        &self,
+        _height: BlockHeight,
+        _prefix: Option<&Key>,
+    ) -> MockPrefixIterator {
         // Mock DB can read only the latest value for now
         unimplemented!()
     }
 
-    fn iter_new_diffs(&self, _height: BlockHeight) -> MockPrefixIterator {
+    fn iter_new_diffs(
+        &self,
+        _height: BlockHeight,
+        _prefix: Option<&Key>,
+    ) -> MockPrefixIterator {
         // Mock DB can read only the latest value for now
         unimplemented!()
     }
