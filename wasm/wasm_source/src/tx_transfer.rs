@@ -11,15 +11,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("failed to decode token::Transfer")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
-    let token::Transfer {
-        source,
-        target,
-        token,
-        amount,
-        key,
-        shielded: shielded_hash,
-    } = transfer;
-    let shielded = shielded_hash
+
+    token::transfer(
+        ctx,
+        &transfer.source,
+        &transfer.target,
+        &transfer.token,
+        transfer.amount,
+    )?;
+
+    let shielded = transfer
+        .shielded
         .as_ref()
         .map(|hash| {
             signed
@@ -28,14 +30,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
                 .ok_or_err_msg("unable to find shielded section")
         })
         .transpose()?;
-    token::transfer(
-        ctx,
-        &source,
-        &target,
-        &token,
-        amount,
-        &key,
-        &shielded_hash,
-        &shielded,
-    )
+    if let Some(shielded) = shielded {
+        token::handle_masp_tx(ctx, &transfer, &shielded)?;
+    }
+    Ok(())
 }
