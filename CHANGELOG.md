@@ -1,5 +1,81 @@
 # CHANGELOG
 
+## v0.24.0
+
+Namada 0.24.0 is a minor release that introduces an SDK crate, PoS redelegation, various updates and fixes for IBC, PoS, governance, ETH bridge and the ledger.
+
+### BUG FIXES
+
+- Reintroduced a dummy field in order to achieve compatibility with hardware
+  wallet. ([\#1949](https://github.com/anoma/namada/pull/1949))
+- Fix broadcasting logic for protocol txs when a node operating the network is a
+  validator ([\#1964](https://github.com/anoma/namada/pull/1964))
+- Avoid redundant storage deletions in lazy collections that would incur
+  extra gas cause and appear in transaction result as changed keys even if not
+  changed occurred. This may have caused PoS transactions to run out of gas.
+  ([\#1984](https://github.com/anoma/namada/pull/1984))
+- Update ibc-rs with the fix for ibc-rs/#911
+  ([\#1989](https://github.com/anoma/namada/issues/1989))
+- Fixed the pgf stewards reward to be constant regardless of the number of
+  stewards. ([\#1999](https://github.com/anoma/namada/pull/1999))
+
+### IMPROVEMENTS
+
+- Reworked the signature of inner transactions to improve safety and fix replay
+  protection. ([\#1867](https://github.com/anoma/namada/pull/1867))
+- Updated the generation of hardware wallet test vectors to cover current
+  codebase ([\#1888](https://github.com/anoma/namada/pull/1888))
+- IBC transfer to a payment address
+  ([\#1917](https://github.com/anoma/namada/issues/1917))
+- Migrate to upstream borsh ([\#1930](https://github.com/anoma/namada/pull/1930))
+- Improve the Epoched data structure's bookkeeping of past
+  epochs, now parameterizable by PoS and governance params.
+  ([\#1943](https://github.com/anoma/namada/pull/1943))
+- New implementation and parameters for purging old epochs for Epoched validator
+  data in storage. ([\#1944](https://github.com/anoma/namada/pull/1944))
+- Query also IBC token balances
+  ([\#1946](https://github.com/anoma/namada/issues/1946))
+- Increased resoultion of gas accounting for signature verification.
+  ([\#1954](https://github.com/anoma/namada/pull/1954))
+- Refactor benchmarks to avoid enabling `"testing`" and `"dev"`` features by 
+  default in the workspace.
+  ([\#1955](https://github.com/anoma/namada/pull/1955))
+- Add missing checks for the commission rate change tx and code clean-up
+  ([\#1973](https://github.com/anoma/namada/pull/1973))
+- Reduced the storage consumption of replay protection.
+  ([\#1977](https://github.com/anoma/namada/pull/1977))
+- Persist the results of governance proposals in storage to allow recovering old
+  results. ([\#1979](https://github.com/anoma/namada/pull/1979))
+- MASP rewards are now distributed in the manner dictated by the PD-controller
+  ([\#1985](https://github.com/anoma/namada/pull/1985))
+- Wait for a node to sync before broadcasting protocol txs
+  ([\#2001](https://github.com/anoma/namada/pull/2001))
+- Sign transactions originating from the Namada relayer that are sent to
+  Ethereum ([\#2012](https://github.com/anoma/namada/pull/2012))
+
+### MISCELLANEOUS
+
+- Switched from using `libsecp256k1` to `k256` crate.
+  ([\#1958](https://github.com/anoma/namada/pull/1958))
+- Tag `ed25519` keys with `ZeroizeOnDrop`
+  ([\#1958](https://github.com/anoma/namada/pull/1958))
+
+### SDK
+
+- Phase out Halt abstractions
+  ([\#1953](https://github.com/anoma/namada/pull/1953))
+- Validate Bridge pool transfers before submitting them to the network
+  ([\#1957](https://github.com/anoma/namada/pull/1957))
+- Improved the usability of the SDK and moved it to separate crate.
+  ([\#1963](https://github.com/anoma/namada/pull/1963))
+- Now re-exporting crates that will commonly be used with the SDK.
+  ([\#2033](https://github.com/anoma/namada/pull/2033))
+
+### TESTING
+
+- Mock ledger services in integration tests
+  ([\#1976](https://github.com/anoma/namada/pull/1976))
+
 ## v0.23.1
 
 Namada 0.23.1 is a patch release fixing a potential ledger crash on the pgf module.
