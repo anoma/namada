@@ -78,8 +78,8 @@ pub mod tx {
         // Emit an IBC event
         pub fn namada_tx_emit_ibc_event(event_ptr: u64, event_len: u64);
 
-        // Get an IBC event
-        pub fn namada_tx_get_ibc_event(
+        // Get IBC events
+        pub fn namada_tx_get_ibc_events(
             event_type_ptr: u64,
             event_type_len: u64,
         ) -> i64;
@@ -196,6 +196,12 @@ pub mod vp {
 
         // Get the native token address
         pub fn namada_vp_get_native_token(result_ptr: u64);
+
+        // Get the IBC event
+        pub fn namada_vp_get_ibc_events(
+            event_type_ptr: u64,
+            event_type_len: u64,
+        ) -> i64;
 
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);

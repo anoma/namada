@@ -1,6 +1,5 @@
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
 pub use namada_core::types::token::*;
@@ -15,9 +14,6 @@ pub fn transfer(
     dest: &Address,
     token: &Address,
     amount: DenominatedAmount,
-    key: &Option<String>,
-    shielded_hash: &Option<Hash>,
-    shielded: &Option<Transaction>,
 ) -> TxResult {
     if amount.amount != Amount::default() && src != dest {
         let src_key = token::balance_key(token, src);
@@ -33,47 +29,43 @@ pub fn transfer(
         ctx.write(&src_key, src_bal)?;
         ctx.write(&dest_key, dest_bal)?;
     }
+    Ok(())
+}
 
-    // If this transaction has a shielded component, then handle it
-    // separately
-    if let Some(shielded) = shielded {
-        let masp_addr = address::masp();
-        ctx.insert_verifier(&masp_addr)?;
-        let head_tx_key = storage::Key::from(masp_addr.to_db_key())
-            .push(&HEAD_TX_KEY.to_owned())
+/// Handle a MASP transaction.
+pub fn handle_masp_tx(
+    ctx: &mut Ctx,
+    transfer: &Transfer,
+    shielded: &Transaction,
+) -> TxResult {
+    let masp_addr = address::masp();
+    ctx.insert_verifier(&masp_addr)?;
+    let head_tx_key = storage::Key::from(masp_addr.to_db_key())
+        .push(&HEAD_TX_KEY.to_owned())
+        .expect("Cannot obtain a storage key");
+    let current_tx_idx: u64 =
+        ctx.read(&head_tx_key).unwrap_or(None).unwrap_or(0);
+    let current_tx_key = storage::Key::from(masp_addr.to_db_key())
+        .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
+        .expect("Cannot obtain a storage key");
+    // Save the Transfer object and its location within the blockchain
+    // so that clients do not have to separately look these
+    // up
+    let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
+        ctx.get_block_epoch()?,
+        ctx.get_block_height()?,
+        ctx.get_tx_index()?,
+        transfer.clone(),
+        shielded.clone(),
+    );
+    ctx.write(&current_tx_key, record)?;
+    ctx.write(&head_tx_key, current_tx_idx + 1)?;
+    // If storage key has been supplied, then pin this transaction to it
+    if let Some(key) = &transfer.key {
+        let pin_key = storage::Key::from(masp_addr.to_db_key())
+            .push(&(PIN_KEY_PREFIX.to_owned() + key))
             .expect("Cannot obtain a storage key");
-        let current_tx_idx: u64 =
-            ctx.read(&head_tx_key).unwrap_or(None).unwrap_or(0);
-        let current_tx_key = storage::Key::from(masp_addr.to_db_key())
-            .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
-            .expect("Cannot obtain a storage key");
-        // Save the Transfer object and its location within the blockchain
-        // so that clients do not have to separately look these
-        // up
-        let transfer = Transfer {
-            source: src.clone(),
-            target: dest.clone(),
-            token: token.clone(),
-            amount,
-            key: key.clone(),
-            shielded: *shielded_hash,
-        };
-        let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
-            ctx.get_block_epoch()?,
-            ctx.get_block_height()?,
-            ctx.get_tx_index()?,
-            transfer,
-            shielded.clone(),
-        );
-        ctx.write(&current_tx_key, record)?;
-        ctx.write(&head_tx_key, current_tx_idx + 1)?;
-        // If storage key has been supplied, then pin this transaction to it
-        if let Some(key) = key {
-            let pin_key = storage::Key::from(masp_addr.to_db_key())
-                .push(&(PIN_KEY_PREFIX.to_owned() + key))
-                .expect("Cannot obtain a storage key");
-            ctx.write(&pin_key, current_tx_idx)?;
-        }
+        ctx.write(&pin_key, current_tx_idx)?;
     }
     Ok(())
 }

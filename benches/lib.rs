@@ -86,9 +86,7 @@ use namada::types::time::DateTimeUtc;
 use namada::types::token::DenominatedAmount;
 use namada::types::transaction::governance::InitProposalData;
 use namada::types::transaction::pos::Bond;
-use namada::types::transaction::GasLimit;
 use namada::vm::wasm::run;
-use namada_apps::cli::args::{Tx as TxArgs, TxTransfer};
 use namada_apps::cli::context::FromContext;
 use namada_apps::cli::Context;
 use namada_apps::config::TendermintMode;
@@ -97,7 +95,6 @@ use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::{defaults, CliWalletUtils};
 use namada_apps::{config, wasm_loader};
-use namada_sdk::args::InputAmount;
 use namada_sdk::masp::{
     self, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
@@ -769,44 +766,10 @@ impl BenchShieldedCtx {
         source: TransferSource,
         target: TransferTarget,
     ) -> Tx {
-        let mock_args = TxArgs {
-            dry_run: false,
-            dry_run_wrapper: false,
-            dump_tx: false,
-            force: false,
-            broadcast_only: false,
-            ledger_address: (),
-            initialized_account_alias: None,
-            fee_amount: None,
-            fee_token: address::nam(),
-            fee_unshield: None,
-            gas_limit: GasLimit::from(u64::MAX),
-            expiration: None,
-            disposable_signing_key: false,
-            signing_keys: vec![defaults::albert_keypair()],
-            signatures: vec![],
-            wallet_alias_force: true,
-            chain_id: None,
-            tx_reveal_code_path: TX_REVEAL_PK_WASM.into(),
-            verification_key: None,
-            password: None,
-            wrapper_fee_payer: None,
-            output_folder: None,
+        let denominated_amount = DenominatedAmount {
+            amount,
+            denom: 0.into(),
         };
-
-        let args = TxTransfer {
-            tx: mock_args,
-            source: source.clone(),
-            target: target.clone(),
-            token: address::nam(),
-            amount: InputAmount::Validated(DenominatedAmount {
-                amount,
-                denom: 0.into(),
-            }),
-            native_token: self.shell.wl_storage.storage.native_token.clone(),
-            tx_code_path: TX_TRANSFER_WASM.into(),
-        };
-
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
             .wallet
@@ -829,7 +792,11 @@ impl BenchShieldedCtx {
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
-                    &namada, &args,
+                    &namada,
+                    &source,
+                    &target,
+                    &address::nam(),
+                    denominated_amount,
                 ),
             )
             .unwrap()

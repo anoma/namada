@@ -29,12 +29,14 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
+use namada_core::ledger::ibc::storage::channel_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
-use namada_core::types::address::{masp, Address};
+use namada_core::types::address::{masp, Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
+use namada_core::types::ibc::IbcShieldedTransfer;
 use namada_core::types::key::*;
-use namada_core::types::masp::TransferTarget;
+use namada_core::types::masp::{TransferSource, TransferTarget};
 use namada_core::types::storage::Epoch;
 use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::MaspDenom;
@@ -51,9 +53,10 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxError};
+use crate::ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
-use crate::masp::{ShieldedContext, ShieldedTransfer};
+use crate::masp::{make_asset_type, ShieldedContext, ShieldedTransfer};
 use crate::proto::{MaspBuilder, Tx};
 use crate::queries::Client;
 use crate::rpc::{
@@ -1841,7 +1844,11 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
     // Construct the shielded part of the transaction, if any
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, args,
+            context,
+            &args.source,
+            &args.target,
+            &args.token,
+            validated_amount,
         )
         .await;
 
@@ -2113,6 +2120,122 @@ pub async fn build_custom<'a>(
     .await?;
 
     Ok((tx, signing_data, epoch))
+}
+
+/// Generate IBC shielded transfer
+pub async fn gen_ibc_shielded_transfer<'a, N: Namada<'a>>(
+    context: &N,
+    args: args::GenIbcShieldedTransafer,
+) -> Result<Option<IbcShieldedTransfer>> {
+    let key = match args.target.payment_address() {
+        Some(pa) if pa.is_pinned() => Some(pa.hash()),
+        Some(_) => None,
+        None => return Ok(None),
+    };
+    let source = Address::Internal(InternalAddress::Ibc);
+    let (src_port_id, src_channel_id) =
+        get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
+            .await?;
+    let ibc_denom =
+        rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
+    let prefixed_denom = ibc_denom
+        .parse()
+        .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
+    let token = namada_core::ledger::ibc::received_ibc_token(
+        &prefixed_denom,
+        &src_port_id,
+        &src_channel_id,
+        &args.port_id,
+        &args.channel_id,
+    )
+    .map_err(|e| {
+        Error::Other(format!("Getting IBC Token failed: error {e}"))
+    })?;
+    let validated_amount =
+        validate_amount(context, args.amount, &token, false).await?;
+
+    let shielded_transfer =
+        ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
+            context,
+            &TransferSource::Address(source.clone()),
+            &args.target,
+            &token,
+            validated_amount,
+        )
+        .await
+        .map_err(|err| TxError::MaspError(err.to_string()))?;
+
+    let transfer = token::Transfer {
+        source: source.clone(),
+        target: masp(),
+        token: token.clone(),
+        amount: validated_amount,
+        key,
+        shielded: None,
+    };
+    if let Some(shielded_transfer) = shielded_transfer {
+        // TODO: Workaround for decoding the asset_type later
+        let mut shielded = context.shielded_mut().await;
+        let mut asset_types = Vec::new();
+        for denom in MaspDenom::iter() {
+            let epoch = shielded_transfer.epoch;
+            let asset_type = make_asset_type(Some(epoch), &token, denom)?;
+            shielded
+                .asset_types
+                .insert(asset_type, (token.clone(), denom, epoch));
+            asset_types.push(asset_type);
+        }
+        let _ = shielded.save().await;
+
+        Ok(Some(IbcShieldedTransfer {
+            transfer,
+            masp_tx: shielded_transfer.masp_tx,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn get_ibc_src_port_channel<'a>(
+    context: &impl Namada<'a>,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<(PortId, ChannelId)> {
+    use crate::ibc::core::ics04_channel::channel::ChannelEnd;
+    use crate::ibc_proto::protobuf::Protobuf;
+
+    let channel_key = channel_key(dest_port_id, dest_channel_id);
+    let bytes = rpc::query_storage_value_bytes(
+        context.client(),
+        &channel_key,
+        None,
+        false,
+    )
+    .await?
+    .0
+    .ok_or_else(|| {
+        Error::Other(format!(
+            "No channel end: port {dest_port_id}, channel {dest_channel_id}"
+        ))
+    })?;
+    let channel = ChannelEnd::decode_vec(&bytes).map_err(|_| {
+        Error::Other(format!(
+            "Decoding channel end failed: port {dest_port_id}, channel \
+             {dest_channel_id}",
+        ))
+    })?;
+    channel
+        .remote
+        .channel_id()
+        .map(|src_channel| {
+            (channel.remote.port_id.clone(), src_channel.clone())
+        })
+        .ok_or_else(|| {
+            Error::Other(format!(
+                "The source channel doesn't exist: port {dest_port_id}, \
+                 channel {dest_channel_id}"
+            ))
+        })
 }
 
 async fn expect_dry_broadcast<'a>(

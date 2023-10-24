@@ -59,9 +59,9 @@ pub trait TxEnv: StorageRead + StorageWrite {
     /// Request to charge the provided amount of gas for the current transaction
     fn charge_gas(&mut self, used_gas: u64) -> Result<(), storage_api::Error>;
 
-    /// Get an IBC event with a event type
-    fn get_ibc_event(
+    /// Get IBC events with a event type
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, storage_api::Error>;
+    ) -> Result<Vec<IbcEvent>, storage_api::Error>;
 }

@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::time::Duration;
 
 pub use context::common::IbcCommonContext;
@@ -18,19 +19,24 @@ use thiserror::Error;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use crate::ibc::applications::transfer::{
-    send_transfer_execute, send_transfer_validate,
+    is_receiver_chain_source, send_transfer_execute, send_transfer_validate,
+    PrefixedDenom, TracePrefix,
 };
 use crate::ibc::core::ics04_channel::msgs::PacketMsg;
 use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
-use crate::ibc::core::ics24_host::identifier::{ChainId as IbcChainId, PortId};
+use crate::ibc::core::ics24_host::identifier::{
+    ChainId as IbcChainId, ChannelId, PortId,
+};
 use crate::ibc::core::router::{Module, ModuleId, Router};
 use crate::ibc::core::{execute, validate, MsgEnvelope, RouterError};
 use crate::ibc_proto::google::protobuf::Any;
-use crate::types::address::Address;
+use crate::types::address::{masp, Address};
 use crate::types::chain::ChainId;
 use crate::types::ibc::{
-    is_ibc_denom, EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
+    get_shielded_transfer, is_ibc_denom, EVENT_TYPE_DENOM_TRACE,
+    EVENT_TYPE_PACKET,
 };
+use crate::types::masp::PaymentAddress;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -53,6 +59,8 @@ pub enum Error {
     Denom(String),
     #[error("Invalid chain ID: {0}")]
     ChainId(ChainId),
+    #[error("Handling MASP transaction error: {0}")]
+    MaspTx(String),
 }
 
 /// IBC actions to handle IBC operations
@@ -128,15 +136,17 @@ where
                 let envelope =
                     MsgEnvelope::try_from(any_msg).map_err(Error::Execution)?;
                 execute(self, envelope.clone()).map_err(Error::Execution)?;
+                // For receiving the token to a shielded address
+                self.handle_masp_tx(&envelope)?;
                 // the current ibc-rs execution doesn't store the denom for the
                 // token hash when transfer with MsgRecvPacket
-                self.store_denom(envelope)
+                self.store_denom(&envelope)
             }
         }
     }
 
     /// Store the denom when transfer with MsgRecvPacket
-    fn store_denom(&mut self, envelope: MsgEnvelope) -> Result<(), Error> {
+    fn store_denom(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
         match envelope {
             MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
                 if let Some((trace_hash, ibc_denom, receiver)) =
@@ -149,11 +159,7 @@ where
                     // denomination is also set for the minting.
                     self.ctx
                         .borrow_mut()
-                        .store_ibc_denom(
-                            &receiver.to_string(),
-                            &trace_hash,
-                            &ibc_denom,
-                        )
+                        .store_ibc_denom(&receiver, &trace_hash, &ibc_denom)
                         .map_err(|e| {
                             Error::Denom(format!(
                                 "Writing the IBC denom failed: {}",
@@ -193,33 +199,47 @@ where
     /// events
     fn get_minted_token_info(
         &self,
-    ) -> Result<Option<(String, String, Address)>, Error> {
-        let receive_event =
-            self.ctx.borrow().get_ibc_event(EVENT_TYPE_PACKET).map_err(
-                |_| Error::Denom("Reading the IBC event failed".to_string()),
-            )?;
+    ) -> Result<Option<(String, String, String)>, Error> {
+        let receive_event = self
+            .ctx
+            .borrow()
+            .get_ibc_events(EVENT_TYPE_PACKET)
+            .map_err(|_| {
+                Error::Denom("Reading the IBC event failed".to_string())
+            })?;
+        // The receiving event should be only one in the single IBC transaction
         let receiver = match receive_event
+            .first()
             .as_ref()
             .and_then(|event| event.attributes.get("receiver"))
         {
-            Some(receiver) => {
-                Some(Address::decode(receiver).map_err(|_| {
-                    Error::Denom(format!(
-                        "Decoding the receiver address failed: {:?}",
-                        receive_event
-                    ))
-                })?)
-            }
+            // Check the receiver address
+            Some(receiver) => Some(
+                Address::decode(receiver)
+                    .or_else(|_| {
+                        // Replace it with MASP address when the receiver is a
+                        // payment address
+                        PaymentAddress::from_str(receiver).map(|_| masp())
+                    })
+                    .map_err(|_| {
+                        Error::Denom(format!(
+                            "Decoding the receiver address failed: {:?}",
+                            receive_event
+                        ))
+                    })?
+                    .to_string(),
+            ),
             None => None,
         };
         let denom_event = self
             .ctx
             .borrow()
-            .get_ibc_event(EVENT_TYPE_DENOM_TRACE)
+            .get_ibc_events(EVENT_TYPE_DENOM_TRACE)
             .map_err(|_| {
                 Error::Denom("Reading the IBC event failed".to_string())
             })?;
-        Ok(denom_event.as_ref().and_then(|event| {
+        // The denom event should be only one in the single IBC transaction
+        Ok(denom_event.first().as_ref().and_then(|event| {
             let trace_hash = event.attributes.get("trace_hash").cloned()?;
             let denom = event.attributes.get("denom").cloned()?;
             Some((trace_hash, denom, receiver?))
@@ -248,6 +268,40 @@ where
             }
         }
     }
+
+    /// Handle the MASP transaction if needed
+    fn handle_masp_tx(&mut self, envelope: &MsgEnvelope) -> Result<(), Error> {
+        let shielded_transfer = match envelope {
+            MsgEnvelope::Packet(PacketMsg::Recv(_)) => {
+                let event = self
+                    .ctx
+                    .borrow()
+                    .get_ibc_events(EVENT_TYPE_PACKET)
+                    .map_err(|_| {
+                        Error::MaspTx(
+                            "Reading the IBC event failed".to_string(),
+                        )
+                    })?;
+                // The receiving event should be only one in the single IBC
+                // transaction
+                match event.first() {
+                    Some(event) => get_shielded_transfer(event)
+                        .map_err(|e| Error::MaspTx(e.to_string()))?,
+                    None => return Ok(()),
+                }
+            }
+            _ => return Ok(()),
+        };
+        if let Some(shielded_transfer) = shielded_transfer {
+            self.ctx
+                .borrow_mut()
+                .handle_masp_tx(&shielded_transfer)
+                .map_err(|_| {
+                    Error::MaspTx("Writing MASP components failed".to_string())
+                })?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -261,4 +315,29 @@ pub struct ValidationParams {
     pub unbonding_period: Duration,
     /// Upgrade path
     pub upgrade_path: Vec<String>,
+}
+
+/// Get the IbcToken from the source/destination ports and channels
+pub fn received_ibc_token(
+    ibc_denom: &PrefixedDenom,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<Address, Error> {
+    let mut ibc_denom = ibc_denom.clone();
+    if is_receiver_chain_source(
+        src_port_id.clone(),
+        src_channel_id.clone(),
+        &ibc_denom,
+    ) {
+        let prefix =
+            TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
+        ibc_denom.remove_trace_prefix(&prefix);
+    } else {
+        let prefix =
+            TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
+        ibc_denom.add_trace_prefix(prefix);
+    }
+    Ok(storage::ibc_token(ibc_denom.to_string()))
 }

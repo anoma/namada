@@ -6,6 +6,7 @@ use std::num::TryFromIntError;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
@@ -22,11 +23,12 @@ use crate::ledger::vp_host_fns;
 use crate::proto::Tx;
 use crate::types::address::{self, Address};
 use crate::types::hash::Hash;
-use crate::types::ibc::IbcEvent;
+use crate::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use crate::types::internal::HostEnvResult;
-use crate::types::storage::{BlockHeight, Key, TxIndex};
+use crate::types::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use crate::types::token::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    Transfer, HEAD_TX_KEY, PIN_KEY_PREFIX, TX_KEY_PREFIX,
 };
 use crate::vm::memory::VmMemory;
 use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
@@ -973,7 +975,7 @@ where
 }
 
 /// Getting an IBC event function exposed to the wasm VM Tx environment.
-pub fn tx_get_ibc_event<MEM, DB, H, CA>(
+pub fn tx_get_ibc_events<MEM, DB, H, CA>(
     env: &TxVmEnv<MEM, DB, H, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -990,20 +992,20 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas(env, gas)?;
     let write_log = unsafe { env.ctx.write_log.get() };
-    for event in write_log.get_ibc_events() {
-        if event.event_type == event_type {
-            let value =
-                borsh::to_vec(event).map_err(TxRuntimeError::EncodingError)?;
-            let len: i64 = value
-                .len()
-                .try_into()
-                .map_err(TxRuntimeError::NumConversionError)?;
-            let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value);
-            return Ok(len);
-        }
-    }
-    Ok(HostEnvResult::Fail.to_i64())
+    let events: Vec<IbcEvent> = write_log
+        .get_ibc_events()
+        .iter()
+        .filter(|event| event.event_type == event_type)
+        .cloned()
+        .collect();
+    let value = events.serialize_to_vec();
+    let len: i64 = value
+        .len()
+        .try_into()
+        .map_err(TxRuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(value);
+    Ok(len)
 }
 
 /// Storage read prior state (before tx execution) function exposed to the wasm
@@ -1771,6 +1773,38 @@ where
     Ok(epoch.0)
 }
 
+/// Getting the IBC event function exposed to the wasm VM VP environment.
+pub fn vp_get_ibc_events<MEM, DB, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, DB, H, EVAL, CA>,
+    event_type_ptr: u64,
+    event_type_len: u64,
+) -> vp_host_fns::EnvResult<i64>
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    let (event_type, gas) = env
+        .memory
+        .read_string(event_type_ptr, event_type_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let gas_meter = unsafe { env.ctx.gas_meter.get() };
+    vp_host_fns::add_gas(gas_meter, gas)?;
+
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let events = vp_host_fns::get_ibc_events(gas_meter, write_log, event_type)?;
+    let value = events.serialize_to_vec();
+    let len: i64 = value
+        .len()
+        .try_into()
+        .map_err(vp_host_fns::RuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(value);
+    Ok(len)
+}
+
 /// Verify a transaction signature
 /// TODO: this is just a warkaround to track gas for multiple singature
 /// verifications. When the runtime gas meter is implemented, this funcion can
@@ -1861,8 +1895,6 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    use masp_primitives::transaction::Transaction;
-
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     let (tx_bytes, gas) = env
         .memory
@@ -2200,16 +2232,17 @@ where
         ibc_tx_charge_gas(self, gas)
     }
 
-    fn get_ibc_event(
+    fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
-    ) -> Result<Option<IbcEvent>, Self::Error> {
+    ) -> Result<Vec<IbcEvent>, Self::Error> {
         let write_log = unsafe { self.write_log.get() };
         Ok(write_log
             .get_ibc_events()
             .iter()
-            .find(|event| event.event_type == event_type.as_ref())
-            .cloned())
+            .filter(|event| event.event_type == event_type.as_ref())
+            .cloned()
+            .collect())
     }
 
     fn transfer_token(
@@ -2236,6 +2269,42 @@ where
             dest_bal.receive(&amount.amount);
             ibc_write_borsh(self, &src_key, &src_bal)?;
             ibc_write_borsh(self, &dest_key, &dest_bal)?;
+        }
+        Ok(())
+    }
+
+    fn handle_masp_tx(
+        &mut self,
+        shielded: &IbcShieldedTransfer,
+    ) -> Result<(), Self::Error> {
+        let masp_addr = address::masp();
+        let head_tx_key = Key::from(masp_addr.to_db_key())
+            .push(&HEAD_TX_KEY.to_owned())
+            .expect("Cannot obtain a storage key");
+        let current_tx_idx: u64 = ibc_read_borsh(self, &head_tx_key)
+            .unwrap_or(None)
+            .unwrap_or(0);
+        let current_tx_key = Key::from(masp_addr.to_db_key())
+            .push(&(TX_KEY_PREFIX.to_owned() + &current_tx_idx.to_string()))
+            .expect("Cannot obtain a storage key");
+        // Save the Transfer object and its location within the blockchain
+        // so that clients do not have to separately look these
+        // up
+        let record: (Epoch, BlockHeight, TxIndex, Transfer, Transaction) = (
+            ibc_get_block_epoch(self)?,
+            self.get_height()?,
+            ibc_get_tx_index(self)?,
+            shielded.transfer.clone(),
+            shielded.masp_tx.clone(),
+        );
+        ibc_write_borsh(self, &current_tx_key, &record)?;
+        ibc_write_borsh(self, &head_tx_key, &(current_tx_idx + 1))?;
+        // If storage key has been supplied, then pin this transaction to it
+        if let Some(key) = &shielded.transfer.key {
+            let pin_key = Key::from(masp_addr.to_db_key())
+                .push(&(PIN_KEY_PREFIX.to_owned() + key))
+                .expect("Cannot obtain a storage key");
+            ibc_write_borsh(self, &pin_key, &current_tx_idx)?;
         }
         Ok(())
     }
@@ -2387,6 +2456,40 @@ where
     let bytes = borsh::to_vec(val).map_err(TxRuntimeError::EncodingError)?;
     namada_core::ledger::ibc::IbcStorageContext::write(ctx, key, bytes)?;
     Ok(())
+}
+
+/// Get the current epoch.
+// Temp helper for ibc tx workaround.
+fn ibc_get_block_epoch<'a, DB, H, CA>(
+    ctx: &TxCtx<'a, DB, H, CA>,
+) -> TxResult<Epoch>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let storage = unsafe { ctx.storage.get() };
+    let (epoch, gas) = storage.get_current_epoch();
+    ibc_tx_charge_gas(ctx, gas)?;
+    Ok(epoch)
+}
+
+/// Get the tx index.
+// Temp helper for ibc tx workaround.
+fn ibc_get_tx_index<'a, DB, H, CA>(
+    ctx: &TxCtx<'a, DB, H, CA>,
+) -> TxResult<TxIndex>
+where
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let tx_index = unsafe { ctx.tx_index.get() };
+    ibc_tx_charge_gas(
+        ctx,
+        crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
+    )?;
+    Ok(TxIndex(tx_index.0))
 }
 
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>

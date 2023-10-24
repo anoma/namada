@@ -299,6 +299,23 @@ impl<'view> VpEnv<'view> for Ctx {
         get_native_token()
     }
 
+    fn get_ibc_events(
+        &self,
+        event_type: String,
+    ) -> Result<Vec<ibc::IbcEvent>, Error> {
+        let read_result = unsafe {
+            namada_vp_get_ibc_events(
+                event_type.as_ptr() as _,
+                event_type.len() as _,
+            )
+        };
+        match read_from_buffer(read_result, namada_vp_result_buffer) {
+            Some(value) => Ok(Vec::<ibc::IbcEvent>::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail")),
+            None => Ok(Vec::new()),
+        }
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
