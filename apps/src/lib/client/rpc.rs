@@ -1117,26 +1117,39 @@ pub async fn query_proposal_result<'a>(
             return;
         };
 
-        let is_author_steward = query_pgf_stewards(context.client())
-            .await
-            .iter()
-            .any(|steward| steward.address.eq(&proposal.author));
-        let tally_type = proposal.get_tally_type(is_author_steward);
-        let total_voting_power = get_total_staked_tokens(
-            context.client(),
-            proposal.voting_end_epoch,
-        )
-        .await;
-
-        let votes = compute_proposal_votes(
-            context.client(),
-            proposal_id,
-            proposal.voting_end_epoch,
-        )
-        .await;
-
+        let proposal_result_key =
+            governance_storage::get_proposal_result_key(proposal_id);
         let proposal_result =
-            compute_proposal_result(votes, total_voting_power, tally_type);
+        // Try to directly query the result in storage first
+            match query_storage_value(context.client(), &proposal_result_key).await {
+                Ok(result) => result,
+                Err(_) => {
+                    // If failure, run the tally
+                    let is_author_steward = query_pgf_stewards(context.client())
+                        .await
+                        .iter()
+                        .any(|steward| steward.address.eq(&proposal.author));
+                    let tally_type = proposal.get_tally_type(is_author_steward);
+                    let total_voting_power = get_total_staked_tokens(
+                        context.client(),
+                        proposal.voting_end_epoch,
+                    )
+                    .await;
+
+                    let votes = compute_proposal_votes(
+                        context.client(),
+                        proposal_id,
+                        proposal.voting_end_epoch,
+                    )
+                    .await;
+
+                    compute_proposal_result(
+                        votes,
+                        total_voting_power,
+                        tally_type,
+                    )
+                }
+            };
 
         display_line!(context.io(), "Proposal Id: {} ", proposal_id);
         display_line!(context.io(), "{:4}{}", "", proposal_result);
