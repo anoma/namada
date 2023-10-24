@@ -117,6 +117,140 @@ pub enum Address {
     Internal(InternalAddress),
 }
 
+impl From<raw::Address<'_, raw::Validated>> for Address {
+    fn from(raw_addr: raw::Address<'_, raw::Validated>) -> Self {
+        match raw_addr.discriminant() {
+            raw::Discriminant::Implicit => Address::Implicit(ImplicitAddress(
+                PublicKeyHash(*raw_addr.data()),
+            )),
+            raw::Discriminant::Established => {
+                Address::Established(EstablishedAddress {
+                    hash: *raw_addr.data(),
+                })
+            }
+            raw::Discriminant::Pos => Address::Internal(InternalAddress::PoS),
+            raw::Discriminant::SlashPool => {
+                Address::Internal(InternalAddress::PosSlashPool)
+            }
+            raw::Discriminant::Parameters => {
+                Address::Internal(InternalAddress::Parameters)
+            }
+            raw::Discriminant::Governance => {
+                Address::Internal(InternalAddress::Governance)
+            }
+            raw::Discriminant::Ibc => Address::Internal(InternalAddress::Ibc),
+            raw::Discriminant::EthBridge => {
+                Address::Internal(InternalAddress::EthBridge)
+            }
+            raw::Discriminant::BridgePool => {
+                Address::Internal(InternalAddress::EthBridgePool)
+            }
+            raw::Discriminant::Multitoken => {
+                Address::Internal(InternalAddress::Multitoken)
+            }
+            raw::Discriminant::Pgf => Address::Internal(InternalAddress::Pgf),
+            raw::Discriminant::Erc20 => Address::Internal(
+                InternalAddress::Erc20(EthAddress(*raw_addr.data())),
+            ),
+            raw::Discriminant::Nut => Address::Internal(InternalAddress::Nut(
+                EthAddress(*raw_addr.data()),
+            )),
+            raw::Discriminant::IbcToken => Address::Internal(
+                InternalAddress::IbcToken(IbcTokenHash(*raw_addr.data())),
+            ),
+        }
+    }
+}
+
+impl From<Address> for raw::Address<'static, raw::Validated> {
+    #[inline]
+    fn from(address: Address) -> Self {
+        raw::Address::from(&address).to_owned()
+    }
+}
+
+impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
+    fn from(address: &'addr Address) -> Self {
+        match address {
+            Address::Established(EstablishedAddress { hash }) => {
+                raw::Address::from_discriminant(raw::Discriminant::Established)
+                    .with_data_array_ref(hash)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Implicit(ImplicitAddress(key::PublicKeyHash(pkh))) => {
+                raw::Address::from_discriminant(raw::Discriminant::Implicit)
+                    .with_data_array_ref(pkh)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::PoS) => {
+                raw::Address::from_discriminant(raw::Discriminant::Pos)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::PosSlashPool) => {
+                raw::Address::from_discriminant(raw::Discriminant::SlashPool)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Parameters) => {
+                raw::Address::from_discriminant(raw::Discriminant::Parameters)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Governance) => {
+                raw::Address::from_discriminant(raw::Discriminant::Governance)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Ibc) => {
+                raw::Address::from_discriminant(raw::Discriminant::Ibc)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::IbcToken(IbcTokenHash(
+                hash,
+            ))) => raw::Address::from_discriminant(raw::Discriminant::IbcToken)
+                .with_data_array_ref(hash)
+                .validate()
+                .expect("This raw address is valid"),
+            Address::Internal(InternalAddress::EthBridge) => {
+                raw::Address::from_discriminant(raw::Discriminant::EthBridge)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::EthBridgePool) => {
+                raw::Address::from_discriminant(raw::Discriminant::BridgePool)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Erc20(EthAddress(eth_addr))) => {
+                raw::Address::from_discriminant(raw::Discriminant::Erc20)
+                    .with_data_array_ref(eth_addr)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Nut(EthAddress(eth_addr))) => {
+                raw::Address::from_discriminant(raw::Discriminant::Nut)
+                    .with_data_array_ref(eth_addr)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Multitoken) => {
+                raw::Address::from_discriminant(raw::Discriminant::Multitoken)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::Pgf) => {
+                raw::Address::from_discriminant(raw::Discriminant::Pgf)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+        }
+    }
+}
+
 // We're using the string format of addresses (bech32m) for ordering to ensure
 // that addresses as strings, storage keys and storage keys as strings preserve
 // the order.
