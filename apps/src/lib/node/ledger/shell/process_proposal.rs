@@ -878,11 +878,9 @@ where
                     }
                 } else {
                     // Replay protection checks
-                    if let Err(e) = self.replay_protection_checks(
-                        &tx,
-                        tx_bytes,
-                        temp_wl_storage,
-                    ) {
+                    if let Err(e) =
+                        self.replay_protection_checks(&tx, temp_wl_storage)
+                    {
                         return TxResult {
                             code: ErrorCodes::ReplayTx.into(),
                             info: e.to_string(),
@@ -988,6 +986,7 @@ mod test_process_proposal {
 
     #[cfg(feature = "abcipp")]
     use assert_matches::assert_matches;
+    use namada::ledger::replay_protection;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
         Code, Data, Section, SignableEthMessage, Signature, Signed,
@@ -2131,14 +2130,16 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::get_replay_protection_key(
+        let hash_key = replay_protection::get_replay_protection_last_subkey(
             &wrapper_unsigned_hash,
         );
         shell
             .wl_storage
             .storage
-            .write(&hash_key, vec![])
+            .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
         // Run validation
@@ -2221,12 +2222,9 @@ mod test_process_proposal {
                 assert_eq!(
                     response[1].result.info,
                     format!(
-                        "Transaction replay attempt: Inner transaction hash \
+                        "Transaction replay attempt: Wrapper transaction hash \
                          {} already in storage",
-                        wrapper
-                            .clone()
-                            .update_header(TxType::Raw)
-                            .header_hash(),
+                        wrapper.header_hash(),
                     )
                 );
             }
@@ -2264,12 +2262,15 @@ mod test_process_proposal {
             wrapper.clone().update_header(TxType::Raw).header_hash();
 
         // Write inner hash to storage
-        let hash_key =
-            replay_protection::get_replay_protection_key(&inner_unsigned_hash);
+        let mut batch =
+            namada::core::ledger::storage::testing::TestStorage::batch();
+        let hash_key = replay_protection::get_replay_protection_last_subkey(
+            &inner_unsigned_hash,
+        );
         shell
             .wl_storage
             .storage
-            .write(&hash_key, vec![])
+            .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
         // Run validation
@@ -2302,7 +2303,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let keypair = crate::wallet::defaults::daewon_keypair();
-        let keypair_2 = crate::wallet::defaults::daewon_keypair();
+        let keypair_2 = crate::wallet::defaults::albert_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(

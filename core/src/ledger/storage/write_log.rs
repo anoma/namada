@@ -10,6 +10,9 @@ use crate::ledger;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
+use crate::ledger::replay_protection::{
+    get_replay_protection_all_subkey, get_replay_protection_last_subkey,
+};
 use crate::ledger::storage::traits::StorageHasher;
 use crate::ledger::storage::Storage;
 use crate::types::address::{Address, EstablishedAddressGen, InternalAddress};
@@ -36,6 +39,8 @@ pub enum Error {
     DeleteVp,
     #[error("Trying to write a temporary value after deleting")]
     WriteTempAfterDelete,
+    #[error("Replay protection key: {0}")]
+    ReplayProtection(String),
 }
 
 /// Result for functions that may fail
@@ -66,6 +71,17 @@ pub enum StorageModification {
     },
 }
 
+#[derive(Debug, Clone)]
+/// A replay protection storage modification
+enum ReProtStorageModification {
+    /// Write an entry
+    Write,
+    /// Delete an entry
+    Delete,
+    /// Finalize an entry
+    Finalize,
+}
+
 /// The write log storage
 #[derive(Debug, Clone)]
 pub struct WriteLog {
@@ -87,6 +103,9 @@ pub struct WriteLog {
     tx_precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction
     ibc_events: BTreeSet<IbcEvent>,
+    /// Storage modifications for the replay protection storage, always
+    /// committed regardless of the result of the transaction
+    replay_protection: HashMap<Hash, ReProtStorageModification>,
 }
 
 /// Write log prefix iterator
@@ -113,6 +132,7 @@ impl Default for WriteLog {
             tx_write_log: HashMap::with_capacity(100),
             tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
+            replay_protection: HashMap::with_capacity(1_000),
         }
     }
 }
@@ -511,10 +531,47 @@ impl WriteLog {
                 StorageModification::Temp { .. } => {}
             }
         }
+
+        for (hash, entry) in self.replay_protection.iter() {
+            match entry {
+                ReProtStorageModification::Write => storage
+                    .write_replay_protection_entry(
+                        batch,
+                        // Can only write tx hashes to the previous block, no
+                        // further
+                        &get_replay_protection_last_subkey(hash),
+                    )
+                    .map_err(Error::StorageError)?,
+                ReProtStorageModification::Delete => storage
+                    .delete_replay_protection_entry(
+                        batch,
+                        // Can only delete tx hashes from the previous block,
+                        // no further
+                        &get_replay_protection_last_subkey(hash),
+                    )
+                    .map_err(Error::StorageError)?,
+                ReProtStorageModification::Finalize => {
+                    storage
+                        .write_replay_protection_entry(
+                            batch,
+                            &get_replay_protection_all_subkey(hash),
+                        )
+                        .map_err(Error::StorageError)?;
+                    storage
+                        .delete_replay_protection_entry(
+                            batch,
+                            &get_replay_protection_last_subkey(hash),
+                        )
+                        .map_err(Error::StorageError)?
+                }
+            }
+        }
+
         if let Some(address_gen) = self.address_gen.take() {
             storage.address_gen = address_gen
         }
         self.block_write_log.clear();
+        self.replay_protection.clear();
         Ok(())
     }
 
@@ -607,6 +664,71 @@ impl WriteLog {
 
         let iter = matches.into_iter();
         PrefixIter { iter }
+    }
+
+    /// Check if the given tx hash has already been processed. Returns `None` if
+    /// the key is not known.
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> Option<bool> {
+        self.replay_protection
+            .get(hash)
+            .map(|action| !matches!(action, ReProtStorageModification::Delete))
+    }
+
+    /// Write the transaction hash
+    pub(crate) fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        if self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Write)
+            .is_some()
+        {
+            // Cannot write an hash if other requests have already been
+            // committed for the same hash
+            return Err(Error::ReplayProtection(format!(
+                "Requested a write on hash {hash} over a previous request"
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Remove the transaction hash
+    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        match self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Delete)
+        {
+            None => Ok(()),
+            // Allow overwriting a previous finalize request
+            Some(ReProtStorageModification::Finalize) => Ok(()),
+            Some(_) =>
+            // Cannot delete an hash that still has to be written to
+            // storage or has already been deleted
+            {
+                Err(Error::ReplayProtection(format!(
+                    "Requested a delete on hash {hash} not yet committed to \
+                     storage"
+                )))
+            }
+        }
+    }
+
+    /// Move the transaction hash of the previous block to the list of all
+    /// blocks. This functions should be called at the beginning of the block
+    /// processing, before any other replay protection operation is done
+    pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        if self
+            .replay_protection
+            .insert(hash, ReProtStorageModification::Finalize)
+            .is_some()
+        {
+            // Cannot finalize an hash if other requests have already been
+            // committed for the same hash
+            return Err(Error::ReplayProtection(format!(
+                "Requested a finalize on hash {hash} over a previous request"
+            )));
+        }
+
+        Ok(())
     }
 }
 
@@ -832,6 +954,98 @@ mod tests {
         assert_eq!(value.expect("no read value"), val3);
         let (value, _) = storage.read(&key4).expect("read failed");
         assert_eq!(value, None);
+    }
+
+    #[test]
+    fn test_replay_protection_commit() {
+        let mut storage =
+            crate::ledger::storage::testing::TestStorage::default();
+        let mut write_log = WriteLog::default();
+        let mut batch = crate::ledger::storage::testing::TestStorage::batch();
+
+        // write some replay protection keys
+        write_log
+            .write_tx_hash(Hash::sha256("tx1".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx2".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx3".as_bytes()))
+            .unwrap();
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        for tx in ["tx1", "tx2", "tx3"] {
+            assert!(
+                storage
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
+        }
+
+        // write some replay protection keys
+        write_log
+            .write_tx_hash(Hash::sha256("tx4".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx5".as_bytes()))
+            .unwrap();
+        write_log
+            .write_tx_hash(Hash::sha256("tx6".as_bytes()))
+            .unwrap();
+
+        // delete previous hash
+        write_log
+            .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
+            .unwrap();
+
+        // finalize previous hashes
+        for tx in ["tx2", "tx3"] {
+            write_log
+                .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
+                .unwrap();
+        }
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
+            assert!(
+                storage
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
+        }
+        assert!(
+            !storage
+                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+                .expect("read failed")
+        );
+
+        // try to delete finalized hash which shouldn't work
+        write_log
+            .delete_tx_hash(Hash::sha256("tx2".as_bytes()))
+            .unwrap();
+
+        // commit a block
+        write_log
+            .commit_block(&mut storage, &mut batch)
+            .expect("commit failed");
+
+        assert!(write_log.replay_protection.is_empty());
+        assert!(
+            storage
+                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
+                .expect("read failed")
+        );
     }
 
     prop_compose! {
