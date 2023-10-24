@@ -563,16 +563,6 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
-dependencies = [
- "borsh-derive 0.10.3",
- "hashbrown 0.12.3",
-]
-
-[[package]]
-name = "borsh"
 version = "1.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41898277107b0d3f027593697912977397eba6ac39a55bdd2eb02c1d5d5013b5"
@@ -587,21 +577,8 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6441c552f230375d18e3cc377677914d2ca2b0d36e52129fe15450a2dce46775"
 dependencies = [
- "borsh-derive-internal 0.9.3",
- "borsh-schema-derive-internal 0.9.3",
- "proc-macro-crate 0.1.5",
- "proc-macro2",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
-dependencies = [
- "borsh-derive-internal 0.10.3",
- "borsh-schema-derive-internal 0.10.3",
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
  "proc-macro-crate 0.1.5",
  "proc-macro2",
  "syn 1.0.109",
@@ -633,17 +610,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "borsh-ext"
 version = "1.0.0-alpha.4"
 source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.0.0-alpha.4#6bebf357002f96574ac37a28f547b6c88e91b799"
@@ -656,17 +622,6 @@ name = "borsh-schema-derive-internal"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdbd5696d8bfa21d53d9fe39a714a18538bad11492a42d066dbbc395fb1951c0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1302,6 +1257,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
+ "strsim",
  "syn 2.0.16",
 ]
 
@@ -1428,12 +1384,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
-name = "dyn-clone"
-version = "1.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
-
-[[package]]
 name = "dynasm"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1485,6 +1435,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519"
+version = "2.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
+dependencies = [
+ "pkcs8",
+ "signature 2.1.0",
+]
+
+[[package]]
 name = "ed25519-consensus"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1500,13 +1460,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-consensus"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c8465edc8ee7436ffea81d21a019b16676ee3db267aa8d5a8d729581ecf998b"
+dependencies = [
+ "curve25519-dalek-ng",
+ "hex",
+ "rand_core 0.6.4",
+ "sha2 0.9.9",
+ "zeroize",
+]
+
+[[package]]
 name = "ed25519-dalek"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
- "ed25519",
+ "ed25519 1.5.3",
  "merlin",
  "rand 0.7.3",
  "serde",
@@ -1614,15 +1587,6 @@ name = "equivalent"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88bffebc5d80432c9b140ee17875ff173a8ab62faad5b257da912bd2f6c1c0a1"
-
-[[package]]
-name = "erased-serde"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f2b0c2380453a92ea8b6c8e5f64ecaafccddde8ceab55ff7a8ac1029f894569"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "errno"
@@ -2642,15 +2606,14 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.41.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs.git?rev=206cb5fa74a7ca38038b937d202ae39fbbd63c19#206cb5fa74a7ca38038b937d202ae39fbbd63c19"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ac37443194c5b5167e56cc10b79c69b9a08b2386a14a9788449f0754db4c590"
 dependencies = [
  "bytes",
- "cfg-if 1.0.0",
  "derive_more",
  "displaydoc",
- "dyn-clone",
- "erased-serde",
+ "ibc-derive",
  "ibc-proto",
  "ics23",
  "num-traits",
@@ -2673,17 +2636,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ibc-derive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92f1528535e9ca495badb76c143bdd4763c1c9d987f59d1f8b47963ba0c11674"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.16",
+]
+
+[[package]]
 name = "ibc-proto"
-version = "0.30.0"
-source = "git+https://github.com/heliaxdev/ibc-proto-rs.git?rev=31892ee743b2af017d5629b2af419ee20b6100c7#31892ee743b2af017d5629b2af419ee20b6100c7"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "459ccbab879b749bf500ae13244593fa16fc64c1b3159f6b0753c169625a1e23"
 dependencies = [
  "base64 0.21.0",
- "borsh 0.10.3",
  "bytes",
  "flex-error",
- "parity-scale-codec",
+ "ics23",
  "prost",
- "scale-info",
  "serde",
  "subtle-encoding",
  "tendermint-proto",
@@ -2691,15 +2665,17 @@ dependencies = [
 
 [[package]]
 name = "ics23"
-version = "0.9.0"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca44b684ce1859cff746ff46f5765ab72e12e3c06f76a8356db8f9a2ecf43f17"
+checksum = "442d4bab37956e76f739c864f246c825d87c0bb7f9afa65660c57833c91bf6d4"
 dependencies = [
  "anyhow",
  "bytes",
  "hex",
+ "informalsystems-pbjson",
  "prost",
  "ripemd",
+ "serde",
  "sha2 0.10.6",
  "sha3",
 ]
@@ -2812,6 +2788,16 @@ checksum = "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.0",
+]
+
+[[package]]
+name = "informalsystems-pbjson"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4eecd90f87bea412eac91c6ef94f6b1e390128290898cbe14f2b926787ae1fb"
+dependencies = [
+ "base64 0.13.1",
+ "serde",
 ]
 
 [[package]]
@@ -3331,7 +3317,7 @@ dependencies = [
  "chrono",
  "data-encoding",
  "derivative",
- "ed25519-consensus",
+ "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-structs",
  "eyre",
@@ -3339,6 +3325,7 @@ dependencies = [
  "ferveo-common",
  "group-threshold-cryptography",
  "ibc",
+ "ibc-derive",
  "ibc-proto",
  "ics23",
  "impl-num-traits",
@@ -5210,7 +5197,7 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=df7ec062e7c40d5e76b136064e9aaf8bd2490750#df7ec062e7c40d5e76b136064e9aaf8bd2490750"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=03c41c102e5e8540525b9dd4c304c8eb6b8d7d7d#03c41c102e5e8540525b9dd4c304c8eb6b8d7d7d"
 dependencies = [
  "borsh 1.0.0-alpha.4",
  "cfg-if 1.0.0",
@@ -5375,13 +5362,14 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c35fe4fd24a7715571814c22416dbc40ec0f2a6e3cce75d73e19699faecd246"
 dependencies = [
- "async-trait",
  "bytes",
- "ed25519",
- "ed25519-dalek",
+ "digest 0.10.6",
+ "ed25519 2.2.3",
+ "ed25519-consensus 2.1.0",
  "flex-error",
  "futures",
  "num-traits",
@@ -5392,8 +5380,8 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
- "sha2 0.9.9",
- "signature 1.6.4",
+ "sha2 0.10.6",
+ "signature 2.1.0",
  "subtle 2.4.1",
  "subtle-encoding",
  "tendermint-proto",
@@ -5403,8 +5391,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-config"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a213a026dfc1c68468160bee24bf128e26002170abc123678ecfbe5ff37f91d"
 dependencies = [
  "flex-error",
  "serde",
@@ -5416,29 +5405,34 @@ dependencies = [
 
 [[package]]
 name = "tendermint-light-client"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4ca7fd6b7533e44f18efcff6385d6eceff990b3828e232d8da8ca519514d73"
 dependencies = [
  "contracts",
  "crossbeam-channel 0.4.4",
  "derive_more",
  "flex-error",
  "futures",
+ "regex",
  "serde",
  "serde_cbor",
  "serde_derive",
+ "serde_json",
  "static_assertions",
  "tendermint",
  "tendermint-light-client-verifier",
  "tendermint-rpc",
  "time",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "680639f67d51eceb700bff18b45b584373ec94ee0d7ffe61f4ca6c54ed7787ff"
 dependencies = [
  "derive_more",
  "flex-error",
@@ -5449,8 +5443,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "639e5adffd77220d238a800a72c74c98d7e869290a6e4494c10b6b4e8f702f02"
 dependencies = [
  "bytes",
  "flex-error",
@@ -5466,8 +5461,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-rpc"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4df40d6d298fdca6cc5af67c85eb62c1113b5834ca321bde30240c919d4912b"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5480,9 +5476,11 @@ dependencies = [
  "hyper-rustls",
  "peg",
  "pin-project",
+ "semver 1.0.17",
  "serde",
  "serde_bytes",
  "serde_json",
+ "subtle 2.4.1",
  "subtle-encoding",
  "tendermint",
  "tendermint-config",
@@ -5498,10 +5496,11 @@ dependencies = [
 
 [[package]]
 name = "tendermint-testgen"
-version = "0.23.6"
-source = "git+https://github.com/heliaxdev/tendermint-rs.git?rev=b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7#b7d1e5afc6f2ccb3fd1545c2174bab1cc48d7fa7"
+version = "0.33.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6768bef6580abe3987cda669dc02fdfb18593e763ff2f4976ef6c58f20bde90a"
 dependencies = [
- "ed25519-dalek",
+ "ed25519-consensus 2.1.0",
  "gumdrop",
  "serde",
  "serde_json",

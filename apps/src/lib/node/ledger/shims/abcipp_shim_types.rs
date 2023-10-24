@@ -6,6 +6,11 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
+    #[cfg(feature = "abcipp")]
+    use crate::facade::tendermint_proto::abci::{
+        RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
+        ResponseVerifyVoteExtension,
+    };
     #[cfg(not(feature = "abcipp"))]
     use crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock;
     use crate::facade::tendermint_proto::v0_37::abci::{
@@ -17,11 +22,6 @@ pub mod shim {
         ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
         VoteInfo,
-    };
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::abci::{
-        RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
-        ResponseVerifyVoteExtension,
     };
     use crate::node::ledger::shell;
 

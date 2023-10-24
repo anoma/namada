@@ -15,7 +15,7 @@ use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;
 use crate::error::{EncodingError, Error, EventError};
-use crate::tendermint_proto::v_37::abci::EventAttribute;
+use crate::tendermint_proto::v0_37::abci::EventAttribute;
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block

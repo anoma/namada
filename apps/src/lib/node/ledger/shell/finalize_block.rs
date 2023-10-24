@@ -1112,7 +1112,7 @@ mod test_finalize_block {
         (
             wrapper_tx,
             ProcessedTx {
-                tx,
+                tx: tx.into(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
                     info: "".into(),
@@ -1153,7 +1153,7 @@ mod test_finalize_block {
         outer_tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
                 .expect("Test failed");
         ProcessedTx {
-            tx: outer_tx.to_bytes(),
+            tx: outer_tx.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -1269,7 +1269,7 @@ mod test_finalize_block {
 
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
         let processed_tx = ProcessedTx {
-            tx: outer_tx.to_bytes(),
+            tx: outer_tx.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::InvalidTx.into(),
                 info: "".into(),
@@ -1312,7 +1312,8 @@ mod test_finalize_block {
         ))));
         let processed_tx = ProcessedTx {
             tx: Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
-                .to_bytes(),
+                .to_bytes()
+                .into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -1439,7 +1440,7 @@ mod test_finalize_block {
 
         let req = FinalizeBlock {
             txs: vec![ProcessedTx {
-                tx,
+                tx: tx.into(),
                 result: TxResult {
                     code: ErrorCodes::InvalidTx.into(),
                     info: Default::default(),
@@ -1508,7 +1509,8 @@ mod test_finalize_block {
             ProcessedTx {
                 tx: EthereumTxData::EthereumEvents(digest)
                     .sign(&protocol_key, shell.chain_id.clone())
-                    .to_bytes(),
+                    .to_bytes()
+                    .into(),
                 result: TxResult {
                     code: ErrorCodes::Ok.into(),
                     info: "".into(),
@@ -1567,7 +1569,8 @@ mod test_finalize_block {
         let processed_tx = ProcessedTx {
             tx: EthereumTxData::EthEventsVext(ext)
                 .sign(&protocol_key, shell.chain_id.clone())
-                .to_bytes(),
+                .to_bytes()
+                .into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -1626,7 +1629,7 @@ mod test_finalize_block {
             .expect("Test failed");
         let (tx, action) = craft_tx(&mut shell);
         let processed_tx = ProcessedTx {
-            tx: tx.to_bytes(),
+            tx: tx.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -1882,7 +1885,7 @@ mod test_finalize_block {
 
         let votes = vec![VoteInfo {
             validator: Some(Validator {
-                address: proposer_address.clone(),
+                address: proposer_address.clone().into(),
                 power: u128::try_from(val_stake).expect("Test failed") as i64,
             }),
             signed_last_block: true,
@@ -1984,7 +1987,7 @@ mod test_finalize_block {
         let votes = vec![
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: u128::try_from(val1.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -1993,7 +1996,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh2.clone(),
+                    address: pkh2.clone().into(),
                     power: u128::try_from(val2.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2002,7 +2005,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh3.clone(),
+                    address: pkh3.clone().into(),
                     power: u128::try_from(val3.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2011,7 +2014,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh4.clone(),
+                    address: pkh4.clone().into(),
                     power: u128::try_from(val4.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2101,7 +2104,7 @@ mod test_finalize_block {
         let votes = vec![
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: u128::try_from(val1.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2110,7 +2113,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh2,
+                    address: pkh2.into(),
                     power: u128::try_from(val2.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2119,7 +2122,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh3,
+                    address: pkh3.into(),
                     power: u128::try_from(val3.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2128,7 +2131,7 @@ mod test_finalize_block {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh4,
+                    address: pkh4.into(),
                     power: u128::try_from(val4.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -2346,7 +2349,7 @@ mod test_finalize_block {
         // Invalid wrapper tx that should lead to a commitment of the wrapper
         // hash and no commitment of the inner hash
         let mut processed_txs = vec![ProcessedTx {
-            tx: invalid_wrapper_tx.to_bytes(),
+            tx: invalid_wrapper_tx.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -2355,7 +2358,7 @@ mod test_finalize_block {
         // Out of gas error triggering inner hash removal and wrapper hash
         // insert
         processed_txs.push(ProcessedTx {
-            tx: decrypted_tx.to_bytes(),
+            tx: decrypted_tx.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -2364,7 +2367,7 @@ mod test_finalize_block {
         // Wasm error that still leads to inner hash commitment and no wrapper
         // hash insert
         processed_txs.push(ProcessedTx {
-            tx: decrypted_tx_2.to_bytes(),
+            tx: decrypted_tx_2.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -2487,7 +2490,7 @@ mod test_finalize_block {
         )));
 
         let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes(),
+            tx: wrapper.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -2581,7 +2584,7 @@ mod test_finalize_block {
         .unwrap();
 
         let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes(),
+            tx: wrapper.to_bytes().into(),
             result: TxResult {
                 code: ErrorCodes::Ok.into(),
                 info: "".into(),
@@ -2697,7 +2700,7 @@ mod test_finalize_block {
             Misbehavior {
                 r#type: 1,
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: Default::default(),
                 }),
                 height: 1,
@@ -2707,7 +2710,7 @@ mod test_finalize_block {
             Misbehavior {
                 r#type: 2,
                 validator: Some(Validator {
-                    address: pkh2,
+                    address: pkh2.into(),
                     power: Default::default(),
                 }),
                 height: 1,
@@ -3259,7 +3262,7 @@ mod test_finalize_block {
         let misbehaviors = vec![Misbehavior {
             r#type: 1,
             validator: Some(Validator {
-                address: pkh1.clone(),
+                address: pkh1.clone().into(),
                 power: Default::default(),
             }),
             height: height.0 as i64,
@@ -3322,7 +3325,7 @@ mod test_finalize_block {
             Misbehavior {
                 r#type: 1,
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: Default::default(),
                 }),
                 height: height.0 as i64,
@@ -3332,7 +3335,7 @@ mod test_finalize_block {
             Misbehavior {
                 r#type: 2,
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: Default::default(),
                 }),
                 height: height4.0 as i64,
@@ -4018,7 +4021,7 @@ mod test_finalize_block {
                 );
                 VoteInfo {
                     validator: Some(Validator {
-                        address: pkh,
+                        address: pkh.into(),
                         power: u128::try_from(val.bonded_stake).unwrap() as i64,
                     }),
                     signed_last_block: true,
@@ -4122,7 +4125,7 @@ mod test_finalize_block {
         // Finalize block 2
         let votes = vec![VoteInfo {
             validator: Some(Validator {
-                address: pkh1.clone(),
+                address: pkh1.clone().into(),
                 power: u128::try_from(val1.bonded_stake).expect("Test failed")
                     as i64,
             }),

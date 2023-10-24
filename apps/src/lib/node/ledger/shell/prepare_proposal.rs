@@ -29,11 +29,11 @@ use super::block_alloc::states::{
 };
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 #[cfg(feature = "abcipp")]
-use crate::facade::tendermint_proto::abci::ExtendedCommitInfo;
-use crate::facade::tendermint_proto::v0_37::abci::RequestPrepareProposal;
-#[cfg(feature = "abcipp")]
 use crate::facade::tendermint_proto::abci::{tx_record::TxAction, TxRecord};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+#[cfg(feature = "abcipp")]
+use crate::facade::tendermint_proto::v0_37::abci::ExtendedCommitInfo;
+use crate::facade::tendermint_proto::v0_37::abci::RequestPrepareProposal;
 #[cfg(feature = "abcipp")]
 use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
 use crate::node::ledger::shell::ShellMode;
@@ -634,7 +634,7 @@ mod test_prepare_proposal {
         let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
         tx.header.chain_id = shell.chain_id.clone();
         let req = RequestPrepareProposal {
-            txs: vec![tx.to_bytes()],
+            txs: vec![tx.to_bytes().into()],
             ..Default::default()
         };
         assert!(shell.prepare_proposal(req).txs.is_empty());
@@ -665,7 +665,7 @@ mod test_prepare_proposal {
         let wrapper = wrapper.to_bytes();
         #[allow(clippy::redundant_clone)]
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.clone()],
+            txs: vec![wrapper.clone().into()],
             ..Default::default()
         };
         assert!(shell.prepare_proposal(req).txs.is_empty());
@@ -871,7 +871,9 @@ mod test_prepare_proposal {
         should_panic(expected = "A Tendermint quorum should never")
     )]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
-        use crate::facade::tendermint_proto::abci::{Validator, VoteInfo};
+        use crate::facade::tendermint_proto::v0_37::abci::{
+            Validator, VoteInfo,
+        };
 
         const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
@@ -951,7 +953,7 @@ mod test_prepare_proposal {
         let votes = vec![
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh1.clone(),
+                    address: pkh1.clone().into(),
                     power: u128::try_from(val1.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -960,7 +962,7 @@ mod test_prepare_proposal {
             },
             VoteInfo {
                 validator: Some(Validator {
-                    address: pkh2,
+                    address: pkh2.into(),
                     power: u128::try_from(val2.bonded_stake)
                         .expect("Test failed")
                         as i64,
@@ -1049,7 +1051,7 @@ mod test_prepare_proposal {
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
             let mut rsp = shell.prepare_proposal(RequestPrepareProposal {
-                txs: vec![vote],
+                txs: vec![vote.into()],
                 ..Default::default()
             });
             assert_eq!(rsp.txs.len(), 1);
@@ -1123,7 +1125,7 @@ mod test_prepare_proposal {
             .unwrap();
             shell.enqueue_tx(tx.clone(), gas);
             expected_wrapper.push(tx.clone());
-            req.txs.push(tx.to_bytes());
+            req.txs.push(tx.to_bytes().into());
             tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             expected_decrypted.push(tx.clone());
         }
@@ -1140,9 +1142,7 @@ mod test_prepare_proposal {
             .txs
             .into_iter()
             .map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .header
+                Tx::try_from(tx_bytes.as_ref()).expect("Test failed").header
             })
             .collect();
         // check that the order of the txs is correct
@@ -1197,13 +1197,13 @@ mod test_prepare_proposal {
             .expect("Test failed");
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper.to_bytes().into()],
             ..Default::default()
         };
 
         let received =
             shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
+                Tx::try_from(tx_bytes.as_ref())
                     .expect("Test failed")
                     .data()
                     .expect("Test failed")
@@ -1239,12 +1239,12 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes(); 2],
+            txs: vec![wrapper.to_bytes().into(); 2],
             ..Default::default()
         };
         let received =
             shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
+                Tx::try_from(tx_bytes.as_ref())
                     .expect("Test failed")
                     .data()
                     .expect("Test failed")
@@ -1291,13 +1291,13 @@ mod test_prepare_proposal {
             .expect("Test failed");
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes()],
+            txs: vec![wrapper.to_bytes().into()],
             ..Default::default()
         };
 
         let received =
             shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
+                Tx::try_from(tx_bytes.as_ref())
                     .expect("Test failed")
                     .data()
                     .expect("Test failed")
@@ -1353,12 +1353,12 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper.to_bytes(), new_wrapper.to_bytes()],
+            txs: vec![wrapper.to_bytes().into(), new_wrapper.to_bytes().into()],
             ..Default::default()
         };
         let received =
             shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
+                Tx::try_from(tx_bytes.as_ref())
                     .expect("Test failed")
                     .data()
                     .expect("Test failed")
@@ -1400,7 +1400,7 @@ mod test_prepare_proposal {
                 nanos: time.0.timestamp_subsec_nanos() as i32,
             };
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: Some(block_time),
             ..Default::default()
@@ -1443,7 +1443,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -1483,7 +1483,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -1524,7 +1524,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -1564,7 +1564,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -1603,7 +1603,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()
@@ -1642,7 +1642,7 @@ mod test_prepare_proposal {
         )));
 
         let req = RequestPrepareProposal {
-            txs: vec![wrapper_tx.to_bytes()],
+            txs: vec![wrapper_tx.to_bytes().into()],
             max_tx_bytes: 0,
             time: None,
             ..Default::default()

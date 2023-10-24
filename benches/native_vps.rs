@@ -296,7 +296,7 @@ fn ibc(c: &mut Criterion) {
     // Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
+            ClientType::new("01-tendermint").unwrap(),
             1,
         )
         .unwrap(),

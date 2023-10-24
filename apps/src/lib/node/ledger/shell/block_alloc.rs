@@ -542,9 +542,9 @@ mod tests {
                 PropTx {
                     tendermint_max_block_space_in_bytes,
                 max_block_gas,
-                    protocol_txs,
-                    encrypted_txs,
-                    decrypted_txs,
+                    protocol_txs: protocol_txs.into_iter().map(prost::bytes::Bytes::from).collect(),
+                    encrypted_txs: encrypted_txs.into_iter().map(prost::bytes::Bytes::from).collect(),
+                    decrypted_txs: decrypted_txs.into_iter().map(prost::bytes::Bytes::from).collect(),
                 }
             }
     }

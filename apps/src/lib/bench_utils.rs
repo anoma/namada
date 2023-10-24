@@ -5,6 +5,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Once;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -88,8 +89,8 @@ use crate::cli::context::FromContext;
 use crate::cli::Context;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
-use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+use crate::facade::tendermint_proto::v0_37::abci::RequestInitChain;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
 use crate::{config, wasm_loader};
@@ -279,11 +280,9 @@ impl BenchShell {
 
     pub fn init_ibc_channel(&mut self) {
         // Set connection open
-        let client_id = ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
-            1,
-        )
-        .unwrap();
+        let client_id =
+            ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
+                .unwrap();
         let connection = ConnectionEnd::new(
             ConnectionState::Open,
             client_id.clone(),
@@ -347,11 +346,9 @@ impl BenchShell {
             .unwrap();
 
         // Set client state
-        let client_id = ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
-            1,
-        )
-        .unwrap();
+        let client_id =
+            ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
+                .unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(
                 namada::ibc::core::ics24_host::path::ClientStatePath(
@@ -362,7 +359,7 @@ impl BenchShell {
             .to_db_key(),
         ));
         let client_state = ClientState::new(
-            IbcChainId::from(ChainId::default().to_string()),
+            IbcChainId::from_str(&ChainId::default().to_string()).unwrap(),
             TrustThreshold::ONE_THIRD,
             std::time::Duration::new(1, 0),
             std::time::Duration::new(2, 0),
@@ -672,11 +669,13 @@ impl Client for BenchShell {
     async fn perform<R>(
         &self,
         _request: R,
-    ) -> Result<R::Response, tendermint_rpc::Error>
+    ) -> Result<R::Output, tendermint_rpc::Error>
     where
         R: tendermint_rpc::SimpleRequest,
     {
-        tendermint_rpc::Response::from_string("MOCK RESPONSE")
+        Ok(R::Output::from(
+            tendermint_rpc::Response::from_string("MOCK RESPONSE").unwrap(),
+        ))
     }
 }
 

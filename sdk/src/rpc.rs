@@ -593,7 +593,7 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
                     event.kind == tx_query.event_type()
                         && event.attributes.iter().any(|tag| {
                             &tag.key == "hash"
-                                && &tag.value == tx_query.tx_hash()
+                                && tag.value == tx_query.tx_hash()
                         })
                 })
                 .cloned()

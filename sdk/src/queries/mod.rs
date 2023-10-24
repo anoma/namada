@@ -191,11 +191,11 @@ mod testing {
             })
         }
 
-        async fn perform<R>(&self, _request: R) -> Result<R::Response, RpcError>
+        async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>
         where
             R: tendermint_rpc::SimpleRequest,
         {
-            Response::from_string("TODO")
+            Ok(R::Response::from_string("TODO").unwrap().into())
         }
     }
 }

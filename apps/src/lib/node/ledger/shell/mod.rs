@@ -76,11 +76,11 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_proto::v0_37::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
-use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -1438,8 +1438,9 @@ where
     fn get_abci_validator_updates(
         &self,
         is_genesis: bool,
-    ) -> storage_api::Result<Vec<namada::tendermint_proto::v0_37::abci::ValidatorUpdate>>
-    {
+    ) -> storage_api::Result<
+        Vec<namada::tendermint_proto::v0_37::abci::ValidatorUpdate>,
+    > {
         use namada::ledger::pos::namada_proof_of_stake;
 
         use crate::facade::tendermint_proto::v0_37::crypto::PublicKey as TendermintPublicKey;
@@ -1506,7 +1507,7 @@ mod test_utils {
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
-    use namada::tendermint_proto::abci::VoteInfo;
+    use namada::tendermint_proto::v0_37::abci::VoteInfo;
     use namada::types::address;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1521,11 +1522,11 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
         Misbehavior, RequestInitChain, RequestPrepareProposal,
         RequestProcessProposal,
     };
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -1728,7 +1729,12 @@ mod test_utils {
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
             let resp = self.shell.process_proposal(RequestProcessProposal {
-                txs: req.txs.clone(),
+                txs: req
+                    .txs
+                    .clone()
+                    .into_iter()
+                    .map(prost::bytes::Bytes::from)
+                    .collect(),
                 proposer_address: HEXUPPER
                     .decode(
                         crate::wallet::defaults::validator_keypair()
@@ -1736,7 +1742,8 @@ mod test_utils {
                             .tm_raw_hash()
                             .as_bytes(),
                     )
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                 ..Default::default()
             });
             let results = resp
@@ -1745,7 +1752,7 @@ mod test_utils {
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
                     result: res,
-                    tx: tx_bytes,
+                    tx: tx_bytes.into(),
                 })
                 .collect();
             if resp.status != 1 {

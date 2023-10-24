@@ -128,6 +128,7 @@ tar = "0.4.37"
 tempfile = {version = "3.2.0"}
 tendermint-config = "0.33.2"
 tendermint-light-client = "0.33.2"
+tendermint-rpc = {version = "0.33.2", default-features = false}
 test-log = {version = "0.2.7", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = "0.3.0"
