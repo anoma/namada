@@ -191,8 +191,9 @@ pub fn init_storage_with_validators(
     // set last height to a reasonable value;
     // it should allow vote extensions to be cast
     if let Some(b) = wl_storage.storage.last_block.as_mut() {
-        b.height = 3.into();
+        b.height = 0.into();
     }
+    wl_storage.storage.block.height = 1.into();
 
     let mut all_keys = HashMap::new();
     let validators: Vec<_> = consensus_validators

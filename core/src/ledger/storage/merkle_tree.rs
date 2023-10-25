@@ -338,7 +338,7 @@ impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
 }
 
 impl<H: StorageHasher + Default> MerkleTree<H> {
-    /// Restore the tree from the stores
+    /// Restore the full tree from the stores
     pub fn new(stores: MerkleTreeStoresRead) -> Result<Self> {
         let base = Smt::new(stores.base.0.into(), stores.base.1);
         let account = Smt::new(stores.account.0.into(), stores.account.1);
@@ -378,6 +378,40 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             Err(Error::MerkleTree(
                 "Invalid MerkleTreeStoresRead".to_string(),
             ))
+        }
+    }
+
+    /// Restore the partial tree from the stores
+    pub fn new_partial(
+        stores: MerkleTreeStoresRead,
+        store_type: &StoreType,
+    ) -> Result<Self> {
+        let base = Smt::new(stores.base.0.into(), stores.base.1);
+        let account = Smt::new(stores.account.0.into(), stores.account.1);
+        let ibc = Amt::new(stores.ibc.0.into(), stores.ibc.1);
+        let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
+        let bridge_pool =
+            BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
+        let tree = Self {
+            base,
+            account,
+            ibc,
+            pos,
+            bridge_pool,
+        };
+
+        // validate
+        let subtree_key = H::hash(store_type.to_string());
+        let subtree_root: Hash = tree.base.get(&subtree_key.into())?;
+        if tree.base.root().is_zero()
+            && tree.sub_root(store_type) == H256::zero().into()
+            || subtree_root == tree.tree(store_type).root().into()
+        {
+            Ok(tree)
+        } else {
+            Err(Error::MerkleTree(format!(
+                "Invalid MerkleTreeStoresRead for {store_type}"
+            )))
         }
     }
 
@@ -570,6 +604,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
+#[derive(PartialEq)]
 pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
@@ -592,6 +627,12 @@ impl From<KeccakHash> for MerkleRoot {
 }
 
 impl From<MerkleRoot> for KeccakHash {
+    fn from(root: MerkleRoot) -> Self {
+        Self(root.0)
+    }
+}
+
+impl From<MerkleRoot> for Hash {
     fn from(root: MerkleRoot) -> Self {
         Self(root.0)
     }

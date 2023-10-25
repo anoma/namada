@@ -282,11 +282,14 @@ pub trait DB: std::fmt::Debug {
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
-    /// Read the merkle tree stores with the start height of the given epoch
+    /// Read the merkle tree stores with the start height of the given epoch. If
+    /// a store_type is given, it reads only the base tree and the specified
+    /// subtree. Otherwise, it reads all trees.
     fn read_merkle_tree_stores(
         &self,
         epoch: Epoch,
         epoch_start_height: BlockHeight,
+        store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>>;
 
     /// Check if the given replay protection entry exists
@@ -805,19 +808,24 @@ where
             .block
             .pred_epochs
             .get_epoch(height)
-            .ok_or(Error::NoMerkleTree { height })?;
-        let epoch_start_height = self
-            .block
-            .pred_epochs
-            .get_start_height_of_epoch(epoch)
-            .unwrap_or(BlockHeight(1));
+            .unwrap_or(Epoch::default());
+        let epoch_start_height =
+            match self.block.pred_epochs.get_start_height_of_epoch(epoch) {
+                Some(height) if height == BlockHeight(0) => BlockHeight(1),
+                Some(height) => height,
+                None => BlockHeight(1),
+            };
         let stores = self
             .db
-            .read_merkle_tree_stores(epoch, epoch_start_height)?
+            .read_merkle_tree_stores(epoch, epoch_start_height, store_type)?
             .ok_or(Error::NoMerkleTree { height })?;
         let prefix = store_type.and_then(|st| st.provable_prefix());
+        let mut tree = match store_type {
+            Some(st) => MerkleTree::<H>::new_partial(stores, &st)
+                .expect("invalid stores"),
+            None => MerkleTree::<H>::new(stores).expect("invalid stores"),
+        };
         // Restore the tree state with diffs
-        let mut tree = MerkleTree::<H>::new(stores).expect("invalid stores");
         let mut target_height = epoch_start_height;
         while target_height < height {
             target_height = target_height.next_height();
@@ -1111,6 +1119,9 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
+        if self.block.epoch.0 == 0 {
+            return Ok(());
+        }
         if let Some(limit) = self.storage_read_past_height_limit {
             if self.get_last_block_height().0 <= limit {
                 return Ok(());

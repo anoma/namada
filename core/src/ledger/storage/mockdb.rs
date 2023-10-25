@@ -242,7 +242,7 @@ impl DB for MockDB {
         &self,
         state: BlockStateWrite,
         _batch: &mut Self::WriteBatch,
-        _is_full_commit: bool,
+        is_full_commit: bool,
     ) -> Result<()> {
         let BlockStateWrite {
             merkle_tree_stores,
@@ -294,25 +294,27 @@ impl DB for MockDB {
         // Merkle tree
         {
             for st in StoreType::iter() {
-                let prefix_key = if *st == StoreType::Base {
-                    base_tree_key_prefix(height)
-                } else {
-                    subtree_key_prefix(st, epoch)
-                };
-                let root_key = prefix_key
-                    .push(&"root".to_owned())
-                    .map_err(Error::KeyError)?;
-                self.0.borrow_mut().insert(
-                    root_key.to_string(),
-                    types::encode(merkle_tree_stores.root(st)),
-                );
-                let store_key = prefix_key
-                    .push(&"store".to_owned())
-                    .map_err(Error::KeyError)?;
-                self.0.borrow_mut().insert(
-                    store_key.to_string(),
-                    merkle_tree_stores.store(st).encode(),
-                );
+                if *st == StoreType::Base || is_full_commit {
+                    let prefix_key = if *st == StoreType::Base {
+                        base_tree_key_prefix(height)
+                    } else {
+                        subtree_key_prefix(st, epoch)
+                    };
+                    let root_key = prefix_key
+                        .push(&"root".to_owned())
+                        .map_err(Error::KeyError)?;
+                    self.0.borrow_mut().insert(
+                        root_key.to_string(),
+                        types::encode(merkle_tree_stores.root(st)),
+                    );
+                    let store_key = prefix_key
+                        .push(&"store".to_owned())
+                        .map_err(Error::KeyError)?;
+                    self.0.borrow_mut().insert(
+                        store_key.to_string(),
+                        merkle_tree_stores.store(st).encode(),
+                    );
+                }
             }
         }
         // Block header
@@ -404,13 +406,17 @@ impl DB for MockDB {
         &self,
         epoch: Epoch,
         epoch_start_height: BlockHeight,
+        store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        for st in StoreType::iter() {
-            let prefix_key = if *st == StoreType::Base {
+        let store_types = store_type
+            .map(|st| vec![StoreType::Base, st])
+            .unwrap_or(StoreType::iter().map(|st| *st).collect());
+        for st in store_types {
+            let prefix_key = if st == StoreType::Base {
                 base_tree_key_prefix(epoch_start_height)
             } else {
-                subtree_key_prefix(st, epoch)
+                subtree_key_prefix(&st, epoch)
             };
             let root_key = prefix_key
                 .push(&"root".to_owned())
@@ -419,7 +425,7 @@ impl DB for MockDB {
             match bytes {
                 Some(b) => {
                     let root = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_root(st, root);
+                    merkle_tree_stores.set_root(&st, root);
                 }
                 None => return Ok(None),
             }
@@ -476,35 +482,21 @@ impl DB for MockDB {
 
     fn write_subspace_val(
         &mut self,
-        _height: BlockHeight,
+        height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
-        let value = value.as_ref();
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
-        let current_len = value.len() as i64;
-        Ok(
-            match self
-                .0
-                .borrow_mut()
-                .insert(key.to_string(), value.to_owned())
-            {
-                Some(prev_value) => current_len - prev_value.len() as i64,
-                None => current_len,
-            },
-        )
+        // batch_write are directry committed
+        self.batch_write_subspace_val(&mut MockDBWriteBatch, height, key, value)
     }
 
     fn delete_subspace_val(
         &mut self,
-        _height: BlockHeight,
+        height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
-        Ok(match self.0.borrow_mut().remove(&key.to_string()) {
-            Some(value) => value.len() as i64,
-            None => 0,
-        })
+        // batch_delete are directry committed
+        self.batch_delete_subspace_val(&mut MockDBWriteBatch, height, key)
     }
 
     fn batch() -> Self::WriteBatch {
@@ -520,21 +512,39 @@ impl DB for MockDB {
     fn batch_write_subspace_val(
         &self,
         _batch: &mut Self::WriteBatch,
-        _height: BlockHeight,
+        height: BlockHeight,
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+        let subspace_key =
+            Key::parse("subspace").map_err(Error::KeyError)?.join(key);
         let current_len = value.len() as i64;
+        let diff_prefix = Key::from(height.to_db_key());
+        let mut db = self.0.borrow_mut();
         Ok(
-            match self
-                .0
-                .borrow_mut()
-                .insert(key.to_string(), value.to_owned())
-            {
-                Some(prev_value) => current_len - prev_value.len() as i64,
-                None => current_len,
+            match db.insert(subspace_key.to_string(), value.to_owned()) {
+                Some(prev_value) => {
+                    let old_key = diff_prefix
+                        .push(&"old".to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(old_key.to_string(), prev_value.clone());
+                    let new_key = diff_prefix
+                        .push(&"new".to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(new_key.to_string(), value.to_owned());
+                    current_len - prev_value.len() as i64
+                }
+                None => {
+                    let new_key = diff_prefix
+                        .push(&"new".to_string().to_db_key())
+                        .unwrap()
+                        .join(key);
+                    db.insert(new_key.to_string(), value.to_owned());
+                    current_len
+                }
             },
         )
     }
@@ -542,12 +552,22 @@ impl DB for MockDB {
     fn batch_delete_subspace_val(
         &self,
         _batch: &mut Self::WriteBatch,
-        _height: BlockHeight,
+        height: BlockHeight,
         key: &Key,
     ) -> Result<i64> {
-        let key = Key::parse("subspace").map_err(Error::KeyError)?.join(key);
-        Ok(match self.0.borrow_mut().remove(&key.to_string()) {
-            Some(value) => value.len() as i64,
+        let subspace_key =
+            Key::parse("subspace").map_err(Error::KeyError)?.join(key);
+        let diff_prefix = Key::from(height.to_db_key());
+        let mut db = self.0.borrow_mut();
+        Ok(match db.remove(&subspace_key.to_string()) {
+            Some(value) => {
+                let old_key = diff_prefix
+                    .push(&"old".to_string().to_db_key())
+                    .unwrap()
+                    .join(key);
+                db.insert(old_key.to_string(), value.clone());
+                value.len() as i64
+            }
             None => 0,
         })
     }
@@ -634,20 +654,44 @@ impl<'iter> DBIter<'iter> for MockDB {
 
     fn iter_old_diffs(
         &self,
-        _height: BlockHeight,
-        _prefix: Option<&Key>,
+        height: BlockHeight,
+        prefix: Option<&Key>,
     ) -> MockPrefixIterator {
-        // Mock DB can read only the latest value for now
-        unimplemented!()
+        // Returns an empty iterator since Mock DB can read only the latest
+        // value for now
+        let db_prefix = format!("{}/old/", height.0.raw());
+        let prefix = prefix
+            .map(|k| {
+                if k == &Key::default() {
+                    db_prefix.clone()
+                } else {
+                    format!("{db_prefix}{k}/")
+                }
+            })
+            .unwrap_or("".to_string());
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }
 
     fn iter_new_diffs(
         &self,
-        _height: BlockHeight,
-        _prefix: Option<&Key>,
+        height: BlockHeight,
+        prefix: Option<&Key>,
     ) -> MockPrefixIterator {
-        // Mock DB can read only the latest value for now
-        unimplemented!()
+        // Returns an empty iterator since Mock DB can read only the latest
+        // value for now
+        let db_prefix = format!("{}/new/", height.0.raw());
+        let prefix = prefix
+            .map(|k| {
+                if k == &Key::default() {
+                    db_prefix.clone()
+                } else {
+                    format!("{db_prefix}{k}/")
+                }
+            })
+            .unwrap_or("".to_string());
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, db_prefix)
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {

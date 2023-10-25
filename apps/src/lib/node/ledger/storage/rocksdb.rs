@@ -951,9 +951,6 @@ impl DB for RocksDB {
                     } else {
                         subtree_key_prefix(st, epoch)
                     };
-                    let prefix_key = prefix_key
-                        .push(&st.to_string())
-                        .map_err(Error::KeyError)?;
                     let root_key = prefix_key
                         .push(&"root".to_owned())
                         .map_err(Error::KeyError)?;
@@ -1070,15 +1067,19 @@ impl DB for RocksDB {
         &self,
         epoch: Epoch,
         epoch_start_height: BlockHeight,
+        store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>> {
         // Get the latest height at which the tree stores were written
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        for st in StoreType::iter() {
-            let prefix_key = if *st == StoreType::Base {
+        let store_types = store_type
+            .map(|st| vec![StoreType::Base, st])
+            .unwrap_or(StoreType::iter().map(|st| *st).collect());
+        for st in store_types {
+            let prefix_key = if st == StoreType::Base {
                 base_tree_key_prefix(epoch_start_height)
             } else {
-                subtree_key_prefix(st, epoch)
+                subtree_key_prefix(&st, epoch)
             };
             let root_key = prefix_key
                 .push(&"root".to_owned())
@@ -1090,7 +1091,7 @@ impl DB for RocksDB {
             match bytes {
                 Some(b) => {
                     let root = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_root(st, root);
+                    merkle_tree_stores.set_root(&st, root);
                 }
                 None => return Ok(None),
             }

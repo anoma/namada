@@ -414,7 +414,11 @@ mod tests {
 
         // Update and commit
         let hash = BlockHash::default();
-        storage.begin_block(hash, BlockHeight(1))?;
+        let height = BlockHeight(1);
+        storage.begin_block(hash, height)?;
+        // Epoch 1
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(height);
         let mut batch = PersistentStorage::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
             if height != storage.block.height {
