@@ -493,7 +493,7 @@ impl RocksDB {
         // Execute next step in parallel
         let batch = Mutex::new(batch);
 
-        tracing::info!("Restoring previous hight subspace diffs");
+        tracing::info!("Restoring previous height subspace diffs");
         self.iter_prefix(None).par_bridge().try_for_each(
             |(key, _value, _gas)| -> Result<()> {
                 // Restore previous height diff if present, otherwise delete the
