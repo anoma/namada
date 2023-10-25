@@ -13,6 +13,7 @@ use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_core::ledger::gas::TxGasMeter;
+use namada_tx_prelude::validity_predicate::VpSentinel;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
@@ -44,6 +45,7 @@ pub struct TestVpEnv {
     pub wl_storage: WlStorage<MockDB, Sha256Hasher>,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: VpGasMeter,
+    pub sentinel: VpSentinel,
     pub tx: Tx,
     pub tx_index: TxIndex,
     pub keys_changed: BTreeSet<storage::Key>,
@@ -77,6 +79,7 @@ impl Default for TestVpEnv {
             gas_meter: VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(10_000_000.into()),
             ),
+            sentinel: VpSentinel::default(),
             tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
@@ -258,6 +261,7 @@ mod native_vp_host_env {
                                 wl_storage,
                                 iterators,
                                 gas_meter,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 keys_changed,
@@ -274,6 +278,7 @@ mod native_vp_host_env {
                                 &wl_storage.write_log,
                                 iterators,
                                 gas_meter,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 verifiers,
@@ -301,6 +306,7 @@ mod native_vp_host_env {
                                 wl_storage,
                                 iterators,
                                 gas_meter,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 keys_changed,
@@ -317,6 +323,7 @@ mod native_vp_host_env {
                                 &wl_storage.write_log,
                                 iterators,
                                 gas_meter,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 verifiers,
@@ -362,16 +369,15 @@ mod native_vp_host_env {
         ) -> i64);
     native_host_fn!(vp_log_string(str_ptr: u64, str_len: u64));
     native_host_fn!(vp_verify_tx_section_signature(
-            hash_list_ptr: u64,
-            hash_list_len: u64,
-            public_keys_map_ptr: u64,
-            public_keys_map_len: u64,
-            signer_ptr: u64,
-            signer_len: u64,
-            threshold: u8,
-            max_signatures_ptr: u64,
-            max_signatures_len: u64,)
-        -> i64
-    );
+        hash_list_ptr: u64,
+        hash_list_len: u64,
+        public_keys_map_ptr: u64,
+        public_keys_map_len: u64,
+        signer_ptr: u64,
+        signer_len: u64,
+        threshold: u8,
+        max_signatures_ptr: u64,
+        max_signatures_len: u64,
+    ) -> i64);
     native_host_fn!(vp_charge_gas(used_gas: u64));
 }

@@ -9,6 +9,17 @@ pub mod main {
     }
 }
 
+/// A tx that fails everytime.
+#[cfg(feature = "tx_fail")]
+pub mod main {
+    use namada_tx_prelude::*;
+
+    #[transaction(gas = 1000)]
+    fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+        Err(Error::SimpleMessage("failed tx"))
+    }
+}
+
 /// A tx that allocates a memory of size given from the `tx_data: usize`.
 #[cfg(feature = "tx_memory_limit")]
 pub mod main {
