@@ -168,6 +168,31 @@ impl TxType {
     }
 }
 
+/// Sentinel used in transactions to signal events that require special
+/// replay protection handling back to the protocol.
+#[derive(Debug, Default)]
+pub enum TxSentinel {
+    /// No action required
+    #[default]
+    None,
+    /// Exceeded gas limit
+    OutOfGas,
+    /// Found invalid commtiment to one of the transaction's sections
+    InvalidCommitment,
+}
+
+impl TxSentinel {
+    /// Set the sentinel for an out of gas error
+    pub fn set_out_of_gas(&mut self) {
+        *self = Self::OutOfGas
+    }
+
+    /// Set the sentinel for an invalid section commitment error
+    pub fn set_invalid_commitment(&mut self) {
+        *self = Self::InvalidCommitment
+    }
+}
+
 #[cfg(test)]
 mod test_process_tx {
     use super::*;

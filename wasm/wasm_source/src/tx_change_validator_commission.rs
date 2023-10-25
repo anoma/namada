@@ -6,7 +6,10 @@ use namada_tx_prelude::*;
 #[transaction(gas = 220000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let CommissionChange {
         validator,
         new_rate,

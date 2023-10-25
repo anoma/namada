@@ -60,7 +60,7 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            // Wasm middleware gas injectiong hook
+            // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
             "namada_tx_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
@@ -86,6 +86,7 @@ where
             "namada_tx_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_native_token),
             "namada_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
             "namada_tx_ibc_execute" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_ibc_execute),
+            "namada_tx_set_commitment_sentinel" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_set_commitment_sentinel)
         },
     }
 }
@@ -107,7 +108,7 @@ where
         // default namespace
         "env" => {
             "memory" => initial_memory,
-            // Wasm middleware gas injectiong hook
+            // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
             "namada_vp_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),

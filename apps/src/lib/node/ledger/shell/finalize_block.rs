@@ -519,12 +519,16 @@ where
                     );
 
                     // If transaction type is Decrypted and failed because of
-                    // out of gas, remove its hash from storage to allow
-                    // rewrapping it
+                    // out of gas or invalid section commtiment, remove its hash
+                    // from storage to allow rewrapping it
                     if let Some(wrapper) = embedding_wrapper {
-                        if let Error::TxApply(protocol::Error::GasError(_)) =
-                            msg
-                        {
+                        if matches!(
+                            msg,
+                            Error::TxApply(protocol::Error::GasError(_))
+                                | Error::TxApply(
+                                    protocol::Error::MissingSection(_)
+                                )
+                        ) {
                             self.allow_tx_replay(wrapper);
                         }
                     } else if let Some(wrapper) = wrapper {
@@ -2308,9 +2312,9 @@ mod test_finalize_block {
     }
 
     /// Test that if a decrypted transaction fails because of out-of-gas,
-    /// undecryptable or invalid signature, its hash is removed from storage.
-    /// Also checks that a tx failing for other reason has its hash persisted to
-    /// storage.
+    /// undecryptable, invalid signature or wrong section commitment, its hash
+    /// is removed from storage. Also checks that a tx failing for other
+    /// reason has its hash persisted to storage.
     #[test]
     fn test_tx_hash_handling() {
         let (mut shell, _, _, _) = setup();
@@ -2357,10 +2361,13 @@ mod test_finalize_block {
         failing_wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
+        let mut wrong_commitment_wrapper = failing_wrapper.clone();
+        wrong_commitment_wrapper.set_code_sechash(Hash::default());
 
         let mut out_of_gas_inner = out_of_gas_wrapper.clone();
         let mut undecryptable_inner = undecryptable_wrapper.clone();
         let mut unsigned_inner = unsigned_wrapper.clone();
+        let mut wrong_commitment_inner = wrong_commitment_wrapper.clone();
         let mut failing_inner = failing_wrapper.clone();
 
         undecryptable_inner
@@ -2368,6 +2375,7 @@ mod test_finalize_block {
         for inner in [
             &mut out_of_gas_inner,
             &mut unsigned_inner,
+            &mut wrong_commitment_inner,
             &mut failing_inner,
         ] {
             inner.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
@@ -2378,6 +2386,7 @@ mod test_finalize_block {
             &out_of_gas_inner,
             &undecryptable_inner,
             &unsigned_inner,
+            &wrong_commitment_inner,
             &failing_inner,
         ] {
             let hash_subkey =
@@ -2396,6 +2405,7 @@ mod test_finalize_block {
             &out_of_gas_inner,
             &undecryptable_inner,
             &unsigned_inner,
+            &wrong_commitment_inner,
             &failing_inner,
         ] {
             processed_txs.push(ProcessedTx {
@@ -2413,6 +2423,10 @@ mod test_finalize_block {
             GAS_LIMIT_MULTIPLIER.into(),
         );
         shell.enqueue_tx(unsigned_wrapper.clone(), u64::MAX.into()); // Prevent out of gas which would still make the test pass
+        shell.enqueue_tx(
+            wrong_commitment_wrapper.clone(),
+            GAS_LIMIT_MULTIPLIER.into(),
+        );
         shell.enqueue_tx(failing_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.wl_storage.storage.block.tree.root();
@@ -2457,51 +2471,35 @@ mod test_finalize_block {
             .expect("Testfailed")
             .as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
+        assert_eq!(event[4].event_type.to_string(), String::from("applied"));
+        let code = event[4]
+            .attributes
+            .get("code")
+            .expect("Testfailed")
+            .as_str();
+        assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
-        assert!(
-            !shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&out_of_gas_inner.header_hash())
-                .unwrap_or_default()
-        );
-        assert!(
-            shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&out_of_gas_wrapper.header_hash())
-                .unwrap_or_default()
-        );
-        assert!(
-            !shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&undecryptable_inner.header_hash())
-                .unwrap_or_default()
-        );
-        assert!(
-            shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(
-                    &undecryptable_wrapper.header_hash()
-                )
-                .unwrap_or_default()
-        );
-        assert!(
-            !shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&unsigned_inner.header_hash())
-                .unwrap_or_default()
-        );
-        assert!(
-            shell
-                .wl_storage
-                .write_log
-                .has_replay_protection_entry(&unsigned_wrapper.header_hash())
-                .unwrap_or_default()
-        );
+        for (invalid_inner, valid_wrapper) in [
+            (out_of_gas_inner, out_of_gas_wrapper),
+            (undecryptable_inner, undecryptable_wrapper),
+            (unsigned_inner, unsigned_wrapper),
+            (wrong_commitment_inner, wrong_commitment_wrapper),
+        ] {
+            assert!(
+                !shell
+                    .wl_storage
+                    .write_log
+                    .has_replay_protection_entry(&invalid_inner.header_hash())
+                    .unwrap_or_default()
+            );
+            assert!(
+                shell
+                    .wl_storage
+                    .write_log
+                    .has_replay_protection_entry(&valid_wrapper.header_hash())
+                    .unwrap_or_default()
+            );
+        }
         assert!(
             shell
                 .wl_storage

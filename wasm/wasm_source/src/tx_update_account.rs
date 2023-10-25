@@ -8,7 +8,10 @@ use namada_tx_prelude::*;
 #[transaction(gas = 140000)]
 fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let signed = tx;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let tx_data =
         transaction::account::UpdateAccount::try_from_slice(&data[..])
             .wrap_err("failed to decode UpdateAccount")?;
@@ -19,9 +22,17 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     if let Some(hash) = tx_data.vp_code_hash {
         let vp_code_hash = signed
             .get_section(&hash)
-            .ok_or_err_msg("vp code section not found")?
+            .ok_or_err_msg("vp code section not found")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?
             .extra_data_sec()
-            .ok_or_err_msg("vp code section must be tagged as extra")?
+            .ok_or_err_msg("vp code section must be tagged as extra")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?
             .code
             .hash();
 
