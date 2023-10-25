@@ -7,7 +7,10 @@ use namada_tx_prelude::*;
 #[transaction(gas = 110000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("failed to decode token::Transfer")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
@@ -28,6 +31,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
                 .get_section(hash)
                 .and_then(|x| x.as_ref().masp_tx())
                 .ok_or_err_msg("unable to find shielded section")
+                .map_err(|err| {
+                    ctx.set_commitment_sentinel();
+                    err
+                })
         })
         .transpose()?;
     if let Some(shielded) = shielded {

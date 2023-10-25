@@ -42,8 +42,8 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Missing wasm code error")]
-    MissingCode,
+    #[error("Missing tx section: {0}")]
+    MissingSection(String),
     #[error("Storage error: {0}")]
     StorageError(crate::ledger::storage::Error),
     #[error("Error decoding a transaction from bytes: {0}")]
@@ -715,6 +715,7 @@ where
     )
     .map_err(|err| match err {
         wasm::run::Error::GasError(msg) => Error::GasError(msg),
+        wasm::run::Error::MissingSection(msg) => Error::MissingSection(msg),
         _ => Error::TxRunnerError(err),
     })
 }

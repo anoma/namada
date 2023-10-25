@@ -64,4 +64,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, storage_api::Error>;
+
+    /// Set the sentinel for an invalid section commitment
+    fn set_commitment_sentinel(&mut self);
 }
