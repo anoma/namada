@@ -5,9 +5,10 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::ledger::gas::{
-    self, GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
+    GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
 };
 use namada_core::ledger::storage::write_log::StorageModification;
+use namada_core::types::validity_predicate::VpSentinel;
 use parity_wasm::elements;
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
@@ -77,10 +78,12 @@ pub enum Error {
     LoadWasmCode(String),
     #[error("Unable to find compiled wasm code")]
     NoCompiledWasmCode,
-    #[error("Error while accounting for gas: {0}")]
-    GasError(#[from] gas::Error),
+    #[error("Gas error: {0}")]
+    GasError(String),
     #[error("Failed type conversion: {0}")]
     ConversionError(String),
+    #[error("Invalid transaction signature")]
+    InvalidTxSignature,
 }
 
 /// Result for functions that may fail
@@ -120,12 +123,14 @@ where
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
 
+    let mut out_of_gas = false;
     let env = TxVmEnv::new(
         WasmMemory::default(),
         storage,
         write_log,
         &mut iterators,
         gas_meter,
+        &mut out_of_gas,
         tx,
         tx_index,
         &mut verifiers,
@@ -162,16 +167,14 @@ where
             entrypoint: TX_ENTRYPOINT,
             error,
         })?;
-    match apply_tx
-        .call(tx_data_ptr, tx_data_len)
-        .map_err(Error::RuntimeError)
-    {
-        Err(Error::RuntimeError(err)) => {
-            tracing::debug!("Tx WASM failed with {}", err);
-            Err(Error::RuntimeError(err))
+    apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
+        tracing::debug!("Tx WASM failed with {}", err);
+        if out_of_gas {
+            Error::GasError(err.to_string())
+        } else {
+            Error::RuntimeError(err)
         }
-        _ => Ok(()),
-    }?;
+    })?;
 
     Ok(verifiers)
 }
@@ -214,12 +217,14 @@ where
         cache_access: PhantomData,
     };
 
+    let mut sentinel = VpSentinel::default();
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
         storage,
         write_log,
         gas_meter,
+        &mut sentinel,
         tx,
         tx_index,
         &mut iterators,
@@ -234,7 +239,7 @@ where
         memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
     let imports = vp_imports(&store, initial_memory, env);
 
-    run_vp(
+    match run_vp(
         module,
         imports,
         &vp_code_hash,
@@ -243,7 +248,22 @@ where
         keys_changed,
         verifiers,
         gas_meter,
-    )
+    ) {
+        Ok(accept) => {
+            if !accept && sentinel.is_invalid_signature() {
+                Err(Error::InvalidTxSignature)
+            } else {
+                Ok(accept)
+            }
+        }
+        Err(err) => {
+            if sentinel.is_out_of_gas() {
+                Err(Error::GasError(err.to_string()))
+            } else {
+                Err(err)
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -520,15 +540,21 @@ where
                 }
             };
 
-            gas_meter.add_wasm_load_from_storage_gas(tx_len)?;
-            gas_meter.add_compiling_gas(tx_len)?;
+            gas_meter
+                .add_wasm_load_from_storage_gas(tx_len)
+                .map_err(|e| Error::GasError(e.to_string()))?;
+            gas_meter
+                .add_compiling_gas(tx_len)
+                .map_err(|e| Error::GasError(e.to_string()))?;
             Ok((module, store))
         }
         Commitment::Id(code) => {
-            gas_meter.add_compiling_gas(
-                u64::try_from(code.len())
-                    .map_err(|e| Error::ConversionError(e.to_string()))?,
-            )?;
+            gas_meter
+                .add_compiling_gas(
+                    u64::try_from(code.len())
+                        .map_err(|e| Error::ConversionError(e.to_string()))?,
+                )
+                .map_err(|e| Error::GasError(e.to_string()))?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
@@ -540,6 +566,8 @@ where
 
 /// Get the gas rules used to meter wasm operations
 fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
+    // NOTE: costs set to 0 don't actually trigger the injection of a call to
+    // the gas host function (no useless instructions are injected)
     let instruction_cost = 0;
     let memory_grow_cost = WASM_MEMORY_PAGE_GAS_COST;
     let call_per_local_cost = 0;
@@ -690,6 +718,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -793,6 +822,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -925,6 +955,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1046,6 +1077,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1105,6 +1137,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1274,6 +1307,7 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
+        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
