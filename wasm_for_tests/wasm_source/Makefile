@@ -7,6 +7,7 @@ nightly := $(shell cat ../../rust-nightly-version)
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_memory_limit
 wasms += tx_no_op
+wasms += tx_fail
 wasms += tx_read_storage_key
 wasms += tx_write
 wasms += vp_always_false
