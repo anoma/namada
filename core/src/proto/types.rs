@@ -26,7 +26,9 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
-use crate::ledger::gas::{GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST};
+use crate::ledger::gas::{
+    self, GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST,
+};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
@@ -74,8 +76,8 @@ pub enum Error {
     InvalidJSONDeserialization(String),
     #[error("The wrapper signature is invalid.")]
     InvalidWrapperSignature,
-    #[error("Signature verification went out of gas")]
-    OutOfGas,
+    #[error("Signature verification went out of gas: {0}")]
+    OutOfGas(gas::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -593,7 +595,7 @@ impl Signature {
                         if let Some(meter) = gas_meter {
                             meter
                                 .consume(VERIFY_TX_SIG_GAS_COST)
-                                .map_err(|_| VerifySigError::OutOfGas)?;
+                                .map_err(VerifySigError::OutOfGas)?;
                         }
                         common::SigScheme::verify_signature(
                             &pk,
@@ -618,7 +620,7 @@ impl Signature {
                         if let Some(meter) = gas_meter {
                             meter
                                 .consume(VERIFY_TX_SIG_GAS_COST)
-                                .map_err(|_| VerifySigError::OutOfGas)?;
+                                .map_err(VerifySigError::OutOfGas)?;
                         }
                         common::SigScheme::verify_signature(
                             pk,
@@ -1448,8 +1450,8 @@ impl Tx {
                             gas_meter,
                         )
                         .map_err(|e| {
-                            if let VerifySigError::OutOfGas = e {
-                                Error::OutOfGas
+                            if let VerifySigError::OutOfGas(inner) = e {
+                                Error::OutOfGas(inner)
                             } else {
                                 Error::InvalidSectionSignature(
                                     "found invalid signature.".to_string(),
