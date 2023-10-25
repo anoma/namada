@@ -350,6 +350,10 @@ impl TxEnv for Ctx {
             None => Ok(Vec::new()),
         }
     }
+
+    fn set_commitment_sentinel(&mut self) {
+        unsafe { namada_tx_set_commitment_sentinel() }
+    }
 }
 
 /// Execute IBC tx.

@@ -19,6 +19,7 @@ use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
 use namada_tx_prelude::borsh_ext::BorshSerializeExt;
+use namada_tx_prelude::transaction::TxSentinel;
 use namada_tx_prelude::{storage_api, Ctx};
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
@@ -51,7 +52,7 @@ pub struct TestTxEnv {
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: BTreeSet<Address>,
     pub gas_meter: TxGasMeter,
-    pub out_of_gas: bool,
+    pub sentinel: TxSentinel,
     pub tx_index: TxIndex,
     pub result_buffer: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
@@ -76,7 +77,7 @@ impl Default for TestTxEnv {
             wl_storage,
             iterators: PrefixIterators::default(),
             gas_meter: TxGasMeter::new_from_sub_limit(100_000_000.into()),
-            out_of_gas: false,
+            sentinel: TxSentinel::default(),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
             result_buffer: None,
@@ -346,7 +347,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
-                        out_of_gas,
+                                sentinel,
                                 result_buffer,
                                 tx_index,
                                 vp_wasm_cache,
@@ -362,7 +363,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
-                                out_of_gas,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 result_buffer,
@@ -389,7 +390,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
-                        out_of_gas,
+                                sentinel,
                                 result_buffer,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
@@ -404,7 +405,7 @@ mod native_tx_host_env {
                                 iterators,
                                 verifiers,
                                 gas_meter,
-                                out_of_gas,
+                                sentinel,
                                 tx,
                                 tx_index,
                                 result_buffer,
@@ -418,7 +419,48 @@ mod native_tx_host_env {
                         })
                     }
                 });
-            }
+            };
+
+            // unit, non-result, return type
+            ( "non-result", $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
+                concat_idents!(extern_fn_name = namada, _, $fn {
+                    #[no_mangle]
+                    extern "C" fn extern_fn_name( $($arg: $type),* ) {
+                        with(|TestTxEnv {
+                                wl_storage,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                sentinel,
+                                result_buffer,
+                                tx_index,
+                                vp_wasm_cache,
+                                vp_cache_dir: _,
+                                tx_wasm_cache,
+                                tx_cache_dir: _,
+                                tx,
+                            }: &mut TestTxEnv| {
+
+                            let tx_env = vm::host_env::testing::tx_env(
+                                &wl_storage.storage,
+                                &mut wl_storage.write_log,
+                                iterators,
+                                verifiers,
+                                gas_meter,
+                                sentinel,
+                                tx,
+                                tx_index,
+                                result_buffer,
+                                vp_wasm_cache,
+                                tx_wasm_cache,
+                            );
+
+                            // Call the `host_env` function
+                            $fn( &tx_env, $($arg),* )
+                        })
+                    }
+                });
+            };
         }
 
     // Implement all the exported functions from
@@ -464,4 +506,5 @@ mod native_tx_host_env {
     native_host_fn!(tx_get_native_token(result_ptr: u64));
     native_host_fn!(tx_log_string(str_ptr: u64, str_len: u64));
     native_host_fn!(tx_charge_gas(used_gas: u64));
+    native_host_fn!("non-result", tx_set_commitment_sentinel());
 }

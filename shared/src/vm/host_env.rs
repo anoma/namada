@@ -9,6 +9,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
 use namada_core::types::internal::KeyVal;
+use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
 use thiserror::Error;
 
@@ -101,8 +102,8 @@ where
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, DB>>,
     /// Transaction gas meter.
     pub gas_meter: MutHostRef<'a, &'a TxGasMeter>,
-    /// Out-of-gas sentinel
-    pub out_of_gas: MutHostRef<'a, &'a bool>,
+    /// Transaction sentinel
+    pub sentinel: MutHostRef<'a, &'a TxSentinel>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<'a, &'a Tx>,
     /// The transaction index is used to identify a shielded transaction's
@@ -145,7 +146,7 @@ where
         write_log: &mut WriteLog,
         iterators: &mut PrefixIterators<'a, DB>,
         gas_meter: &mut TxGasMeter,
-        out_of_gas: &mut bool,
+        sentinel: &mut TxSentinel,
         tx: &Tx,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
@@ -157,7 +158,7 @@ where
         let write_log = unsafe { MutHostRef::new(write_log) };
         let iterators = unsafe { MutHostRef::new(iterators) };
         let gas_meter = unsafe { MutHostRef::new(gas_meter) };
-        let out_of_gas = unsafe { MutHostRef::new(out_of_gas) };
+        let sentinel = unsafe { MutHostRef::new(sentinel) };
         let tx = unsafe { HostRef::new(tx) };
         let tx_index = unsafe { HostRef::new(tx_index) };
         let verifiers = unsafe { MutHostRef::new(verifiers) };
@@ -171,7 +172,7 @@ where
             write_log,
             iterators,
             gas_meter,
-            out_of_gas,
+            sentinel,
             tx,
             tx_index,
             verifiers,
@@ -215,7 +216,7 @@ where
             write_log: self.write_log.clone(),
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
-            out_of_gas: self.out_of_gas.clone(),
+            sentinel: self.sentinel.clone(),
             tx: self.tx.clone(),
             tx_index: self.tx_index.clone(),
             verifiers: self.verifiers.clone(),
@@ -488,8 +489,8 @@ where
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     // if we run out of gas, we need to stop the execution
     gas_meter.consume(used_gas).map_err(|err| {
-        let sentinel = unsafe { env.ctx.out_of_gas.get() };
-        *sentinel = true;
+        let sentinel = unsafe { env.ctx.sentinel.get() };
+        sentinel.set_out_of_gas();
         tracing::info!(
             "Stopping transaction execution because of gas error: {}",
             err
@@ -2005,8 +2006,11 @@ where
 
     use namada_core::ledger::ibc::{IbcActions, TransferModule};
 
-    let tx_data = unsafe { env.ctx.tx.get().data() }
-        .ok_or(TxRuntimeError::MissingTxData)?;
+    let tx_data = unsafe { env.ctx.tx.get().data() }.ok_or_else(|| {
+        let sentinel = unsafe { env.ctx.sentinel.get() };
+        sentinel.set_invalid_commitment();
+        TxRuntimeError::MissingTxData
+    })?;
     let ctx = Rc::new(RefCell::new(env.ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone());
     let module = TransferModule::new(ctx);
@@ -2046,6 +2050,18 @@ where
         }
     }
     Ok(())
+}
+
+/// Set the sentinel for an invalid tx section commitment
+pub fn tx_set_commitment_sentinel<MEM, DB, H, CA>(env: &TxVmEnv<MEM, DB, H, CA>)
+where
+    MEM: VmMemory,
+    DB: storage::DB + for<'iter> storage::DBIter<'iter>,
+    H: StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let sentinel = unsafe { env.ctx.sentinel.get() };
+    sentinel.set_invalid_commitment();
 }
 
 /// Evaluate a validity predicate with the given input data.
@@ -2574,7 +2590,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, DB>,
         verifiers: &mut BTreeSet<Address>,
         gas_meter: &mut TxGasMeter,
-        out_of_gas: &mut bool,
+        sentinel: &mut TxSentinel,
         tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
@@ -2592,7 +2608,7 @@ pub mod testing {
             write_log,
             iterators,
             gas_meter,
-            out_of_gas,
+            sentinel,
             tx,
             tx_index,
             verifiers,

@@ -8,6 +8,7 @@ use namada_core::ledger::gas::{
     GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS_COST,
 };
 use namada_core::ledger::storage::write_log::StorageModification;
+use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
 use parity_wasm::elements;
 use thiserror::Error;
@@ -39,8 +40,8 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Missing wasm code error")]
-    MissingCode,
+    #[error("Missing tx section: {0}")]
+    MissingSection(String),
     #[error("Memory error: {0}")]
     MemoryError(memory::Error),
     #[error("Unable to inject stack limiter")]
@@ -109,7 +110,7 @@ where
     let tx_code = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
-        .ok_or(Error::MissingCode)?;
+        .ok_or(Error::MissingSection(tx.code_sechash().to_string()))?;
 
     let (module, store) = fetch_or_compile(
         tx_wasm_cache,
@@ -123,14 +124,14 @@ where
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
 
-    let mut out_of_gas = false;
+    let mut sentinel = TxSentinel::default();
     let env = TxVmEnv::new(
         WasmMemory::default(),
         storage,
         write_log,
         &mut iterators,
         gas_meter,
-        &mut out_of_gas,
+        &mut sentinel,
         tx,
         tx_index,
         &mut verifiers,
@@ -169,10 +170,12 @@ where
         })?;
     apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
         tracing::debug!("Tx WASM failed with {}", err);
-        if out_of_gas {
-            Error::GasError(err.to_string())
-        } else {
-            Error::RuntimeError(err)
+        match sentinel {
+            TxSentinel::None => Error::RuntimeError(err),
+            TxSentinel::OutOfGas => Error::GasError(err.to_string()),
+            TxSentinel::InvalidCommitment => {
+                Error::MissingSection(err.to_string())
+            }
         }
     })?;
 

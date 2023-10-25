@@ -8,7 +8,10 @@ use namada_tx_prelude::*;
 #[transaction(gas = 1240000)]
 fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     // let signed = tx_data;
-    // let data = signed.data().ok_or_err_msg("Missing data")?;
+    // let data = signed.data().ok_or_err_msg("Missing data").or_else(|err| {
+    //                 ctx.set_commitment_sentinel();
+    //                 Err(err)
+    // })?;
 
     // ibc::ibc_actions(ctx).execute(&data).into_storage_result()
 

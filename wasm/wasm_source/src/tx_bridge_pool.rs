@@ -8,7 +8,10 @@ use namada_tx_prelude::*;
 
 #[transaction(gas = 100000)]
 fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let transfer = PendingTransfer::try_from_slice(&data[..])
         .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     log_string("Received transfer to add to pool.");
