@@ -467,7 +467,7 @@ pub async fn save_initialized_accounts<'a, N: Namada<'a>>(
                 None => N::WalletUtils::read_alias(&encoded).into(),
             };
             let alias = alias.into_owned();
-            let added = context.wallet_mut().await.add_address(
+            let added = context.wallet_mut().await.insert_address(
                 alias.clone(),
                 address.clone(),
                 args.wallet_alias_force,

@@ -59,7 +59,7 @@ pub fn run(
 
             let cmd = cmds::NamadaWallet::parse(&matches)
                 .expect("Could not parse wallet command");
-            CliApi::handle_wallet_command(cmd, ctx, &TestingIo)
+            rt.block_on(CliApi::handle_wallet_command(cmd, ctx, &TestingIo))
         }
         Bin::Relayer => {
             args.insert(0, "relayer");

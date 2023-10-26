@@ -29,8 +29,6 @@ use crate::types::key::{SignableBytes, StorageHasher};
     Ord,
     PartialOrd,
     Hash,
-    Serialize,
-    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -40,6 +38,48 @@ pub enum PublicKey {
     Ed25519(ed25519::PublicKey),
     /// Encapsulate Secp256k1 public keys
     Secp256k1(secp256k1::PublicKey),
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // String encoded, because toml doesn't support enums
+        let prefix = match self {
+            PublicKey::Ed25519(_) => "ED25519_PK_PREFIX",
+            PublicKey::Secp256k1(_) => "SECP256K1_PK_PREFIX",
+        };
+        let keypair_string = format!("{}{}", prefix, self);
+        Serialize::serialize(&keypair_string, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let keypair_string: String =
+            serde::Deserialize::deserialize(deserializer)
+                .map_err(D::Error::custom)?;
+        if let Some(raw) = keypair_string.strip_prefix("ED25519_PK_PREFIX") {
+            PublicKey::from_str(raw).map_err(D::Error::custom)
+        } else if let Some(raw) =
+            keypair_string.strip_prefix("SECP256K1_PK_PREFIX")
+        {
+            PublicKey::from_str(raw).map_err(D::Error::custom)
+        } else {
+            Err(D::Error::custom(
+                "Could not deserialize SecretKey do to invalid prefix",
+            ))
+        }
+    }
 }
 
 impl super::PublicKey for PublicKey {

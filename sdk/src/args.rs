@@ -1693,7 +1693,9 @@ pub struct KeyAndAddressRestore {
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
-    pub derivation_path: Option<String>,
+    pub derivation_path: String,
+    /// Use device to generate key and address
+    pub use_device: bool,
 }
 
 /// Wallet key lookup arguments

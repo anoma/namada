@@ -252,7 +252,7 @@ pub fn add_genesis_addresses(
         wallet.add_vp_type_to_address(AddressVpType::Token, address);
     }
     for (alias, addr) in defaults::addresses_from_genesis(genesis) {
-        wallet.add_address(alias.normalize(), addr, true);
+        wallet.insert_address(alias.normalize(), addr, true);
     }
 }
 

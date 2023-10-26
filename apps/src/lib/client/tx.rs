@@ -16,6 +16,7 @@ use namada::types::key::{self, *};
 use namada::types::transaction::pos::InitValidator;
 use namada_sdk::rpc::{TxBroadcastData, TxResponse};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
+use rand::rngs::OsRng;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
@@ -247,14 +248,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1
@@ -276,14 +276,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1
@@ -306,14 +305,13 @@ pub async fn submit_init_validator<'a>(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_key(
+                .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
                     tx_args.wallet_alias_force,
-                    None,
                     password,
-                    None,
+                    &mut OsRng,
                 )
                 .expect("Key generation should not fail.")
                 .1

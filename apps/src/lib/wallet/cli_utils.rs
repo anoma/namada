@@ -7,7 +7,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::types::key::{PublicKeyHash, RefTo};
 use namada::types::masp::{MaspValue, PaymentAddress};
 use namada_sdk::masp::find_valid_diversifier;
-use namada_sdk::wallet::{DecryptionError, FindKeyError, GenRestoreKeyError};
+use namada_sdk::wallet::{DecryptionError, FindKeyError};
 use rand_core::OsRng;
 
 use crate::cli;
@@ -151,7 +151,8 @@ pub fn spending_key_gen(
     let mut wallet = ctx.wallet;
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) = wallet.gen_spending_key(alias, password, alias_force);
+    let (alias, _key) =
+        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng);
     crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
     println!(
         "Successfully added a spending key with alias: \"{}\"",
@@ -220,12 +221,7 @@ pub fn address_key_add(
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = ctx
                 .wallet
-                .encrypt_insert_spending_key(
-                    alias,
-                    spending_key,
-                    password,
-                    alias_force,
-                )
+                .insert_spending_key(alias, spending_key, password, alias_force)
                 .unwrap_or_else(|| {
                     eprintln!("Spending key not added");
                     cli::safe_exit(1);
@@ -247,89 +243,6 @@ pub fn address_key_add(
     println!(
         "Successfully added a {} with the following alias to wallet: {}",
         typ, alias,
-    );
-}
-
-/// Restore a keypair and an implicit address from the mnemonic code in the
-/// wallet.
-pub fn key_and_address_restore(
-    ctx: Context,
-    args::KeyAndAddressRestore {
-        scheme,
-        alias,
-        alias_force,
-        unsafe_dont_encrypt,
-        derivation_path,
-    }: args::KeyAndAddressRestore,
-) {
-    let mut wallet = ctx.wallet;
-    let encryption_password =
-        read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let (alias, _key) = wallet
-        .derive_key_from_user_mnemonic_code(
-            scheme,
-            alias,
-            alias_force,
-            derivation_path,
-            None,
-            encryption_password,
-        )
-        .unwrap_or_else(|err| {
-            eprintln!("{}", err);
-            cli::safe_exit(1)
-        })
-        .unwrap_or_else(|| {
-            println!("No changes are persisted. Exiting.");
-            cli::safe_exit(0);
-        });
-    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
-    println!(
-        "Successfully added a key and an address with alias: \"{}\"",
-        alias
-    );
-}
-
-/// Generate a new keypair and derive implicit address from it and store them in
-/// the wallet.
-pub fn key_and_address_gen(
-    ctx: Context,
-    args::KeyAndAddressGen {
-        scheme,
-        alias,
-        alias_force,
-        unsafe_dont_encrypt,
-        derivation_path,
-    }: args::KeyAndAddressGen,
-) {
-    let mut wallet = ctx.wallet;
-    let encryption_password =
-        read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let mut rng = OsRng;
-    let derivation_path_and_mnemonic_rng =
-        derivation_path.map(|p| (p, &mut rng));
-    let (alias, _key, _mnemonic) = wallet
-        .gen_key(
-            scheme,
-            alias,
-            alias_force,
-            None,
-            encryption_password,
-            derivation_path_and_mnemonic_rng,
-        )
-        .unwrap_or_else(|err| match err {
-            GenRestoreKeyError::KeyStorageError => {
-                println!("No changes are persisted. Exiting.");
-                cli::safe_exit(0);
-            }
-            _ => {
-                eprintln!("{}", err);
-                cli::safe_exit(1);
-            }
-        });
-    crate::wallet::save(&wallet).unwrap_or_else(|err| eprintln!("{}", err));
-    println!(
-        "Successfully added a key and an address with alias: \"{}\"",
-        alias
     );
 }
 
@@ -356,7 +269,9 @@ pub fn key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_key(alias.to_lowercase(), None),
+                Some(alias) => {
+                    wallet.find_secret_key(alias.to_lowercase(), None)
+                }
             }
         }
     };
@@ -384,7 +299,7 @@ pub fn key_list(
     }: args::KeyList,
 ) {
     let wallet = ctx.wallet;
-    let known_keys = wallet.get_keys();
+    let known_keys = wallet.get_secret_keys();
     if known_keys.is_empty() {
         println!(
             "No known keys. Try `key gen --alias my-key` to generate a new \
@@ -428,7 +343,7 @@ pub fn key_list(
 pub fn key_export(ctx: Context, args::KeyExport { alias }: args::KeyExport) {
     let mut wallet = ctx.wallet;
     wallet
-        .find_key(alias.to_lowercase(), None)
+        .find_secret_key(alias.to_lowercase(), None)
         .map(|keypair| {
             let file_data = keypair.serialize_to_vec();
             let file_name = format!("key_{}", alias.to_lowercase());
@@ -499,7 +414,7 @@ pub fn address_or_alias_find(ctx: Context, args: args::AddressOrAliasFind) {
 pub fn address_add(ctx: Context, args: args::AddressAdd) {
     let mut wallet = ctx.wallet;
     if wallet
-        .add_address(
+        .insert_address(
             args.alias.clone().to_lowercase(),
             args.address,
             args.alias_force,

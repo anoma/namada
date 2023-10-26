@@ -2712,9 +2712,10 @@ pub mod args {
         arg("genesis-validator").opt();
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
-    pub const HD_WALLET_DERIVATION_PATH: Arg<String> = arg("hd-path");
+    pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
+        arg_default("hd-path", DefaultFn(|| "default".to_string()));
     pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
-        HD_WALLET_DERIVATION_PATH.opt();
+        arg_opt("hd-path");
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
@@ -2790,6 +2791,7 @@ pub mod args {
     pub const THRESOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
+    pub const USE_DEVICE: ArgFlag = flag("use-device");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
@@ -5414,12 +5416,14 @@ pub mod args {
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
+                use_device,
                 derivation_path,
             }
         }
@@ -5443,7 +5447,11 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
+            .arg(USE_DEVICE.def().help(
+                "Derive an address and public key from the seed stored on the \
+                 connected hardware wallet.",
+            ))
+            .arg(HD_WALLET_DERIVATION_PATH.def().help(
                 "HD key derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \
                  scheme\n- m/44'/877'/0'/0'/0' for ed25519 scheme.\nFor \
@@ -5487,7 +5495,7 @@ pub mod args {
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network.",
             ))
-            .arg(HD_WALLET_DERIVATION_PATH_OPT.def().help(
+            .arg(HD_WALLET_DERIVATION_PATH.def().help(
                 "Generate a new key and wallet using BIP39 mnemonic code and \
                  HD derivation path. Use keyword `default` to refer to a \
                  scheme default path:\n- m/44'/60'/0'/0/0 for secp256k1 \

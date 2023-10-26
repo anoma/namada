@@ -1,11 +1,12 @@
 //! Provides functionality for managing validator keys
 use namada_core::types::key::{common, SchemeType};
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
 use crate::wallet;
-use crate::wallet::{store, StoredKeypair};
+use crate::wallet::StoredKeypair;
 
 /// Ways in which wallet store operations can fail
 #[derive(Error, Debug)]
@@ -75,8 +76,9 @@ impl ValidatorStore {
 pub fn gen_key_to_store(
     scheme: SchemeType,
     password: Option<Zeroizing<String>>,
+    rng: &mut (impl CryptoRng + Rng),
 ) -> (StoredKeypair<common::SecretKey>, common::SecretKey) {
-    let sk = store::gen_sk_rng(scheme);
+    let sk = wallet::gen_secret_key(scheme, rng);
     StoredKeypair::new(sk, password)
 }
 

@@ -691,15 +691,17 @@ impl Default for BenchShieldedCtx {
         .unwrap();
 
         // Generate spending key for Albert and Bertha
-        ctx.wallet.gen_spending_key(
+        ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
             None,
             true,
+            &mut OsRng,
         );
-        ctx.wallet.gen_spending_key(
+        ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
             None,
             true,
+            &mut OsRng,
         );
         crate::wallet::save(&ctx.wallet).unwrap();
 

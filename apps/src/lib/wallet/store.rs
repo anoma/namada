@@ -10,9 +10,10 @@ use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 #[cfg(not(feature = "dev"))]
 use namada_sdk::wallet::store::AddressVpType;
-#[cfg(feature = "dev")]
-use namada_sdk::wallet::StoredKeypair;
-use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
+use namada_sdk::wallet::{
+    gen_secret_key, LoadStoreError, Store, ValidatorKeys,
+};
+use rand::rngs::OsRng;
 
 use crate::config::genesis::genesis_config::GenesisConfig;
 use crate::wallet::CliWalletUtils;
@@ -99,17 +100,23 @@ fn new() -> Store {
     let mut store = Store::default();
     // Pre-load the default keys without encryption
     let no_password = None;
+    let addresses = super::defaults::addresses();
     for (alias, keypair) in super::defaults::keys() {
-        let pkh: PublicKeyHash = (&keypair.ref_to()).into();
         store.insert_keypair::<CliWalletUtils>(
-            alias,
-            StoredKeypair::new(keypair, no_password.clone()).0,
-            pkh,
+            alias.clone(),
+            keypair,
+            no_password.clone(),
+            addresses.get(&alias).cloned(),
+            None,
             true,
         );
     }
-    for (alias, addr) in super::defaults::addresses() {
-        store.insert_address::<CliWalletUtils>(alias, addr, true);
+    let keys = super::defaults::keys();
+    for (alias, addr) in addresses {
+        if !keys.contains_key(&alias) {
+            // If we only possess an address
+            store.insert_address::<CliWalletUtils>(alias, addr, true);
+        }
     }
     store
 }
@@ -130,9 +137,9 @@ pub fn gen_validator_keys(
             }
             k
         })
-        .unwrap_or_else(|| gen_sk_rng(SchemeType::Secp256k1));
-    let protocol_keypair =
-        protocol_keypair.unwrap_or_else(|| gen_sk_rng(protocol_keypair_scheme));
+        .unwrap_or_else(|| gen_secret_key(SchemeType::Secp256k1, &mut OsRng));
+    let protocol_keypair = protocol_keypair
+        .unwrap_or_else(|| gen_secret_key(protocol_keypair_scheme, &mut OsRng));
     let dkg_keypair = ferveo_common::Keypair::<EllipticCurve>::new(
         &mut StdRng::from_entropy(),
     );

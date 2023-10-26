@@ -30,6 +30,7 @@ use namada_core::types::transaction::governance::{
 use namada_core::types::transaction::pos::InitValidator;
 use namada_core::types::transaction::{pos, Fee};
 use prost::Message;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use zeroize::Zeroizing;
@@ -287,7 +288,7 @@ pub async fn aux_signing_data<'a>(
         context
             .wallet_mut()
             .await
-            .generate_disposable_signing_key()
+            .gen_disposable_signing_key(&mut OsRng)
             .to_public()
     } else {
         match &args.wrapper_fee_payer {

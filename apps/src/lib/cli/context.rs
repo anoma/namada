@@ -419,7 +419,7 @@ impl ArgFromMutContext for common::SecretKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it can be an alias
             ctx.wallet
-                .find_key(raw, None)
+                .find_secret_key(raw, None)
                 .map_err(|_find_err| format!("Unknown key {}", raw))
         })
     }
@@ -442,7 +442,7 @@ impl ArgFromMutContext for common::PublicKey {
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {
                     ctx.wallet
-                        .find_key(raw, None)
+                        .find_secret_key(raw, None)
                         .map(|x| x.ref_to())
                         .map_err(|x| x.to_string())
                 })
