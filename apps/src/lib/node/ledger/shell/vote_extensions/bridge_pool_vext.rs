@@ -270,7 +270,6 @@ where
 mod test_bp_vote_extensions {
     #[cfg(feature = "abcipp")]
     use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
     #[cfg(not(feature = "abcipp"))]
     use namada::core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ledger::pos::PosQueries;
@@ -681,7 +680,7 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.wl_storage.storage.block.height = 2.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
+        let height = shell.wl_storage.storage.block.height;
         shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -695,7 +694,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.storage.block.height = 3.into();
         shell.wl_storage.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
+        let height = shell.wl_storage.storage.block.height;
         shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -749,7 +748,7 @@ mod test_bp_vote_extensions {
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.wl_storage.storage.block.height = 2.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
-        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
+        let height = shell.wl_storage.storage.block.height;
         shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
@@ -763,7 +762,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.storage.block.height = 3.into();
         shell.wl_storage.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
-        let height = shell.wl_storage.storage.block.height.serialize_to_vec();
+        let height = shell.wl_storage.storage.block.height;
         shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
