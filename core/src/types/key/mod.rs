@@ -238,7 +238,6 @@ pub trait PublicKey:
     + Display
     + Debug
     + PartialOrd
-    + FromStr<Err = ParsePublicKeyError>
     + Hash
     + Send
     + Sync

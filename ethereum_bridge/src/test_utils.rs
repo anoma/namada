@@ -6,7 +6,6 @@ use std::num::NonZeroU64;
 use borsh_ext::BorshSerializeExt;
 use namada_core::ledger::eth_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_core::ledger::eth_bridge::storage::whitelist;
-use namada_core::ledger::governance::parameters::GovernanceParameters;
 use namada_core::ledger::storage::mockdb::MockDBWriteBatch;
 use namada_core::ledger::storage::testing::{TestStorage, TestWlStorage};
 use namada_core::ledger::storage_api::token::credit_tokens;
@@ -27,7 +26,7 @@ use namada_proof_of_stake::{
 };
 
 use crate::parameters::{
-    ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+    ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };
 
@@ -99,12 +98,12 @@ pub fn default_validator() -> (Address, token::Amount) {
     (addr, voting_power)
 }
 
-/// Writes a dummy [`EthereumBridgeConfig`] to the given [`TestWlStorage`], and
+/// Writes a dummy [`EthereumBridgeParams`] to the given [`TestWlStorage`], and
 /// returns it.
 pub fn bootstrap_ethereum_bridge(
     wl_storage: &mut TestWlStorage,
-) -> EthereumBridgeConfig {
-    let config = EthereumBridgeConfig {
+) -> EthereumBridgeParams {
+    let config = EthereumBridgeParams {
         // start with empty erc20 whitelist
         erc20_whitelist: vec![],
         eth_start_height: Default::default(),
@@ -217,11 +216,9 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
-    let gov_params = GovernanceParameters::default();
-    gov_params.init_storage(wl_storage).unwrap();
-    namada_proof_of_stake::init_genesis(
+    namada_proof_of_stake::test_utils::test_init_genesis(
         wl_storage,
-        &OwnedPosParams::default(),
+        OwnedPosParams::default(),
         validators.into_iter(),
         0.into(),
     )
@@ -291,11 +288,12 @@ pub fn append_validators_to_storage(
             current_epoch,
             commission_rate: Dec::new(5, 2).unwrap(),
             max_commission_rate_change: Dec::new(1, 2).unwrap(),
+            offset_opt: Some(1),
         })
         .expect("Test failed");
         credit_tokens(wl_storage, &staking_token, &validator, stake)
             .expect("Test failed");
-        bond_tokens(wl_storage, None, &validator, stake, current_epoch)
+        bond_tokens(wl_storage, None, &validator, stake, current_epoch, None)
             .expect("Test failed");
 
         all_keys.insert(validator, keys);

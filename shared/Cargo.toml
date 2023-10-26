@@ -20,8 +20,6 @@ mainnet = [
   "namada_core/mainnet",
 ]
 std = ["fd-lock"]
-# NOTE "dev" features that shouldn't be used in live networks are enabled by default for now
-dev = []
 ferveo-tpke = [
   "namada_core/ferveo-tpke",
   "namada_sdk/ferveo-tpke",

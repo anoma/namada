@@ -1399,7 +1399,7 @@ mod test {
         let mut s = TestWlStorage::default();
         let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(&mut s)?;
-        crate::init_genesis(
+        crate::test_utils::init_genesis_helper(
             &mut s,
             &PosParams::default(),
             [GenesisValidator {

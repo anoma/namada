@@ -7,31 +7,24 @@ use std::hash::Hash;
 use std::io::ErrorKind;
 use std::str::FromStr;
 
-use bech32::{self, FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use thiserror::Error;
 
 use crate::ibc::Signer;
+use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
-use crate::types::key;
 use crate::types::key::PublicKeyHash;
 use crate::types::token::Denomination;
+use crate::types::{key, string_encoding};
 
 /// The length of an established [`Address`] encoded with Borsh.
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 
 /// The length of [`Address`] encoded with Bech32m.
-pub const ADDRESS_LEN: usize = 79 + ADDRESS_HRP.len();
-
-/// human-readable part of Bech32m encoded address
-// TODO use "a" for live network
-const ADDRESS_HRP: &str = "atest";
-/// We're using "Bech32m" variant
-pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
+pub const ADDRESS_LEN: usize = 79 + string_encoding::hrp_len::<Address>();
 
 /// Length of a hash of an address as a hexadecimal string
 pub(crate) const HASH_HEX_LEN: usize = 40;
@@ -89,6 +82,12 @@ mod internal {
         "ano::Pgf                                     ";
 }
 
+/// Error from decoding address from string
+pub type DecodeError = string_encoding::DecodeError;
+
+/// Result of decoding address from string
+pub type Result<T> = std::result::Result<T, DecodeError>;
+
 /// Fixed-length address strings prefix for established addresses.
 const PREFIX_ESTABLISHED: &str = "est";
 /// Fixed-length address strings prefix for implicit addresses.
@@ -101,26 +100,6 @@ const PREFIX_IBC: &str = "ibc";
 const PREFIX_ETH: &str = "eth";
 /// Fixed-length address strings prefix for Non-Usable-Token addresses.
 const PREFIX_NUT: &str = "nut";
-
-#[allow(missing_docs)]
-#[derive(Error, Debug, PartialEq, Eq, Clone)]
-pub enum DecodeError {
-    #[error("Error decoding address from Bech32m: {0}")]
-    DecodeBech32(bech32::Error),
-    #[error("Error decoding address from base32: {0}")]
-    DecodeBase32(bech32::Error),
-    #[error("Unexpected Bech32m human-readable part {0}, expected {1}")]
-    UnexpectedBech32Prefix(String, String),
-    #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
-    UnexpectedBech32Variant(bech32::Variant),
-    #[error("Invalid address encoding: {0}, {1}")]
-    InvalidInnerEncoding(ErrorKind, String),
-    #[error("Invalid address encoding")]
-    InvalidInnerEncodingStr(String),
-}
-
-/// Result of a function that may fail
-pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
@@ -153,33 +132,12 @@ impl Ord for Address {
 impl Address {
     /// Encode an address with Bech32m encoding
     pub fn encode(&self) -> String {
-        let bytes = self.to_fixed_len_string();
-        bech32::encode(ADDRESS_HRP, bytes.to_base32(), BECH32M_VARIANT)
-            .unwrap_or_else(|_| {
-                panic!(
-                    "The human-readable part {} should never cause a failure",
-                    ADDRESS_HRP
-                )
-            })
+        string_encoding::Format::encode(self)
     }
 
     /// Decode an address from Bech32m encoding
     pub fn decode(string: impl AsRef<str>) -> Result<Self> {
-        let (prefix, hash_base32, variant) = bech32::decode(string.as_ref())
-            .map_err(DecodeError::DecodeBech32)?;
-        if prefix != ADDRESS_HRP {
-            return Err(DecodeError::UnexpectedBech32Prefix(
-                prefix,
-                ADDRESS_HRP.into(),
-            ));
-        }
-        match variant {
-            BECH32M_VARIANT => {}
-            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
-        }
-        let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
-            .map_err(DecodeError::DecodeBase32)?;
-        Self::try_from_fixed_len_string(&mut &bytes[..])
+        string_encoding::Format::decode(string)
     }
 
     /// Try to get a raw hash of an address, only defined for established and
@@ -199,7 +157,7 @@ impl Address {
     }
 
     /// Convert an address to a fixed length 7-bit ascii string bytes
-    fn to_fixed_len_string(&self) -> Vec<u8> {
+    pub fn to_fixed_len_string(&self) -> Vec<u8> {
         let mut string = match self {
             Address::Established(EstablishedAddress { hash }) => {
                 // The bech32m's data is a hex of the first 40 chars of the hash
@@ -276,7 +234,7 @@ impl Address {
                     let raw =
                         HEXUPPER.decode(hash.as_bytes()).map_err(|e| {
                             DecodeError::InvalidInnerEncoding(
-                                std::io::ErrorKind::InvalidInput,
+                                ErrorKind::InvalidInput,
                                 e.to_string(),
                             )
                         })?;
@@ -394,6 +352,20 @@ impl Address {
     }
 }
 
+impl string_encoding::Format for Address {
+    const HRP: &'static str = string_encoding::ADDRESS_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        Self::to_fixed_len_string(self)
+    }
+
+    fn decode_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::try_from_fixed_len_string(&mut &bytes[..])
+    }
+}
+
+impl_display_and_from_str_via_format!(Address);
+
 impl serde::Serialize for Address {
     fn serialize<S>(
         &self,
@@ -418,23 +390,9 @@ impl<'de> serde::Deserialize<'de> for Address {
     }
 }
 
-impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.encode())
-    }
-}
-
 impl Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.pretty_fmt(f)
-    }
-}
-
-impl FromStr for Address {
-    type Err = DecodeError;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Address::decode(s)
     }
 }
 
@@ -443,18 +401,7 @@ impl TryFrom<Signer> for Address {
     type Error = DecodeError;
 
     fn try_from(signer: Signer) -> Result<Self> {
-        // The given address should be an address or payment address. When
-        // sending a token from a spending key, it has been already
-        // replaced with the MASP address.
-        Address::decode(signer.as_ref()).or(
-            match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
-            {
-                Ok(_) => Ok(masp()),
-                Err(_) => Err(DecodeError::InvalidInnerEncodingStr(format!(
-                    "Invalid address for IBC transfer: {signer}"
-                ))),
-            },
-        )
+        Address::decode(signer.as_ref())
     }
 }
 
@@ -478,7 +425,17 @@ pub struct EstablishedAddress {
 }
 
 /// A generator of established addresses
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct EstablishedAddressGen {
     last_hash: [u8; SHA_HASH_LEN],
 }
@@ -603,6 +560,20 @@ impl Display for InternalAddress {
     }
 }
 
+impl InternalAddress {
+    /// Certain internal addresses have reserved aliases.
+    pub fn try_from_alias(alias: &str) -> Option<Self> {
+        match alias {
+            "pos" => Some(InternalAddress::PoS),
+            "ibc" => Some(InternalAddress::Ibc),
+            "ethbridge" => Some(InternalAddress::EthBridge),
+            "bridgepool" => Some(InternalAddress::EthBridgePool),
+            "governance" => Some(InternalAddress::Governance),
+            _ => None,
+        }
+    }
+}
+
 /// Temporary helper for testing
 pub fn nam() -> Address {
     Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")
@@ -666,15 +637,15 @@ pub const fn wnam() -> EthAddress {
 
 /// Temporary helper for testing, a hash map of tokens addresses with their
 /// informal currency codes and number of decimal places.
-pub fn tokens() -> HashMap<Address, (&'static str, Denomination)> {
+pub fn tokens() -> HashMap<&'static str, Denomination> {
     vec![
-        (nam(), ("NAM", 6.into())),
-        (btc(), ("BTC", 8.into())),
-        (eth(), ("ETH", 18.into())),
-        (dot(), ("DOT", 10.into())),
-        (schnitzel(), ("Schnitzel", 6.into())),
-        (apfel(), ("Apfel", 6.into())),
-        (kartoffel(), ("Kartoffel", 6.into())),
+        ("NAM", 6.into()),
+        ("BTC", 8.into()),
+        ("ETH", 18.into()),
+        ("DOT", 10.into()),
+        ("Schnitzel", 6.into()),
+        ("Apfel", 6.into()),
+        ("Kartoffel", 6.into()),
     ]
     .into_iter()
     .collect()
