@@ -439,7 +439,6 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
-        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -451,6 +450,16 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
+        let native_token = if !cfg!(test) {
+            let chain_dir = base_dir.join(chain_id.as_str());
+            let genesis =
+                genesis::chain::Finalized::read_toml_files(&chain_dir)
+                    .expect("Missing genesis files");
+            genesis.get_native_token().clone()
+        } else {
+            address::nam()
+        };
+
         // load last state from storage
         let mut storage = Storage::open(
             db_path,
@@ -472,26 +481,19 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(feature = "dev"))]
+                #[cfg(not(test))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
-                    let genesis_path =
-                        &base_dir.join(format!("{}.toml", chain_id.as_str()));
                     tracing::debug!(
-                        "{}",
-                        wallet_path.as_path().to_str().unwrap()
+                        "Loading wallet from {}",
+                        wallet_path.to_string_lossy()
                     );
-                    let mut wallet = crate::wallet::load_or_new_from_genesis(
-                        wallet_path,
-                        genesis::genesis_config::open_genesis_config(
-                            genesis_path,
-                        )
-                        .unwrap(),
-                    );
+                    let mut wallet = crate::wallet::load(wallet_path)
+                        .expect("Validator node must have a wallet");
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
-                            data: data.clone(),
+                            data,
                             broadcast_sender,
                             eth_oracle,
                         })
@@ -500,14 +502,15 @@ where
                              wallet",
                         )
                 }
-                #[cfg(feature = "dev")]
+                #[cfg(test)]
                 {
                     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-                        wallet::defaults::validator_keys();
+                        crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
+                        data: ValidatorData {
+                            address: crate::wallet::defaults::validator_address(
+                            ),
+                            keys: ValidatorKeys {
                                 protocol_keypair,
                                 eth_bridge_keypair,
                                 dkg_keypair: Some(dkg_keypair),
@@ -1689,7 +1692,6 @@ mod test_utils {
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
-                address::nam(),
             );
             shell.wl_storage.storage.block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
@@ -1967,7 +1969,6 @@ mod test_utils {
 
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
     /// on startup it is read successfully
-    #[cfg(feature = "testing")]
     #[test]
     fn test_tx_queue_persistence() {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
@@ -1998,14 +1999,12 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            native_token.clone(),
         );
         shell
             .wl_storage
             .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
-        token::testing::init_token_storage(&mut shell.wl_storage, 60);
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let mut wrapper =
@@ -2035,6 +2034,14 @@ mod test_utils {
             .block
             .pred_epochs
             .new_epoch(BlockHeight(1));
+        // Insert a map assigning random addresses to each token alias.
+        // Needed for storage but not for this test.
+        for (token, _) in address::tokens() {
+            shell.wl_storage.storage.conversion_state.tokens.insert(
+                token.to_string(),
+                address::gen_deterministic_established_address(token),
+            );
+        }
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");
@@ -2064,7 +2071,6 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
     }

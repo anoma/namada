@@ -17,8 +17,10 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
 use crate::types::key::{SignableBytes, StorageHasher};
+use crate::types::string_encoding;
 
 /// Public key
 #[derive(
@@ -71,23 +73,25 @@ impl super::PublicKey for PublicKey {
     }
 }
 
-impl Display for PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.serialize_to_vec()))
+/// String decoding error
+pub type DecodeError = string_encoding::DecodeError;
+
+impl string_encoding::Format for PublicKey {
+    const HRP: &'static str = string_encoding::COMMON_PK_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.serialize_to_vec()
+    }
+
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(DecodeError::InvalidBytes)
     }
 }
 
-impl FromStr for PublicKey {
-    type Err = ParsePublicKeyError;
-
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vec = HEXLOWER
-            .decode(str.as_ref())
-            .map_err(ParsePublicKeyError::InvalidHex)?;
-        Self::try_from_slice(vec.as_slice())
-            .map_err(ParsePublicKeyError::InvalidEncoding)
-    }
-}
+impl_display_and_from_str_via_format!(PublicKey);
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -246,6 +250,23 @@ pub enum Signature {
     Secp256k1(secp256k1::Signature),
 }
 
+impl string_encoding::Format for Signature {
+    const HRP: &'static str = string_encoding::COMMON_SIG_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.serialize_to_vec()
+    }
+
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(DecodeError::InvalidBytes)
+    }
+}
+
+impl_display_and_from_str_via_format!(Signature);
+
 impl From<ed25519::Signature> for Signature {
     fn from(sig: ed25519::Signature) -> Self {
         Signature::Ed25519(sig)
@@ -368,5 +389,24 @@ impl super::SigScheme for SigScheme {
             }
             _ => Err(VerifySigError::MismatchedScheme),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::key::ed25519;
+
+    /// Run `cargo test gen_ed25519_keypair -- --nocapture` to generate a
+    /// new ed25519 keypair wrapped in `common` key types.
+    #[test]
+    fn gen_ed25519_keypair() {
+        let secret_key =
+            SecretKey::Ed25519(crate::types::key::testing::gen_keypair::<
+                ed25519::SigScheme,
+            >());
+        let public_key = secret_key.to_public();
+        println!("Public key: {}", public_key);
+        println!("Secret key: {}", secret_key);
     }
 }
