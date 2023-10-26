@@ -2,13 +2,11 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::parameters::{Parameters};
+use namada::ledger::parameters::Parameters;
 use namada::ledger::pos::OwnedPosParams;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::token::{
-    credit_tokens, write_denom,
-};
+use namada::ledger::storage_api::token::{credit_tokens, write_denom};
 use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
@@ -18,6 +16,7 @@ use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
+use namada_sdk::proof_of_stake::PosParams;
 
 use super::*;
 use crate::config::genesis::chain::{
@@ -289,12 +288,8 @@ where
         let state_key = key_prefix
             .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
             .unwrap();
-        let conv_bytes = self
-            .wl_storage
-            .storage
-            .conversion_state
-            .serialize_to_vec()
-            .unwrap();
+        let conv_bytes =
+            self.wl_storage.storage.conversion_state.serialize_to_vec();
         self.wl_storage.write_bytes(&state_key, conv_bytes).unwrap();
     }
 

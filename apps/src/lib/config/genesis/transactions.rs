@@ -18,7 +18,7 @@ use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
-use namada_sdk::wallet::{FindKeyError, Wallet, WalletUtils};
+use namada_sdk::wallet::{FindKeyError, Wallet};
 use serde::{Deserialize, Serialize};
 
 use super::templates::{
@@ -28,7 +28,7 @@ use crate::config::genesis::templates::{
     TemplateValidation, Tokens, Unvalidated, Validated,
 };
 use crate::config::genesis::HexString;
-use crate::wallet::Alias;
+use crate::wallet::{Alias, CliWalletUtils};
 
 pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
@@ -45,9 +45,9 @@ pub struct GenesisValidatorData {
 /// Panics if given `txs.validator_accounts` is not empty, because validator
 /// transactions must be signed with a validator wallet (see
 /// `init-genesis-validator` command).
-pub fn sign_txs<U: WalletUtils>(
+pub fn sign_txs(
     txs: UnsignedTransactions,
-    wallet: &mut Wallet<U>,
+    wallet: &mut Wallet<CliWalletUtils>,
 ) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
@@ -110,7 +110,7 @@ pub fn parse_unsigned(
 }
 
 /// Create signed [`Transactions`] for a genesis validator.
-pub fn init_validator<U: WalletUtils>(
+pub fn init_validator(
     GenesisValidatorData {
         source_key,
         alias,
@@ -120,7 +120,7 @@ pub fn init_validator<U: WalletUtils>(
         transfer_from_source_amount,
         self_bond_amount,
     }: GenesisValidatorData,
-    source_wallet: &mut Wallet<U>,
+    source_wallet: &mut Wallet<CliWalletUtils>,
     validator_wallet: &ValidatorWallet,
 ) -> Transactions<Unvalidated> {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
@@ -198,9 +198,9 @@ pub fn init_validator<U: WalletUtils>(
     }
 }
 
-pub fn sign_established_account_tx<U: WalletUtils>(
+pub fn sign_established_account_tx(
     unsigned_tx: UnsignedEstablishedAccountTx,
-    wallet: &mut Wallet<U>,
+    wallet: &mut Wallet<CliWalletUtils>,
 ) -> SignedEstablishedAccountTx {
     let key = unsigned_tx.public_key.as_ref().map(|pk| {
         let secret = wallet
@@ -303,9 +303,9 @@ pub fn sign_validator_account_tx(
     }
 }
 
-pub fn sign_transfer_tx<U: WalletUtils>(
+pub fn sign_transfer_tx(
     unsigned_tx: TransferTx<Unvalidated>,
-    source_wallet: &mut Wallet<U>,
+    source_wallet: &mut Wallet<CliWalletUtils>,
 ) -> SignedTransferTx {
     let source_key = source_wallet
         .find_key_by_pk(&unsigned_tx.source, None)
@@ -320,9 +320,9 @@ pub fn sign_self_bond_tx(
     unsigned_tx.sign(&validator_wallet.account_key)
 }
 
-pub fn sign_delegation_bond_tx<U: WalletUtils>(
+pub fn sign_delegation_bond_tx(
     unsigned_tx: BondTx<Unvalidated>,
-    wallet: &mut Wallet<U>,
+    wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx<SignedPk>>>,
 ) -> SignedBondTx {
     let alias = &unsigned_tx.source;
