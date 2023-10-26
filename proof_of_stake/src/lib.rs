@@ -37,7 +37,7 @@ use namada_core::ledger::storage_api::collections::{LazyCollection, LazySet};
 use namada_core::ledger::storage_api::{
     self, governance, token, ResultExt, StorageRead, StorageWrite,
 };
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::types::address::{self, Address, InternalAddress};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::{
     common, protocol_pk_key, tm_consensus_key_raw_hash, PublicKeyTmRawHash,
@@ -229,20 +229,11 @@ pub fn rewards_accumulator_handle() -> RewardsAccumulator {
     RewardsAccumulator::open(key)
 }
 
-/// Get the storage handle to a validator's self rewards products
+/// Get the storage handle to a validator's rewards products
 pub fn validator_rewards_products_handle(
     validator: &Address,
 ) -> RewardsProducts {
-    let key = storage::validator_self_rewards_product_key(validator);
-    RewardsProducts::open(key)
-}
-
-/// Get the storage handle to the delegator rewards products associated with a
-/// particular validator
-pub fn delegator_rewards_products_handle(
-    validator: &Address,
-) -> RewardsProducts {
-    let key = storage::validator_delegation_rewards_product_key(validator);
+    let key = storage::validator_rewards_product_key(validator);
     RewardsProducts::open(key)
 }
 
@@ -4129,6 +4120,125 @@ where
     for (address, value) in values.into_iter() {
         rewards_accumulator_handle().insert(storage, address, value)?;
     }
+
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct Rewards {
+    product: Dec,
+    commissions: token::Amount,
+}
+
+/// Update validator and delegators rewards products and mint the inflation
+/// tokens into the PoS account.
+/// Any left-over inflation tokens from rounding error of the sum of the
+/// rewards is given to the governance address.
+pub fn update_rewards_products_and_mint_inflation<S>(
+    storage: &mut S,
+    params: &PosParams,
+    last_epoch: Epoch,
+    num_blocks_in_last_epoch: u64,
+    inflation: token::Amount,
+    staking_token: &Address,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Read the rewards accumulator and calculate the new rewards products
+    // for the previous epoch
+    //
+    // TODO: think about changing the reward to Decimal
+    let mut reward_tokens_remaining = inflation;
+    let mut new_rewards_products: HashMap<Address, Rewards> = HashMap::new();
+    let mut accumulators_sum = Dec::zero();
+    for acc in rewards_accumulator_handle().iter(storage)? {
+        let (validator, value) = acc?;
+        accumulators_sum += value;
+
+        // Get reward token amount for this validator
+        let fractional_claim = value / num_blocks_in_last_epoch;
+        let reward_tokens = fractional_claim * inflation;
+
+        // Get validator stake at the last epoch
+        let stake = Dec::from(read_validator_stake(
+            storage, params, &validator, last_epoch,
+        )?);
+
+        let commission_rate = validator_commission_rate_handle(&validator)
+            .get(storage, last_epoch, params)?
+            .expect("Should be able to find validator commission rate");
+
+        // Calculate the reward product from the whole validator stake and take
+        // out the commissions. Because we're using the whole stake to work with
+        // a single product, we're also taking out commission on validator's
+        // self-bonds, but it is then included in the rewards claimable by the
+        // validator so they get it back.
+        let product =
+            Dec::from(reward_tokens) / stake * (Dec::one() - commission_rate);
+
+        // Tally the commission tokens earned by the validator.
+        // TODO: think abt Dec rounding and if `new_product` should be used
+        // instead of `reward_tokens`
+        let commissions = commission_rate * reward_tokens;
+
+        new_rewards_products.insert(
+            validator,
+            Rewards {
+                product,
+                commissions,
+            },
+        );
+
+        reward_tokens_remaining -= reward_tokens;
+    }
+    for (
+        validator,
+        Rewards {
+            product,
+            commissions,
+        },
+    ) in new_rewards_products
+    {
+        validator_rewards_products_handle(&validator)
+            .insert(storage, last_epoch, product)?;
+        // The commissions belong to the validator
+        add_rewards_to_counter(storage, &validator, &validator, commissions)?;
+    }
+
+    // Mint tokens to the PoS account for the last epoch's inflation
+    let pos_reward_tokens = inflation - reward_tokens_remaining;
+    tracing::info!(
+        "Minting tokens for PoS rewards distribution into the PoS account. \
+         Amount: {}. Total inflation: {}, number of blocks in the last epoch: \
+         {num_blocks_in_last_epoch}, reward accumulators sum: \
+         {accumulators_sum}.",
+        pos_reward_tokens.to_string_native(),
+        inflation.to_string_native(),
+    );
+    token::credit_tokens(
+        storage,
+        staking_token,
+        &address::POS,
+        pos_reward_tokens,
+    )?;
+
+    if reward_tokens_remaining > token::Amount::zero() {
+        let amount =
+            token::Amount::from_uint(reward_tokens_remaining, 0).unwrap();
+        tracing::info!(
+            "Minting tokens remaining from PoS rewards distribution into the \
+             Governance account. Amount: {}.",
+            amount.to_string_native()
+        );
+        token::credit_tokens(storage, staking_token, &address::GOV, amount)?;
+    }
+
+    // Clear validator rewards accumulators
+    storage.delete_prefix(
+        // The prefix of `rewards_accumulator_handle`
+        &storage::consensus_validator_rewards_accumulator_key(),
+    )?;
 
     Ok(())
 }

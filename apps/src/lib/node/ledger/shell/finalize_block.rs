@@ -1,7 +1,5 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
-use std::collections::HashMap;
-
 use data_encoding::HEXUPPER;
 use namada::core::ledger::inflation;
 use namada::core::ledger::pgf::ADDRESS as pgf_address;
@@ -15,17 +13,12 @@ use namada::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::ledger::storage_api::token::credit_tokens;
 use namada::ledger::storage_api::{pgf, StorageRead, StorageWrite};
 use namada::proof_of_stake::{
-    delegator_rewards_products_handle, find_validator_by_raw_hash,
-    read_last_block_proposer_address, read_pos_params, read_total_stake,
-    read_validator_stake, rewards_accumulator_handle,
-    validator_commission_rate_handle, validator_rewards_products_handle,
-    write_last_block_proposer_address,
+    find_validator_by_raw_hash, read_last_block_proposer_address,
+    read_pos_params, read_total_stake, write_last_block_proposer_address,
 };
-use namada::types::address::Address;
 use namada::types::dec::Dec;
 use namada::types::key::tm_raw_hash_to_string;
 use namada::types::storage::{BlockHash, BlockResults, Epoch, Header};
-use namada::types::token::Amount;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
@@ -680,99 +673,21 @@ where
             self.wl_storage.storage.block.height.0 - first_block_of_last_epoch
         };
 
-        // Read the rewards accumulator and calculate the new rewards products
-        // for the previous epoch
-        //
-        // TODO: think about changing the reward to Decimal
-        let inflation = token::Amount::from_uint(inflation, 0)
-            .expect("Should not fail Uint -> Amount conversion");
-
-        let mut reward_tokens_remaining = inflation;
-        let mut new_rewards_products: HashMap<Address, (Dec, Dec)> =
-            HashMap::new();
-        for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
-            let (address, value) = acc?;
-
-            // Get reward token amount for this validator
-            let fractional_claim = value / num_blocks_in_last_epoch;
-            let reward = fractional_claim * inflation;
-
-            // Get validator data at the last epoch
-            let stake = Dec::from(read_validator_stake(
-                &self.wl_storage,
-                &params,
-                &address,
-                last_epoch,
-            )?);
-            let last_rewards_product =
-                validator_rewards_products_handle(&address)
-                    .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or_else(Dec::one);
-            let last_delegation_product =
-                delegator_rewards_products_handle(&address)
-                    .get(&self.wl_storage, &last_epoch)?
-                    .unwrap_or_else(Dec::one);
-            let commission_rate = validator_commission_rate_handle(&address)
-                .get(&self.wl_storage, last_epoch, &params)?
-                .expect("Should be able to find validator commission rate");
-
-            let new_product =
-                last_rewards_product * (Dec::one() + Dec::from(reward) / stake);
-            let new_delegation_product = last_delegation_product
-                * (Dec::one()
-                    + (Dec::one() - commission_rate) * Dec::from(reward)
-                        / stake);
-            new_rewards_products
-                .insert(address, (new_product, new_delegation_product));
-            reward_tokens_remaining -= reward;
-        }
-        for (
-            address,
-            (new_validator_reward_product, new_delegator_reward_product),
-        ) in new_rewards_products
-        {
-            validator_rewards_products_handle(&address).insert(
-                &mut self.wl_storage,
-                last_epoch,
-                new_validator_reward_product,
-            )?;
-            delegator_rewards_products_handle(&address).insert(
-                &mut self.wl_storage,
-                last_epoch,
-                new_delegator_reward_product,
-            )?;
-        }
-
         let staking_token = staking_token_address(&self.wl_storage);
 
-        // Mint tokens to the PoS account for the last epoch's inflation
-        let pos_reward_tokens = inflation - reward_tokens_remaining;
-        tracing::info!(
-            "Minting tokens for PoS rewards distribution into the PoS \
-             account. Amount: {}.",
-            pos_reward_tokens.to_string_native(),
-        );
-        credit_tokens(
+        let inflation = token::Amount::from_uint(inflation, 0)
+            .expect("Should not fail Uint -> Amount conversion");
+        namada_proof_of_stake::update_rewards_products_and_mint_inflation(
             &mut self.wl_storage,
+            &params,
+            last_epoch,
+            num_blocks_in_last_epoch,
+            inflation,
             &staking_token,
-            &address::POS,
-            pos_reward_tokens,
-        )?;
-
-        if reward_tokens_remaining > token::Amount::zero() {
-            let amount = Amount::from_uint(reward_tokens_remaining, 0).unwrap();
-            tracing::info!(
-                "Minting tokens remaining from PoS rewards distribution into \
-                 the Governance account. Amount: {}.",
-                amount.to_string_native()
-            );
-            credit_tokens(
-                &mut self.wl_storage,
-                &staking_token,
-                &address::GOV,
-                amount,
-            )?;
-        }
+        )
+        .expect(
+            "Must be able to update PoS rewards products and mint inflation",
+        );
 
         // Write new rewards parameters that will be used for the inflation of
         // the current new epoch
@@ -782,17 +697,6 @@ where
         self.wl_storage
             .write(&params_storage::get_staked_ratio_key(), locked_ratio)
             .expect("unable to write new locked ratio");
-
-        // Delete the accumulators from storage
-        // TODO: refactor with https://github.com/anoma/namada/issues/1225
-        let addresses_to_drop: HashSet<Address> = rewards_accumulator_handle()
-            .iter(&self.wl_storage)?
-            .map(|a| a.unwrap().0)
-            .collect();
-        for address in addresses_to_drop.into_iter() {
-            rewards_accumulator_handle()
-                .remove(&mut self.wl_storage, &address)?;
-        }
 
         // Pgf inflation
         let pgf_parameters = pgf::get_parameters(&self.wl_storage)?;
@@ -1014,7 +918,7 @@ fn pos_votes_from_abci(
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use std::num::NonZeroU64;
 
     use data_encoding::HEXUPPER;
@@ -1045,7 +949,7 @@ mod test_finalize_block {
     use namada::proof_of_stake::{
         enqueued_slashes_handle, get_num_consensus_validators,
         read_consensus_validator_set_addresses_with_stake,
-        rewards_accumulator_handle, unjail_validator,
+        read_validator_stake, rewards_accumulator_handle, unjail_validator,
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
     };
