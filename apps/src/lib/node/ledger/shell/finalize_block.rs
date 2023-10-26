@@ -117,9 +117,6 @@ where
         // because it potentially needs to be able to read validator state from
         // previous epoch and jailing validator removes the historical state
         self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
-        if new_epoch {
-            self.apply_inflation(current_epoch)?;
-        }
 
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` and before `self.update_epoch`.
@@ -127,7 +124,10 @@ where
         // Invariant: This has to be applied after
         // `copy_validator_sets_and_positions` if we're starting a new epoch
         if new_epoch {
+            // Invariant: Process slashes before inflation as they may affect
+            // the rewards in the current epoch.
             self.process_slashes();
+            self.apply_inflation(current_epoch)?;
         }
 
         let mut stats = InternalStats::default();
@@ -982,7 +982,6 @@ mod test_finalize_block {
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-
     const GAS_LIMIT_MULTIPLIER: u64 = 300_000;
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
