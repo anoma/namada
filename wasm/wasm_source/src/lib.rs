@@ -35,8 +35,6 @@ pub mod tx_withdraw;
 
 #[cfg(feature = "vp_implicit")]
 pub mod vp_implicit;
-#[cfg(feature = "vp_masp")]
-pub mod vp_masp;
 #[cfg(feature = "vp_user")]
 pub mod vp_user;
 #[cfg(feature = "vp_validator")]

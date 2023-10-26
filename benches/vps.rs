@@ -14,24 +14,21 @@ use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::proto::{Code, Section};
 use namada::types::hash::Hash;
 use namada::types::key::ed25519;
-use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Key, TxIndex};
 use namada::types::transaction::governance::VoteProposalData;
 use namada::types::transaction::pos::{Bond, CommissionChange};
 use namada::vm::wasm::run;
 use namada_apps::bench_utils::{
-    generate_foreign_key_tx, generate_tx, BenchShell, BenchShieldedCtx,
-    ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
-    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL_WASM, VP_VALIDATOR_WASM,
+    generate_foreign_key_tx, generate_tx, BenchShell, TX_BOND_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM,
+    VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use sha2::Digest;
 
 const VP_USER_WASM: &str = "vp_user.wasm";
 const VP_IMPLICIT_WASM: &str = "vp_implicit.wasm";
-const VP_MASP_WASM: &str = "vp_masp.wasm";
 
 fn vp_user(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_user");
@@ -466,94 +463,5 @@ fn vp_validator(c: &mut Criterion) {
     group.finish();
 }
 
-fn vp_masp(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_masp");
-
-    let amount = Amount::native_whole(500);
-
-    for bench_name in ["shielding", "unshielding", "shielded"] {
-        group.bench_function(bench_name, |b| {
-            let mut shielded_ctx = BenchShieldedCtx::default();
-            let vp_code_hash: Hash = shielded_ctx
-                .shell
-                .read_storage_key(&Key::wasm_hash(VP_MASP_WASM))
-                .unwrap();
-
-            let albert_spending_key = shielded_ctx
-                .wallet
-                .find_spending_key(ALBERT_SPENDING_KEY, None)
-                .unwrap()
-                .to_owned();
-            let albert_payment_addr = shielded_ctx
-                .wallet
-                .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
-                .unwrap()
-                .to_owned();
-            let bertha_payment_addr = shielded_ctx
-                .wallet
-                .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
-                .unwrap()
-                .to_owned();
-
-            // Shield some tokens for Albert
-            let shield_tx = shielded_ctx.generate_masp_tx(
-                amount,
-                TransferSource::Address(defaults::albert_address()),
-                TransferTarget::PaymentAddress(albert_payment_addr),
-            );
-            shielded_ctx.shell.execute_tx(&shield_tx);
-            shielded_ctx.shell.wl_storage.commit_tx();
-            shielded_ctx.shell.commit();
-
-            let signed_tx = match bench_name {
-                "shielding" => shielded_ctx.generate_masp_tx(
-                    amount,
-                    TransferSource::Address(defaults::albert_address()),
-                    TransferTarget::PaymentAddress(albert_payment_addr),
-                ),
-                "unshielding" => shielded_ctx.generate_masp_tx(
-                    amount,
-                    TransferSource::ExtendedSpendingKey(albert_spending_key),
-                    TransferTarget::Address(defaults::albert_address()),
-                ),
-                "shielded" => shielded_ctx.generate_masp_tx(
-                    amount,
-                    TransferSource::ExtendedSpendingKey(albert_spending_key),
-                    TransferTarget::PaymentAddress(bertha_payment_addr),
-                ),
-                _ => panic!("Unexpected bench test"),
-            };
-            shielded_ctx.shell.execute_tx(&signed_tx);
-            let (verifiers, keys_changed) = shielded_ctx
-                .shell
-                .wl_storage
-                .write_log
-                .verifiers_and_changed_keys(&BTreeSet::default());
-
-            b.iter(|| {
-                assert!(
-                    run::vp(
-                        vp_code_hash,
-                        &signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shielded_ctx.shell.wl_storage.storage,
-                        &shielded_ctx.shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
-                        &keys_changed,
-                        &verifiers,
-                        shielded_ctx.shell.vp_wasm_cache.clone(),
-                    )
-                    .unwrap()
-                );
-            })
-        });
-    }
-
-    group.finish();
-}
-
-criterion_group!(whitelisted_vps, vp_user, vp_implicit, vp_validator, vp_masp,);
+criterion_group!(whitelisted_vps, vp_user, vp_implicit, vp_validator,);
 criterion_main!(whitelisted_vps);

@@ -17,7 +17,6 @@
     "tx_vote_proposal.wasm": "tx_vote_proposal.a8ae56dc352635a01d7e6e953c188c03309810d2e84983516a30832f34a12533.wasm",
     "tx_withdraw.wasm": "tx_withdraw.690ad6b17768e24f8523dd5e09ed458fce4b2a3b85710f81731306fac1f28ac7.wasm",
     "vp_implicit.wasm": "vp_implicit.05fa0994305859d2e76950744982bb245be36a58d6e6413e6f7eb4fb1d59bce3.wasm",
-    "vp_masp.wasm": "vp_masp.adbb83cced017ca4f06a5eec4764f81ab30b56d73a179303aa12aa2c03b26964.wasm",
     "vp_user.wasm": "vp_user.f50b392a7bc587a126f1377d287ec159cf2859ad2f737c189a97964b3fab7bc9.wasm",
     "vp_validator.wasm": "vp_validator.d1fd61cca046ce85e1fd63cc85245e19c7b06c23f5705eb4949f855a8b3ed1a4.wasm"
 }
