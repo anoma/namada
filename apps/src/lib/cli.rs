@@ -2658,7 +2658,6 @@ pub mod args {
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
     pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
     pub const TX_UPDATE_STEWARD_COMMISSION: &str =
         "tx_update_steward_commission.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
