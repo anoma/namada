@@ -4175,17 +4175,8 @@ where
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
-    let mut total_consensus_stake = token::Amount::zero();
-    for validator in consensus_validators.iter(storage)? {
-        let (
-            NestedSubKey::Data {
-                key: amount,
-                nested_sub_key: _,
-            },
-            _address,
-        ) = validator?;
-        total_consensus_stake += amount;
-    }
+    let total_consensus_stake =
+        get_total_consensus_stake(storage, epoch, &params)?;
 
     // Get set of signing validator addresses and the combined stake of
     // these signers
@@ -4291,14 +4282,14 @@ where
         rewards_frac += coeffs.active_val_coeff
             * (stake_unscaled / consensus_stake_unscaled);
 
-        // Update the rewards accumulator
-        let prev = rewards_accumulator_handle()
-            .get(storage, &address)?
-            .unwrap_or_default();
-        values.insert(address, prev + rewards_frac);
+        // To be added to the rewards accumulator
+        values.insert(address, rewards_frac);
     }
     for (address, value) in values.into_iter() {
-        rewards_accumulator_handle().insert(storage, address, value)?;
+        // Update the rewards accumulator
+        rewards_accumulator_handle().update(storage, address, |prev| {
+            prev.unwrap_or_default() + value
+        })?;
     }
 
     Ok(())
