@@ -18,7 +18,7 @@ mod test_bridge_pool_vp {
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
     use namada_sdk::eth_bridge::{
-        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeConfig,
+        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,
     };
 
@@ -65,7 +65,7 @@ mod test_bridge_pool_vp {
             tx,
             ..Default::default()
         };
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             erc20_whitelist: vec![Erc20WhitelistEntry {
                 token_address: wnam(),
                 token_cap: Amount::from_u64(TOKEN_CAP).native_denominated(),

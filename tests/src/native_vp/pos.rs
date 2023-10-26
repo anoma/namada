@@ -96,7 +96,7 @@
 //! - add rewards
 
 use namada::proof_of_stake::parameters::{OwnedPosParams, PosParams};
-use namada::proof_of_stake::test_init_genesis as init_genesis;
+use namada::proof_of_stake::test_utils::test_init_genesis as init_genesis;
 use namada::proof_of_stake::types::GenesisValidator;
 use namada::types::storage::Epoch;
 
