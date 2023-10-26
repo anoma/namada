@@ -20,11 +20,11 @@ use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
-use crate::config::genesis;
-use crate::config::{self, Config};
+use crate::cli::utils;
+use crate::config::global::GlobalConfig;
+use crate::config::{self, genesis, Config};
 use crate::wallet::CliWalletUtils;
 use crate::{wallet, wasm_loader};
-use crate::cli::utils;
 
 /// Env. var to set chain ID
 const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
@@ -173,9 +173,9 @@ impl Context {
         client: &'a C,
         io: &'a IO,
     ) -> impl Namada
-        where
-            C: namada::ledger::queries::Client + Sync,
-            IO: Io,
+    where
+        C: namada::ledger::queries::Client + Sync,
+        IO: Io,
     {
         let chain_ctx = self.borrow_mut_chain_or_exit();
         NamadaImpl::native_new(
