@@ -920,6 +920,7 @@ mod test_ethbridge_router {
         };
 
         // write a transfer into the bridge pool
+        client.wl_storage.storage.block.height = 1.into();
         client
             .wl_storage
             .write_bytes(
@@ -1062,7 +1063,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root.clone(), BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root.clone(), BlockHeight::from(1)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1272,7 +1273,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root, BlockHeight::from(1)).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1445,7 +1446,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root, BlockHeight::from(1)).serialize_to_vec(),
             )
             .expect("Test failed");
 

@@ -282,13 +282,13 @@ pub trait DB: std::fmt::Debug {
     /// Read the block header with the given height from the DB
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
-    /// Read the merkle tree stores with the start height of the given epoch. If
-    /// a store_type is given, it reads only the base tree and the specified
-    /// subtree. Otherwise, it reads all trees.
+    /// Read the merkle tree stores with the given epoch. If a store_type is
+    /// given, it reads only the the specified tree. Otherwise, it reads all
+    /// trees.
     fn read_merkle_tree_stores(
         &self,
         epoch: Epoch,
-        epoch_start_height: BlockHeight,
+        base_height: BlockHeight,
         store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>>;
 
@@ -821,8 +821,7 @@ where
             .ok_or(Error::NoMerkleTree { height })?;
         let prefix = store_type.and_then(|st| st.provable_prefix());
         let mut tree = match store_type {
-            Some(st) => MerkleTree::<H>::new_partial(stores, &st)
-                .expect("invalid stores"),
+            Some(_) => MerkleTree::<H>::new_partial(stores),
             None => MerkleTree::<H>::new(stores).expect("invalid stores"),
         };
         // Restore the tree state with diffs
@@ -902,6 +901,18 @@ where
                     (None, None) => break,
                 }
             }
+        }
+        if let Some(st) = store_type {
+            // Add the base tree with the given height
+            let mut stores = self
+                .db
+                .read_merkle_tree_stores(epoch, height, Some(StoreType::Base))?
+                .ok_or(Error::NoMerkleTree { height })?;
+            let restored_stores = tree.stores();
+            // Set the root and store of the rebuilt subtree
+            stores.set_root(&st, *restored_stores.root(&st));
+            stores.set_store(restored_stores.store(&st).to_owned());
+            tree = MerkleTree::<H>::new_partial(stores);
         }
         Ok(tree)
     }

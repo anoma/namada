@@ -194,7 +194,7 @@ impl DB for MockDB {
                 if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
                 {
                     merkle_tree_stores.set_root(
-                        &st,
+                        st,
                         types::decode(bytes).map_err(Error::CodingError)?,
                     );
                 }
@@ -405,16 +405,16 @@ impl DB for MockDB {
     fn read_merkle_tree_stores(
         &self,
         epoch: Epoch,
-        epoch_start_height: BlockHeight,
+        base_height: BlockHeight,
         store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let store_types = store_type
-            .map(|st| vec![StoreType::Base, st])
-            .unwrap_or(StoreType::iter().map(|st| *st).collect());
+            .map(|st| vec![st])
+            .unwrap_or(StoreType::iter().copied().collect());
         for st in store_types {
             let prefix_key = if st == StoreType::Base {
-                base_tree_key_prefix(epoch_start_height)
+                base_tree_key_prefix(base_height)
             } else {
                 subtree_key_prefix(&st, epoch)
             };

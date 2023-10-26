@@ -682,10 +682,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.storage.block.height = 2.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
         let height = shell.wl_storage.storage.block.height.serialize_to_vec();
-        shell
-            .wl_storage
-            .write_bytes(&key, height.serialize_to_vec())
-            .expect("Test failed");
+        shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
             shell
@@ -699,10 +696,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
         let height = shell.wl_storage.storage.block.height.serialize_to_vec();
-        shell
-            .wl_storage
-            .write_bytes(&key, height.serialize_to_vec())
-            .expect("Test failed");
+        shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
             shell
@@ -756,10 +750,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.storage.block.height = 2.into();
         let key = get_key_from_hash(&KeccakHash([1; 32]));
         let height = shell.wl_storage.storage.block.height.serialize_to_vec();
-        shell
-            .wl_storage
-            .write_bytes(&key, height.serialize_to_vec())
-            .expect("Test failed");
+        shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
             shell
@@ -773,10 +764,7 @@ mod test_bp_vote_extensions {
         shell.wl_storage.delete(&key).expect("Test failed");
         let key = get_key_from_hash(&KeccakHash([2; 32]));
         let height = shell.wl_storage.storage.block.height.serialize_to_vec();
-        shell
-            .wl_storage
-            .write_bytes(&key, height.serialize_to_vec())
-            .expect("Test failed");
+        shell.wl_storage.write(&key, height).expect("Test failed");
         shell.commit();
         assert_eq!(
             shell

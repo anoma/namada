@@ -792,7 +792,7 @@ impl DB for RocksDB {
                     .map_err(|e| Error::DBError(e.into_string()))?
                 {
                     merkle_tree_stores.set_root(
-                        &st,
+                        st,
                         types::decode(bytes).map_err(Error::CodingError)?,
                     );
                 }
@@ -1066,18 +1066,18 @@ impl DB for RocksDB {
     fn read_merkle_tree_stores(
         &self,
         epoch: Epoch,
-        epoch_start_height: BlockHeight,
+        base_height: BlockHeight,
         store_type: Option<StoreType>,
     ) -> Result<Option<MerkleTreeStoresRead>> {
         // Get the latest height at which the tree stores were written
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let store_types = store_type
-            .map(|st| vec![StoreType::Base, st])
-            .unwrap_or(StoreType::iter().map(|st| *st).collect());
+            .map(|st| vec![st])
+            .unwrap_or(StoreType::iter().copied().collect());
         for st in store_types {
             let prefix_key = if st == StoreType::Base {
-                base_tree_key_prefix(epoch_start_height)
+                base_tree_key_prefix(base_height)
             } else {
                 subtree_key_prefix(&st, epoch)
             };
@@ -1531,7 +1531,7 @@ fn iter_diffs_prefix<'a>(
         }
     });
     // get keys without a prefix
-    iter_prefix(db, diffs_cf, db_prefix.clone(), prefix)
+    iter_prefix(db, diffs_cf, db_prefix, prefix)
 }
 
 fn iter_prefix<'a>(

@@ -1607,7 +1607,7 @@ mod test_finalize_block {
     {
         let (mut shell, _, _, _) = setup_at_height(1u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
-            &mut shell.wl_storage.storage,
+            &mut shell.wl_storage,
             &KeccakHash([1; 32]),
             1.into(),
         );
