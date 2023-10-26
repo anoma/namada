@@ -196,6 +196,17 @@ impl CliApi {
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_withdraw(&namada, args).await?;
                     }
+                    Sub::ClaimRewards(ClaimRewards(mut args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        tx::submit_claim_rewards(&namada, args).await?;
+                    }
                     Sub::Redelegate(Redelegate(mut args)) => {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(

@@ -96,6 +96,8 @@ pub const TX_BOND_WASM: &str = "tx_bond.wasm";
 pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
 /// Withdraw WASM path
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+/// Claim-rewards WASM path
+pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
 /// Bridge pool WASM path
 pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 /// Change commission WASM path
@@ -989,11 +991,18 @@ pub async fn build_withdraw<'a>(
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
+    // Check that the validator address is actually a validator
     let validator =
         known_validator_or_err(validator.clone(), tx_args.force, context)
             .await?;
 
-    let source = source.clone();
+    // Check that the source address exists on chain
+    let source = match source.clone() {
+        Some(source) => source_exists_or_err(source, tx_args.force, context)
+            .await
+            .map(Some),
+        None => Ok(source.clone()),
+    }?;
 
     // Check the source's current unbond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -1029,6 +1038,54 @@ pub async fn build_withdraw<'a>(
     }
 
     let data = pos::Withdraw { validator, source };
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    )
+    .await
+    .map(|(tx, epoch)| (tx, signing_data, epoch))
+}
+
+/// Submit transaction to withdraw an unbond
+pub async fn build_claim_rewards<'a>(
+    context: &impl Namada<'a>,
+    args::ClaimRewards {
+        tx: tx_args,
+        validator,
+        source,
+        tx_code_path,
+    }: &args::ClaimRewards,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_address = source.clone().unwrap_or(validator.clone());
+    let default_signer = Some(default_address.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(default_address),
+        default_signer,
+    )
+    .await?;
+
+    // Check that the validator address is actually a validator
+    let validator =
+        known_validator_or_err(validator.clone(), tx_args.force, context)
+            .await?;
+
+    // Check that the source address exists on chain
+    let source = match source.clone() {
+        Some(source) => source_exists_or_err(source, tx_args.force, context)
+            .await
+            .map(Some),
+        None => Ok(source.clone()),
+    }?;
+
+    let data = pos::ClaimRewards { validator, source };
 
     build(
         context,

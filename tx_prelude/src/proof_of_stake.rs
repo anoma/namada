@@ -7,8 +7,8 @@ use namada_core::types::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, change_validator_commission_rate,
-    read_pos_params, redelegate_tokens, unbond_tokens, unjail_validator,
-    withdraw_tokens, BecomeValidator,
+    claim_reward_tokens, read_pos_params, redelegate_tokens, unbond_tokens,
+    unjail_validator, withdraw_tokens, BecomeValidator,
 };
 pub use namada_proof_of_stake::{parameters, types, ResultSlashing};
 
@@ -86,6 +86,16 @@ impl Ctx {
             current_epoch,
             amount,
         )
+    }
+
+    /// Claim available reward tokens
+    pub fn claim_reward_tokens(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+    ) -> EnvResult<token::Amount> {
+        let current_epoch = self.get_block_epoch()?;
+        claim_reward_tokens(self, source, validator, current_epoch)
     }
 
     /// Attempt to initialize a validator account. On success, returns the

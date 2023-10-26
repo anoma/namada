@@ -951,6 +951,28 @@ where
     Ok(())
 }
 
+pub async fn submit_claim_rewards<'a, N: Namada<'a>>(
+    namada: &N,
+    args: args::ClaimRewards,
+) -> Result<(), error::Error>
+where
+    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+{
+    let (mut tx, signing_data, _fee_unshield_epoch) =
+        args.build(namada).await?;
+    signing::generate_test_vector(namada, &tx).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
+
+        namada.submit(tx, &args.tx).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn submit_redelegate<'a, N: Namada<'a>>(
     namada: &N,
     args: args::Redelegate,
