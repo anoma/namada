@@ -41,6 +41,8 @@ const CONSENSUS_KEYS: &str = "consensus_keys";
 const LAST_BLOCK_PROPOSER_STORAGE_KEY: &str = "last_block_proposer";
 const CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY: &str =
     "validator_rewards_accumulator";
+const LAST_REWARD_CLAIM_EPOCH: &str = "last_reward_claim_epoch";
+const REWARDS_COUNTER_KEY: &str = "validator_rewards_commissions";
 const VALIDATOR_INCOMING_REDELEGATIONS_KEY: &str = "incoming_redelegations";
 const VALIDATOR_OUTGOING_REDELEGATIONS_KEY: &str = "outgoing_redelegations";
 const VALIDATOR_TOTAL_REDELEGATED_BONDED_KEY: &str = "total_redelegated_bonded";
@@ -255,10 +257,19 @@ pub fn is_validator_rewards_product_key(key: &Key) -> Option<&Address> {
     }
 }
 
-/// Storage key for validator's delegation rewards products.
-pub fn validator_delegation_rewards_product_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_DELEGATION_REWARDS_PRODUCT_KEY.to_owned())
+/// Storage prefix for rewards counter.
+pub fn rewards_counter_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&REWARDS_COUNTER_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for rewards counter.
+pub fn rewards_counter_key(source: &Address, validator: &Address) -> Key {
+    rewards_counter_prefix()
+        .push(&source.to_db_key())
+        .expect("Cannot obtain a storage key")
+        .push(&validator.to_db_key())
         .expect("Cannot obtain a storage key")
 }
 
@@ -698,6 +709,27 @@ pub fn is_consensus_validator_set_accumulator_key(key: &Key) -> bool {
             DbKeySeg::StringSeg(key),
         ] if addr == &ADDRESS
             && key == CONSENSUS_VALIDATOR_SET_ACCUMULATOR_STORAGE_KEY)
+}
+
+/// Storage prefix for epoch at which an account last claimed PoS inflationary
+/// rewards.
+pub fn last_pos_reward_claim_epoch_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&LAST_REWARD_CLAIM_EPOCH.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for epoch at which an account last claimed PoS inflationary
+/// rewards.
+pub fn last_pos_reward_claim_epoch_key(
+    delegator: &Address,
+    validator: &Address,
+) -> Key {
+    last_pos_reward_claim_epoch_prefix()
+        .push(&delegator.to_db_key())
+        .expect("Cannot obtain a storage key")
+        .push(&validator.to_db_key())
+        .expect("Cannot obtain a storage key")
 }
 
 /// Get validator address from bond key
