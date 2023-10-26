@@ -2,8 +2,6 @@
 
 use core::time::Duration;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use prost::Message;
 use sha2::Digest;
 
