@@ -7,8 +7,9 @@ use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
 use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::StoredKeypair;
-use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
+use namada_sdk::wallet::{
+    gen_sk_rng, LoadStoreError, Store, StoredKeypair, ValidatorKeys,
+};
 
 use crate::wallet::CliWalletUtils;
 
@@ -34,25 +35,6 @@ pub fn load(store_dir: &Path) -> Result<Store, LoadStoreError> {
     let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
     wallet.load()?;
     Ok(wallet.into())
-}
-
-fn new() -> Store {
-    let mut store = Store::default();
-    // Pre-load the default keys without encryption
-    let no_password = None;
-    for (alias, keypair) in super::defaults::keys() {
-        let pkh: PublicKeyHash = (&keypair.ref_to()).into();
-        store.insert_keypair::<CliWalletUtils>(
-            alias,
-            StoredKeypair::new(keypair, no_password.clone()).0,
-            pkh,
-            true,
-        );
-    }
-    for (alias, addr) in super::defaults::addresses() {
-        store.insert_address::<CliWalletUtils>(alias, addr, true);
-    }
-    store
 }
 
 /// Generate keypair for signing protocol txs and for the DKG

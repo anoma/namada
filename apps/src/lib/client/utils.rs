@@ -9,10 +9,11 @@ use borsh_ext::BorshSerializeExt;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use namada::types::address;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
+use namada::types::uint::Uint;
+use namada::types::{address, token};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::wallet::{alias, Wallet};
 use prost::bytes::Bytes;
@@ -23,11 +24,10 @@ use sha2::{Digest, Sha256};
 
 use crate::cli::context::ENV_VAR_WASM_DIR;
 use crate::cli::{self, args};
-use crate::config::genesis::genesis_config::{
-    self, GenesisConfig, HexString, ValidatorPreGenesisConfig,
-};
 use crate::config::global::GlobalConfig;
-use crate::config::{self, get_default_namada_folder, Config, TendermintMode};
+use crate::config::{
+    self, genesis, get_default_namada_folder, Config, TendermintMode,
+};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
@@ -413,7 +413,7 @@ pub fn init_network(
             } else {
                 (Dec::from(1) / tm_votes_per_token).ceil().abs()
             },
-            NATIVE_MAX_DECIMAL_PLACES,
+            token::NATIVE_MAX_DECIMAL_PLACES,
         )
         .unwrap();
         eprintln!(
