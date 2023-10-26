@@ -5,7 +5,7 @@ mod state_machine_v2;
 mod utils;
 
 use std::cmp::{max, min};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::{Deref, Range};
 use std::str::FromStr;
 
@@ -41,12 +41,13 @@ use test_log::test;
 use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::{OwnedPosParams, PosParams};
+use crate::rewards::PosRewardsCalculator;
 use crate::test_utils::test_init_genesis;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, EagerRedelegatedBondsMap, GenesisValidator, Position,
     RedelegatedTokens, ReverseOrdTokenAmount, Slash, SlashType, UnbondDetails,
-    ValidatorSetUpdate, ValidatorState, WeightedValidator,
+    ValidatorSetUpdate, ValidatorState, VoteInfo, WeightedValidator,
 };
 use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
@@ -225,6 +226,53 @@ proptest! {
 
     ) {
         test_overslashing_aux(genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_unslashed_bond_amount_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_unslashed_bond_amount(
+
+    genesis_validators in arb_genesis_validators(4..5, None),
+
+    ) {
+        test_unslashed_bond_amount_aux(genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_log_block_rewards_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_log_block_rewards(
+        genesis_validators in arb_genesis_validators(4..10, None),
+        params in arb_pos_params(Some(5))
+
+    ) {
+        test_log_block_rewards_aux(genesis_validators, params)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_update_rewards_products_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_update_rewards_products(
+        genesis_validators in arb_genesis_validators(4..10, None),
+
+    ) {
+        test_update_rewards_products_aux(genesis_validators)
     }
 }
 
@@ -5733,4 +5781,500 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         crate::bond_amount(&storage, &self_bond_id, epoch).unwrap();
     let exp_bond_amount = token::Amount::zero();
     assert_eq!(self_bond_amount, exp_bond_amount);
+}
+
+fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
+    let mut storage = TestWlStorage::default();
+    let params = OwnedPosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    // Genesis
+    let mut current_epoch = storage.storage.block.epoch;
+    let params = test_init_genesis(
+        &mut storage,
+        params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    let validator1 = validators[0].address.clone();
+    let validator2 = validators[1].address.clone();
+
+    // Get a delegator with some tokens
+    let staking_token = staking_token_address(&storage);
+    let delegator = address::testing::gen_implicit_address();
+    let del_balance = token::Amount::from_uint(1_000_000, 0).unwrap();
+    credit_tokens(&mut storage, &staking_token, &delegator, del_balance)
+        .unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        10_000.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Unbond some from validator 1
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        1_342.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        1_875.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        584.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Advance an epoch
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        384.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Unbond some from validator 1
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        144.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        3_448.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        699.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Advance an epoch
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        4_384.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        1_008.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        3_500.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Checks
+    let val1_init_stake = validators[0].tokens;
+
+    for epoch in Epoch::iter_bounds_inclusive(
+        Epoch(0),
+        current_epoch + params.pipeline_len,
+    ) {
+        let bond_amount = crate::bond_amounts_for_rewards(
+            &storage,
+            &BondId {
+                source: delegator.clone(),
+                validator: validator1.clone(),
+            },
+            epoch,
+            epoch,
+        )
+        .unwrap()
+        .get(&epoch)
+        .cloned()
+        .unwrap_or_default();
+
+        let val_stake =
+            crate::read_validator_stake(&storage, &params, &validator1, epoch)
+                .unwrap();
+        dbg!(&bond_amount);
+        assert_eq!(val_stake - val1_init_stake, bond_amount);
+    }
+}
+
+fn test_log_block_rewards_aux(
+    validators: Vec<GenesisValidator>,
+    params: OwnedPosParams,
+) {
+    tracing::info!(
+        "New case with {} validators: {:#?}",
+        validators.len(),
+        validators
+            .iter()
+            .map(|v| (&v.address, v.tokens.to_string_native()))
+            .collect::<Vec<_>>()
+    );
+    let mut s = TestWlStorage::default();
+    // Init genesis
+    let current_epoch = s.storage.block.epoch;
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    s.commit_block().unwrap();
+    let total_stake =
+        crate::get_total_consensus_stake(&s, current_epoch, &params).unwrap();
+    let consensus_set =
+        crate::read_consensus_validator_set_addresses(&s, current_epoch)
+            .unwrap();
+    let proposer_address = consensus_set.iter().next().unwrap().clone();
+
+    tracing::info!(
+            ?params.block_proposer_reward,
+            ?params.block_vote_reward,
+    );
+    tracing::info!(?proposer_address,);
+
+    // Rewards accumulator should be empty at first
+    let rewards_handle = crate::rewards_accumulator_handle();
+    assert!(rewards_handle.is_empty(&s).unwrap());
+
+    let mut last_rewards = BTreeMap::default();
+
+    let num_blocks = 100;
+    // Loop through `num_blocks`, log rewards & check results
+    for i in 0..num_blocks {
+        tracing::info!("");
+        tracing::info!("Block {}", i + 1);
+
+        // A helper closure to prepare minimum required votes
+        let prep_votes = |epoch| {
+            // Ceil of 2/3 of total stake
+            let min_required_votes = total_stake.mul_ceil(Dec::two() / 3);
+
+            let mut total_votes = token::Amount::zero();
+            let mut non_voters = HashSet::<Address>::default();
+            let mut prep_vote = |validator| {
+                // Add validator vote if it's in consensus set and if we don't
+                // yet have min required votes
+                if consensus_set.contains(validator)
+                    && total_votes < min_required_votes
+                {
+                    let stake =
+                        read_validator_stake(&s, &params, validator, epoch)
+                            .unwrap();
+                    total_votes += stake;
+                    let validator_vp =
+                        into_tm_voting_power(params.tm_votes_per_token, stake)
+                            as u64;
+                    tracing::info!("Validator {validator} signed");
+                    Some(VoteInfo {
+                        validator_address: validator.clone(),
+                        validator_vp,
+                    })
+                } else {
+                    non_voters.insert(validator.clone());
+                    None
+                }
+            };
+
+            let votes: Vec<VoteInfo> = validators
+                .iter()
+                .rev()
+                .filter_map(|validator| prep_vote(&validator.address))
+                .collect();
+            (votes, total_votes, non_voters)
+        };
+
+        let (votes, signing_stake, non_voters) = prep_votes(current_epoch);
+        crate::log_block_rewards(
+            &mut s,
+            current_epoch,
+            &proposer_address,
+            votes.clone(),
+        )
+        .unwrap();
+
+        assert!(!rewards_handle.is_empty(&s).unwrap());
+
+        let rewards_calculator = PosRewardsCalculator {
+            proposer_reward: params.block_proposer_reward,
+            signer_reward: params.block_vote_reward,
+            signing_stake,
+            total_stake,
+        };
+        let coeffs = rewards_calculator.get_reward_coeffs().unwrap();
+        tracing::info!(?coeffs);
+
+        // Check proposer reward
+        let stake =
+            read_validator_stake(&s, &params, &proposer_address, current_epoch)
+                .unwrap();
+        let proposer_signing_reward = votes.iter().find_map(|vote| {
+            if vote.validator_address == proposer_address {
+                let signing_fraction =
+                    Dec::from(stake) / Dec::from(signing_stake);
+                Some(coeffs.signer_coeff * signing_fraction)
+            } else {
+                None
+            }
+        });
+        let expected_proposer_rewards = last_rewards.get(&proposer_address).copied().unwrap_or_default() +
+        // Proposer reward
+        coeffs.proposer_coeff
+        // Consensus validator reward
+        + (coeffs.active_val_coeff
+            * (Dec::from(stake) / Dec::from(total_stake)))
+        // Signing reward (if proposer voted)
+        + proposer_signing_reward
+            .unwrap_or_default();
+        tracing::info!(
+            "Expected proposer rewards: {expected_proposer_rewards}. Signed \
+             block: {}",
+            proposer_signing_reward.is_some()
+        );
+        assert_eq!(
+            rewards_handle.get(&s, &proposer_address).unwrap(),
+            Some(expected_proposer_rewards)
+        );
+
+        // Check voters rewards
+        for VoteInfo {
+            validator_address, ..
+        } in votes.iter()
+        {
+            // Skip proposer, in case voted - already checked
+            if validator_address == &proposer_address {
+                continue;
+            }
+
+            let stake = read_validator_stake(
+                &s,
+                &params,
+                validator_address,
+                current_epoch,
+            )
+            .unwrap();
+            let signing_fraction = Dec::from(stake) / Dec::from(signing_stake);
+            let expected_signer_rewards = last_rewards
+                .get(validator_address)
+                .copied()
+                .unwrap_or_default()
+                + coeffs.signer_coeff * signing_fraction
+                + (coeffs.active_val_coeff
+                    * (Dec::from(stake) / Dec::from(total_stake)));
+            tracing::info!(
+                "Expected signer {validator_address} rewards: \
+                 {expected_signer_rewards}"
+            );
+            assert_eq!(
+                rewards_handle.get(&s, validator_address).unwrap(),
+                Some(expected_signer_rewards)
+            );
+        }
+
+        // Check non-voters rewards, if any
+        for address in non_voters {
+            // Skip proposer, in case it didn't vote - already checked
+            if address == proposer_address {
+                continue;
+            }
+
+            if consensus_set.contains(&address) {
+                let stake =
+                    read_validator_stake(&s, &params, &address, current_epoch)
+                        .unwrap();
+                let expected_non_signer_rewards =
+                    last_rewards.get(&address).copied().unwrap_or_default()
+                        + coeffs.active_val_coeff
+                            * (Dec::from(stake) / Dec::from(total_stake));
+                tracing::info!(
+                    "Expected non-signer {address} rewards: \
+                     {expected_non_signer_rewards}"
+                );
+                assert_eq!(
+                    rewards_handle.get(&s, &address).unwrap(),
+                    Some(expected_non_signer_rewards)
+                );
+            } else {
+                let last_reward = last_rewards.get(&address).copied();
+                assert_eq!(
+                    rewards_handle.get(&s, &address).unwrap(),
+                    last_reward
+                );
+            }
+        }
+        s.commit_block().unwrap();
+
+        last_rewards =
+            crate::rewards_accumulator_handle().collect_map(&s).unwrap();
+
+        let rewards_sum: Dec = last_rewards.values().copied().sum();
+        let expected_sum = Dec::one() * (i as u64 + 1);
+        let err_tolerance = Dec::new(1, 9).unwrap();
+        let fail_msg = format!(
+            "Expected rewards sum at block {} to be {expected_sum}, got \
+             {rewards_sum}. Error tolerance {err_tolerance}.",
+            i + 1
+        );
+        assert!(expected_sum <= rewards_sum + err_tolerance, "{fail_msg}");
+        assert!(rewards_sum <= expected_sum, "{fail_msg}");
+    }
+}
+
+fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
+    tracing::info!(
+        "New case with {} validators: {:#?}",
+        validators.len(),
+        validators
+            .iter()
+            .map(|v| (&v.address, v.tokens.to_string_native()))
+            .collect::<Vec<_>>()
+    );
+    let mut s = TestWlStorage::default();
+    // Init genesis
+    let current_epoch = s.storage.block.epoch;
+    let params = OwnedPosParams::default();
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        validators.into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    s.commit_block().unwrap();
+
+    let staking_token = staking_token_address(&s);
+    let consensus_set =
+        crate::read_consensus_validator_set_addresses(&s, current_epoch)
+            .unwrap();
+
+    // Start a new epoch
+    let current_epoch = advance_epoch(&mut s, &params);
+
+    // Read some data before applying rewards
+    let pos_balance_pre =
+        read_balance(&s, &staking_token, &address::POS).unwrap();
+    let gov_balance_pre =
+        read_balance(&s, &staking_token, &address::GOV).unwrap();
+
+    let num_consensus_validators = consensus_set.len() as u64;
+    let accum_val = Dec::one() / num_consensus_validators;
+    let num_blocks_in_last_epoch = 1000;
+
+    // Assign some reward accumulator values to consensus validator
+    for validator in &consensus_set {
+        crate::rewards_accumulator_handle()
+            .insert(
+                &mut s,
+                validator.clone(),
+                accum_val * num_blocks_in_last_epoch,
+            )
+            .unwrap();
+    }
+
+    // Distribute inflation into rewards
+    let last_epoch = current_epoch.prev();
+    let inflation = token::Amount::native_whole(10_000_000);
+    crate::update_rewards_products_and_mint_inflation(
+        &mut s,
+        &params,
+        last_epoch,
+        num_blocks_in_last_epoch,
+        inflation,
+        &staking_token,
+    )
+    .unwrap();
+
+    let pos_balance_post =
+        read_balance(&s, &staking_token, &address::POS).unwrap();
+    let gov_balance_post =
+        read_balance(&s, &staking_token, &address::GOV).unwrap();
+
+    assert_eq!(
+        pos_balance_pre + gov_balance_pre + inflation,
+        pos_balance_post + gov_balance_post,
+        "Expected inflation to be minted to PoS and left-over amount to Gov"
+    );
+
+    let pos_credit = pos_balance_post - pos_balance_pre;
+    let gov_credit = gov_balance_post - gov_balance_pre;
+    assert!(
+        pos_credit > gov_credit,
+        "PoS must receive more tokens than Gov, but got {} in PoS and {} in \
+         Gov",
+        pos_credit.to_string_native(),
+        gov_credit.to_string_native()
+    );
+
+    // Rewards accumulator must be cleared out
+    let rewards_handle = crate::rewards_accumulator_handle();
+    assert!(rewards_handle.is_empty(&s).unwrap());
 }
