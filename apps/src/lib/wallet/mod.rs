@@ -1,4 +1,3 @@
-pub mod cli_utils;
 pub mod defaults;
 pub mod pre_genesis;
 mod store;
@@ -9,13 +8,12 @@ use std::str::FromStr;
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
-use namada::types::address::Address;
 use namada::types::key::*;
 pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    AddressVpType, ConfirmationResponse, FindKeyError, GenRestoreKeyError,
+    ConfirmationResponse, FindKeyError, GenRestoreKeyError,
     Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
@@ -24,8 +22,6 @@ pub use store::wallet_file;
 use zeroize::Zeroizing;
 
 use crate::cli;
-use crate::config::genesis::genesis_config::GenesisConfig;
-
 #[derive(Debug, Clone)]
 pub struct CliWalletUtils {
     store_dir: PathBuf,
@@ -239,23 +235,6 @@ where
         .transpose()
 }
 
-/// Add addresses from a genesis configuration.
-pub fn add_genesis_addresses(
-    wallet: &mut Wallet<CliWalletUtils>,
-    genesis: GenesisConfig,
-) {
-    for (alias, config) in &genesis.token {
-        let exp_addr = format!("Genesis token {alias} must have address");
-        let address =
-            Address::from_str(config.address.as_ref().expect(&exp_addr))
-                .expect("Valid address");
-        wallet.add_vp_type_to_address(AddressVpType::Token, address);
-    }
-    for (alias, addr) in defaults::addresses_from_genesis(genesis) {
-        wallet.add_address(alias.normalize(), addr, true);
-    }
-}
-
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
     wallet
@@ -285,20 +264,10 @@ pub fn load_or_new(store_dir: &Path) -> Wallet<CliWalletUtils> {
     wallet
 }
 
-/// Load a wallet from the store file or create a new one with the default
-/// addresses loaded from the genesis file, if not found.
-pub fn load_or_new_from_genesis(
-    store_dir: &Path,
-    genesis_cfg: GenesisConfig,
-) -> Wallet<CliWalletUtils> {
-    let store = self::store::load_or_new_from_genesis(store_dir, genesis_cfg)
-        .unwrap_or_else(|err| {
-            eprintln!("Unable to load the wallet: {}", err);
-            cli::safe_exit(1)
-        });
-    let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
-    *wallet.store_mut() = store;
-    wallet
+/// Check if a wallet exists in the given store dir.
+pub fn exists(store_dir: &Path) -> bool {
+    let file = wallet_file(store_dir);
+    file.exists()
 }
 
 /// Read the password for encryption from the file/env/stdin, with

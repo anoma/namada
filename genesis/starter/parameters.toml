@@ -1,0 +1,90 @@
+# General protocol parameters.
+[parameters]
+native_token = "NAM"
+# Minimum number of blocks in an epoch.
+min_num_of_blocks = 4
+# Maximum expected time per block (in seconds).
+max_expected_time_per_block = 30
+# Max payload size, in bytes, for a tx batch proposal.
+max_proposal_bytes = 22020096
+# vp whitelist
+vp_whitelist = []
+# tx whitelist
+tx_whitelist = []
+# Implicit VP WASM name
+implicit_vp = "vp_implicit"
+# Expected number of epochs per year (also sets the min duration of an epoch in seconds)
+epochs_per_year = 31_536_000
+# The P gain factor in the Proof of Stake rewards controller
+pos_gain_p = "0.1"
+# The D gain factor in the Proof of Stake rewards controller
+pos_gain_d = "0.1"
+# Maximum number of signature per transaction
+max_signatures_per_transaction = 15
+# Max gas for block
+max_block_gas = 20000000
+# Fee unshielding gas limit
+fee_unshielding_gas_limit = 20000
+# Fee unshielding descriptions limit
+fee_unshielding_descriptions_limit = 15
+
+# Map of the cost per gas unit for every token allowed for fee payment
+[parameters.minimum_gas_price]
+nam = "0.000001"
+
+# Proof of stake parameters.
+[pos_params]
+# Maximum number of active validators.
+max_validator_slots = 128
+# Pipeline length (in epochs). Any change in the validator set made in
+# epoch 'n' will become active in epoch 'n + pipeline_len'.
+pipeline_len = 2
+# Unbonding length (in epochs). Validators may have their stake slashed
+# for a fault in epoch 'n' up through epoch 'n + unbonding_len'.
+unbonding_len = 3
+# Votes per fundamental staking token (namnam)
+tm_votes_per_token = "1"
+# Reward for proposing a block.
+block_proposer_reward = "0.125"
+# Reward for voting on a block.
+block_vote_reward = "0.1"
+# Maximum inflation rate per annum (10%)
+max_inflation_rate = "0.1"
+# Targeted ratio of staked tokens to total tokens in the supply
+target_staked_ratio = "0.6667"
+# Portion of a validator's stake that should be slashed on a duplicate
+# vote.
+duplicate_vote_min_slash_rate = "0.001"
+# Portion of a validator's stake that should be slashed on a light
+# client attack.
+light_client_attack_min_slash_rate = "0.001"
+# Number of epochs above and below (separately) the current epoch to
+# consider when doing cubic slashing
+cubic_slashing_window_length = 1
+# The minimum amount of bonded tokens that a validator needs to be in
+# either the `consensus` or `below_capacity` validator sets
+validator_stake_threshold = "1"
+
+# Governance parameters.
+[gov_params]
+# minimum amount of nam token to lock
+min_proposal_fund = 500
+# proposal code size in bytes
+max_proposal_code_size = 300000
+# min proposal period length in epochs
+min_proposal_voting_period = 3
+# max proposal period length in epochs
+max_proposal_period = 27
+# maximum number of characters in the proposal content
+max_proposal_content_size = 10000
+# minimum epochs between end and grace epoch
+min_proposal_grace_epochs = 6
+
+# Public goods funding parameters
+[pgf_params]
+# Initial set of stewards
+stewards = []
+# The pgf funding inflation rate
+pgf_inflation_rate = "0.1"
+# The pgf stewards inflation rate
+stewards_inflation_rate = "0.01"

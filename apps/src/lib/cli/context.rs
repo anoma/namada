@@ -20,13 +20,11 @@ use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
-#[cfg(any(test, feature = "dev"))]
 use crate::config::genesis;
-use crate::config::genesis::genesis_config;
-use crate::config::global::GlobalConfig;
 use crate::config::{self, Config};
 use crate::wallet::CliWalletUtils;
-use crate::wasm_loader;
+use crate::{wallet, wasm_loader};
+use crate::cli::utils;
 
 /// Env. var to set chain ID
 const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
@@ -74,10 +72,17 @@ pub type WalletBalanceOwner = FromContext<BalanceOwner>;
 pub struct Context {
     /// Global arguments
     pub global_args: args::Global,
-    /// The wallet
-    pub wallet: Wallet<CliWalletUtils>,
     /// The global configuration
     pub global_config: GlobalConfig,
+    /// Chain-specific context, if any chain is configured in `global_config`
+    pub chain: Option<ChainContext>,
+}
+
+/// Command execution context with chain-specific data
+#[derive(Debug)]
+pub struct ChainContext {
+    /// The wallet
+    pub wallet: Wallet<CliWalletUtils>,
     /// The ledger configuration for a specific chain ID
     pub config: Config,
     /// The context fr shielded operations
@@ -89,68 +94,77 @@ pub struct Context {
 impl Context {
     pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
-        tracing::debug!("Chain ID: {}", global_config.default_chain_id);
 
-        let mut config = Config::load(
-            &global_args.base_dir,
-            &global_config.default_chain_id,
-            None,
-        );
+        let chain = match global_config.default_chain_id.as_ref() {
+            Some(default_chain_id) => {
+                tracing::info!("Default chain ID: {default_chain_id}");
+                let mut config =
+                    Config::load(&global_args.base_dir, default_chain_id, None);
+                let chain_dir =
+                    global_args.base_dir.join(default_chain_id.as_str());
+                let genesis =
+                    genesis::chain::Finalized::read_toml_files(&chain_dir)
+                        .expect("Missing genesis files");
+                let native_token = genesis.get_native_token().clone();
+                let wallet = if wallet::exists(&chain_dir) {
+                    wallet::load(&chain_dir).unwrap()
+                } else {
+                    panic!(
+                        "Could not find wallet at {}.",
+                        chain_dir.to_string_lossy()
+                    );
+                };
 
-        let chain_dir = global_args
-            .base_dir
-            .join(global_config.default_chain_id.as_str());
-        let genesis_file_path = global_args
-            .base_dir
-            .join(format!("{}.toml", global_config.default_chain_id.as_str()));
-        // NOTE: workaround to make this function work both in integration tests
-        // and benchmarks
-        let (wallet, native_token) = if genesis_file_path.is_file() {
-            let genesis =
-                genesis_config::read_genesis_config(&genesis_file_path);
-
-            let default_genesis =
-                genesis_config::open_genesis_config(genesis_file_path)?;
-
-            (
-                crate::wallet::load_or_new_from_genesis(
-                    &chain_dir,
-                    default_genesis,
-                ),
-                genesis.native_token,
-            ) // If the WASM dir specified, put it in the config
-        } else {
-            #[cfg(not(any(test, feature = "testing")))]
-            panic!("Missing genesis file");
-            #[cfg(any(test, feature = "testing"))]
-            {
-                let default_genesis = genesis::genesis(1);
-                (
-                    crate::wallet::load_or_new(&genesis_file_path),
-                    default_genesis.native_token,
-                )
+                // If the WASM dir specified, put it in the config
+                match global_args.wasm_dir.as_ref() {
+                    Some(wasm_dir) => {
+                        config.wasm_dir = wasm_dir.clone();
+                    }
+                    None => {
+                        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
+                            let wasm_dir: PathBuf = wasm_dir.into();
+                            config.wasm_dir = wasm_dir;
+                        }
+                    }
+                }
+                Some(ChainContext {
+                    wallet,
+                    config,
+                    shielded: FsShieldedUtils::new(chain_dir),
+                    native_token,
+                })
             }
+            None => None,
         };
 
-        match global_args.wasm_dir.as_ref() {
-            Some(wasm_dir) => {
-                config.wasm_dir = wasm_dir.clone();
-            }
-            None => {
-                if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                    let wasm_dir: PathBuf = wasm_dir.into();
-                    config.wasm_dir = wasm_dir;
-                }
-            }
-        }
         Ok(Self {
             global_args,
-            wallet,
             global_config,
-            config,
-            shielded: FsShieldedUtils::new(chain_dir),
-            native_token,
+            chain,
         })
+    }
+
+    /// Try to take the chain context, or exit the process with an error if no
+    /// chain is configured.
+    pub fn take_chain_or_exit(self) -> ChainContext {
+        self.chain
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+    }
+
+    /// Try to borrow chain context, or exit the process with an error if no
+    /// chain is configured.
+    pub fn borrow_chain_or_exit(&self) -> &ChainContext {
+        self.chain
+            .as_ref()
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+    }
+
+    /// Try to borrow mutably chain context, or exit the process with an error
+    /// if no chain is configured.
+    pub fn borrow_mut_chain_or_exit(&mut self) -> &mut ChainContext {
+        self.chain
+            .as_mut()
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
     }
 
     /// Make an implementation of Namada from this object and parameters.
@@ -159,19 +173,30 @@ impl Context {
         client: &'a C,
         io: &'a IO,
     ) -> impl Namada
-    where
-        C: namada::ledger::queries::Client + Sync,
-        IO: Io,
+        where
+            C: namada::ledger::queries::Client + Sync,
+            IO: Io,
     {
+        let chain_ctx = self.borrow_mut_chain_or_exit();
         NamadaImpl::native_new(
             client,
-            &mut self.wallet,
-            &mut self.shielded,
+            &mut chain_ctx.wallet,
+            &mut chain_ctx.shielded,
             io,
-            self.native_token.clone(),
+            chain_ctx.native_token.clone(),
         )
     }
+}
 
+fn safe_exit_on_missing_chain_context() -> ! {
+    eprintln!(
+        "No chain is configured. You may need to run `namada client utils \
+         join-network` command."
+    );
+    utils::safe_exit(1)
+}
+
+impl ChainContext {
     /// Parse and/or look-up the value from the context.
     pub fn get<T>(&self, from_context: &FromContext<T>) -> T
     where
@@ -273,7 +298,7 @@ pub fn read_or_try_new_global_config(
 /// Argument that can be given raw or found in the [`Context`].
 #[derive(Debug, Clone)]
 pub struct FromContext<T> {
-    raw: String,
+    pub(crate) raw: String,
     phantom: PhantomData<T>,
 }
 

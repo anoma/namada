@@ -54,11 +54,11 @@ default = ["std", "abciplus"]
 mainnet = [
   "namada/mainnet",
 ]
-dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std", "namada_sdk/std"]
 # for integration tests and test utilies
-testing = ["dev", "namada_test_utils"]
-
+testing = ["namada_test_utils"]
+benches = ["testing", "namada_test_utils"]
+integration = []
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",

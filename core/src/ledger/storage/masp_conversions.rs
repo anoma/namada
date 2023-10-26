@@ -27,6 +27,8 @@ pub struct ConversionState {
     pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<Node>,
+    /// A map from token alias to actual address.
+    pub tokens: BTreeMap<String, Address>,
     /// Map assets to their latest conversion and position in Merkle tree
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<
@@ -215,7 +217,15 @@ where
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let tokens = address::tokens();
-    let mut masp_reward_keys: Vec<_> = tokens.into_keys().collect();
+    let mut masp_reward_keys: Vec<_> = tokens.into_keys()
+        .map(|k| wl_storage
+            .storage
+            .conversion_state
+            .tokens
+            .get(k)
+            .unwrap_or_else(|| panic!("Could not find token alias {} in MASP conversion state.", k))
+            .clone()
+        ).collect();
     // Put the native rewards first because other inflation computations depend
     // on it
     let native_token = wl_storage.storage.native_token.clone();
@@ -293,7 +303,7 @@ where
                             "MASP reward for {} assumed to be 0 because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
-                            *addr
+                            addr
                         );
                         *normed_inflation
                     });
@@ -339,7 +349,7 @@ where
                             "MASP reward for {} assumed to be 0 because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
-                            *addr
+                            addr
                         );
                         0u128
                     });

@@ -90,10 +90,10 @@ where
 
     let pgf_inflation_rate: Dec = storage
         .read(&pgf_inflation_rate_key)?
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
     let stewards_inflation_rate: Dec = storage
         .read(&stewards_inflation_rate_key)?
-        .expect("Parameter should be definied.");
+        .expect("Parameter should be defined.");
 
     Ok(PgfParameters {
         pgf_inflation_rate,

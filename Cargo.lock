@@ -4234,6 +4234,7 @@ version = "0.24.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "base58 0.2.0",
  "bimap",
  "borsh 1.0.0-alpha.4",
  "borsh-ext",
