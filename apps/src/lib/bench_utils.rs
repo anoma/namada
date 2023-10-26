@@ -108,6 +108,7 @@ pub const TX_CHANGE_VALIDATOR_COMMISSION_WASM: &str =
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
 pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
+pub const TX_CLAIM_REWARDS_WASM: &str = "tx_claim_rewards.wasm";
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
