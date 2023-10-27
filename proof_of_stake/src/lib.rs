@@ -60,11 +60,11 @@ use types::{
     BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionRates,
     ConsensusValidator, ConsensusValidatorSet, ConsensusValidatorSets,
     DelegatorRedelegatedBonded, DelegatorRedelegatedUnbonded,
-    EagerRedelegatedBondsMap, EpochedSlashes,
-    IncomingRedelegations, OutgoingRedelegations, Position,
-    RedelegatedBondsOrUnbonds, RedelegatedTokens, ReverseOrdTokenAmount,
-    RewardsAccumulator, RewardsProducts, Slash, SlashType, SlashedAmount,
-    Slashes, TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
+    EagerRedelegatedBondsMap, EpochedSlashes, IncomingRedelegations,
+    OutgoingRedelegations, Position, RedelegatedBondsOrUnbonds,
+    RedelegatedTokens, ReverseOrdTokenAmount, RewardsAccumulator,
+    RewardsProducts, Slash, SlashType, SlashedAmount, Slashes,
+    TotalConsensusStakes, TotalDeltas, TotalRedelegatedBonded,
     TotalRedelegatedUnbonded, UnbondDetails, Unbonds, ValidatorAddresses,
     ValidatorConsensusKeys, ValidatorDeltas, ValidatorEthColdKeys,
     ValidatorEthHotKeys, ValidatorPositionAddresses, ValidatorProtocolKeys,
@@ -327,7 +327,12 @@ where
 
     // Copy the genesis validator sets up to the pipeline epoch
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
-        copy_validator_sets_and_positions(storage, &params, current_epoch, epoch)?;
+        copy_validator_sets_and_positions(
+            storage,
+            &params,
+            current_epoch,
+            epoch,
+        )?;
         store_total_consensus_stake(storage, epoch)?;
     }
     Ok(())
@@ -816,12 +821,7 @@ where
 
     // Initialize or update the bond at the pipeline offset
     bond_handle.add(storage, amount, current_epoch, offset)?;
-    total_bonded_handle.add(
-        storage,
-        amount,
-        current_epoch,
-        offset,
-    )?;
+    total_bonded_handle.add(storage, amount, current_epoch, offset)?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
@@ -843,7 +843,7 @@ where
             &params,
             validator,
             amount.change(),
-            offset_epoch,
+            current_epoch,
             offset_opt,
         )?;
     }
@@ -2778,6 +2778,15 @@ where
         offset,
     )?;
 
+    insert_validator_into_validator_set(
+        storage,
+        &params,
+        &address,
+        token::Amount::zero(),
+        current_epoch,
+        offset,
+    )?;
+
     Ok(())
 }
 
@@ -4473,9 +4482,15 @@ where
                 &validator,
                 -slash_delta.change(),
                 epoch,
-                None,
+                Some(0),
             )?;
-            update_total_deltas(storage, &params, -slash_delta.change(), epoch, None)?;
+            update_total_deltas(
+                storage,
+                &params,
+                -slash_delta.change(),
+                epoch,
+                Some(0),
+            )?;
         }
 
         // TODO: should we clear some storage here as is done in Quint??
@@ -5339,14 +5354,15 @@ pub mod test_utils {
         validators: impl Iterator<Item = GenesisValidator>,
         current_epoch: namada_core::types::storage::Epoch,
     ) -> storage_api::Result<()>
-        where
-            S: StorageRead + StorageWrite,
+    where
+        S: StorageRead + StorageWrite,
     {
         init_genesis(storage, params, current_epoch)?;
         for GenesisValidator {
             address,
             consensus_key,
-            protocol_key, eth_cold_key,
+            protocol_key,
+            eth_cold_key,
             eth_hot_key,
             commission_rate,
             max_commission_rate_change,
@@ -5389,16 +5405,16 @@ pub mod test_utils {
         Ok(())
     }
 
-    /// Init PoS genesis wrapper helper that also initializes gov params that are
-    /// used in PoS with default values.
+    /// Init PoS genesis wrapper helper that also initializes gov params that
+    /// are used in PoS with default values.
     pub fn test_init_genesis<S>(
         storage: &mut S,
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
         current_epoch: namada_core::types::storage::Epoch,
     ) -> storage_api::Result<PosParams>
-        where
-            S: StorageRead + StorageWrite,
+    where
+        S: StorageRead + StorageWrite,
     {
         let gov_params = namada_core::ledger::governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;

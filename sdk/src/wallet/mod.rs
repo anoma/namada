@@ -346,7 +346,10 @@ impl<U> Wallet<U> {
     }
 
     /// Find the stored address by an alias.
-    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<std::borrow::Cow<Address>> {
+    pub fn find_address(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<std::borrow::Cow<Address>> {
         Alias::is_reserved(alias.as_ref())
             .map(std::borrow::Cow::Owned)
             .or_else(|| {

@@ -13,9 +13,9 @@ pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::{OwnedPosParams, PosParams};
 pub use namada_proof_of_stake::pos_queries::*;
 pub use namada_proof_of_stake::storage::*;
-pub use namada_proof_of_stake::{staking_token_address, types};
 #[cfg(any(test, feature = "testing"))]
 pub use namada_proof_of_stake::test_utils;
+pub use namada_proof_of_stake::{staking_token_address, types};
 pub use vp::PosVP;
 
 use crate::types::address::{Address, InternalAddress};

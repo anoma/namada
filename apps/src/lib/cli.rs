@@ -4964,7 +4964,7 @@ pub mod args {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             GenIbcShieldedTransafer::<SdkTypes> {
-                query: self.query.to_sdk(ctx),
+                query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
                 token: chain_ctx.get(&self.token),

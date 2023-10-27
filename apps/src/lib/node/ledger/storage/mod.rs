@@ -62,7 +62,7 @@ mod tests {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
-    use namada::types::{address, storage};
+    use namada::types::{address, storage, token};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -144,6 +144,25 @@ mod tests {
         storage.block.pred_epochs.new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
         let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
+        let token_params = token::Parameters {
+            max_reward_rate: Default::default(),
+            kd_gain_nom: Default::default(),
+            kp_gain_nom: Default::default(),
+            locked_ratio_target: Default::default(),
+        };
+        // Insert a map assigning random addresses to each token alias.
+        // Needed for storage but not for this test.
+        for (token, _) in address::tokens() {
+            let addr = address::gen_deterministic_established_address(token);
+            token_params.init_storage(&addr, &mut wl_storage);
+            wl_storage.write(&token::minted_balance_key(&addr), token::Amount::zero()).unwrap();
+            wl_storage.storage.conversion_state.tokens.insert(
+                token.to_string(),
+                addr,
+            );
+        }
+        token_params.init_storage(&wl_storage.storage.native_token.clone(), &mut wl_storage);
+        wl_storage.write(&token::minted_balance_key(&wl_storage.storage.native_token.clone()), token::Amount::zero()).unwrap();
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");

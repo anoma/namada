@@ -639,13 +639,13 @@ pub const fn wnam() -> EthAddress {
 /// informal currency codes and number of decimal places.
 pub fn tokens() -> HashMap<&'static str, Denomination> {
     vec![
-        ("NAM", 6.into()),
-        ("BTC", 8.into()),
-        ("ETH", 18.into()),
-        ("DOT", 10.into()),
-        ("Schnitzel", 6.into()),
-        ("Apfel", 6.into()),
-        ("Kartoffel", 6.into()),
+        ("nam", 6.into()),
+        ("btc", 8.into()),
+        ("eth", 18.into()),
+        ("dot", 10.into()),
+        ("schnitzel", 6.into()),
+        ("apfel", 6.into()),
+        ("kartoffel", 6.into()),
     ]
     .into_iter()
     .collect()

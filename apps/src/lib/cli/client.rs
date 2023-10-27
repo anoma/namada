@@ -114,9 +114,19 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let mut config =
-                            ctx.borrow_chain_or_exit().config.clone();
-                        let namada = ctx.to_sdk(&client, io);
+                        let cli::context::ChainContext {
+                            mut wallet,
+                            mut config,
+                            mut shielded,
+                            native_token,
+                        } = ctx.take_chain_or_exit();
+                        let namada = NamadaImpl::native_new(
+                            &client,
+                            &mut wallet,
+                            &mut shielded,
+                            io,
+                            native_token,
+                        );
                         tx::submit_init_validator(&namada, &mut config, args)
                             .await?;
                     }

@@ -3094,7 +3094,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Self-unbond
-        let self_unbond_1_amount = token::Amount::native_whole(154_654);
+        let self_unbond_1_amount = token::Amount::native_whole(54_654);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,

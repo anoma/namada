@@ -4,7 +4,6 @@ mod store;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
@@ -13,8 +12,7 @@ pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    ConfirmationResponse, FindKeyError, GenRestoreKeyError,
-    Wallet, WalletIo,
+    ConfirmationResponse, FindKeyError, GenRestoreKeyError, Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;

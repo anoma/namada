@@ -16,9 +16,8 @@ use expectrl::process::unix::{PtyStream, UnixProcess};
 use expectrl::session::Session;
 use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
-use eyre::{eyre, Context};
+use eyre::eyre;
 use itertools::{Either, Itertools};
-use namada_sdk::wallet::alias::Alias;
 use namada::types::chain::ChainId;
 use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
@@ -30,6 +29,7 @@ use namada_apps::{config, wallet};
 use namada_core::types::key::{RefTo, SchemeType};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
 use namada_vp_prelude::HashSet;
 use once_cell::sync::Lazy;
@@ -148,12 +148,11 @@ where
         let mut wallet = wallet::load(&wallet_path)
             .expect("Could not locate pre-genesis wallet used for e2e tests.");
         let alias = format!("validator-{}-balance-key", val);
-        let (alias, sk) = wallet
-            .gen_key(SchemeType::Ed25519, Some(alias), true, None, None)
+        let (alias, sk, _mnemonic) = wallet
+            .gen_key(SchemeType::Ed25519, Some(alias), true, None, None, None)
             .unwrap_or_else(|_| {
                 panic!("Could not generate new key for validator-{}", val)
-            })
-            .unwrap();
+            });
         wallet::save(&wallet).unwrap();
         // assign balance to the key
         genesis

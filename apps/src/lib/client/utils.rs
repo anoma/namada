@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -12,18 +11,16 @@ use flate2::Compression;
 use namada::types::chain::ChainId;
 use namada::types::dec::Dec;
 use namada::types::key::*;
+use namada::types::token;
 use namada::types::uint::Uint;
-use namada::types::{address, token};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::wallet::{alias, Wallet};
 use prost::bytes::Bytes;
-use rand::prelude::ThreadRng;
-use rand::thread_rng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use crate::cli::args;
 use crate::cli::context::ENV_VAR_WASM_DIR;
-use crate::cli::{self, args};
 use crate::config::global::GlobalConfig;
 use crate::config::{
     self, genesis, get_default_namada_folder, Config, TendermintMode,
@@ -31,9 +28,7 @@ use crate::config::{
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
 use crate::node::ledger::tendermint_node;
-use crate::wallet::{
-    pre_genesis, read_and_confirm_encryption_password, CliWalletUtils,
-};
+use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";

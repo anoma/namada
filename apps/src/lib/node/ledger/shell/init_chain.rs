@@ -3,11 +3,10 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use namada::ledger::parameters::Parameters;
-use namada::ledger::pos::OwnedPosParams;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
 use namada::ledger::storage_api::token::{credit_tokens, write_denom};
-use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::types::hash::Hash as CodeHash;
@@ -269,10 +268,11 @@ where
 
             let FinalizedTokenConfig {
                 address,
-                config: TokenConfig { denom },
+                config: TokenConfig { denom, parameters },
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.wl_storage, address, *denom).unwrap();
+            parameters.init_storage(address, &mut self.wl_storage);
             // add token addresses to the masp reward conversions lookup table.
             let alias = alias.to_string();
             if masp_rewards.contains_key(&alias.as_str()) {
@@ -304,6 +304,7 @@ where
                 .get(token_alias)
                 .expect("Token with configured balance not found in genesis.")
                 .address;
+            let mut total_token_balance = token::Amount::zero();
             for (owner_pk, balance) in balances {
                 let owner = Address::from(&owner_pk.raw);
                 storage_api::account::set_public_key_at(
@@ -326,7 +327,16 @@ where
                     balance.amount,
                 )
                 .expect("Couldn't credit initial balance");
+                total_token_balance += balance.amount;
             }
+            // Write the total amount of tokens for the ratio
+            self.wl_storage
+                .write(
+                    &token::minted_balance_key(token_address),
+                    total_token_balance,
+                )
+                .unwrap();
+
         }
     }
 
