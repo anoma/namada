@@ -33,7 +33,9 @@ pub enum Error {
 #[serde(transparent)]
 pub struct Checksums(pub HashMap<String, String>);
 
-const S3_URL: &str = "https://namada-wasm-master.s3.eu-west-1.amazonaws.com";
+/// Github URL prefix of released Namada network configs
+pub const ENV_VAR_WASM_SERVER: &str = "NAMADA_NETWORK_CONFIGS_SERVER";
+const DEFAULT_WASM_SERVER: &str = "https://artifacts.heliax.click/namada-wasm";
 
 impl Checksums {
     /// Read WASM checksums from the given path
@@ -99,6 +101,11 @@ impl Checksums {
             }
         }
     }
+}
+
+fn wasm_url_prefix(wasm_name: &str) -> String {
+    std::env::var(ENV_VAR_WASM_SERVER)
+        .unwrap_or_else(|_| format!("{DEFAULT_WASM_SERVER}/{wasm_name}"))
 }
 
 /// Download all the pre-built wasms, or if they're already downloaded, verify
@@ -180,7 +187,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                         }
                     }
 
-                    let url = format!("{}/{}", S3_URL, full_name);
+                    let url = wasm_url_prefix(&full_name);
                     match download_wasm(url).await {
                         Ok(bytes) => {
                             if let Err(e) =
@@ -224,7 +231,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                             }
                         }
 
-                        let url = format!("{}/{}", S3_URL, full_name);
+                        let url = wasm_url_prefix(&full_name);
                         match download_wasm(url).await {
                             Ok(bytes) => {
                                 if let Err(e) =
