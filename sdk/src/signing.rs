@@ -14,7 +14,7 @@ use namada_core::ledger::parameters::storage as parameter_storage;
 use namada_core::proto::SignatureIndex;
 use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
-    masp_tx_key, Address, ImplicitAddress, MASP,
+    masp_tx_key, Address, ImplicitAddress, InternalAddress, MASP,
 };
 use namada_core::types::key::*;
 use namada_core::types::masp::{ExtendedViewingKey, PaymentAddress};
@@ -277,8 +277,16 @@ pub async fn aux_signing_data<'a>(
             Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
             1u8,
         ),
-        Some(owner @ Address::Internal(_)) => {
-            return Err(Error::from(TxError::InvalidAccount(owner.encode())));
+        Some(owner @ Address::Internal(internal)) => {
+            match internal {
+                // TODO use sentinel?
+                InternalAddress::Masp => (None, 0u8),
+                _ => {
+                    return Err(Error::from(TxError::InvalidAccount(
+                        owner.encode(),
+                    )));
+                }
+            }
         }
         None => (None, 0u8),
     };
