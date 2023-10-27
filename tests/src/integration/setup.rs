@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
 use namada_apps::cli::args;
+use namada_apps::client::utils::PRE_GENESIS_DIR;
 use namada_apps::config;
-use namada_apps::config::genesis::genesis_config;
-use namada_apps::config::genesis::genesis_config::GenesisConfig;
+use namada_apps::config::genesis::chain::Finalized;
+use namada_apps::config::genesis::templates;
+use namada_apps::config::genesis::templates::load_and_validate;
 use namada_apps::config::TendermintMode;
 use namada_apps::facade::tendermint::Timeout;
 use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
@@ -17,13 +19,11 @@ use namada_apps::node::ledger::shell::testing::node::{
 };
 use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
-use namada_core::types::address::nam;
-use namada_core::types::chain::{ChainId, ChainIdPrefix};
-use toml::value::Table;
+use namada_apps::wallet::pre_genesis;
+use namada_core::types::chain::ChainIdPrefix;
+use namada_sdk::wallet::alias::Alias;
 
-use crate::e2e::setup::{
-    copy_wasm_to_chain_dir, get_all_wasms_hashes, SINGLE_NODE_NET_GENESIS,
-};
+use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};
 
 /// Env. var for keeping temporary files created by the integration tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
@@ -88,23 +88,24 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
         },
     );
 
-    finalize_wallet(&template_dir, &global_args, genesis);
+    let eth_bridge_params = genesis.get_eth_bridge_params();
     let auto_drive_services = {
         // NB: for now, the only condition that
         // dictates whether mock services should
         // be enabled is if the Ethereum bridge
         // is enabled at genesis
-        genesis.ethereum_bridge_params.is_some()
+        eth_bridge_params.is_some()
     };
     let enable_eth_oracle = {
         // NB: we only enable the oracle if the
         // Ethereum bridge is enabled at genesis
-        genesis.ethereum_bridge_params.is_some()
+        eth_bridge_params.is_some()
     };
     let services_cfg = MockServicesCfg {
         auto_drive_services,
         enable_eth_oracle,
     };
+    finalize_wallet(&template_dir, &global_args, genesis);
     create_node(test_dir, global_args, keep_temp, services_cfg)
 }
 

@@ -1027,6 +1027,18 @@ impl Parameters {
             locked_ratio_target: locked_target,
         } = self;
         wl_storage
+            .write(
+                &masp_last_inflation_key(&address),
+                Amount::zero(),
+            )
+            .expect("last inflation key for the given asset must be initialized");
+        wl_storage
+            .write(
+                &masp_last_locked_ratio_key(&address),
+                Dec::zero(),
+            )
+            .expect("last locked ratio key for the given asset must be initialized");
+        wl_storage
             .write(&masp_max_reward_rate_key(address), max_rate)
             .expect("max reward rate for the given asset must be initialized");
         wl_storage
@@ -1482,5 +1494,4 @@ pub mod testing {
     ) -> impl Strategy<Value = Amount> {
         (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
     }
-
 }

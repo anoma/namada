@@ -420,7 +420,8 @@ mod tests {
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        ).unwrap();
+        )
+        .unwrap();
         // epoch duration
         let epoch_duration_key = get_epoch_duration_storage_key();
         let epoch_duration = EpochDuration {

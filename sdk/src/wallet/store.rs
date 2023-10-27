@@ -537,7 +537,7 @@ impl Store {
         // abort if the alias is reserved
         if Alias::is_reserved(&alias).is_some() {
             println!("The alias {} is reserved", alias);
-            return ;
+            return;
         }
         key.map(|x| self.keys.insert(alias.clone(), x));
         pkh.map(|x| self.pkhs.insert(x, alias.clone()));

@@ -219,7 +219,8 @@ pub fn init_storage() -> (Address, Address) {
             OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        ).unwrap();
+        )
+        .unwrap();
         // store wasm code
         let key = Key::wasm_code(&code_hash);
         env.wl_storage.storage.write(&key, code.clone()).unwrap();
