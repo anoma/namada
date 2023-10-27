@@ -1,15 +1,10 @@
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use ark_std::rand::prelude::*;
 use ark_std::rand::SeedableRng;
-use namada::types::address::Address;
 use namada::types::key::*;
 use namada::types::transaction::EllipticCurve;
-use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::{
-    gen_sk_rng, LoadStoreError, Store, StoredKeypair, ValidatorKeys,
-};
+use namada_sdk::wallet::{gen_sk_rng, LoadStoreError, Store, ValidatorKeys};
 
 use crate::wallet::CliWalletUtils;
 
@@ -74,7 +69,7 @@ mod test_wallet {
 
     #[test]
     fn test_toml_roundtrip_ed25519() {
-        let mut store = new();
+        let mut store = Store::default();
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
@@ -87,7 +82,7 @@ mod test_wallet {
 
     #[test]
     fn test_toml_roundtrip_secp256k1() {
-        let mut store = new();
+        let mut store = Store::default();
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(

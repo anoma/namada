@@ -217,15 +217,24 @@ where
     let key_prefix: storage::Key = masp_addr.to_db_key().into();
 
     let tokens = address::tokens();
-    let mut masp_reward_keys: Vec<_> = tokens.into_keys()
-        .map(|k| wl_storage
-            .storage
-            .conversion_state
-            .tokens
-            .get(k)
-            .unwrap_or_else(|| panic!("Could not find token alias {} in MASP conversion state.", k))
-            .clone()
-        ).collect();
+    let mut masp_reward_keys: Vec<_> = tokens
+        .into_keys()
+        .map(|k| {
+            wl_storage
+                .storage
+                .conversion_state
+                .tokens
+                .get(k)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Could not find token alias {} in MASP conversion \
+                         state.",
+                        k
+                    )
+                })
+                .clone()
+        })
+        .collect();
     // Put the native rewards first because other inflation computations depend
     // on it
     let native_token = wl_storage.storage.native_token.clone();

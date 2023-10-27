@@ -273,11 +273,11 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     use namada::core::types::string_encoding::StringEncoded;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
     use namada::proto::{standalone_signature, SerializeWithBorsh};
-    use namada_sdk::wallet::alias::Alias;
     use namada::types::address::wnam;
     use namada::types::chain::ChainIdPrefix;
     use namada::types::ethereum_events::EthAddress;
     use namada::types::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::finalize;
     use crate::wallet::defaults;

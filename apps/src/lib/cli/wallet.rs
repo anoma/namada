@@ -16,7 +16,6 @@ use namada_sdk::wallet::{
     WalletStorage,
 };
 use namada_sdk::{display, display_line, edisplay_line};
-use rand::RngCore;
 use rand_core::OsRng;
 
 use crate::cli;
@@ -24,7 +23,9 @@ use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
 use crate::client::utils::PRE_GENESIS_DIR;
-use crate::wallet::{self, read_and_confirm_encryption_password, CliWalletUtils};
+use crate::wallet::{
+    self, read_and_confirm_encryption_password, CliWalletUtils,
+};
 
 impl CliApi {
     pub fn handle_wallet_command(
@@ -35,27 +36,35 @@ impl CliApi {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
                 cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
-                    key_and_address_restore(ctx, io, args)
+                    key_and_address_restore(
+                        &mut ctx.borrow_mut_chain_or_exit().wallet,
+                        io,
+                        args,
+                    )
                 }
                 cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
-                    key_and_address_gen(ctx, io, &mut OsRng, args)
+                    key_and_address_gen(ctx, io, args)
                 }
                 cmds::WalletKey::Find(cmds::KeyFind(args)) => {
                     key_find(ctx, io, args)
                 }
                 cmds::WalletKey::List(cmds::KeyList(args)) => {
-                    key_list( ctx, io, args)
+                    key_list(ctx, io, args)
                 }
                 cmds::WalletKey::Export(cmds::Export(args)) => {
-                    key_export( ctx, io, args)
+                    key_export(ctx, io, args)
                 }
             },
             cmds::NamadaWallet::Address(sub) => match sub {
                 cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
-                    key_and_address_gen(ctx, io, &mut OsRng, args)
+                    key_and_address_gen(ctx, io, args)
                 }
                 cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
-                    key_and_address_restore(&mut ctx.borrow_mut_chain_or_exit().wallet, io, args)
+                    key_and_address_restore(
+                        &mut ctx.borrow_mut_chain_or_exit().wallet,
+                        io,
+                        args,
+                    )
                 }
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(ctx, io, args)
@@ -73,7 +82,11 @@ impl CliApi {
                 }
                 cmds::WalletMasp::GenPayAddr(cmds::MaspGenPayAddr(args)) => {
                     let args = args.to_sdk(&mut ctx);
-                    payment_address_gen(&mut ctx.borrow_mut_chain_or_exit().wallet, io, args)
+                    payment_address_gen(
+                        &mut ctx.borrow_mut_chain_or_exit().wallet,
+                        io,
+                        args,
+                    )
                 }
                 cmds::WalletMasp::AddAddrKey(cmds::MaspAddAddrKey(args)) => {
                     address_key_add(ctx, io, args)
@@ -396,7 +409,7 @@ fn key_and_address_restore(
 
 /// Generate a new keypair and derive implicit address from it and store them in
 /// the wallet.
-fn key_and_address_gen<R: RngCore>(
+fn key_and_address_gen(
     ctx: Context,
     io: &impl Io,
     args::KeyAndAddressGen {

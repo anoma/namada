@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use namada::core::types::storage;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::proto::{
@@ -674,10 +675,10 @@ impl TransferTx<Unvalidated> {
     /// The signable data. This does not include the phantom data.
     fn data_to_sign(&self) -> Vec<u8> {
         [
-            self.token.try_to_vec().unwrap(),
-            self.source.try_to_vec().unwrap(),
-            self.target.try_to_vec().unwrap(),
-            self.amount.try_to_vec().unwrap(),
+            self.token.serialize_to_vec(),
+            self.source.serialize_to_vec(),
+            self.target.serialize_to_vec(),
+            self.amount.serialize_to_vec(),
         ]
         .concat()
     }
@@ -766,9 +767,9 @@ impl BondTx<Unvalidated> {
     /// The signable data. This does not include the phantom data.
     fn data_to_sign(&self) -> Vec<u8> {
         [
-            self.source.try_to_vec().unwrap(),
-            self.validator.try_to_vec().unwrap(),
-            self.amount.try_to_vec().unwrap(),
+            self.source.serialize_to_vec(),
+            self.validator.serialize_to_vec(),
+            self.amount.serialize_to_vec(),
         ]
         .concat()
     }
