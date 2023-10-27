@@ -666,6 +666,63 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     pub threshold: Option<u8>,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxInitAccount<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxInitAccount {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxInitAccount<C> {
+    /// A vector of public key to associate with the new account
+    pub fn public_keys(self, public_keys: Vec<C::PublicKey>) -> Self {
+        Self {
+            public_keys,
+            ..self
+        }
+    }
+
+    /// A threshold to associate with the new account
+    pub fn threshold(self, threshold: u8) -> Self {
+        Self {
+            threshold: Some(threshold),
+            ..self
+        }
+    }
+
+    /// Path to the VP WASM code file
+    pub fn vp_code_path(self, vp_code_path: PathBuf) -> Self {
+        Self {
+            vp_code_path,
+            ..self
+        }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxInitAccount {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_init_account(context, self).await
+    }
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
