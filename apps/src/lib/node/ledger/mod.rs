@@ -541,12 +541,7 @@ async fn run_abci(
     let server = Server::builder()
         .consensus(consensus)
         .snapshot(snapshot)
-        .mempool(
-            ServiceBuilder::new()
-                .load_shed()
-                .buffer(1024)
-                .service(mempool),
-        )
+        .mempool(ServiceBuilder::new().load_shed().buffer(1).service(mempool))
         .info(
             ServiceBuilder::new()
                 .load_shed()
