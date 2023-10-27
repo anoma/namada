@@ -241,20 +241,7 @@ impl ChainContext {
     ///
     /// Note that in "dev" build, this may be the root `wasm` dir.
     pub fn wasm_dir(&self) -> PathBuf {
-        let wasm_dir =
-            self.config.ledger.chain_dir().join(&self.config.wasm_dir);
-
-        // In dev-mode with dev chain (the default), load wasm directly from the
-        // root wasm dir instead of the chain dir
-        #[cfg(feature = "dev")]
-        let wasm_dir =
-            if self.global_config.default_chain_id == ChainId::default() {
-                "wasm".into()
-            } else {
-                wasm_dir
-            };
-
-        wasm_dir
+        self.config.ledger.chain_dir().join(&self.config.wasm_dir)
     }
 
     /// Read the given WASM file from the WASM directory or an absolute path.
@@ -309,10 +296,6 @@ impl<T> FromContext<T> {
             phantom: PhantomData,
         }
     }
-
-    pub fn into_raw(self) -> String {
-        self.raw
-    }
 }
 
 impl FromContext<TransferSource> {
@@ -360,8 +343,8 @@ impl<T> FromContext<T>
 where
     T: ArgFromContext,
 {
-    /// Parse and/or look-up the value from the context.
-    fn arg_from_ctx(&self, ctx: &Context) -> Result<T, String> {
+    /// Parse and/or look-up the value from the chain context.
+    fn arg_from_ctx(&self, ctx: &ChainContext) -> Result<T, String> {
         T::arg_from_ctx(ctx, &self.raw)
     }
 }
@@ -370,32 +353,32 @@ impl<T> FromContext<T>
 where
     T: ArgFromMutContext,
 {
-    /// Parse and/or look-up the value from the mutable context.
-    fn arg_from_mut_ctx(&self, ctx: &mut Context) -> Result<T, String> {
+    /// Parse and/or look-up the value from the mutable chain context.
+    fn arg_from_mut_ctx(&self, ctx: &mut ChainContext) -> Result<T, String> {
         T::arg_from_mut_ctx(ctx, &self.raw)
     }
 }
 
-/// CLI argument that found via the [`Context`].
+/// CLI argument that found via the [`ChainContext`].
 pub trait ArgFromContext: Sized {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String>;
 }
 
-/// CLI argument that found via the [`Context`] and cached (as in case of an
-/// encrypted keypair that has been decrypted), hence using mutable context.
+/// CLI argument that found via the [`ChainContext`] and cached (as in case of
+/// an encrypted keypair that has been decrypted), hence using mutable context.
 pub trait ArgFromMutContext: Sized {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String>;
 }
 
 impl ArgFromContext for Address {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         struct Skip;
@@ -429,14 +412,19 @@ impl ArgFromContext for Address {
                     .ok_or(Skip)
             })
             // Or it can be an alias that may be found in the wallet
-            .or_else(|_| ctx.wallet.find_address(raw).cloned().ok_or(Skip))
+            .or_else(|_| {
+                ctx.wallet
+                    .find_address(raw)
+                    .map(|x| x.into_owned())
+                    .ok_or(Skip)
+            })
             .map_err(|_| format!("Unknown address {raw}"))
     }
 }
 
 impl ArgFromMutContext for common::SecretKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -452,7 +440,7 @@ impl ArgFromMutContext for common::SecretKey {
 
 impl ArgFromMutContext for common::PublicKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -477,7 +465,7 @@ impl ArgFromMutContext for common::PublicKey {
 
 impl ArgFromMutContext for ExtendedSpendingKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -493,7 +481,7 @@ impl ArgFromMutContext for ExtendedSpendingKey {
 
 impl ArgFromMutContext for ExtendedViewingKey {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -510,7 +498,7 @@ impl ArgFromMutContext for ExtendedViewingKey {
 
 impl ArgFromContext for PaymentAddress {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -527,7 +515,7 @@ impl ArgFromContext for PaymentAddress {
 
 impl ArgFromMutContext for TransferSource {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -543,7 +531,7 @@ impl ArgFromMutContext for TransferSource {
 
 impl ArgFromContext for TransferTarget {
     fn arg_from_ctx(
-        ctx: &Context,
+        ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -558,7 +546,7 @@ impl ArgFromContext for TransferTarget {
 
 impl ArgFromMutContext for BalanceOwner {
     fn arg_from_mut_ctx(
-        ctx: &mut Context,
+        ctx: &mut ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();

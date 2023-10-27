@@ -5,10 +5,10 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::io::Read;
 use std::str::FromStr;
-use borsh::{BorshDeserialize, BorshSerialize};
 
-use serde::{Deserialize, Serialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::types::address::{Address, InternalAddress};
+use serde::{Deserialize, Serialize};
 
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
@@ -62,8 +62,8 @@ impl BorshDeserialize for Alias {
 
 impl Serialize for Alias {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
         Serialize::serialize(&self.normalize(), serializer)
     }
@@ -71,8 +71,8 @@ impl Serialize for Alias {
 
 impl<'de> Deserialize<'de> for Alias {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
+    where
+        D: serde::Deserializer<'de>,
     {
         let raw: String = Deserialize::deserialize(deserializer)?;
         Ok(Self::from(raw))
@@ -84,7 +84,6 @@ impl PartialEq for Alias {
         self.normalize() == other.normalize()
     }
 }
-
 
 impl PartialOrd for Alias {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -138,7 +137,6 @@ impl FromStr for Alias {
         Ok(Self::from(s))
     }
 }
-
 
 impl AsRef<str> for &Alias {
     fn as_ref(&self) -> &str {

@@ -3,15 +3,16 @@ use std::path::Path;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use namada::ledger::parameters::EpochDuration;
-use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::{pre_genesis, Wallet};
 use namada::types::address::{masp, Address, EstablishedAddressGen};
 use namada::types::chain::{ChainId, ChainIdPrefix};
 use namada::types::dec::Dec;
 use namada::types::hash::Hash;
 use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::types::token::Amount;
+use namada_sdk::wallet::store::AddressVpType;
+use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -338,18 +339,21 @@ impl Finalized {
         } = self.parameters.pos_params.clone();
 
         namada::proof_of_stake::parameters::PosParams {
-            max_validator_slots,
-            pipeline_len,
-            unbonding_len,
-            tm_votes_per_token,
-            block_proposer_reward,
-            block_vote_reward,
-            max_inflation_rate,
-            target_staked_ratio,
-            duplicate_vote_min_slash_rate,
-            light_client_attack_min_slash_rate,
-            cubic_slashing_window_length,
-            validator_stake_threshold,
+            owned: namada::proof_of_stake::parameters::OwnedPosParams {
+                max_validator_slots,
+                pipeline_len,
+                unbonding_len,
+                tm_votes_per_token,
+                block_proposer_reward,
+                block_vote_reward,
+                max_inflation_rate,
+                target_staked_ratio,
+                duplicate_vote_min_slash_rate,
+                light_client_attack_min_slash_rate,
+                cubic_slashing_window_length,
+                validator_stake_threshold,
+            },
+            max_proposal_period: self.parameters.gov_params.max_proposal_period,
         }
     }
 
@@ -458,7 +462,7 @@ pub fn finalize(
             address_gen: None,
         },
     };
-    let genesis_bytes = genesis_to_gen_address.try_to_vec().unwrap();
+    let genesis_bytes = genesis_to_gen_address.serialize_to_vec();
     let mut addr_gen = established_address_gen(&genesis_bytes);
 
     // Generate addresses
@@ -488,7 +492,7 @@ pub fn finalize(
         parameters,
         transactions,
     };
-    let to_finalize_bytes = to_finalize.try_to_vec().unwrap();
+    let to_finalize_bytes = to_finalize.serialize_to_vec();
     let chain_id = ChainId::from_genesis(chain_id_prefix, to_finalize_bytes);
 
     // Construct the `Finalized` chain
