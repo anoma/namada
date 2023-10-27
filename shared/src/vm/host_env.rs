@@ -8,6 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
+use namada_core::types::address::MASP;
 use namada_core::types::internal::KeyVal;
 use thiserror::Error;
 
@@ -2277,7 +2278,7 @@ where
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), Self::Error> {
-        let masp_addr = address::masp();
+        let masp_addr = MASP;
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");

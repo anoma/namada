@@ -31,7 +31,7 @@ use namada_core::ledger::governance::storage::proposal::ProposalType;
 use namada_core::ledger::governance::storage::vote::StorageProposalVote;
 use namada_core::ledger::ibc::storage::channel_key;
 use namada_core::ledger::pgf::cli::steward::Commission;
-use namada_core::types::address::{masp, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::dec::Dec;
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::IbcShieldedTransfer;
@@ -1828,7 +1828,7 @@ pub async fn build_transfer<'a, N: Namada<'a>>(
         token: args.token.clone(),
     });
 
-    let masp_addr = masp();
+    let masp_addr = MASP;
 
     // For MASP sources, use a special sentinel key recognized by VPs as default
     // signer. Also, if the transaction is shielded, redact the amount and token
@@ -2172,7 +2172,7 @@ pub async fn gen_ibc_shielded_transfer<'a, N: Namada<'a>>(
 
     let transfer = token::Transfer {
         source: source.clone(),
-        target: masp(),
+        target: MASP,
         token: token.clone(),
         amount: validated_amount,
         key,

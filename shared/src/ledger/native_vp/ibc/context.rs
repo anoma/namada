@@ -9,7 +9,7 @@ use namada_core::ledger::ibc::{IbcCommonContext, IbcStorageContext};
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::ledger::storage::{self as ledger_storage, StorageHasher};
 use namada_core::ledger::storage_api::StorageRead;
-use namada_core::types::address::{self, Address, InternalAddress};
+use namada_core::types::address::{Address, InternalAddress, MASP};
 use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
 use namada_core::types::storage::{
     BlockHeight, Epoch, Header, Key, KeySeg, TxIndex,
@@ -164,7 +164,7 @@ where
         &mut self,
         shielded: &IbcShieldedTransfer,
     ) -> Result<(), Self::Error> {
-        let masp_addr = address::masp();
+        let masp_addr = MASP;
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
             .expect("Cannot obtain a storage key");

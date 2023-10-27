@@ -14,7 +14,7 @@ use namada_core::ledger::parameters::storage as parameter_storage;
 use namada_core::proto::SignatureIndex;
 use namada_core::types::account::AccountPublicKeysMap;
 use namada_core::types::address::{
-    masp, masp_tx_key, Address, ImplicitAddress,
+    masp_tx_key, Address, ImplicitAddress, MASP,
 };
 use namada_core::types::key::*;
 use namada_core::types::masp::{ExtendedViewingKey, PaymentAddress};
@@ -184,7 +184,7 @@ pub async fn tx_signers<'a>(
 
     // Now actually fetch the signing key and apply it
     match signer {
-        Some(signer) if signer == masp() => Ok(vec![masp_tx_key().ref_to()]),
+        Some(signer) if signer == MASP => Ok(vec![masp_tx_key().ref_to()]),
 
         Some(signer) => Ok(vec![
             find_pk(context, &signer, args.password.clone()).await?,
@@ -715,9 +715,9 @@ pub async fn make_ledger_masp_endpoints<'a>(
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, (Address, MaspDenom, Epoch)>,
 ) {
-    if transfer.source != masp() {
+    if transfer.source != MASP {
         output.push(format!("Sender : {}", transfer.source));
-        if transfer.target == masp() {
+        if transfer.target == MASP {
             make_ledger_amount_addr(
                 tokens,
                 output,
@@ -742,9 +742,9 @@ pub async fn make_ledger_masp_endpoints<'a>(
             .await;
         }
     }
-    if transfer.target != masp() {
+    if transfer.target != MASP {
         output.push(format!("Destination : {}", transfer.target));
-        if transfer.source == masp() {
+        if transfer.source == MASP {
             make_ledger_amount_addr(
                 tokens,
                 output,
@@ -769,7 +769,7 @@ pub async fn make_ledger_masp_endpoints<'a>(
             .await;
         }
     }
-    if transfer.source != masp() && transfer.target != masp() {
+    if transfer.source != MASP && transfer.target != MASP {
         make_ledger_amount_addr(
             tokens,
             output,

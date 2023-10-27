@@ -5,7 +5,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada::ledger::parameters::EpochDuration;
-use namada::types::address::{masp, Address, EstablishedAddressGen};
+use namada::types::address::{Address, EstablishedAddressGen, MASP};
 use namada::types::chain::{ChainId, ChainIdPrefix};
 use namada::types::dec::Dec;
 use namada::types::hash::Hash;
@@ -410,7 +410,7 @@ impl Finalized {
 
     pub fn get_user_address(&self, alias: &Alias) -> Option<Address> {
         if alias.to_string() == *"masp" {
-            return Some(masp());
+            return Some(MASP);
         }
         let established = self.transactions.established_account.as_ref()?;
         let validators = self.transactions.validator_account.as_ref()?;

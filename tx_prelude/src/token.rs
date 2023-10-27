@@ -1,5 +1,5 @@
 use masp_primitives::transaction::Transaction;
-use namada_core::types::address::Address;
+use namada_core::types::address::{Address, MASP};
 use namada_core::types::storage::KeySeg;
 use namada_core::types::token;
 pub use namada_core::types::token::*;
@@ -38,7 +38,7 @@ pub fn handle_masp_tx(
     transfer: &Transfer,
     shielded: &Transaction,
 ) -> TxResult {
-    let masp_addr = address::masp();
+    let masp_addr = MASP;
     ctx.insert_verifier(&masp_addr)?;
     let head_tx_key = storage::Key::from(masp_addr.to_db_key())
         .push(&HEAD_TX_KEY.to_owned())

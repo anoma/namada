@@ -18,7 +18,6 @@ use namada_sdk::masp::verify_shielded_tx;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
-use tracing::log::debug;
 
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
@@ -86,7 +85,8 @@ fn valid_transfer_amount(
         tracing::debug!(
             "The unshielded amount {} disagrees with the calculated masp \
              transparented value {}",
-            unshielded_transfer_value, reporeted_transparent_value
+            unshielded_transfer_value,
+            reporeted_transparent_value
         );
     }
     res

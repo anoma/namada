@@ -57,6 +57,8 @@ pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
+/// Internal MASP address
+pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 
 /// Raw strings used to produce internal addresses. All the strings must begin
 /// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
@@ -411,7 +413,7 @@ impl TryFrom<Signer> for Address {
         Address::decode(signer.as_ref()).or(
             match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
             {
-                Ok(_) => Ok(masp()),
+                Ok(_) => Ok(MASP),
                 Err(_) => Err(DecodeError::InvalidInnerEncodingStr(format!(
                     "Invalid address for IBC transfer: {signer}"
                 ))),
@@ -625,11 +627,6 @@ pub fn apfel() -> Address {
 /// Temporary helper for testing
 pub fn kartoffel() -> Address {
     Address::decode("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90").expect("The token address decoding shouldn't fail")
-}
-
-/// Temporary helper for testing
-pub fn masp() -> Address {
-    Address::Internal(InternalAddress::Masp)
 }
 
 /// Sentinel secret key to indicate a MASP source

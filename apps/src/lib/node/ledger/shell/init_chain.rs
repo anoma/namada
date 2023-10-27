@@ -286,7 +286,7 @@ where
                     .insert(alias, address.clone());
             }
         }
-        let key_prefix: Key = address::masp().to_db_key().into();
+        let key_prefix: Key = address::MASP.to_db_key().into();
         // Save the current conversion state
         let state_key = key_prefix
             .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
@@ -351,7 +351,7 @@ where
         let vp_code = self.lookup_vp("vp_masp", genesis, vp_cache);
         let code_hash = CodeHash::sha256(&vp_code);
         self.wl_storage
-            .write_bytes(&Key::validity_predicate(&address::masp()), code_hash)
+            .write_bytes(&Key::validity_predicate(&address::MASP), code_hash)
             .unwrap();
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {

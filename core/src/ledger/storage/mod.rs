@@ -41,7 +41,7 @@ use crate::ledger::storage::merkle_tree::{
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::Proof;
 use crate::types::address::{
-    masp, Address, EstablishedAddressGen, InternalAddress,
+    Address, EstablishedAddressGen, InternalAddress, MASP,
 };
 use crate::types::chain::{ChainId, CHAIN_ID_LENGTH};
 use crate::types::hash::{Error as HashError, Hash};
@@ -486,7 +486,7 @@ where
                 .or_else(|_| self.get_merkle_tree(height))?;
             if self.block.height.0 > 0 {
                 // The derived conversions will be placed in MASP address space
-                let masp_addr = masp();
+                let masp_addr = MASP;
                 let key_prefix: Key = masp_addr.to_db_key().into();
                 // Load up the conversions currently being given as query
                 // results

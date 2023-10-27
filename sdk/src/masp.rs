@@ -50,7 +50,7 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::types::address::{masp, Address};
+use namada_core::types::address::{Address, MASP};
 use namada_core::types::masp::{
     BalanceOwner, ExtendedViewingKey, PaymentAddress, TransferSource,
     TransferTarget,
@@ -747,7 +747,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
         Error,
     > {
         // The address of the MASP account
-        let masp_addr = masp();
+        let masp_addr = MASP;
         // Construct the key where last transaction pointer is stored
         let head_tx_key = Key::from(masp_addr.to_db_key())
             .push(&HEAD_TX_KEY.to_owned())
@@ -1347,7 +1347,7 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
             }
         }
         // The address of the MASP account
-        let masp_addr = masp();
+        let masp_addr = MASP;
         // Construct the key for where the transaction ID would be stored
         let pin_key = Key::from(masp_addr.to_db_key())
             .push(&(PIN_KEY_PREFIX.to_owned() + &owner.hash()))
@@ -1927,8 +1927,8 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
                         if let Some(transfer) = transfer {
                             // Skip MASP addresses as they are already handled
                             // by ShieldedContext
-                            if transfer.source == masp()
-                                || transfer.target == masp()
+                            if transfer.source == MASP
+                                || transfer.target == MASP
                             {
                                 continue;
                             }
