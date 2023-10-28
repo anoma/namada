@@ -1042,6 +1042,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1063,7 +1064,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root.clone(), BlockHeight::from(1)).serialize_to_vec(),
+                (signed_root.clone(), written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1252,6 +1253,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1273,7 +1275,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(1)).serialize_to_vec(),
+                (signed_root, written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1425,6 +1427,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1446,7 +1449,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(1)).serialize_to_vec(),
+                (signed_root, written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 

@@ -302,20 +302,16 @@ impl fmt::Display for StoreType {
 /// storage
 pub fn base_tree_key_prefix(height: BlockHeight) -> Key {
     Key::from(height.to_db_key())
-        .push(&"tree".to_owned())
-        .expect("Creating a key shouldn't fail")
-        .push(&StoreType::Base.to_string())
-        .expect("Creating a key shouldn't fail")
+        .with_segment("tree".to_owned())
+        .with_segment(StoreType::Base.to_string())
 }
 
 /// Get the key prefix with which the subtree root and store are stored in the
 /// storage
 pub fn subtree_key_prefix(st: &StoreType, epoch: Epoch) -> Key {
     Key::from(epoch.to_db_key())
-        .push(&"tree".to_owned())
-        .expect("Creating a key shouldn't fail")
-        .push(&st.to_string())
-        .expect("Creating a key shouldn't fail")
+        .with_segment("tree".to_owned())
+        .with_segment(st.to_string())
 }
 
 /// Merkle tree storage

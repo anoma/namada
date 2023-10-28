@@ -783,9 +783,8 @@ impl DB for RocksDB {
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
                 let key_prefix = subtree_key_prefix(st, epoch);
-                let root_key = key_prefix
-                    .push(&"root".to_owned())
-                    .map_err(Error::KeyError)?;
+                let root_key =
+                    key_prefix.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self
                     .0
                     .get_cf(block_cf, &root_key.to_string())
@@ -796,9 +795,7 @@ impl DB for RocksDB {
                         types::decode(bytes).map_err(Error::CodingError)?,
                     );
                 }
-                let store_key = key_prefix
-                    .push(&"store".to_owned())
-                    .map_err(Error::KeyError)?;
+                let store_key = key_prefix.with_segment("store".to_owned());
                 if let Some(bytes) = self
                     .0
                     .get_cf(block_cf, &store_key.to_string())
@@ -946,22 +943,19 @@ impl DB for RocksDB {
         {
             for st in StoreType::iter() {
                 if *st == StoreType::Base || is_full_commit {
-                    let prefix_key = if *st == StoreType::Base {
+                    let key_prefix = if *st == StoreType::Base {
                         base_tree_key_prefix(height)
                     } else {
                         subtree_key_prefix(st, epoch)
                     };
-                    let root_key = prefix_key
-                        .push(&"root".to_owned())
-                        .map_err(Error::KeyError)?;
+                    let root_key =
+                        key_prefix.clone().with_segment("root".to_owned());
                     batch.0.put_cf(
                         block_cf,
                         root_key.to_string(),
                         types::encode(merkle_tree_stores.root(st)),
                     );
-                    let store_key = prefix_key
-                        .push(&"store".to_owned())
-                        .map_err(Error::KeyError)?;
+                    let store_key = key_prefix.with_segment("store".to_owned());
                     batch.0.put_cf(
                         block_cf,
                         store_key.to_string(),
@@ -1076,14 +1070,12 @@ impl DB for RocksDB {
             .map(|st| vec![st])
             .unwrap_or(StoreType::iter().copied().collect());
         for st in store_types {
-            let prefix_key = if st == StoreType::Base {
+            let key_prefix = if st == StoreType::Base {
                 base_tree_key_prefix(base_height)
             } else {
                 subtree_key_prefix(&st, epoch)
             };
-            let root_key = prefix_key
-                .push(&"root".to_owned())
-                .map_err(Error::KeyError)?;
+            let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self
                 .0
                 .get_cf(block_cf, root_key.to_string())
@@ -1096,9 +1088,7 @@ impl DB for RocksDB {
                 None => return Ok(None),
             }
 
-            let store_key = prefix_key
-                .push(&"store".to_owned())
-                .map_err(Error::KeyError)?;
+            let store_key = key_prefix.with_segment("store".to_owned());
             let bytes = self
                 .0
                 .get_cf(block_cf, store_key.to_string())
@@ -1398,14 +1388,10 @@ impl DB for RocksDB {
         epoch: Epoch,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let prefix_key = subtree_key_prefix(store_type, epoch);
-        let root_key = prefix_key
-            .push(&"root".to_owned())
-            .map_err(Error::KeyError)?;
+        let key_prefix = subtree_key_prefix(store_type, epoch);
+        let root_key = key_prefix.clone().with_segment("root".to_owned());
         batch.0.delete_cf(block_cf, root_key.to_string());
-        let store_key = prefix_key
-            .push(&"store".to_owned())
-            .map_err(Error::KeyError)?;
+        let store_key = key_prefix.with_segment("store".to_owned());
         batch.0.delete_cf(block_cf, store_key.to_string());
         Ok(())
     }
