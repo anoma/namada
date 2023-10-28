@@ -161,25 +161,19 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Get the client update time
     fn client_update_time(&self, client_id: &ClientId) -> Result<Timestamp> {
         let key = storage::client_update_timestamp_key(client_id);
-        match self.read_bytes(&key)? {
-            Some(value) => {
-                let time = TmTime::decode_vec(&value).map_err(|_| {
-                    ContextError::from(ClientError::Other {
-                        description: format!(
-                            "Decoding the client update time failed: ID \
-                             {client_id}",
-                        ),
-                    })
-                })?;
-                Ok(time.into())
-            }
-            None => Err(ClientError::ClientSpecific {
+        let value =
+            self.read_bytes(&key)?.ok_or(ClientError::ClientSpecific {
                 description: format!(
                     "The client update time doesn't exist: ID {client_id}",
                 ),
-            }
-            .into()),
-        }
+            })?;
+        let time =
+            TmTime::decode_vec(&value).map_err(|_| ClientError::Other {
+                description: format!(
+                    "Decoding the client update time failed: ID {client_id}",
+                ),
+            })?;
+        Ok(time.into())
     }
 
     /// Store the client update time
@@ -189,41 +183,36 @@ pub trait IbcCommonContext: IbcStorageContext {
         timestamp: Timestamp,
     ) -> Result<()> {
         let key = storage::client_update_timestamp_key(client_id);
-        match timestamp.into_tm_time() {
-            Some(time) => self
-                .write_bytes(
-                    &key,
-                    time.encode_vec().expect("encoding shouldn't fail"),
-                )
-                .map_err(ContextError::from),
-            None => Err(ContextError::ClientError(ClientError::Other {
-                description: format!(
-                    "The client timestamp is invalid: ID {client_id}",
-                ),
-            })),
-        }
+        let time = timestamp.into_tm_time().ok_or(ClientError::Other {
+            description: format!(
+                "The client timestamp is invalid: ID {client_id}",
+            ),
+        })?;
+        self.write_bytes(
+            &key,
+            time.encode_vec().expect("encoding shouldn't fail"),
+        )
+        .map_err(ContextError::from)
     }
 
     /// Get the client update height
     fn client_update_height(&self, client_id: &ClientId) -> Result<Height> {
         let key = storage::client_update_height_key(client_id);
-        match self.read_bytes(&key)? {
-            Some(value) => Height::decode_vec(&value).map_err(|_| {
-                ClientError::Other {
-                    description: format!(
-                        "Decoding the client update height failed: ID \
-                         {client_id}",
-                    ),
-                }
-                .into()
-            }),
-            None => Err(ClientError::ClientSpecific {
+        let value = self.read_bytes(&key)?.ok_or({
+            ClientError::ClientSpecific {
                 description: format!(
                     "The client update height doesn't exist: ID {client_id}",
                 ),
             }
-            .into()),
-        }
+        })?;
+        Height::decode_vec(&value).map_err(|_| {
+            ClientError::Other {
+                description: format!(
+                    "Decoding the client update height failed: ID {client_id}",
+                ),
+            }
+            .into()
+        })
     }
 
     /// Get the timestamp on this chain
@@ -290,20 +279,19 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Get the ConnectionEnd
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
         let key = storage::connection_key(conn_id);
-        match self.read_bytes(&key)? {
-            Some(value) => ConnectionEnd::decode_vec(&value).map_err(|_| {
-                ConnectionError::Other {
-                    description: format!(
-                        "Decoding the connection end failed: ID {conn_id}",
-                    ),
-                }
-                .into()
-            }),
-            None => Err(ConnectionError::ConnectionNotFound {
+        let value = self.read_bytes(&key)?.ok_or(
+            ConnectionError::ConnectionNotFound {
                 connection_id: conn_id.clone(),
+            },
+        )?;
+        ConnectionEnd::decode_vec(&value).map_err(|_| {
+            ConnectionError::Other {
+                description: format!(
+                    "Decoding the connection end failed: ID {conn_id}",
+                ),
             }
-            .into()),
-        }
+            .into()
+        })
     }
 
     /// Store the ConnectionEnd
@@ -338,21 +326,20 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<ChannelEnd> {
         let key = storage::channel_key(port_id, channel_id);
-        match self.read_bytes(&key)? {
-            Some(value) => ChannelEnd::decode_vec(&value).map_err(|_| {
-                ChannelError::Other {
-                    description: format!(
-                        "Decoding the channel end failed: Key {key}",
-                    ),
-                }
-                .into()
-            }),
-            None => Err(ChannelError::ChannelNotFound {
-                port_id: port_id.clone(),
-                channel_id: channel_id.clone(),
+        let value =
+            self.read_bytes(&key)?
+                .ok_or(ChannelError::ChannelNotFound {
+                    port_id: port_id.clone(),
+                    channel_id: channel_id.clone(),
+                })?;
+        ChannelEnd::decode_vec(&value).map_err(|_| {
+            ChannelError::Other {
+                description: format!(
+                    "Decoding the channel end failed: Key {key}",
+                ),
             }
-            .into()),
-        }
+            .into()
+        })
     }
 
     /// Store the ChannelEnd
@@ -592,16 +579,8 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Read a counter
     fn read_counter(&self, key: &Key) -> Result<u64> {
-        match self.read_bytes(key)? {
-            Some(value) => {
-                let value: [u8; 8] =
-                    value.try_into().map_err(|_| ClientError::Other {
-                        description: format!(
-                            "The counter value wasn't u64: Key {key}",
-                        ),
-                    })?;
-                Ok(u64::from_be_bytes(value))
-            }
+        match self.read::<u64>(key)? {
+            Some(counter) => Ok(counter),
             None => unreachable!("the counter should be initialized"),
         }
     }
@@ -613,8 +592,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             u64::checked_add(count, 1).ok_or_else(|| ClientError::Other {
                 description: format!("The counter overflow: Key {key}"),
             })?;
-        self.write_bytes(key, count.to_be_bytes())
-            .map_err(ContextError::from)
+        self.write(key, count).map_err(ContextError::from)
     }
 
     /// Write the IBC denom. The given address could be a non-Namada token.

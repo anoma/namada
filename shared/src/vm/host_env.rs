@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::num::TryFromIntError;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use namada_core::ledger::gas::{GasMetering, TxGasMeter};
