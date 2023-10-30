@@ -2493,10 +2493,7 @@ where
     CA: WasmCacheAccess,
 {
     let tx_index = unsafe { ctx.tx_index.get() };
-    ibc_tx_charge_gas(
-        ctx,
-        crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
-    )?;
+    ibc_tx_charge_gas(ctx, crate::vm::host_env::gas::DATA_ACCESS_GAS_PER_BYTE)?;
     Ok(TxIndex(tx_index.0))
 }
 

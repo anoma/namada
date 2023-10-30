@@ -27,6 +27,7 @@ use namada::ibc::clients::ics07_tendermint::client_state::{
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use namada::ibc::clients::ics07_tendermint::trust_threshold::TrustThreshold;
 use namada::ibc::core::ics02_client::client_type::ClientType;
+use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
 use namada::ibc::core::ics03_connection::connection::{
     ConnectionEnd, Counterparty, State as ConnectionState,
 };
@@ -281,75 +282,7 @@ impl BenchShell {
         .unwrap();
     }
 
-    pub fn init_ibc_channel(&mut self) {
-        // Set connection open
-        let client_id = ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
-            1,
-        )
-        .unwrap();
-        let connection = ConnectionEnd::new(
-            ConnectionState::Open,
-            client_id.clone(),
-            Counterparty::new(
-                client_id,
-                Some(ConnectionId::new(1)),
-                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-            ),
-            vec![Version::default()],
-            std::time::Duration::new(100, 0),
-        )
-        .unwrap();
-
-        let addr_key =
-            Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
-
-        let connection_key = connection_key(&NamadaConnectionId::new(1));
-        self.wl_storage
-            .storage
-            .write(&connection_key, connection.encode_vec())
-            .unwrap();
-
-        // Set port
-        let port_key = port_key(&NamadaPortId::transfer());
-
-        let index_key = addr_key
-            .join(&Key::from("capabilities/index".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&index_key, 1u64.to_be_bytes())
-            .unwrap();
-        self.wl_storage
-            .storage
-            .write(&port_key, 1u64.to_be_bytes())
-            .unwrap();
-        let cap_key =
-            addr_key.join(&Key::from("capabilities/1".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&cap_key, PortId::transfer().as_bytes())
-            .unwrap();
-
-        // Set Channel open
-        let counterparty = ChannelCounterparty::new(
-            PortId::transfer(),
-            Some(ChannelId::new(5)),
-        );
-        let channel = ChannelEnd::new(
-            State::Open,
-            Order::Unordered,
-            counterparty,
-            vec![ConnectionId::new(1)],
-            ChannelVersion::new("ics20-1".to_string()),
-        )
-        .unwrap();
-        let channel_key =
-            channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
-        self.wl_storage
-            .storage
-            .write(&channel_key, channel.encode_vec())
-            .unwrap();
-
+    pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
         // Set client state
         let client_id = ClientId::new(
             ClientType::new("01-tendermint".to_string()).unwrap(),
@@ -385,6 +318,81 @@ impl BenchShell {
             .storage
             .write(&client_state_key, bytes)
             .expect("write failed");
+
+        client_id
+    }
+
+    pub fn init_ibc_connection(&mut self) -> (Key, ClientId) {
+        // Set client state
+        let addr_key =
+            Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
+        let client_id = self.init_ibc_client_state(addr_key.clone());
+
+        // Set connection open
+        let connection = ConnectionEnd::new(
+            ConnectionState::Open,
+            client_id.clone(),
+            Counterparty::new(
+                client_id.clone(),
+                Some(ConnectionId::new(1)),
+                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+            ),
+            vec![Version::default()],
+            std::time::Duration::new(100, 0),
+        )
+        .unwrap();
+
+        let connection_key = connection_key(&NamadaConnectionId::new(1));
+        self.wl_storage
+            .storage
+            .write(&connection_key, connection.encode_vec())
+            .unwrap();
+
+        // Set port
+        let port_key = port_key(&NamadaPortId::transfer());
+
+        let index_key = addr_key
+            .join(&Key::from("capabilities/index".to_string().to_db_key()));
+        self.wl_storage
+            .storage
+            .write(&index_key, 1u64.to_be_bytes())
+            .unwrap();
+        self.wl_storage
+            .storage
+            .write(&port_key, 1u64.to_be_bytes())
+            .unwrap();
+        let cap_key =
+            addr_key.join(&Key::from("capabilities/1".to_string().to_db_key()));
+        self.wl_storage
+            .storage
+            .write(&cap_key, PortId::transfer().as_bytes())
+            .unwrap();
+
+        (addr_key, client_id)
+    }
+
+    pub fn init_ibc_channel(&mut self) {
+        let (addr_key, client_id) = self.init_ibc_connection();
+
+        // Set Channel open
+        let counterparty = ChannelCounterparty::new(
+            PortId::transfer(),
+            Some(ChannelId::new(5)),
+        );
+        let channel = ChannelEnd::new(
+            State::Open,
+            Order::Unordered,
+            counterparty,
+            vec![ConnectionId::new(1)],
+            ChannelVersion::new("ics20-1".to_string()),
+        )
+        .unwrap();
+        let channel_key =
+            channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
+        self.wl_storage
+            .storage
+            .write(&channel_key, channel.encode_vec())
+            .unwrap();
 
         // Set consensus state
         let now: namada::tendermint::Time =
@@ -427,8 +435,10 @@ pub fn generate_tx(
         namada::types::transaction::DecryptedTx::Decrypted,
     ));
 
-    // NOTE: don't use the hash to avoid computing the cost of loading the wasm
-    // code
+    // NOTE: here we use the code hash to avoid including the cost for the wasm
+    // validation. The wasm codes (both txs and vps) are always in cache so we
+    // don't end up computing the cost to read and compile the code which is the
+    // desired behaviour FIXME: actually use the hash
     tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
         WASM_DIR,
         wasm_code_path,
