@@ -120,7 +120,6 @@ regex.workspace = true
 reqwest.workspace = true
 ripemd.workspace = true
 rlimit.workspace = true
-rocksdb.workspace = true
 rpassword.workspace = true
 serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
@@ -143,9 +142,14 @@ tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tra
 tracing.workspace = true
 winapi.workspace = true
 zeroize.workspace = true
-
 warp = "0.3.2"
 bytes = "1.1.0"
+
+[target.'cfg(not(windows))'.dependencies]
+rocksdb = { workspace = true, features = ['jemalloc'] } # jemalloc is not supported on windows
+
+[target.'cfg(windows)'.dependencies]
+rocksdb = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
