@@ -395,7 +395,7 @@ moniker = "technodrome"
 #
 # Deprecated: this key will be removed and BlockSync will be enabled
 # unconditionally in the next major release.
-block_sync = true
+fast_sync = true
 
 # Database backend: goleveldb | cleveldb | boltdb | rocksdb | badgerdb
 # * goleveldb (github.com/syndtr/goleveldb - most popular implementation)
@@ -736,7 +736,7 @@ chunk_fetchers = "4"
 #######################################################
 ###       Block Sync Configuration Options          ###
 #######################################################
-[blocksync]
+[fastsync]
 
 # Block Sync version to use:
 #
