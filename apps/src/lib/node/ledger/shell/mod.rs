@@ -1498,6 +1498,7 @@ mod test_utils {
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
+    use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{
         update_allowed_conversions, LastBlock, Sha256Hasher,
@@ -1518,11 +1519,9 @@ mod test_utils {
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
-    use namada::ledger::parameters::{EpochDuration, Parameters};
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-
     use crate::facade::tendermint_proto::abci::{
         Misbehavior, RequestInitChain, RequestPrepareProposal,
         RequestProcessProposal,
@@ -2038,7 +2037,10 @@ mod test_utils {
             .new_epoch(BlockHeight(1));
         // initialize parameter storage
         let params = Parameters {
-            epoch_duration: EpochDuration { min_num_of_blocks: 1, min_duration: DurationSecs(3600) },
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 1,
+                min_duration: DurationSecs(3600),
+            },
             max_expected_time_per_block: DurationSecs(3600),
             max_proposal_bytes: Default::default(),
             max_block_gas: 100,
@@ -2055,7 +2057,9 @@ mod test_utils {
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
         };
-        params.init_storage(&mut shell.wl_storage).expect("Test failed");
+        params
+            .init_storage(&mut shell.wl_storage)
+            .expect("Test failed");
         // make wl_storage to update conversion for a new epoch
         let token_params = token::Parameters {
             max_reward_rate: Default::default(),
@@ -2068,17 +2072,36 @@ mod test_utils {
         for (token, _) in address::tokens() {
             let addr = address::gen_deterministic_established_address(token);
             token_params.init_storage(&addr, &mut shell.wl_storage);
-            shell.wl_storage.write(&token::minted_balance_key(&addr), token::Amount::zero()).unwrap();
-            shell.wl_storage.storage.conversion_state.tokens.insert(
-                token.to_string(),
-                addr,
-            );
+            shell
+                .wl_storage
+                .write(&token::minted_balance_key(&addr), token::Amount::zero())
+                .unwrap();
+            shell
+                .wl_storage
+                .storage
+                .conversion_state
+                .tokens
+                .insert(token.to_string(), addr);
         }
-        shell.wl_storage.storage.conversion_state.tokens.insert("nam".to_string(), shell.wl_storage.storage.native_token.clone());
-        token_params.init_storage(&shell.wl_storage.storage.native_token.clone(), &mut shell.wl_storage);
-        // final adjustments so that updating allowed conversions doesn't panic with
-        // divide by zero
-        shell.wl_storage.write(&token::minted_balance_key(&shell.wl_storage.storage.native_token.clone()), token::Amount::zero()).unwrap();
+        shell.wl_storage.storage.conversion_state.tokens.insert(
+            "nam".to_string(),
+            shell.wl_storage.storage.native_token.clone(),
+        );
+        token_params.init_storage(
+            &shell.wl_storage.storage.native_token.clone(),
+            &mut shell.wl_storage,
+        );
+        // final adjustments so that updating allowed conversions doesn't panic
+        // with divide by zero
+        shell
+            .wl_storage
+            .write(
+                &token::minted_balance_key(
+                    &shell.wl_storage.storage.native_token.clone(),
+                ),
+                token::Amount::zero(),
+            )
+            .unwrap();
         shell.wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
