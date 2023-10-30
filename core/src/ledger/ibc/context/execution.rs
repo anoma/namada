@@ -1,7 +1,8 @@
 //! ExecutionContext implementation for IBC
 
-use super::super::IbcCommonContext;
-use super::{AnyClientState, AnyConsensusState, IbcContext};
+use super::client::{AnyClientState, AnyConsensusState};
+use super::common::IbcCommonContext;
+use super::IbcContext;
 use crate::ibc::core::events::IbcEvent;
 use crate::ibc::core::ics02_client::ClientExecutionContext;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;

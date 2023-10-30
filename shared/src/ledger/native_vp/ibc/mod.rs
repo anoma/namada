@@ -1432,6 +1432,15 @@ mod tests {
             .expect("write failed");
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);

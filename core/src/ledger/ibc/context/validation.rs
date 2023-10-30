@@ -1,6 +1,7 @@
 //! ValidationContext implementation for IBC
 
-use super::super::IbcCommonContext;
+use super::client::{AnyClientState, AnyConsensusState};
+use super::common::IbcCommonContext;
 use super::IbcContext;
 use crate::ibc::clients::ics07_tendermint::{
     CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
@@ -28,7 +29,6 @@ use crate::ibc::hosts::tendermint::ValidateSelfClientContext;
 use crate::ibc::mock::client_state::MockClientState;
 use crate::ibc::{Height, Signer};
 use crate::ibc_proto::google::protobuf::Any;
-use crate::ledger::ibc::context::{AnyClientState, AnyConsensusState};
 use crate::ledger::ibc::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
@@ -73,6 +73,28 @@ where
     }
 }
 
+#[cfg(feature = "ibc-mocks")]
+use crate::ibc::mock::client_state::MockClientContext;
+#[cfg(feature = "ibc-mocks")]
+impl<C> MockClientContext for IbcContext<C>
+where
+    C: IbcCommonContext,
+{
+    type AnyConsensusState = AnyConsensusState;
+    type ConversionError = ClientError;
+
+    fn consensus_state(
+        &self,
+        client_cons_state_path: &ClientConsensusStatePath,
+    ) -> Result<Self::AnyConsensusState, ContextError> {
+        ValidationContext::consensus_state(self, client_cons_state_path)
+    }
+
+    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+        ValidationContext::host_timestamp(self)
+    }
+}
+
 impl<C> ValidationContext for IbcContext<C>
 where
     C: IbcCommonContext,
@@ -97,7 +119,7 @@ where
         &self,
         client_state: Any,
     ) -> Result<Self::AnyClientState, ContextError> {
-        self.inner.borrow().decode_client_state(client_state)
+        client_state.try_into().map_err(ContextError::from)
     }
 
     fn consensus_state(

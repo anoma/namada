@@ -5,8 +5,8 @@ use core::time::Duration;
 use prost::Message;
 use sha2::Digest;
 
+use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
 use crate::ibc::core::ics02_client::error::ClientError;
@@ -27,7 +27,6 @@ use crate::ibc::core::timestamp::Timestamp;
 use crate::ibc::core::ContextError;
 use crate::ibc_proto::google::protobuf::Any;
 use crate::ibc_proto::protobuf::Protobuf;
-use crate::ledger::ibc::context::{AnyClientState, AnyConsensusState};
 use crate::ledger::ibc::storage;
 use crate::ledger::parameters::storage::get_max_expected_time_per_block_key;
 use crate::ledger::storage_api;
@@ -45,11 +44,10 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn client_state(&self, client_id: &ClientId) -> Result<AnyClientState> {
         let key = storage::client_state_key(client_id);
         match self.read_bytes(&key)? {
-            Some(value) => {
-                let any =
-                    Any::decode(&value[..]).map_err(ClientError::Decode)?;
-                self.decode_client_state(any)
-            }
+            Some(value) => Any::decode(&value[..])
+                .map_err(ClientError::Decode)?
+                .try_into()
+                .map_err(ContextError::from),
             None => Err(ClientError::ClientStateNotFound {
                 client_id: client_id.clone(),
             }
@@ -64,18 +62,8 @@ pub trait IbcCommonContext: IbcStorageContext {
         client_state: AnyClientState,
     ) -> Result<()> {
         let key = storage::client_state_key(client_id);
-        let bytes = Protobuf::<Any>::encode_vec(&client_state);
+        let bytes = Any::from(client_state).encode_to_vec();
         self.write_bytes(&key, bytes).map_err(ContextError::from)
-    }
-
-    /// Decode ClientState from Any
-    fn decode_client_state(&self, client_state: Any) -> Result<AnyClientState> {
-        let cs = TmClientState::try_from(client_state).map_err(|_| {
-            ContextError::from(ClientError::ClientSpecific {
-                description: "Unknown client state".to_string(),
-            })
-        })?;
-        Ok(cs)
     }
 
     /// Get the ConsensusState
@@ -86,11 +74,10 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<AnyConsensusState> {
         let key = storage::consensus_state_key(client_id, height);
         match self.read_bytes(&key)? {
-            Some(value) => {
-                let any =
-                    Any::decode(&value[..]).map_err(ClientError::Decode)?;
-                self.decode_consensus_state(any)
-            }
+            Some(value) => Any::decode(&value[..])
+                .map_err(ClientError::Decode)?
+                .try_into()
+                .map_err(ContextError::from),
             None => Err(ClientError::ConsensusStateNotFound {
                 client_id: client_id.clone(),
                 height,
@@ -111,27 +98,15 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
-    /// Decode ConsensusState from Any
-    fn decode_consensus_state(
-        &self,
-        consensus_state: Any,
-    ) -> Result<AnyConsensusState> {
-        let cs = TmConsensusState::try_from(consensus_state).map_err(|_| {
-            ContextError::from(ClientError::ClientSpecific {
-                description: "Unknown consensus state".to_string(),
-            })
-        })?;
-        Ok(cs.into())
-    }
-
     /// Decode ConsensusState from bytes
     fn decode_consensus_state_value(
         &self,
         consensus_state: Vec<u8>,
     ) -> Result<AnyConsensusState> {
-        let any =
-            Any::decode(&consensus_state[..]).map_err(ClientError::Decode)?;
-        self.decode_consensus_state(any)
+        Any::decode(&consensus_state[..])
+            .map_err(ClientError::Decode)?
+            .try_into()
+            .map_err(ContextError::from)
     }
 
     /// Get the next consensus state after the given height
@@ -158,7 +133,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         lowest_height_value
-            .map(|(_, value)| self.decode_consensus_state_value(value))
+            .map(|(_, value)| value.try_into().map_err(ContextError::from))
             .transpose()
     }
 
@@ -187,7 +162,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         highest_height_value
-            .map(|(_, value)| self.decode_consensus_state_value(value))
+            .map(|(_, value)| value.try_into().map_err(ContextError::from))
             .transpose()
     }
 
@@ -221,7 +196,8 @@ pub trait IbcCommonContext: IbcStorageContext {
                 "The client timestamp is invalid: ID {client_id}",
             ),
         })?;
-        self.write_bytes(&key, time.encode_vec()).map_err(ContextError::from)
+        self.write_bytes(&key, time.encode_vec())
+            .map_err(ContextError::from)
     }
 
     /// Get the client update height

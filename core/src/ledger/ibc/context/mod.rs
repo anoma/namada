@@ -1,5 +1,6 @@
 //! IBC Contexts
 
+pub mod client;
 pub mod common;
 pub mod execution;
 pub mod router;
@@ -13,10 +14,6 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
-use ibc_derive::ConsensusState;
-
-use crate::ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
-use crate::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use crate::ibc::core::ics23_commitment::specs::ProofSpecs;
 use crate::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
 
@@ -66,32 +63,6 @@ impl Default for ValidationParams {
             proof_specs: ProofSpecs::default(),
             unbonding_period: Duration::default(),
             upgrade_path: Vec::default(),
-        }
-    }
-}
-
-// TODO: #[derive(ClientState)]
-type AnyClientState = TmClientState;
-
-/// ConsensusState for light clients
-#[derive(ConsensusState)]
-pub enum AnyConsensusState {
-    /// Tendermint consensus state
-    Tendermint(TmConsensusState),
-}
-
-impl From<TmConsensusState> for AnyConsensusState {
-    fn from(cs: TmConsensusState) -> Self {
-        Self::Tendermint(cs)
-    }
-}
-
-impl TryFrom<AnyConsensusState> for TmConsensusState {
-    type Error = crate::ibc::core::ics02_client::error::ClientError;
-
-    fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
-        match any {
-            AnyConsensusState::Tendermint(cs) => Ok(cs),
         }
     }
 }
