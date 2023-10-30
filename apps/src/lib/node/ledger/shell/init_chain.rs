@@ -336,7 +336,6 @@ where
                     total_token_balance,
                 )
                 .unwrap();
-
         }
     }
 

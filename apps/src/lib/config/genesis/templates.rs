@@ -210,9 +210,8 @@ pub struct Tokens {
 )]
 pub struct TokenConfig {
     pub denom: Denomination,
-    pub parameters: token::Parameters
+    pub parameters: token::Parameters,
 }
-
 
 #[derive(
     Clone,
