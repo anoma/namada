@@ -25,6 +25,7 @@ env:
   SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
   AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+  AWS_REGION: us-east-1
 
 jobs:
   build:
