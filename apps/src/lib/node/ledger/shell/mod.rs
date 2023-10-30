@@ -1514,13 +1514,15 @@ mod test_utils {
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::DateTimeUtc;
+    use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
+    use namada::ledger::parameters::{EpochDuration, Parameters};
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+
     use crate::facade::tendermint_proto::abci::{
         Misbehavior, RequestInitChain, RequestPrepareProposal,
         RequestProcessProposal,
@@ -2034,14 +2036,50 @@ mod test_utils {
             .block
             .pred_epochs
             .new_epoch(BlockHeight(1));
+        // initialize parameter storage
+        let params = Parameters {
+            epoch_duration: EpochDuration { min_num_of_blocks: 1, min_duration: DurationSecs(3600) },
+            max_expected_time_per_block: DurationSecs(3600),
+            max_proposal_bytes: Default::default(),
+            max_block_gas: 100,
+            vp_whitelist: vec![],
+            tx_whitelist: vec![],
+            implicit_vp_code_hash: Default::default(),
+            epochs_per_year: 365,
+            max_signatures_per_transaction: 10,
+            pos_gain_p: Default::default(),
+            pos_gain_d: Default::default(),
+            staked_ratio: Default::default(),
+            pos_inflation_amount: Default::default(),
+            fee_unshielding_gas_limit: 0,
+            fee_unshielding_descriptions_limit: 0,
+            minimum_gas_price: Default::default(),
+        };
+        params.init_storage(&mut shell.wl_storage).expect("Test failed");
+        // make wl_storage to update conversion for a new epoch
+        let token_params = token::Parameters {
+            max_reward_rate: Default::default(),
+            kd_gain_nom: Default::default(),
+            kp_gain_nom: Default::default(),
+            locked_ratio_target: Default::default(),
+        };
         // Insert a map assigning random addresses to each token alias.
         // Needed for storage but not for this test.
         for (token, _) in address::tokens() {
+            let addr = address::gen_deterministic_established_address(token);
+            token_params.init_storage(&addr, &mut shell.wl_storage);
+            shell.wl_storage.write(&token::minted_balance_key(&addr), token::Amount::zero()).unwrap();
             shell.wl_storage.storage.conversion_state.tokens.insert(
                 token.to_string(),
-                address::gen_deterministic_established_address(token),
+                addr,
             );
         }
+        shell.wl_storage.storage.conversion_state.tokens.insert("nam".to_string(), shell.wl_storage.storage.native_token.clone());
+        token_params.init_storage(&shell.wl_storage.storage.native_token.clone(), &mut shell.wl_storage);
+        // final adjustments so that updating allowed conversions doesn't panic with
+        // divide by zero
+        shell.wl_storage.write(&token::minted_balance_key(&shell.wl_storage.storage.native_token.clone()), token::Amount::zero()).unwrap();
+        shell.wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");
