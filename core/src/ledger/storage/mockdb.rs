@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use itertools::Either;
 
 use super::merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
@@ -404,20 +405,21 @@ impl DB for MockDB {
     ) -> Result<Option<MerkleTreeStoresRead>> {
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let store_types = store_type
-            .map(|st| vec![st])
-            .unwrap_or(StoreType::iter().copied().collect());
+            .as_ref()
+            .map(|st| Either::Left(std::iter::once(st)))
+            .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if st == StoreType::Base {
+            let key_prefix = if *st == StoreType::Base {
                 base_tree_key_prefix(base_height)
             } else {
-                subtree_key_prefix(&st, epoch)
+                subtree_key_prefix(st, epoch)
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self.0.borrow().get(&root_key.to_string()).cloned();
             match bytes {
                 Some(b) => {
                     let root = types::decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_root(&st, root);
+                    merkle_tree_stores.set_root(st, root);
                 }
                 None => return Ok(None),
             }
