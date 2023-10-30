@@ -549,6 +549,7 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
+
         shell.update_eth_oracle();
         shell
     }
