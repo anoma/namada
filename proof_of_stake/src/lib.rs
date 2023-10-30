@@ -4467,7 +4467,7 @@ where
                     &validator,
                     -slash_amount.change(),
                     epoch,
-                    None,
+                    Some(0),
                 )?;
             }
         }
@@ -5310,7 +5310,7 @@ where
             &params,
             dest_validator,
             amount_after_slashing.change(),
-            pipeline_epoch,
+            current_epoch,
             None,
         )?;
     }
