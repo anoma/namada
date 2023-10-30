@@ -1550,7 +1550,7 @@ fn test_validator_sets() {
         &params,
         &val1,
         -unbond.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
@@ -1753,7 +1753,7 @@ fn test_validator_sets() {
         &params,
         &val6,
         bond.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
@@ -2035,7 +2035,7 @@ fn test_validator_sets_swap() {
         &params,
         &val2,
         bond2.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
@@ -2054,7 +2054,7 @@ fn test_validator_sets_swap() {
         &params,
         &val3,
         bond3.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
@@ -2088,7 +2088,7 @@ fn test_validator_sets_swap() {
         &params,
         &val2,
         bonds.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
@@ -2107,7 +2107,7 @@ fn test_validator_sets_swap() {
         &params,
         &val3,
         bonds.change(),
-        pipeline_epoch,
+        epoch,
         None,
     )
     .unwrap();
