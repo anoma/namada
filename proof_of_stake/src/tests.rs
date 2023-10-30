@@ -246,6 +246,22 @@ proptest! {
 }
 
 proptest! {
+    // Generate arb valid input for `test_slashed_bond_amount_aux`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_slashed_bond_amount(
+
+    genesis_validators in arb_genesis_validators(4..5, None),
+
+    ) {
+        test_slashed_bond_amount_aux(genesis_validators)
+    }
+}
+
+proptest! {
     // Generate arb valid input for `test_log_block_rewards_aux`
     #![proptest_config(Config {
         cases: 1,
@@ -6277,4 +6293,266 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     // Rewards accumulator must be cleared out
     let rewards_handle = crate::rewards_accumulator_handle();
     assert!(rewards_handle.is_empty(&s).unwrap());
+}
+
+fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
+    let mut storage = TestWlStorage::default();
+    let params = OwnedPosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+
+    let init_tot_stake = validators
+        .clone()
+        .into_iter()
+        .fold(token::Amount::zero(), |acc, v| acc + v.tokens);
+    let val1_init_stake = validators[0].tokens;
+
+    let mut validators = validators;
+    validators[0].tokens = (init_tot_stake - val1_init_stake) / 30;
+
+    // Genesis
+    let mut current_epoch = storage.storage.block.epoch;
+    let params = test_init_genesis(
+        &mut storage,
+        params,
+        validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    let validator1 = validators[0].address.clone();
+    let validator2 = validators[1].address.clone();
+
+    // Get a delegator with some tokens
+    let staking_token = staking_token_address(&storage);
+    let delegator = address::testing::gen_implicit_address();
+    let del_balance = token::Amount::from_uint(1_000_000, 0).unwrap();
+    credit_tokens(&mut storage, &staking_token, &delegator, del_balance)
+        .unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        10_000.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Unbond some from validator 1
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        1_342.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        1_875.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        584.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Advance an epoch to 1
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        384.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Unbond some from validator 1
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        144.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        3_448.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        699.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Advance an epoch to ep 2
+    current_epoch = advance_epoch(&mut storage, &params);
+    super::process_slashes(&mut storage, current_epoch).unwrap();
+
+    // Bond to validator 1
+    super::bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        4_384.into(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Redelegate some from validator 1 -> 2
+    super::redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        1_008.into(),
+    )
+    .unwrap();
+
+    // Unbond some from validator 2
+    super::unbond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        3_500.into(),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    // Advance two epochs to ep 4
+    for _ in 0..2 {
+        current_epoch = advance_epoch(&mut storage, &params);
+        super::process_slashes(&mut storage, current_epoch).unwrap();
+    }
+
+    // Find some slashes committed in various epochs
+    super::slash(
+        &mut storage,
+        &params,
+        current_epoch,
+        Epoch(1),
+        1_u64,
+        SlashType::DuplicateVote,
+        &validator1,
+        current_epoch,
+    )
+    .unwrap();
+    super::slash(
+        &mut storage,
+        &params,
+        current_epoch,
+        Epoch(2),
+        1_u64,
+        SlashType::DuplicateVote,
+        &validator1,
+        current_epoch,
+    )
+    .unwrap();
+    super::slash(
+        &mut storage,
+        &params,
+        current_epoch,
+        Epoch(2),
+        1_u64,
+        SlashType::DuplicateVote,
+        &validator1,
+        current_epoch,
+    )
+    .unwrap();
+    super::slash(
+        &mut storage,
+        &params,
+        current_epoch,
+        Epoch(3),
+        1_u64,
+        SlashType::DuplicateVote,
+        &validator1,
+        current_epoch,
+    )
+    .unwrap();
+
+    // Advance such that these slashes are all processed
+    for _ in 0..params.slash_processing_epoch_offset() {
+        current_epoch = advance_epoch(&mut storage, &params);
+        super::process_slashes(&mut storage, current_epoch).unwrap();
+    }
+
+    for epoch in Epoch::iter_bounds_inclusive(
+        current_epoch + params.pipeline_len,
+        current_epoch + params.pipeline_len,
+    ) {
+        let del_bond_amount = crate::bond_amounts_for_rewards(
+            &storage,
+            &BondId {
+                source: delegator.clone(),
+                validator: validator1.clone(),
+            },
+            epoch,
+            epoch,
+        )
+        .unwrap()
+        .get(&epoch)
+        .cloned()
+        .unwrap_or_default();
+
+        let self_bond_amount = crate::bond_amounts_for_rewards(
+            &storage,
+            &BondId {
+                source: validator1.clone(),
+                validator: validator1.clone(),
+            },
+            epoch,
+            epoch,
+        )
+        .unwrap()
+        .get(&epoch)
+        .cloned()
+        .unwrap_or_default();
+
+        let val_stake =
+            crate::read_validator_stake(&storage, &params, &validator1, epoch)
+                .unwrap();
+        dbg!(&del_bond_amount);
+        dbg!(&self_bond_amount);
+        assert_eq!(val_stake, del_bond_amount + self_bond_amount);
+    }
 }
