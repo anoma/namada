@@ -1411,7 +1411,7 @@ fn check_balances(
     );
     client.exp_string(&expected)?;
     // Check the source balance
-    let expected = ": 900000, owned by albert".to_string();
+    let expected = ": 880000, owned by albert".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
@@ -1475,7 +1475,7 @@ fn check_balances_after_back(
     );
     client.exp_string(&expected)?;
     // Check the source balance
-    let expected = ": 950000, owned by albert".to_string();
+    let expected = ": 930000, owned by albert".to_string();
     client.exp_string(&expected)?;
     client.assert_success();
 
