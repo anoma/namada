@@ -6,19 +6,19 @@
 
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
+use std::fs;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::sleep;
 use std::time::Duration;
-use std::{cmp, fs};
 
 use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
-use crate::core::types::hash::{Hash, HASH_LENGTH};
+use crate::core::types::hash::Hash;
 use crate::types::control_flow::time::{ExponentialBackoff, SleepStrategy};
 use crate::vm::wasm::run::untrusted_wasm_store;
 use crate::vm::wasm::{self, memory};
@@ -61,18 +61,8 @@ enum Compilation {
 struct ModuleCacheScale;
 
 impl WeightScale<Hash, Module> for ModuleCacheScale {
-    fn weight(&self, key: &Hash, value: &Module) -> usize {
-        // We only want to limit the max memory size, not the number of
-        // elements, so we use the size of the module as its scale
-        // and subtract 1 from it to negate the increment of the cache length.
-
-        let size = loupe::size_of_val(&value) + HASH_LENGTH;
-        tracing::debug!(
-            "WASM module hash {}, size including the hash {}",
-            key.to_string(),
-            size
-        );
-        cmp::max(1, size) - 1
+    fn weight(&self, _key: &Hash, _value: &Module) -> usize {
+        1
     }
 }
 
@@ -89,8 +79,10 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         );
         let in_memory = Arc::new(RwLock::new(cache));
         let dir = dir.into();
+
         fs::create_dir_all(&dir)
             .expect("Couldn't create the wasm cache directory");
+
         Self {
             dir,
             progress: Default::default(),
@@ -459,10 +451,6 @@ fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {
     Hash::sha256(code.as_ref())
 }
 
-fn hash_to_store_dir(hash: &Hash) -> PathBuf {
-    PathBuf::from("vp_wasm_cache").join(hash.to_string().to_lowercase())
-}
-
 fn compile(
     code: impl AsRef<[u8]>,
 ) -> Result<(Module, Store), wasm::run::Error> {
@@ -500,18 +488,21 @@ fn file_load_module(dir: impl AsRef<Path>, hash: &Hash) -> (Module, Store) {
 }
 
 fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {
-    let path = dir.as_ref().join(hash_to_store_dir(hash));
+    let path = dir.as_ref().join(hash.to_string().to_lowercase());
     let mut fs_cache = FileSystemCache::new(path).unwrap();
     fs_cache.set_cache_extension(Some(file_ext()));
     fs_cache
 }
 
 fn module_file_exists(dir: impl AsRef<Path>, hash: &Hash) -> bool {
-    let file = dir.as_ref().join(hash_to_store_dir(hash)).join(format!(
-        "{}.{}",
-        hash.to_string().to_lowercase(),
-        file_ext()
-    ));
+    let file =
+        dir.as_ref()
+            .join(hash.to_string().to_lowercase())
+            .join(format!(
+                "{}.{}",
+                hash.to_string().to_lowercase(),
+                file_ext()
+            ));
     file.exists()
 }
 
@@ -1022,7 +1013,7 @@ mod test {
     fn load_wasm(file: impl AsRef<Path>) -> WasmWithMeta {
         // When `WeightScale` calls `loupe::size_of_val` in the cache, for some
         // reason it returns 8 bytes more than the same call in here.
-        let extra_bytes = 8;
+        let _extra_bytes = 8;
 
         let file = file.as_ref();
         let code = fs::read(file).unwrap();
@@ -1033,9 +1024,9 @@ mod test {
                 // No in-memory cache needed, but must be non-zero
                 1,
             );
-            let (module, _store) =
+            let (_module, _store) =
                 cache.compile_or_fetch(&code).unwrap().unwrap();
-            loupe::size_of_val(&module) + HASH_LENGTH + extra_bytes
+            1
         };
         println!(
             "Compiled module {} size including the hash: {} ({})",
