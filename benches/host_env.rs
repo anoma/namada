@@ -11,7 +11,7 @@ use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
     generate_tx, BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM,
-    TX_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM, WASM_DIR,
+    TX_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM, VP_VALIDATOR_WASM, WASM_DIR,
 };
 
 // Benchmarks the validation of a single signature on a single `Section` of a
@@ -62,19 +62,20 @@ fn compile_wasm(c: &mut Criterion) {
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
+        VP_VALIDATOR_WASM,
     ] {
         let wasm_code = wasm_loader::read_wasm_or_exit(WASM_DIR, tx);
         txs.insert(tx, wasm_code);
     }
 
     // Test the compilation of a few different transactions
-    for (tx, wasm_code) in txs {
+    for (wasm, wasm_code) in txs {
         // Extract the throughput, together with the
         // wall-time, so that we can than invert it to calculate the
         // desired metric (time/byte)
         let len = wasm_code.len() as u64;
         group.throughput(criterion::Throughput::Bytes(len));
-        group.bench_function(format!("Tx: {tx}, size: {len}"), |b| {
+        group.bench_function(format!("Wasm: {wasm}, size: {len}"), |b| {
             b.iter_batched_ref(
                 || {
                     let mut shell = BenchShell::default();

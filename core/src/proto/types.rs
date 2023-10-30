@@ -617,7 +617,7 @@ impl Signature {
                     {
                         if let Some(meter) = gas_meter {
                             meter
-                                .consume(VERIFY_TX_SIG_GAS_COST)
+                                .consume(VERIFY_TX_SIG_GAS)
                                 .map_err(|_| VerifySigError::OutOfGas)?;
                         }
                         common::SigScheme::verify_signature(

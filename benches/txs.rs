@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::governance::storage::proposal::ProposalType;
@@ -12,11 +13,23 @@ use namada::core::types::key::{
 use namada::core::types::token::Amount;
 use namada::core::types::transaction::account::{InitAccount, UpdateAccount};
 use namada::core::types::transaction::pos::InitValidator;
+use namada::ibc::core::ics02_client::client_type::ClientType;
+use namada::ibc::core::ics03_connection::connection::Counterparty;
+use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
+use namada::ibc::core::ics03_connection::version::Version;
+use namada::ibc::core::ics04_channel::channel::Order;
+use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
+use namada::ibc::core::ics04_channel::Version as ChannelVersion;
+use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
+use namada::ibc::core::ics24_host::identifier::{
+    ClientId, ConnectionId, PortId,
+};
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake::types::SlashType;
-use namada::proof_of_stake::{self, read_pos_params};
+use namada::proof_of_stake::{self, read_pos_params, KeySeg};
 use namada::proto::{Code, Section};
+use namada::types::address::Address;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::hash::Hash;
 use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
@@ -30,14 +43,16 @@ use namada::types::transaction::pos::{
 };
 use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
-    generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
-    ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_BRIDGE_POOL_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    generate_ibc_transfer_tx, generate_ibc_tx, generate_tx, BenchShell,
+    BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
+    BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM,
+    TX_UNBOND_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
     TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
+use namada_apps::wallet::defaults;
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -353,6 +368,7 @@ fn reveal_pk(c: &mut Criterion) {
 
 fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
+    //FIXME:
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
@@ -661,20 +677,76 @@ fn change_validator_commission(c: &mut Criterion) {
 }
 
 fn ibc(c: &mut Criterion) {
-    let signed_tx = generate_ibc_transfer_tx();
+    let mut group = c.benchmark_group("tx_ibc");
 
-    c.bench_function("ibc_transfer", |b| {
-        b.iter_batched_ref(
-            || {
-                let mut shell = BenchShell::default();
-                shell.init_ibc_channel();
-
-                shell
-            },
-            |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+    // Connection handshake
+    let msg = MsgConnectionOpenInit {
+        client_id_on_a: ClientId::new(
+            ClientType::new("01-tendermint".to_string()).unwrap(),
+            1,
         )
-    });
+        .unwrap(),
+        counterparty: Counterparty::new(
+            ClientId::from_str("01-tendermint-1").unwrap(),
+            None,
+            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+        ),
+        version: Some(Version::default()),
+        delay_period: std::time::Duration::new(100, 0),
+        signer: defaults::albert_address().to_string().into(),
+    };
+    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Channel handshake
+    let msg = MsgChannelOpenInit {
+        port_id_on_a: PortId::transfer(),
+        connection_hops_on_a: vec![ConnectionId::new(1)],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: defaults::albert_address().to_string().into(),
+        version_proposal: ChannelVersion::new("ics20-1".to_string()),
+    };
+
+    // Avoid serializing the data again with borsh
+    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Ibc transfer
+    let outgoing_transfer = generate_ibc_transfer_tx();
+
+    // NOTE: Ibc encompass a variety of different messages that can be executed, here we only benchmark a few of those
+    for (signed_tx, bench_name) in
+        [open_connection, open_channel, outgoing_transfer]
+            .iter()
+            .zip(["open_connection", "open_channel", "outgoing_transfer"])
+    {
+        group.bench_function(bench_name, |b| {
+            b.iter_batched_ref(
+                || {
+                    let mut shell = BenchShell::default();
+                    // Initialize the state according to the target tx
+                    match bench_name {
+                        "open_connection" => {
+                            let _ = shell.init_ibc_client_state(
+                                namada::core::types::storage::Key::from(
+                                    Address::Internal(namada::types::address::InternalAddress::Ibc).to_db_key(),
+                                ),
+                            );
+                        }
+                        "open_channel" => {
+                            let _ = shell.init_ibc_connection();
+                        }
+                        "outgoing_transfer" => shell.init_ibc_channel(),
+                        _ => panic!("Unexpected bench test"),
+                    }
+                    shell
+                },
+                |shell| shell.execute_tx(signed_tx),
+                criterion::BatchSize::LargeInput,
+            )
+        });
+    }
+
+    group.finish();
 }
 
 fn unjail_validator(c: &mut Criterion) {
