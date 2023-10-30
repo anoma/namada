@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.24.1
+
+Namada 0.24.1 is patch release addressing ledger startup problems with wasm artifacts and several other minor fixes.
+
+### BUG FIXES
+
+- Fix Windows build by disabling RocksDB jemalloc feature.
+  ([\#2047](https://github.com/anoma/namada/pull/2047))
+
+### IMPROVEMENTS
+
+- Define the wasm download endpoint via environemnt variable.
+  ([\#2064](https://github.com/anoma/namada/pull/2064))
+
 ## v0.24.0
 
 Namada 0.24.0 is a minor release that introduces an SDK crate, PoS redelegation, various updates and fixes for IBC, PoS, governance, ETH bridge and the ledger.
