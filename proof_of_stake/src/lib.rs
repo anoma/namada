@@ -2780,8 +2780,8 @@ where
 
     insert_validator_into_validator_set(
         storage,
-        &params,
-        &address,
+        params,
+        address,
         token::Amount::zero(),
         current_epoch,
         offset,
