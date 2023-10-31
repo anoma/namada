@@ -13,8 +13,8 @@ use sha2::{Digest, Sha256};
 #[cfg(feature = "abcipp")]
 use tendermint_abcipp::Moniker;
 use thiserror::Error;
-use tokio::fs::{self, File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::fs::{self, read_to_string, OpenOptions};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::cli::namada_version;
@@ -396,17 +396,15 @@ async fn write_tm_genesis(
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
-    let mut file = File::open(&path).await.unwrap_or_else(|err| {
-        panic!(
-            "Couldn't open the genesis file at {:?}, error: {}",
-            path, err
-        )
-    });
-    let mut file_contents = vec![];
-    file.read_to_end(&mut file_contents)
+    let genesis_json = read_to_string(&path)
         .await
         .expect("Couldn't read Tendermint genesis file");
-    let mut genesis: Genesis = serde_json::from_slice(&file_contents[..])
+    // Append `app_state` because it was omitted
+    let mut genesis_json: serde_json::Value =
+        serde_json::from_str(&genesis_json)
+            .expect("Couldn't deserialize the genesis file");
+    genesis_json["app_state"] = "".into();
+    let mut genesis: Genesis = serde_json::from_str(&genesis_json.to_string())
         .expect("Couldn't deserialize the genesis file");
     genesis.chain_id =
         FromStr::from_str(chain_id.as_str()).expect("Invalid chain ID");

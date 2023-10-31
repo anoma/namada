@@ -342,7 +342,8 @@ fn dummy_client() -> (MockClientState, MockConsensusState) {
     let height = Height::new(0, 1).unwrap();
     let header = MockHeader {
         height,
-        timestamp: Timestamp::now(),
+        // for a past block on the counterparty chain
+        timestamp: (Timestamp::now() - Duration::from_secs(10)).unwrap(),
     };
     let client_state = MockClientState::new(header);
     let consensus_state = MockConsensusState::new(header);
@@ -660,7 +661,7 @@ pub fn msg_transfer(
 
 pub fn set_timeout_timestamp(msg: &mut MsgTransfer) {
     msg.timeout_timestamp_on_b =
-        (msg.timeout_timestamp_on_b - Duration::from_secs(101)).unwrap();
+        (msg.timeout_timestamp_on_b - Duration::from_secs(201)).unwrap();
 }
 
 pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {

@@ -151,6 +151,7 @@ where
     }
 
     fn validation_params(&self) -> VpResult<ValidationParams> {
+        use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
         let pos_params =
@@ -161,7 +162,7 @@ where
         let unbonding_period_secs =
             pipeline_len * epoch_duration.min_duration.0;
         Ok(ValidationParams {
-            chain_id: IbcChainId::new(&chain_id, 0)
+            chain_id: IbcChainId::from_str(&chain_id)
                 .map_err(|e| Error::IbcAction(ActionError::ChainId(e)))?,
             proof_specs: proof_specs.into(),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
