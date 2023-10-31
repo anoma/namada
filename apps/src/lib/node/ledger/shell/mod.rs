@@ -694,8 +694,8 @@ where
                     );
                     continue;
                 }
-                let slash_type = match EvidenceType::from_i32(evidence.r#type) {
-                    Some(r#type) => match r#type {
+                let slash_type = match EvidenceType::try_from(evidence.r#type) {
+                    Ok(r#type) => match r#type {
                         EvidenceType::DuplicateVote => {
                             pos::types::SlashType::DuplicateVote
                         }
@@ -710,7 +710,7 @@ where
                             continue;
                         }
                     },
-                    None => {
+                    Err(_) => {
                         tracing::error!(
                             "Unexpected evidence type {}",
                             evidence.r#type

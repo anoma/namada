@@ -7,6 +7,7 @@ use crate::ibc::clients::ics07_tendermint::{
     CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
 };
 use crate::ibc::core::ics02_client::error::ClientError;
+use crate::ibc::core::ics02_client::ClientValidationContext;
 use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
 use crate::ibc::core::ics04_channel::channel::ChannelEnd;
 use crate::ibc::core::ics04_channel::commitment::{
@@ -40,11 +41,26 @@ where
     type AnyConsensusState = AnyConsensusState;
     type ConversionError = ClientError;
 
+    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+        ValidationContext::host_timestamp(self)
+    }
+
+    fn host_height(&self) -> Result<Height, ContextError> {
+        ValidationContext::host_height(self)
+    }
+
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Self::AnyConsensusState, ContextError> {
         ValidationContext::consensus_state(self, client_cons_state_path)
+    }
+
+    fn consensus_state_heights(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Vec<Height>, ContextError> {
+        self.inner.borrow().consensus_state_heights(client_id)
     }
 }
 
@@ -52,10 +68,6 @@ impl<C> TmValidationContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
-    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
-        ValidationContext::host_timestamp(self)
-    }
-
     fn next_consensus_state(
         &self,
         client_id: &ClientId,
@@ -93,6 +105,31 @@ where
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
     }
+
+    fn host_height(&self) -> Result<Height, ContextError> {
+        ValidationContext::host_height(self)
+    }
+}
+
+impl<C> ClientValidationContext for IbcContext<C>
+where
+    C: IbcCommonContext,
+{
+    fn client_update_time(
+        &self,
+        client_id: &ClientId,
+        _height: &Height,
+    ) -> Result<Timestamp, ContextError> {
+        self.inner.borrow().client_update_time(client_id)
+    }
+
+    fn client_update_height(
+        &self,
+        client_id: &ClientId,
+        _height: &Height,
+    ) -> Result<Height, ContextError> {
+        self.inner.borrow().client_update_height(client_id)
+    }
 }
 
 impl<C> ValidationContext for IbcContext<C>
@@ -101,10 +138,10 @@ where
 {
     type AnyClientState = AnyClientState;
     type AnyConsensusState = AnyConsensusState;
-    type ClientValidationContext = Self;
     type E = Self;
+    type V = Self;
 
-    fn get_client_validation_context(&self) -> &Self::ClientValidationContext {
+    fn get_client_validation_context(&self) -> &Self::V {
         self
     }
 
@@ -252,22 +289,6 @@ where
             &path.channel_id,
             path.sequence,
         )
-    }
-
-    fn client_update_time(
-        &self,
-        client_id: &ClientId,
-        _height: &Height,
-    ) -> Result<Timestamp, ContextError> {
-        self.inner.borrow().client_update_time(client_id)
-    }
-
-    fn client_update_height(
-        &self,
-        client_id: &ClientId,
-        _height: &Height,
-    ) -> Result<Height, ContextError> {
-        self.inner.borrow().client_update_height(client_id)
     }
 
     fn channel_counter(&self) -> Result<u64, ContextError> {

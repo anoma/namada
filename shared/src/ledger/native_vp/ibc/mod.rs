@@ -683,31 +683,6 @@ mod tests {
             .write(&consensus_key, bytes)
             .expect("write failed");
         keys_changed.insert(consensus_key);
-        // client update time
-        let client_update_time_key = client_update_timestamp_key(&client_id);
-        let time = wl_storage
-            .storage
-            .get_block_header(None)
-            .unwrap()
-            .0
-            .unwrap()
-            .time;
-        let bytes = TmTime::try_from(time).unwrap().encode_vec();
-        wl_storage
-            .write_log
-            .write(&client_update_time_key, bytes)
-            .expect("write failed");
-        keys_changed.insert(client_update_time_key);
-        // client update height
-        let client_update_height_key = client_update_height_key(&client_id);
-        let host_height = wl_storage.storage.get_block_height().0;
-        let host_height =
-            Height::new(0, host_height.0).expect("invalid height");
-        wl_storage
-            .write_log
-            .write(&client_update_height_key, host_height.encode_vec())
-            .expect("write failed");
-        keys_changed.insert(client_update_height_key);
         // client counter
         let client_counter_key = client_counter_key();
         increment_counter(&mut wl_storage, &client_counter_key);

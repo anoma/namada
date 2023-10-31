@@ -178,7 +178,7 @@ impl ProposalBytes {
 }
 
 /// Release default chain ID. Must be [`CHAIN_ID_LENGTH`] long.
-pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
+pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000-0";
 
 /// Chain ID
 #[derive(

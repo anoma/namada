@@ -40,9 +40,9 @@ itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true
-tendermint = { version = "0.33.2", optional = true}
-tendermint-rpc = { version = "0.33.2", default-features = false, optional = true}
-tendermint-proto = { version = "0.33.2", optional = true}
+tendermint = {workspace = true, optional = true}
+tendermint-rpc = {workspace = true, optional = true}
+tendermint-proto = {workspace = true, optional = true}
 tracing = "0.1.30"
 
 [dev-dependencies]

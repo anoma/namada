@@ -98,6 +98,16 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
+    /// Delete the ConsensusState
+    fn delete_consensus_state(
+        &mut self,
+        client_id: &ClientId,
+        height: Height,
+    ) -> Result<()> {
+        let key = storage::consensus_state_key(client_id, height);
+        self.delete(&key).map_err(ContextError::from)
+    }
+
     /// Decode ConsensusState from bytes
     fn decode_consensus_state_value(
         &self,
@@ -107,6 +117,26 @@ pub trait IbcCommonContext: IbcStorageContext {
             .map_err(ClientError::Decode)?
             .try_into()
             .map_err(ContextError::from)
+    }
+
+    /// Get heights of all consensus states
+    fn consensus_state_heights(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<Vec<Height>> {
+        let prefix = storage::consensus_state_prefix(client_id);
+        let mut iter = self.iter_prefix(&prefix)?;
+        let mut heights = Vec::new();
+        while let Some((key, _)) = self.iter_next(&mut iter)? {
+            let key = Key::parse(key).expect("the key should be parsable");
+            let height = storage::consensus_height(&key).map_err(|e| {
+                ClientError::Other {
+                    description: e.to_string(),
+                }
+            })?;
+            heights.push(height);
+        }
+        Ok(heights)
     }
 
     /// Get the next consensus state after the given height
@@ -200,6 +230,12 @@ pub trait IbcCommonContext: IbcStorageContext {
             .map_err(ContextError::from)
     }
 
+    /// Delete the client update time
+    fn delete_update_time(&mut self, client_id: &ClientId) -> Result<()> {
+        let key = storage::client_update_timestamp_key(client_id);
+        self.delete(&key).map_err(ContextError::from)
+    }
+
     /// Get the client update height
     fn client_update_height(&self, client_id: &ClientId) -> Result<Height> {
         let key = storage::client_update_height_key(client_id);
@@ -279,6 +315,12 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_update_height_key(client_id);
         let bytes = host_height.encode_vec();
         self.write_bytes(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Delete the client update height
+    fn delete_update_height(&mut self, client_id: &ClientId) -> Result<()> {
+        let key = storage::client_update_height_key(client_id);
+        self.delete(&key).map_err(ContextError::from)
     }
 
     /// Get the ConnectionEnd

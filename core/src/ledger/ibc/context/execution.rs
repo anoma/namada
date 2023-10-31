@@ -28,7 +28,7 @@ where
 {
     type AnyClientState = AnyClientState;
     type AnyConsensusState = AnyConsensusState;
-    type ClientValidationContext = Self;
+    type V = Self;
 
     fn store_client_state(
         &mut self,
@@ -56,19 +56,19 @@ where
             consensus_state,
         )
     }
-}
 
-impl<C> ExecutionContext for IbcContext<C>
-where
-    C: IbcCommonContext,
-{
-    fn get_client_execution_context(&mut self) -> &mut Self::E {
-        self
-    }
-
-    fn increase_client_counter(&mut self) -> Result<(), ContextError> {
-        let key = storage::client_counter_key();
-        self.inner.borrow_mut().increment_counter(&key)
+    fn delete_consensus_state(
+        &mut self,
+        consensus_state_path: ClientConsensusStatePath,
+    ) -> Result<(), ContextError> {
+        let client_id = consensus_state_path.client_id;
+        let height = Height::new(
+            consensus_state_path.epoch,
+            consensus_state_path.height,
+        )?;
+        self.inner
+            .borrow_mut()
+            .delete_consensus_state(&client_id, height)
     }
 
     fn store_update_time(
@@ -91,6 +91,36 @@ where
         self.inner
             .borrow_mut()
             .store_update_height(&client_id, host_height)
+    }
+
+    fn delete_update_time(
+        &mut self,
+        client_id: ClientId,
+        _height: Height,
+    ) -> Result<(), ContextError> {
+        self.inner.borrow_mut().delete_update_time(&client_id)
+    }
+
+    fn delete_update_height(
+        &mut self,
+        client_id: ClientId,
+        _height: Height,
+    ) -> Result<(), ContextError> {
+        self.inner.borrow_mut().delete_update_height(&client_id)
+    }
+}
+
+impl<C> ExecutionContext for IbcContext<C>
+where
+    C: IbcCommonContext,
+{
+    fn get_client_execution_context(&mut self) -> &mut Self::E {
+        self
+    }
+
+    fn increase_client_counter(&mut self) -> Result<(), ContextError> {
+        let key = storage::client_counter_key();
+        self.inner.borrow_mut().increment_counter(&key)
     }
 
     fn store_connection(
