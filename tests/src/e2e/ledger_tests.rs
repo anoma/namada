@@ -3524,6 +3524,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
             &["key", "gen", "--alias", &key_alias, "--unsafe-dont-encrypt"],
             Some(20),
         )?;
+        cmd.exp_string("Enter BIP39 passphrase (empty for none): ")?;
+        cmd.send_line("")?;
         cmd.assert_success();
 
         // Apply the key_alias once the key is generated to obtain tx args

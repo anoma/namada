@@ -3689,7 +3689,7 @@ pub mod args {
                 public_keys: self
                     .public_keys
                     .iter()
-                    .map(|pk| ctx.get_cached(pk))
+                    .map(|pk| ctx.get(pk))
                     .collect(),
                 threshold: self.threshold,
             }
@@ -3741,13 +3741,13 @@ pub mod args {
                 account_keys: self
                     .account_keys
                     .iter()
-                    .map(|x| ctx.get_cached(x))
+                    .map(|x| ctx.get(x))
                     .collect(),
                 threshold: self.threshold,
                 consensus_key: self.consensus_key.map(|x| ctx.get_cached(&x)),
                 eth_cold_key: self.eth_cold_key.map(|x| ctx.get_cached(&x)),
                 eth_hot_key: self.eth_hot_key.map(|x| ctx.get_cached(&x)),
-                protocol_key: self.protocol_key.map(|x| ctx.get_cached(&x)),
+                protocol_key: self.protocol_key.map(|x| ctx.get(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
                 validator_vp_code_path: self
@@ -3862,7 +3862,7 @@ pub mod args {
                 public_keys: self
                     .public_keys
                     .iter()
-                    .map(|pk| ctx.get_cached(pk))
+                    .map(|pk| ctx.get(pk))
                     .collect(),
                 threshold: self.threshold,
             }
@@ -4303,7 +4303,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
             RevealPk::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                public_key: ctx.get_cached(&self.public_key),
+                public_key: ctx.get(&self.public_key),
             }
         }
     }
@@ -5090,7 +5090,7 @@ pub mod args {
                     .collect(),
                 verification_key: self
                     .verification_key
-                    .map(|public_key| ctx.get_cached(&public_key)),
+                    .map(|public_key| ctx.get(&public_key)),
                 disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,

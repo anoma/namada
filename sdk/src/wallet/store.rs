@@ -115,6 +115,22 @@ impl Store {
             })
     }
 
+    /// Find the stored key by an alias, a public key hash or a public key.
+    pub fn find_public_key(
+        &self,
+        alias_or_pkh: impl AsRef<str>,
+    ) -> Option<&common::PublicKey> {
+        let alias_or_pkh = alias_or_pkh.as_ref();
+        // Try to find by alias
+        self.public_keys
+            .get(&alias_or_pkh.into())
+            // Try to find by PKH
+            .or_else(|| {
+                let pkh = PublicKeyHash::from_str(alias_or_pkh).ok()?;
+                self.find_public_key_by_pkh(&pkh)
+            })
+    }
+
     /// Find the spending key with the given alias and return it
     pub fn find_spending_key(
         &self,
@@ -160,6 +176,22 @@ impl Store {
     /// Find the stored alias for a public key hash.
     pub fn find_alias_by_pkh(&self, pkh: &PublicKeyHash) -> Option<Alias> {
         self.pkhs.get(pkh).cloned()
+    }
+
+    /// Find a derivation path by public key hash
+    pub fn find_path_by_pkh(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Option<DerivationPath> {
+        self.derivation_paths.get(self.pkhs.get(pkh)?).cloned()
+    }
+
+    /// Find the public key by a public key hash.
+    pub fn find_public_key_by_pkh(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Option<&common::PublicKey> {
+        self.public_keys.get(self.pkhs.get(pkh)?)
     }
 
     /// Find the stored address by an alias.

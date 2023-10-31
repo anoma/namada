@@ -425,9 +425,9 @@ impl ArgFromMutContext for common::SecretKey {
     }
 }
 
-impl ArgFromMutContext for common::PublicKey {
-    fn arg_from_mut_ctx(
-        ctx: &mut Context,
+impl ArgFromContext for common::PublicKey {
+    fn arg_from_ctx(
+        ctx: &Context,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
@@ -436,15 +436,11 @@ impl ArgFromMutContext for common::PublicKey {
             // Or it can be a public key hash in hex string
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
-                    let key = ctx.wallet.find_key_by_pkh(&pkh, None).unwrap();
-                    key.ref_to()
+                    ctx.wallet.find_public_key_by_pkh(&pkh).unwrap()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {
-                    ctx.wallet
-                        .find_secret_key(raw, None)
-                        .map(|x| x.ref_to())
-                        .map_err(|x| x.to_string())
+                    ctx.wallet.find_public_key(raw).map_err(|x| x.to_string())
                 })
         })
     }

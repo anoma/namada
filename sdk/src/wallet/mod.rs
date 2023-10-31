@@ -681,6 +681,17 @@ impl<U: WalletIo> Wallet<U> {
         )
     }
 
+    /// Find the public key by an alias or a public key hash.
+    pub fn find_public_key(
+        &self,
+        alias_or_pkh: impl AsRef<str>,
+    ) -> Result<common::PublicKey, FindKeyError> {
+        self.store
+            .find_public_key(alias_or_pkh.as_ref())
+            .cloned()
+            .ok_or(FindKeyError::KeyNotFound)
+    }
+
     /// Find the spending key with the given alias in the wallet and return it.
     /// If the spending key is encrypted but a password is not supplied, then it
     /// will be interactively prompted.
@@ -720,6 +731,30 @@ impl<U: WalletIo> Wallet<U> {
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
         self.find_key_by_pkh(&pkh, password)
+    }
+
+    /// Find a derivation path by public key hash
+    pub fn find_path_by_pkh(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Result<DerivationPath, FindKeyError> {
+        self.store
+            .find_path_by_pkh(pkh)
+            .ok_or(FindKeyError::KeyNotFound)
+    }
+
+    /// Find the public key by a public key hash.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
+    pub fn find_public_key_by_pkh(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Result<common::PublicKey, FindKeyError> {
+        self.store
+            .find_public_key_by_pkh(pkh)
+            .cloned()
+            .ok_or(FindKeyError::KeyNotFound)
     }
 
     /// Find the stored key by a public key hash.
