@@ -89,7 +89,11 @@ fn compile_wasm(c: &mut Criterion) {
                     (shell, tempdir)
                 },
                 |(shell, _tempdir)| {
-                    shell.tx_wasm_cache.compile_or_fetch(&wasm_code)
+                    shell
+                        .tx_wasm_cache
+                        .compile_or_fetch(&wasm_code)
+                        .unwrap()
+                        .unwrap()
                 },
                 criterion::BatchSize::LargeInput,
             )
