@@ -266,7 +266,7 @@ fn write_log_write(c: &mut Criterion) {
                     |value| {
                         shell.wl_storage.write_log.write(&key, value).unwrap()
                     },
-                    criterion::BatchSize::LargeInput,
+                    criterion::BatchSize::SmallInput,
                 )
             },
         );
@@ -312,7 +312,7 @@ fn storage_write(c: &mut Criterion) {
                             .write_subspace_val(block_height, &key, value)
                             .unwrap();
                     },
-                    criterion::BatchSize::LargeInput,
+                    criterion::BatchSize::SmallInput,
                 )
             },
         );

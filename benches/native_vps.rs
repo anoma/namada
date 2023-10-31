@@ -1139,8 +1139,6 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     group.finish();
 }
 
-// FIXME: put everything to small input in a separate commit
-
 criterion_group!(
     native_vps,
     governance,
