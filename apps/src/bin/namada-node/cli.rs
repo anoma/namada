@@ -2,6 +2,7 @@
 
 use eyre::{Context, Result};
 use namada::types::time::{DateTimeUtc, Utc};
+use namada_apps::cli::args::CliToSdk;
 use namada_apps::cli::{self, cmds};
 use namada_apps::node::ledger;
 
@@ -27,6 +28,10 @@ pub fn main() -> Result<()> {
             }
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
                 ledger::dump_db(ctx.config.ledger, args);
+            }
+            cmds::Ledger::SetFunds(cmds::LedgerSetFunds(args)) => {
+                let args = args.to_sdk(&mut ctx);
+                ledger::set_funds(ctx.config.ledger, args);
             }
             cmds::Ledger::RollBack(_) => {
                 ledger::rollback(ctx.config.ledger)
