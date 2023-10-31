@@ -229,6 +229,90 @@ pub fn dump_db(
     db.dump_block(out_file_path, historic, block_height);
 }
 
+/// Change the funds of an account in-place. Use with
+/// caution, as this modifies state in storage without
+/// going through the consensus protocol.
+pub fn set_funds(
+    config: config::Ledger,
+    args::LedgerSetFunds {
+        account,
+        token,
+        amount,
+    }: args::LedgerSetFunds,
+) {
+    use namada::ledger::storage::types::{decode, encode};
+    use namada::ledger::storage::DB;
+    use namada::types::token;
+
+    let cometbft_path = config.cometbft_dir();
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let mut db = storage::PersistentDB::open(db_path, None);
+    let mut batch = Default::default();
+
+    let bal_key = token::balance_key(&token, &account);
+    let minted_key = token::minted_balance_key(&token);
+
+    tracing::debug!(
+        %bal_key,
+        %minted_key,
+        %token,
+        %account,
+        ?amount,
+        "Changing balance keys"
+    );
+
+    let previous_acc_funds = {
+        let value: token::Amount = db
+            .read_subspace_val(&bal_key)
+            .expect("Failed to read from storage")
+            .map(|amt| decode(amt).expect("Failed to decode amount"))
+            .unwrap_or_default();
+        value
+    };
+    let previous_minted_funds = {
+        let value: token::Amount = db
+            .read_subspace_val(&minted_key)
+            .expect("Failed to read from storage")
+            .map(|amt| decode(amt).expect("Failed to decode amount"))
+            .unwrap_or_default();
+        value
+    };
+
+    tracing::debug!(
+        ?previous_acc_funds,
+        ?previous_minted_funds,
+        "Previous funds in storage"
+    );
+
+    let diff = amount.change() - previous_acc_funds.change();
+    let new_minted_funds =
+        token::Amount::from_change(previous_minted_funds.change() + diff);
+
+    db.overwrite_entry(&mut batch, None, &bal_key, encode(&amount))
+        .expect("Failed to overwrite funds in storage");
+    db.overwrite_entry(
+        &mut batch,
+        None,
+        &minted_key,
+        encode(&new_minted_funds),
+    )
+    .expect("Failed to overwrite funds in storage");
+
+    db.exec_batch(batch).expect("Failed to execute write batch");
+
+    // reset CometBFT's state, such that we can resume with a different app hash
+    tendermint_node::reset_state(cometbft_path)
+        .expect("Failed to reset CometBFT state");
+
+    tracing::debug!(
+        new_acc_funds = ?amount,
+        ?new_minted_funds,
+        "New funds in storage"
+    );
+}
+
 /// Roll Namada state back to the previous height
 pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
     shell::rollback(config)
