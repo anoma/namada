@@ -129,7 +129,7 @@ fn transfer(c: &mut Criterion) {
                 |(shielded_ctx, signed_tx)| {
                     shielded_ctx.shell.execute_tx(signed_tx);
                 },
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -172,7 +172,7 @@ fn bond(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -215,7 +215,7 @@ fn unbond(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -302,7 +302,7 @@ fn withdraw(c: &mut Criterion) {
                     shell
                 },
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -365,7 +365,7 @@ fn reveal_pk(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -399,7 +399,7 @@ fn update_account(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&vp),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -439,7 +439,7 @@ fn init_account(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -531,7 +531,7 @@ fn init_proposal(c: &mut Criterion) {
                     (shell, signed_tx)
                 },
                 |(shell, signed_tx)| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -576,7 +576,7 @@ fn vote_proposal(c: &mut Criterion) {
             b.iter_batched_ref(
                 BenchShell::default,
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -654,7 +654,7 @@ fn init_validator(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -676,7 +676,7 @@ fn change_validator_commission(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -748,7 +748,7 @@ fn ibc(c: &mut Criterion) {
                     shell
                 },
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
@@ -797,7 +797,7 @@ fn unjail_validator(c: &mut Criterion) {
                 shell
             },
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -830,7 +830,7 @@ fn tx_bridge_pool(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -859,7 +859,7 @@ fn resign_steward(c: &mut Criterion) {
                 (shell, tx)
             },
             |(shell, tx)| shell.execute_tx(tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -896,7 +896,7 @@ fn update_steward_commission(c: &mut Criterion) {
                 (shell, tx)
             },
             |(shell, tx)| shell.execute_tx(tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }

@@ -95,7 +95,7 @@ fn process_tx(c: &mut Criterion) {
                     0
                 )
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
