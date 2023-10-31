@@ -475,43 +475,31 @@ fn key_and_address_gen<R: RngCore, W: WalletStorage + WalletIo<Rng = R>>(
 ) {
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
-    let alias_result = if let Some(derivation_path) = derivation_path {
-        let derivation_path = decode_derivation_path(scheme, derivation_path)
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
-                cli::safe_exit(1)
-            });
-        let (_mnemonic, seed) = Wallet::<W>::gen_hd_seed(None, rng)
-            .unwrap_or_else(|err| {
-                edisplay_line!(io, "{}", err);
-                cli::safe_exit(1)
-            });
-        wallet
-            .derive_store_hd_secret_key(
-                scheme,
-                alias,
-                alias_force,
-                seed,
-                derivation_path,
-                encryption_password,
-            )
-            .map(|x| x.0)
-    } else {
-        wallet
-            .gen_store_secret_key(
-                scheme,
-                alias,
-                alias_force,
-                encryption_password,
-                &mut OsRng,
-            )
-            .map(|x| x.0)
-    };
-    let alias = alias_result.unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        println!("No changes are persisted. Exiting.");
-        cli::safe_exit(0);
-    });
+    let derivation_path = decode_derivation_path(scheme, derivation_path)
+        .unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            cli::safe_exit(1)
+        });
+    let (_mnemonic, seed) =
+        Wallet::<W>::gen_hd_seed(None, rng).unwrap_or_else(|err| {
+            edisplay_line!(io, "{}", err);
+            cli::safe_exit(1)
+        });
+    let alias = wallet
+        .derive_store_hd_secret_key(
+            scheme,
+            alias,
+            alias_force,
+            seed,
+            derivation_path,
+            encryption_password,
+        )
+        .map(|x| x.0)
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            println!("No changes are persisted. Exiting.");
+            cli::safe_exit(0);
+        });
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));

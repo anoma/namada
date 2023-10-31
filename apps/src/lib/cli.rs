@@ -2714,8 +2714,6 @@ pub mod args {
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_WALLET_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
-    pub const HD_WALLET_DERIVATION_PATH_OPT: ArgOpt<String> =
-        arg_opt("hd-path");
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
     pub const LEDGER_ADDRESS_ABOUT: &str =
@@ -5468,7 +5466,7 @@ pub mod args {
             let alias = ALIAS_OPT.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let derivation_path = HD_WALLET_DERIVATION_PATH_OPT.parse(matches);
+            let derivation_path = HD_WALLET_DERIVATION_PATH.parse(matches);
             Self {
                 scheme,
                 alias,
