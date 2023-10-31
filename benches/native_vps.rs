@@ -15,10 +15,6 @@ use namada::core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::core::types::address::{self, Address};
 use namada::core::types::token::{Amount, Transfer};
 use namada::eth_bridge::storage::whitelist;
-use namada::ibc::clients::ics07_tendermint::client_state::{
-    AllowUpdate, ClientState,
-};
-use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState;
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -27,7 +23,6 @@ use namada::ibc::core::ics04_channel::channel::Order;
 use namada::ibc::core::ics04_channel::msgs::MsgChannelOpenInit;
 use namada::ibc::core::ics04_channel::Version as ChannelVersion;
 use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use namada::ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use namada::ibc::core::ics24_host::identifier::{
     ClientId, ConnectionId, PortId,
 };
@@ -51,8 +46,7 @@ use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
 use namada::types::address::InternalAddress;
 use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
-use namada::types::storage::{BlockHash, Epoch, TxIndex};
-use namada::types::time::DateTimeUtc;
+use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
@@ -83,7 +77,7 @@ fn governance(c: &mut Criterion) {
             "delegator_vote" => {
                 // Advance to the proposal voting period
                 shell.advance_epoch();
-                generate_tx(
+                shell.generate_tx(
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
@@ -99,7 +93,7 @@ fn governance(c: &mut Criterion) {
             "validator_vote" => {
                 // Advance to the proposal voting period
                 shell.advance_epoch();
-                generate_tx(
+                shell.generate_tx(
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
@@ -123,7 +117,7 @@ fn governance(c: &mut Criterion) {
                     shell.wl_storage.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
-                generate_tx(
+                shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: None,
@@ -173,7 +167,7 @@ fn governance(c: &mut Criterion) {
                     shell.wl_storage.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
-                generate_tx(
+                shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: Some(1),
@@ -243,7 +237,7 @@ fn governance(c: &mut Criterion) {
 //          generate_foreign_key_tx(&defaults::albert_keypair());
 
 //      let content_section = Section::ExtraData(Code::new(vec![]));
-//      let governance_proposal = generate_tx(
+//      let governance_proposal = shell.generate_tx(
 //          TX_INIT_PROPOSAL_WASM,
 //          InitProposalData {
 //              id: None,
@@ -309,9 +303,10 @@ fn governance(c: &mut Criterion) {
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
+    let shell = BenchShell::default();
 
-    // NOTE: Ibc encompass a variety of different messages that can be executed, here we only benchmark a few of those
-    // Connection handshake
+    // NOTE: Ibc encompass a variety of different messages that can be executed,
+    // here we only benchmark a few of those Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
             ClientType::new("01-tendermint".to_string()).unwrap(),
@@ -327,7 +322,7 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -340,10 +335,10 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
-    let outgoing_transfer = generate_ibc_transfer_tx();
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
     for (signed_tx, bench_name) in
         [open_connection, open_channel, outgoing_transfer]
@@ -407,11 +402,12 @@ fn ibc(c: &mut Criterion) {
 
 fn vp_multitoken(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_multitoken");
+    let shell = BenchShell::default();
 
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let transfer = generate_tx(
+    let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -488,7 +484,7 @@ fn pgf(c: &mut Criterion) {
             "foreign_key_write" => {
                 generate_foreign_key_tx(&defaults::albert_keypair())
             }
-            "remove_steward" => generate_tx(
+            "remove_steward" => shell.generate_tx(
                 TX_RESIGN_STEWARD,
                 defaults::albert_address(),
                 None,
@@ -504,7 +500,7 @@ fn pgf(c: &mut Criterion) {
                             namada::types::dec::Dec::zero(),
                         )]),
                     };
-                generate_tx(
+                shell.generate_tx(
                     TX_UPDATE_STEWARD_COMMISSION,
                     data,
                     None,
@@ -577,7 +573,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
             token: shell.wl_storage.storage.native_token.clone(),
         },
     };
-        generate_tx(
+        shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
             None,
@@ -649,7 +645,7 @@ fn eth_bridge(c: &mut Criterion) {
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
             };
-        generate_tx(
+        shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
             None,
@@ -699,6 +695,9 @@ fn eth_bridge(c: &mut Criterion) {
 }
 
 fn eth_bridge_pool(c: &mut Criterion) {
+    // NOTE: this vp is one of the most expensive but its cost comes from the
+    // numerous accesses to storage that we already account for, so no need to
+    // benchmark specific sections of it like for the ibc native vp
     let mut group = c.benchmark_group("vp_eth_bridge_pool");
 
     let mut shell = BenchShell::default();
@@ -745,7 +744,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
             token: shell.wl_storage.storage.native_token.clone(),
         },
     };
-        generate_tx(
+        shell.generate_tx(
             TX_BRIDGE_POOL_WASM,
             data,
             None,
@@ -946,6 +945,7 @@ fn pos(c: &mut Criterion) {
 
 fn ibc_vp_validate_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_validate_action");
+    let shell = BenchShell::default();
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
@@ -963,7 +963,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -976,10 +976,10 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
-    let outgoing_transfer = generate_ibc_transfer_tx();
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
     for (signed_tx, bench_name) in
         [open_connection, open_channel, outgoing_transfer]
@@ -1043,6 +1043,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
 fn ibc_vp_execute_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_execute_action");
+    let shell = BenchShell::default();
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
@@ -1060,7 +1061,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -1073,10 +1074,10 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
-    let outgoing_transfer = generate_ibc_transfer_tx();
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
     for (signed_tx, bench_name) in
         [open_connection, open_channel, outgoing_transfer]
@@ -1138,7 +1139,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     group.finish();
 }
 
-//FIXME: put everything to small input in a separate commit
+// FIXME: put everything to small input in a separate commit
 
 criterion_group!(
     native_vps,

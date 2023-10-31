@@ -43,7 +43,7 @@ fn vp_user(c: &mut Criterion) {
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let transfer = generate_tx(
+    let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -58,7 +58,7 @@ fn vp_user(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let received_transfer = generate_tx(
+    let received_transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::bertha_address(),
@@ -88,7 +88,7 @@ fn vp_user(c: &mut Criterion) {
         public_keys: vec![defaults::albert_keypair().to_public()],
         threshold: None,
     };
-    let vp = generate_tx(
+    let vp = shell.generate_tx(
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
@@ -96,7 +96,7 @@ fn vp_user(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let vote = generate_tx(
+    let vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -109,7 +109,7 @@ fn vp_user(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let pos = generate_tx(
+    let pos = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -148,6 +148,8 @@ fn vp_user(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
+                    // NOTE: the wasm code is always in cache so we don't
+                    // include here the cost to read and compile the code
                     run::vp(
                         vp_code_hash,
                         signed_tx,
@@ -184,7 +186,8 @@ fn vp_implicit(c: &mut Criterion) {
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let transfer = generate_tx(
+    let shell = BenchShell::default();
+    let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: Address::from(&implicit_account.to_public()),
@@ -199,7 +202,7 @@ fn vp_implicit(c: &mut Criterion) {
         Some(&implicit_account),
     );
 
-    let received_transfer = generate_tx(
+    let received_transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::bertha_address(),
@@ -214,7 +217,7 @@ fn vp_implicit(c: &mut Criterion) {
         Some(&defaults::bertha_keypair()),
     );
 
-    let reveal_pk = generate_tx(
+    let reveal_pk = shell.generate_tx(
         TX_REVEAL_PK_WASM,
         &implicit_account.to_public(),
         None,
@@ -222,7 +225,7 @@ fn vp_implicit(c: &mut Criterion) {
         None,
     );
 
-    let pos = generate_tx(
+    let pos = shell.generate_tx(
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -234,7 +237,7 @@ fn vp_implicit(c: &mut Criterion) {
         Some(&implicit_account),
     );
 
-    let vote = generate_tx(
+    let vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -293,23 +296,21 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        vp_code_hash,
-                        tx,
-                        &TxIndex(0),
-                        &Address::from(&implicit_account.to_public()),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                    )
-                    .unwrap()
+                assert!(run::vp(
+                    vp_code_hash,
+                    tx,
+                    &TxIndex(0),
+                    &Address::from(&implicit_account.to_public()),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                    ),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
                 )
+                .unwrap())
             })
         });
     }
@@ -327,7 +328,7 @@ fn vp_validator(c: &mut Criterion) {
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let transfer = generate_tx(
+    let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::validator_address(),
@@ -342,7 +343,7 @@ fn vp_validator(c: &mut Criterion) {
         Some(&defaults::validator_keypair()),
     );
 
-    let received_transfer = generate_tx(
+    let received_transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::bertha_address(),
@@ -369,7 +370,7 @@ fn vp_validator(c: &mut Criterion) {
         public_keys: vec![defaults::validator_keypair().to_public()],
         threshold: None,
     };
-    let vp = generate_tx(
+    let vp = shell.generate_tx(
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
@@ -377,7 +378,7 @@ fn vp_validator(c: &mut Criterion) {
         Some(&defaults::validator_keypair()),
     );
 
-    let commission_rate = generate_tx(
+    let commission_rate = shell.generate_tx(
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
@@ -388,7 +389,7 @@ fn vp_validator(c: &mut Criterion) {
         Some(&defaults::validator_keypair()),
     );
 
-    let vote = generate_tx(
+    let vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -401,7 +402,7 @@ fn vp_validator(c: &mut Criterion) {
         Some(&defaults::validator_keypair()),
     );
 
-    let pos = generate_tx(
+    let pos = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -442,23 +443,21 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        vp_code_hash,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    vp_code_hash,
+                    signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shell.wl_storage.storage,
+                    &shell.wl_storage.write_log,
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                    ),
+                    &keys_changed,
+                    &verifiers,
+                    shell.vp_wasm_cache.clone(),
+                )
+                .unwrap());
             })
         });
     }
@@ -531,23 +530,21 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(
-                    run::vp(
-                        vp_code_hash,
-                        &signed_tx,
-                        &TxIndex(0),
-                        &defaults::validator_address(),
-                        &shielded_ctx.shell.wl_storage.storage,
-                        &shielded_ctx.shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
-                        &keys_changed,
-                        &verifiers,
-                        shielded_ctx.shell.vp_wasm_cache.clone(),
-                    )
-                    .unwrap()
-                );
+                assert!(run::vp(
+                    vp_code_hash,
+                    &signed_tx,
+                    &TxIndex(0),
+                    &defaults::validator_address(),
+                    &shielded_ctx.shell.wl_storage.storage,
+                    &shielded_ctx.shell.wl_storage.write_log,
+                    &mut VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                    ),
+                    &keys_changed,
+                    &verifiers,
+                    shielded_ctx.shell.vp_wasm_cache.clone(),
+                )
+                .unwrap());
             })
         });
     }

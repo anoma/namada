@@ -10,13 +10,14 @@ use namada::vm::wasm::TxCache;
 use namada_apps::wallet::defaults;
 use namada_apps::wasm_loader;
 use namada_benches::{
-    generate_tx, BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM,
-    TX_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM, VP_VALIDATOR_WASM, WASM_DIR,
+    BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
+    TX_UPDATE_ACCOUNT_WASM, VP_VALIDATOR_WASM, WASM_DIR,
 };
 
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
+    let shell = BenchShell::default();
     let transfer_data = Transfer {
         source: defaults::albert_address(),
         target: defaults::bertha_address(),
@@ -25,7 +26,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         key: None,
         shielded: None,
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_TRANSFER_WASM,
         transfer_data,
         None,

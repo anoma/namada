@@ -140,7 +140,8 @@ fn transfer(c: &mut Criterion) {
 fn bond(c: &mut Criterion) {
     let mut group = c.benchmark_group("bond");
 
-    let bond = generate_tx(
+    let shell = BenchShell::default();
+    let bond = shell.generate_tx(
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -152,7 +153,7 @@ fn bond(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_bond = generate_tx(
+    let self_bond = shell.generate_tx(
         TX_BOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -182,7 +183,8 @@ fn bond(c: &mut Criterion) {
 fn unbond(c: &mut Criterion) {
     let mut group = c.benchmark_group("unbond");
 
-    let unbond = generate_tx(
+    let shell = BenchShell::default();
+    let unbond = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -194,7 +196,7 @@ fn unbond(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_unbond = generate_tx(
+    let self_unbond = shell.generate_tx(
         TX_UNBOND_WASM,
         Bond {
             validator: defaults::validator_address(),
@@ -223,8 +225,9 @@ fn unbond(c: &mut Criterion) {
 
 fn withdraw(c: &mut Criterion) {
     let mut group = c.benchmark_group("withdraw");
+    let shell = BenchShell::default();
 
-    let withdraw = generate_tx(
+    let withdraw = shell.generate_tx(
         TX_WITHDRAW_WASM,
         Withdraw {
             validator: defaults::validator_address(),
@@ -235,7 +238,7 @@ fn withdraw(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let self_withdraw = generate_tx(
+    let self_withdraw = shell.generate_tx(
         TX_WITHDRAW_WASM,
         Withdraw {
             validator: defaults::validator_address(),
@@ -257,7 +260,7 @@ fn withdraw(c: &mut Criterion) {
 
                     // Unbond funds
                     let unbond_tx = match bench_name {
-                        "withdraw" => generate_tx(
+                        "withdraw" => shell.generate_tx(
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
@@ -268,7 +271,7 @@ fn withdraw(c: &mut Criterion) {
                             None,
                             Some(&defaults::albert_keypair()),
                         ),
-                        "self_withdraw" => generate_tx(
+                        "self_withdraw" => shell.generate_tx(
                             TX_UNBOND_WASM,
                             Bond {
                                 validator: defaults::validator_address(),
@@ -348,8 +351,9 @@ fn reveal_pk(c: &mut Criterion) {
         ed25519::SigScheme::generate(&mut csprng)
             .try_to_sk()
             .unwrap();
+    let shell = BenchShell::default();
 
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_REVEAL_PK_WASM,
         new_implicit_account.to_public(),
         None,
@@ -368,7 +372,6 @@ fn reveal_pk(c: &mut Criterion) {
 
 fn update_account(c: &mut Criterion) {
     let shell = BenchShell::default();
-    //FIXME:
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
         .unwrap();
@@ -384,7 +387,7 @@ fn update_account(c: &mut Criterion) {
         public_keys: vec![defaults::albert_keypair().ref_to()],
         threshold: None,
     };
-    let vp = generate_tx(
+    let vp = shell.generate_tx(
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
@@ -424,7 +427,7 @@ fn init_account(c: &mut Criterion) {
         vp_code_hash: extra_hash,
         threshold: 1,
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_INIT_ACCOUNT_WASM,
         data,
         None,
@@ -454,7 +457,7 @@ fn init_proposal(c: &mut Criterion) {
                         "minimal_proposal" => {
                             let content_section =
                                 Section::ExtraData(Code::new(vec![]));
-                            generate_tx(
+                            shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: None,
@@ -504,7 +507,7 @@ fn init_proposal(c: &mut Criterion) {
                                         as _
                                 ]));
 
-                            generate_tx(
+                            shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
                                     id: Some(1),
@@ -538,7 +541,8 @@ fn init_proposal(c: &mut Criterion) {
 
 fn vote_proposal(c: &mut Criterion) {
     let mut group = c.benchmark_group("vote_proposal");
-    let delegator_vote = generate_tx(
+    let shell = BenchShell::default();
+    let delegator_vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -551,7 +555,7 @@ fn vote_proposal(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    let validator_vote = generate_tx(
+    let validator_vote = shell.generate_tx(
         TX_VOTE_PROPOSAL_WASM,
         VoteProposalData {
             id: 0,
@@ -638,7 +642,7 @@ fn init_validator(c: &mut Criterion) {
         max_commission_rate_change: namada::types::dec::Dec::default(),
         validator_vp_code_hash: extra_hash,
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_INIT_VALIDATOR_WASM,
         data,
         None,
@@ -656,7 +660,8 @@ fn init_validator(c: &mut Criterion) {
 }
 
 fn change_validator_commission(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
@@ -678,6 +683,7 @@ fn change_validator_commission(c: &mut Criterion) {
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("tx_ibc");
+    let shell = BenchShell::default();
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
@@ -695,7 +701,7 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -708,12 +714,13 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
-    let outgoing_transfer = generate_ibc_transfer_tx();
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
-    // NOTE: Ibc encompass a variety of different messages that can be executed, here we only benchmark a few of those
+    // NOTE: Ibc encompass a variety of different messages that can be executed,
+    // here we only benchmark a few of those
     for (signed_tx, bench_name) in
         [open_connection, open_channel, outgoing_transfer]
             .iter()
@@ -750,7 +757,8 @@ fn ibc(c: &mut Criterion) {
 }
 
 fn unjail_validator(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_UNJAIL_VALIDATOR_WASM,
         defaults::validator_address(),
         None,
@@ -811,7 +819,7 @@ fn tx_bridge_pool(c: &mut Criterion) {
             token: shell.wl_storage.storage.native_token.clone(),
         },
     };
-    let tx = generate_tx(
+    let tx = shell.generate_tx(
         TX_BRIDGE_POOL_WASM,
         data,
         None,
@@ -840,7 +848,7 @@ fn resign_steward(c: &mut Criterion) {
                     )
                     .unwrap();
 
-                let tx = generate_tx(
+                let tx = shell.generate_tx(
                     TX_RESIGN_STEWARD,
                     defaults::albert_address(),
                     None,
@@ -877,7 +885,7 @@ fn update_steward_commission(c: &mut Criterion) {
                             namada::types::dec::Dec::zero(),
                         )]),
                     };
-                let tx = generate_tx(
+                let tx = shell.generate_tx(
                     TX_UPDATE_STEWARD_COMMISSION,
                     data,
                     None,
