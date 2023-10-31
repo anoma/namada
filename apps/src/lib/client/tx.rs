@@ -1016,6 +1016,50 @@ where
     Ok(())
 }
 
+pub async fn submit_deactivate_validator<'a, N: Namada<'a>>(
+    namada: &N,
+    args: args::TxDeactivateValidator,
+) -> Result<(), error::Error>
+where
+    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+{
+    let (mut tx, signing_data, _fee_unshield_epoch) =
+        args.build(namada).await?;
+    signing::generate_test_vector(namada, &tx).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
+
+        namada.submit(tx, &args.tx).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn submit_reactivate_validator<'a, N: Namada<'a>>(
+    namada: &N,
+    args: args::TxReactivateValidator,
+) -> Result<(), error::Error>
+where
+    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+{
+    let (mut tx, signing_data, _fee_unshield_epoch) =
+        args.build(namada).await?;
+    signing::generate_test_vector(namada, &tx).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        namada.sign(&mut tx, &args.tx, signing_data).await?;
+
+        namada.submit(tx, &args.tx).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn submit_update_steward_commission<'a, N: Namada<'a>>(
     namada: &N,
     args: args::UpdateStewardCommission,

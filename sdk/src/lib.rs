@@ -65,9 +65,10 @@ use crate::signing::SigningTxData;
 use crate::token::DenominatedAmount;
 use crate::tx::{
     ProcessTxResponse, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL,
-    TX_INIT_VALIDATOR_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_CHANGE_COMMISSION_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
@@ -328,6 +329,32 @@ pub trait Namada<'a>: Sized {
         args::TxUnjailValidator {
             validator,
             tx_code_path: PathBuf::from(TX_UNJAIL_VALIDATOR_WASM),
+            tx: self.tx_builder(),
+        }
+    }
+
+    /// Make a TxDeactivateValidator builder from the given minimum set of
+    /// arguments
+    fn new_deactivate_validator(
+        &self,
+        validator: Address,
+    ) -> args::TxDeactivateValidator {
+        args::TxDeactivateValidator {
+            validator,
+            tx_code_path: PathBuf::from(TX_DEACTIVATE_VALIDATOR_WASM),
+            tx: self.tx_builder(),
+        }
+    }
+
+    /// Make a TxReactivateValidator builder from the given minimum set of
+    /// arguments
+    fn new_reactivate_validator(
+        &self,
+        validator: Address,
+    ) -> args::TxReactivateValidator {
+        args::TxReactivateValidator {
+            validator,
+            tx_code_path: PathBuf::from(TX_REACTIVATE_VALIDATOR_WASM),
             tx: self.tx_builder(),
         }
     }

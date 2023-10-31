@@ -140,6 +140,22 @@ pub enum RedelegationError {
     NotAValidator(Address),
 }
 
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum DeactivationError {
+    #[error("The validator {0} is already inactive at the pipeline epoch {1}")]
+    AlreadyInactive(Address, Epoch),
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ReactivationError {
+    #[error("The validator {0} is not inactive at the epoch {1}")]
+    NotInactive(Address, Epoch),
+    #[error("No state found for validator {0} in epoch {1}")]
+    NoStateFound(Address, Epoch),
+}
+
 impl From<BecomeValidatorError> for storage_api::Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
@@ -184,6 +200,18 @@ impl From<UnjailValidatorError> for storage_api::Error {
 
 impl From<RedelegationError> for storage_api::Error {
     fn from(err: RedelegationError) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<DeactivationError> for storage_api::Error {
+    fn from(err: DeactivationError) -> Self {
+        Self::new(err)
+    }
+}
+
+impl From<ReactivationError> for storage_api::Error {
+    fn from(err: ReactivationError) -> Self {
         Self::new(err)
     }
 }
