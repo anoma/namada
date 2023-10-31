@@ -234,4 +234,90 @@ mod test {
         assert_eq!(locked_ratio_2, locked_ratio_1);
         assert_eq!(inflation_2, Uint::zero());
     }
+
+    #[test]
+    fn test_inflation_playground() {
+        let init_locked_ratio = Dec::from_str("0.1").unwrap();
+        let total_tokens = 1_000_000_000_000_000_u64;
+        let epochs_per_year = 365_u64;
+
+        let staking_growth = Dec::from_str("0.04").unwrap();
+        // let mut do_add = true;
+
+        // let a = (init_locked_ratio * total_tokens).to_uint().unwrap();
+        let num_rounds = 100;
+
+        let mut controller = RewardsController {
+            locked_tokens: (init_locked_ratio * total_tokens)
+                .to_uint()
+                .unwrap(),
+            total_tokens: Uint::from(total_tokens),
+            total_native_tokens: Uint::from(total_tokens),
+            locked_ratio_target: Dec::from_str("0.66666666").unwrap(),
+            locked_ratio_last: init_locked_ratio,
+            max_reward_rate: Dec::from_str("0.1").unwrap(),
+            last_inflation_amount: Uint::zero(),
+            p_gain_nom: Dec::from_str("0.25").unwrap(),
+            d_gain_nom: Dec::from_str("0.25").unwrap(),
+            epochs_per_year,
+        };
+        dbg!(&controller);
+
+        for round in 0..num_rounds {
+            let ValsToUpdate {
+                locked_ratio,
+                inflation,
+            } = controller.clone().run();
+            let rate = Dec::try_from(inflation).unwrap()
+                * Dec::from(epochs_per_year)
+                / Dec::from(total_tokens);
+            println!(
+                "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
+                 {rate}",
+            );
+            controller.last_inflation_amount = inflation;
+            controller.total_tokens += inflation;
+            controller.total_native_tokens += inflation;
+
+            // if rate.abs_diff(&controller.max_reward_rate)
+            //     < Dec::from_str("0.01").unwrap()
+            // {
+            //     controller.locked_tokens = controller.total_tokens;
+            // }
+
+            let tot_tokens = u64::try_from(controller.total_tokens).unwrap();
+            let change_staked_tokens =
+                (staking_growth * tot_tokens).to_uint().unwrap();
+            controller.locked_tokens = std::cmp::min(
+                controller.total_tokens,
+                controller.locked_tokens + change_staked_tokens,
+            );
+
+            // if locked_ratio > Dec::from_str("0.8").unwrap()
+            //     && locked_ratio - controller.locked_ratio_last >= Dec::zero()
+            // {
+            //     do_add = false;
+            // } else if locked_ratio < Dec::from_str("0.4").unwrap()
+            //     && locked_ratio - controller.locked_ratio_last < Dec::zero()
+            // {
+            //     do_add = true;
+            // }
+
+            // controller.locked_tokens = std::cmp::min(
+            //     if do_add {
+            //         controller.locked_tokens + change_staked_tokens
+            //     } else {
+            //         controller.locked_tokens - change_staked_tokens
+            //     },
+            //     controller.total_tokens,
+            // );
+
+            controller.locked_ratio_last = locked_ratio;
+        }
+
+        // controller.locked_ratio_last = locked_ratio_1;
+        // controller.last_inflation_amount = inflation_1;
+        // controller.total_tokens += inflation_1;
+        // controller.locked_tokens += inflation_1;
+    }
 }
