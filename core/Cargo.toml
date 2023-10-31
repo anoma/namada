@@ -68,7 +68,7 @@ eyre.workspace = true
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-ibc = { version = "0.47.0", features = ["serde"], optional = true}
+ibc = { version = "0.47.0", default-features = false, features = ["serde"], optional = true}
 ibc-derive = { version = "0.3.0", optional = true}
 ibc-proto = {version = "0.37.1", default-features = false, optional = true}
 ics23.workspace = true
