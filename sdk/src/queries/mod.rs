@@ -431,7 +431,7 @@ pub trait Client {
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
+impl<C: tendermint_rpc::client::Client + std::marker::Sync> Client for C {
     type Error = Error;
 
     async fn request(
@@ -472,6 +472,6 @@ impl<C: tendermint_rpc::Client + std::marker::Sync> Client for C {
     where
         R: tendermint_rpc::SimpleRequest,
     {
-        tendermint_rpc::Client::perform(self, request).await
+        tendermint_rpc::client::Client::perform(self, request).await
     }
 }
