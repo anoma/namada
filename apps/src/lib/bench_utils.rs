@@ -55,6 +55,7 @@ use namada::ibc_proto::protobuf::Protobuf;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
 use namada::ledger::ibc::storage::{channel_key, connection_key};
+use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
@@ -279,6 +280,11 @@ impl BenchShell {
     }
 
     pub fn init_ibc_channel(&mut self) {
+        // Set a dummy header
+        self.wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .unwrap();
         // Set connection open
         let client_id =
             ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
