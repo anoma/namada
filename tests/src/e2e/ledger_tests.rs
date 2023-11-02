@@ -915,11 +915,25 @@ fn pos_bonds() -> Result<()> {
             genesis.parameters.parameters.min_num_of_blocks = 6;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            let mut genesis = setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+            );
+            let bonds = genesis.transactions.bond.unwrap();
+            genesis.transactions.bond = Some(
+                bonds
+                    .into_iter()
+                    .filter(|bond| {
+                        (&bond.data.validator).as_ref() != "validator-1"
+                    })
+                    .collect(),
+            );
+            genesis
         },
         None,
     )?;
-
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
