@@ -54,7 +54,6 @@ mod tests {
     use std::collections::HashMap;
 
     use itertools::Itertools;
-    use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::write_log::WriteLog;
     use namada::ledger::storage::{
         types, update_allowed_conversions, WlStorage,
@@ -63,7 +62,6 @@ mod tests {
     use namada::types::chain::ChainId;
     use namada::types::hash::Hash;
     use namada::types::storage::{BlockHash, BlockHeight, Key};
-    use namada::types::time::DurationSecs;
     use namada::types::{address, storage, token};
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -137,43 +135,15 @@ mod tests {
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
         let value_bytes = types::encode(&value);
-        let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
-        // initialize parameter storage
-        let params = Parameters {
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 1,
-                min_duration: DurationSecs(3600),
-            },
-            max_expected_time_per_block: DurationSecs(3600),
-            max_proposal_bytes: Default::default(),
-            max_block_gas: 100,
-            vp_whitelist: vec![],
-            tx_whitelist: vec![],
-            implicit_vp_code_hash: Default::default(),
-            epochs_per_year: 365,
-            max_signatures_per_transaction: 10,
-            pos_gain_p: Default::default(),
-            pos_gain_d: Default::default(),
-            staked_ratio: Default::default(),
-            pos_inflation_amount: Default::default(),
-            fee_unshielding_gas_limit: 0,
-            fee_unshielding_descriptions_limit: 0,
-            minimum_gas_price: Default::default(),
-        };
-        params.init_storage(&mut wl_storage).expect("Test failed");
+
         // insert and commit
-        wl_storage
-            .storage
+        storage
             .write(&key, value_bytes.clone())
             .expect("write failed");
-        wl_storage.storage.block.epoch = wl_storage.storage.block.epoch.next();
-        wl_storage
-            .storage
-            .block
-            .pred_epochs
-            .new_epoch(BlockHeight(100));
+        storage.block.epoch = storage.block.epoch.next();
+        storage.block.pred_epochs.new_epoch(BlockHeight(100));
         // make wl_storage to update conversion for a new epoch
-
+        let mut wl_storage = WlStorage::new(WriteLog::default(), storage);
         let token_params = token::Parameters {
             max_reward_rate: Default::default(),
             kd_gain_nom: Default::default(),
@@ -185,34 +155,14 @@ mod tests {
         for (token, _) in address::tokens() {
             let addr = address::gen_deterministic_established_address(token);
             token_params.init_storage(&addr, &mut wl_storage);
-            wl_storage
-                .write(&token::minted_balance_key(&addr), token::Amount::zero())
-                .unwrap();
-            wl_storage
-                .storage
-                .conversion_state
-                .tokens
-                .insert(token.to_string(), addr);
+            wl_storage.write(&token::minted_balance_key(&addr), token::Amount::zero()).unwrap();
+            wl_storage.storage.conversion_state.tokens.insert(
+                token.to_string(),
+                addr,
+            );
         }
-        wl_storage
-            .storage
-            .conversion_state
-            .tokens
-            .insert("nam".to_string(), wl_storage.storage.native_token.clone());
-        token_params.init_storage(
-            &wl_storage.storage.native_token.clone(),
-            &mut wl_storage,
-        );
-
-        wl_storage
-            .write(
-                &token::minted_balance_key(
-                    &wl_storage.storage.native_token.clone(),
-                ),
-                token::Amount::zero(),
-            )
-            .unwrap();
-        wl_storage.storage.conversion_state.normed_inflation = Some(1);
+        token_params.init_storage(&wl_storage.storage.native_token.clone(), &mut wl_storage);
+        wl_storage.write(&token::minted_balance_key(&wl_storage.storage.native_token.clone()), token::Amount::zero()).unwrap();
         update_allowed_conversions(&mut wl_storage)
             .expect("update conversions failed");
         wl_storage.commit_block().expect("commit failed");

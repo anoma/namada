@@ -1545,8 +1545,15 @@ fn test_validator_sets() {
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
-    update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val1,
+        -unbond.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1741,8 +1748,15 @@ fn test_validator_sets() {
     let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
     println!("val6 {val6} new stake {}", stake6.to_string_native());
-    update_validator_set(&mut s, &params, &val6, bond.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val6,
+        bond.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch, None)
         .unwrap();
     let val6_bond_epoch = pipeline_epoch;
@@ -2016,8 +2030,15 @@ fn test_validator_sets_swap() {
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
 
-    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val2,
+        bond2.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -2028,8 +2049,15 @@ fn test_validator_sets_swap() {
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val3,
+        bond3.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -2055,8 +2083,15 @@ fn test_validator_sets_swap() {
         into_tm_voting_power(params.tm_votes_per_token, stake3)
     );
 
-    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -2067,8 +2102,15 @@ fn test_validator_sets_swap() {
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch, None)
-        .unwrap();
+    update_validator_set(
+        &mut s,
+        &params,
+        &val3,
+        bonds.change(),
+        pipeline_epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
