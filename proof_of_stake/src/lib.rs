@@ -2780,8 +2780,8 @@ where
 
     insert_validator_into_validator_set(
         storage,
-        params,
-        address,
+        &params,
+        &address,
         token::Amount::zero(),
         current_epoch,
         offset,
@@ -4467,7 +4467,7 @@ where
                     &validator,
                     -slash_amount.change(),
                     epoch,
-                    Some(0),
+                    None,
                 )?;
             }
         }
@@ -5310,7 +5310,7 @@ where
             &params,
             dest_validator,
             amount_after_slashing.change(),
-            current_epoch,
+            pipeline_epoch,
             None,
         )?;
     }
