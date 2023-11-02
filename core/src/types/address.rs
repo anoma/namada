@@ -401,7 +401,23 @@ impl TryFrom<Signer> for Address {
     type Error = DecodeError;
 
     fn try_from(signer: Signer) -> Result<Self> {
-        Address::decode(signer.as_ref())
+        // The given address should be an address or payment address. When
+        // sending a token from a spending key, it has been already
+        // replaced with the MASP address.
+        Address::decode(signer.as_ref()).or(
+            match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
+            {
+                Ok(_) => Ok(masp()),
+                Err(_) => {
+                    tracing::debug!(
+                        "\n\n\n Invalid address for IBC transfer: {signer}\n\n\n"
+                    );
+                    Err(DecodeError::InvalidInnerEncodingStr(format!(
+                        "Invalid address for IBC transfer: {signer}"
+                    )))
+                },
+            },
+        )
     }
 }
 
