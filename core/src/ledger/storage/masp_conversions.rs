@@ -137,7 +137,9 @@ where
                 Uint::from(precision),
                 total_token_in_masp.raw_amount(),
             )
-            .and_then(|x| x.0.try_into().ok())
+            .and_then(|x| {
+                x.0.try_into().ok()
+            })
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "MASP inflation for {} assumed to be 0 because the \
