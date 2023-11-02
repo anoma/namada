@@ -590,6 +590,17 @@ impl DB for MockDB {
 
         Ok(())
     }
+
+    #[cold]
+    fn overwrite_entry(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        _height: Option<BlockHeight>,
+        _key: &Key,
+        _new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {

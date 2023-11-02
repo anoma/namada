@@ -1432,6 +1432,60 @@ impl DB for RocksDB {
 
         Ok(())
     }
+
+    #[inline]
+    fn overwrite_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let last_height: BlockHeight = {
+            let state_cf = self.get_column_family(STATE_CF)?;
+
+            types::decode(
+                self.0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))?
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })?,
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })?
+        };
+        let desired_height = height.unwrap_or(last_height);
+
+        if desired_height != last_height {
+            todo!(
+                "Overwriting values at heights different than the last \
+                 committed height hast yet to be implemented"
+            );
+        }
+        // NB: the following code only updates values
+        // written to at the last committed height
+
+        let val = new_value.as_ref();
+
+        // update subspace value
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_key = key.to_string();
+
+        batch.0.put_cf(subspace_cf, subspace_key, val);
+
+        // update value stored in diffs
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let diffs_key = Key::from(last_height.to_db_key())
+            .with_segment("new".to_owned())
+            .join(key)
+            .to_string();
+
+        batch.0.put_cf(diffs_cf, diffs_key, val);
+
+        Ok(())
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
