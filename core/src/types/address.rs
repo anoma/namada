@@ -409,13 +409,10 @@ impl TryFrom<Signer> for Address {
             {
                 Ok(_) => Ok(masp()),
                 Err(_) => {
-                    tracing::debug!(
-                        "\n\n\n Invalid address for IBC transfer: {signer}\n\n\n"
-                    );
                     Err(DecodeError::InvalidInnerEncodingStr(format!(
                         "Invalid address for IBC transfer: {signer}"
                     )))
-                },
+                }
             },
         )
     }
