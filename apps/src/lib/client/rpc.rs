@@ -341,7 +341,6 @@ pub async fn query_transparent_balance<'a>(
                         );
                     }
                     Err(e) => {
-                        display_line!(context.io(), "Querying error: {e}");
                         display_line!(
                             context.io(),
                             "No {} balance found for {}",
