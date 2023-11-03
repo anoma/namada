@@ -552,8 +552,6 @@ fn pgf(c: &mut Criterion) {
 }
 
 fn eth_bridge_nut(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_eth_bridge_nut");
-
     let mut shell = BenchShell::default();
     let native_erc20_addres =
         read_native_erc20_address(&shell.wl_storage).unwrap();
@@ -608,7 +606,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
         ),
     };
 
-    group.bench_function("transfer", |b| {
+    c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
             assert!(nut
                 .validate_tx(
@@ -619,13 +617,9 @@ fn eth_bridge_nut(c: &mut Criterion) {
                 .unwrap())
         })
     });
-
-    group.finish();
 }
 
 fn eth_bridge(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_eth_bridge");
-
     let mut shell = BenchShell::default();
     let native_erc20_addres =
         read_native_erc20_address(&shell.wl_storage).unwrap();
@@ -679,7 +673,7 @@ fn eth_bridge(c: &mut Criterion) {
         ),
     };
 
-    group.bench_function("transfer", |b| {
+    c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
             assert!(eth_bridge
                 .validate_tx(
@@ -690,16 +684,12 @@ fn eth_bridge(c: &mut Criterion) {
                 .unwrap())
         })
     });
-
-    group.finish();
 }
 
 fn eth_bridge_pool(c: &mut Criterion) {
     // NOTE: this vp is one of the most expensive but its cost comes from the
     // numerous accesses to storage that we already account for, so no need to
     // benchmark specific sections of it like for the ibc native vp
-    let mut group = c.benchmark_group("vp_eth_bridge_pool");
-
     let mut shell = BenchShell::default();
     let native_erc20_addres =
         read_native_erc20_address(&shell.wl_storage).unwrap();
@@ -778,7 +768,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
         ),
     };
 
-    group.bench_function("transfer", |b| {
+    c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
             assert!(bridge_pool
                 .validate_tx(
@@ -789,8 +779,6 @@ fn eth_bridge_pool(c: &mut Criterion) {
                 .unwrap())
         })
     });
-
-    group.finish();
 }
 
 fn parameters(c: &mut Criterion) {
