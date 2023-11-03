@@ -450,7 +450,7 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
-        let native_token = if !cfg!(test) {
+        let native_token = if !cfg!(test) && !cfg!(feature = "benches") {
             let chain_dir = base_dir.join(chain_id.as_str());
             let genesis =
                 genesis::chain::Finalized::read_toml_files(&chain_dir)
