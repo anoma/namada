@@ -484,7 +484,7 @@ where
             // Rebuild Merkle tree
             self.block.tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.get_merkle_tree(height))?;
-            if self.block.height > 0 {
+            if self.block.height.0 > 0 {
                 // The derived conversions will be placed in MASP address space
                 let masp_addr = masp();
                 let key_prefix: Key = masp_addr.to_db_key().into();
@@ -506,7 +506,7 @@ where
                 )
                 .expect("unable to decode conversion state");
                 self.conversion_state.tokens = tokens;
-                if self.last_epoch > 0 {
+                if self.last_epoch.0 > 0 {
                     self.conversion_state.normed_inflation = normed_inflation;
                     self.conversion_state.tree = tree;
                     self.conversion_state.assets = assets;
