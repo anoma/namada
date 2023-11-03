@@ -286,10 +286,9 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
         .expect("Current directory should exist")
         .canonicalize()
         .expect("Current directory should exist");
-    while current_path.file_name().unwrap() != "apps" {
+    while current_path.file_name().unwrap() != "namada" {
         current_path.pop();
     }
-    current_path.pop();
     let chain_dir = current_path.join("genesis").join("localnet");
     let templates = templates::load_and_validate(&chain_dir)
         .expect("Missing genesis files");

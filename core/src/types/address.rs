@@ -408,11 +408,9 @@ impl TryFrom<Signer> for Address {
             match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
             {
                 Ok(_) => Ok(masp()),
-                Err(_) => {
-                    Err(DecodeError::InvalidInnerEncodingStr(format!(
-                        "Invalid address for IBC transfer: {signer}"
-                    )))
-                }
+                Err(_) => Err(DecodeError::InvalidInnerEncodingStr(format!(
+                    "Invalid address for IBC transfer: {signer}"
+                ))),
             },
         )
     }
