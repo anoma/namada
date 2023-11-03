@@ -580,6 +580,9 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/e2e-test.*/setup/validator-*/.namada/logs/*.log
+            /tmp/.*/logs/*
+            /tmp/.*/setup/validator-*
+            /tmp/.*/setup/validator-*/*
           retention-days: 5
       - name: Print sccache stats
         if: always()
