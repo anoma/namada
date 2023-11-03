@@ -41,7 +41,7 @@ path = "host_env.rs"
 
 [dev-dependencies]
 namada = { path = "../shared", features = ["testing"] }
-namada_apps = { path = "../apps", features = ["testing"] }
+namada_apps = { path = "../apps", features = ["benches"] }
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
