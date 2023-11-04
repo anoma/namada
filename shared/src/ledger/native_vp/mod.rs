@@ -11,6 +11,7 @@ use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::WrapErr;
+use namada_core::ledger::gas::GasMetering;
 pub use namada_core::ledger::vp_env::VpEnv;
 
 use super::storage_api::{self, ResultExt, StorageRead};
@@ -538,8 +539,10 @@ where
         unimplemented!("no masp native vp")
     }
 
-    fn charge_gas(&self, _used_gas: u64) -> Result<(), storage_api::Error> {
-        unimplemented!("Native vps don't consume whitelisted gas")
+    fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error> {
+        self.gas_meter.borrow_mut().consume(used_gas).map_err(|_| {
+            Error::SimpleMessage("Gas limit exceeded in native vp")
+        })
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, storage_api::Error> {
