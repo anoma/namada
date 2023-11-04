@@ -208,27 +208,9 @@ pub struct Parameters {
 pub struct HexString(pub String);
 
 impl HexString {
-    pub fn to_bytes(&self) -> Result<Vec<u8>, HexKeyError> {
+    pub fn parse(&self) -> Result<Vec<u8>, HexKeyError> {
         let bytes = HEXLOWER.decode(self.0.as_ref())?;
         Ok(bytes)
-    }
-
-    pub fn to_sha256_bytes(&self) -> Result<[u8; 32], HexKeyError> {
-        let bytes = HEXLOWER.decode(self.0.as_ref())?;
-        let slice = bytes.as_slice();
-        let array: [u8; 32] = slice.try_into()?;
-        Ok(array)
-    }
-
-    pub fn to_public_key(&self) -> Result<common::PublicKey, HexKeyError> {
-        let key = common::PublicKey::from_str(&self.0)
-            .map_err(HexKeyError::InvalidPublicKey)?;
-        Ok(key)
-    }
-
-    pub fn to_dkg_public_key(&self) -> Result<DkgPublicKey, HexKeyError> {
-        let key = DkgPublicKey::from_str(&self.0)?;
-        Ok(key)
     }
 }
 
