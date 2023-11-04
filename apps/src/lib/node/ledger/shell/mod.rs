@@ -369,8 +369,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     /// The id of the current chain
-    #[allow(dead_code)]
-    chain_id: ChainId,
+    pub chain_id: ChainId,
     /// The persistent storage with write log
     pub wl_storage: WlStorage<D, H>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in

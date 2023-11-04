@@ -8,7 +8,6 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use namada::ledger::ibc::storage::ibc_token;
 use namada::types::address::{Address, InternalAddress};
-use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthAddress;
 use namada::types::ibc::is_ibc_denom;
 use namada::types::io::Io;
@@ -22,12 +21,10 @@ use namada_sdk::{Namada, NamadaImpl};
 use super::args;
 use crate::cli::utils;
 use crate::config::global::GlobalConfig;
-use crate::config::{self, genesis, Config};
+use crate::config::{genesis, Config};
 use crate::wallet::CliWalletUtils;
 use crate::{wallet, wasm_loader};
 
-/// Env. var to set chain ID
-const ENV_VAR_CHAIN_ID: &str = "NAMADA_CHAIN_ID";
 /// Env. var to set wasm directory
 pub const ENV_VAR_WASM_DIR: &str = "NAMADA_WASM_DIR";
 
@@ -251,34 +248,13 @@ impl ChainContext {
 }
 
 /// Load global config from expected path in the `base_dir` or try to generate a
-/// new one if it doesn't exist.
+/// new one without a chain if it doesn't exist.
 pub fn read_or_try_new_global_config(
     global_args: &args::Global,
 ) -> GlobalConfig {
     GlobalConfig::read(&global_args.base_dir).unwrap_or_else(|err| {
-        if let config::global::Error::FileNotFound(_) = err {
-            let chain_id = global_args.chain_id.clone().or_else(|| {
-                env::var(ENV_VAR_CHAIN_ID).ok().map(|chain_id| {
-                    ChainId::from_str(&chain_id).unwrap_or_else(|err| {
-                        eprintln!("Invalid chain ID: {}", err);
-                        super::safe_exit(1)
-                    })
-                })
-            });
-
-            // If not specified, use the default
-            let chain_id = chain_id.unwrap_or_default();
-
-            let config = GlobalConfig::new(chain_id);
-            config.write(&global_args.base_dir).unwrap_or_else(|err| {
-                tracing::error!("Error writing global config file: {}", err);
-                super::safe_exit(1)
-            });
-            config
-        } else {
-            eprintln!("Error reading global config: {}", err);
-            super::safe_exit(1)
-        }
+        eprintln!("Error reading global config: {}", err);
+        super::safe_exit(1)
     })
 }
 

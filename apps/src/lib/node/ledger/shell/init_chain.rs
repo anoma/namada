@@ -71,7 +71,10 @@ where
             any(test, feature = "benches"),
             not(feature = "integration")
         ))]
-        let genesis = genesis::make_dev_genesis(_num_validators);
+        let genesis = {
+            let chain_dir = self.base_dir.join(chain_id);
+            genesis::make_dev_genesis(_num_validators, chain_dir)
+        };
         #[cfg(all(
             any(test, feature = "benches"),
             not(feature = "integration")
