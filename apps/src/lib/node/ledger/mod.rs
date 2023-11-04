@@ -16,7 +16,7 @@ use byte_unit::Byte;
 use futures::future::TryFutureExt;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::types::storage::Key;
+use namada::types::storage::{BlockHeight, Key};
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
@@ -166,6 +166,13 @@ impl Shell {
             }
         }
     }
+}
+
+/// Determine if the ledger is migrating state.
+pub fn migrating_state() -> Option<BlockHeight> {
+    const ENV_INITIAL_HEIGHT: &str = "NAMADA_INITIAL_HEIGHT";
+    let height = std::env::var(ENV_INITIAL_HEIGHT).ok()?;
+    height.parse::<u64>().ok().map(BlockHeight)
 }
 
 /// Run the ledger with an async runtime
