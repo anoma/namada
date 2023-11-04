@@ -538,6 +538,7 @@ impl CliApi {
                     let namada = ctx.to_sdk(&client, io);
                     rpc::epoch_sleep(&namada, args).await;
                 }
+                Utils::PrettyDump(PrettyDump(args)) => utils::pretty_dump(args),
             },
         }
         Ok(())
