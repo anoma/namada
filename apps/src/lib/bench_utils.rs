@@ -209,7 +209,8 @@ impl Default for BenchShell {
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(vec![]));
-        let voting_start_epoch = Epoch(25);
+        let voting_start_epoch =
+            Epoch(2 + params.pipeline_len + params.unbonding_len);
         let signed_tx = generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
@@ -218,8 +219,8 @@ impl Default for BenchShell {
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
                 voting_start_epoch,
-                voting_end_epoch: 28.into(),
-                grace_epoch: 34.into(),
+                voting_end_epoch: voting_start_epoch + 3_u64,
+                grace_epoch: voting_start_epoch + 9_u64,
             },
             None,
             Some(vec![content_section]),
