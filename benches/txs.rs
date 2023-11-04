@@ -395,7 +395,7 @@ fn update_account(c: &mut Criterion) {
         Some(&defaults::albert_keypair()),
     );
 
-    c.bench_function("update_vp", |b| {
+    c.bench_function("update_account", |b| {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&vp),
