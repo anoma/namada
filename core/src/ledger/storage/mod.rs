@@ -30,9 +30,10 @@ pub use self::masp_conversions::update_allowed_conversions;
 pub use self::masp_conversions::{
     calculate_masp_rewards, encode_asset_type, ConversionState,
 };
+use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
-    DATA_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
 use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
@@ -606,7 +607,7 @@ where
     pub fn has_key(&self, key: &Key) -> Result<(bool, u64)> {
         Ok((
             self.block.tree.has_key(key)?,
-            key.len() as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
         ))
     }
 
@@ -621,10 +622,10 @@ where
         match self.db.read_subspace_val(key)? {
             Some(v) => {
                 let gas =
-                    (key.len() + v.len()) as u64 * DATA_ACCESS_GAS_PER_BYTE;
+                    (key.len() + v.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE;
                 Ok((Some(v), gas))
             }
-            None => Ok((None, key.len() as u64 * DATA_ACCESS_GAS_PER_BYTE)),
+            None => Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE)),
         }
     }
 
@@ -644,11 +645,13 @@ where
                 self.get_last_block_height(),
             )? {
                 Some(v) => {
-                    let gas =
-                        (key.len() + v.len()) as u64 * DATA_ACCESS_GAS_PER_BYTE;
+                    let gas = (key.len() + v.len()) as u64
+                        * STORAGE_ACCESS_GAS_PER_BYTE;
                     Ok((Some(v), gas))
                 }
-                None => Ok((None, key.len() as u64 * DATA_ACCESS_GAS_PER_BYTE)),
+                None => {
+                    Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE))
+                }
             }
         }
     }
@@ -664,7 +667,7 @@ where
     ) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (
             self.db.iter_prefix(Some(prefix)),
-            prefix.len() as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            prefix.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -769,7 +772,7 @@ where
     pub fn get_chain_id(&self) -> (String, u64) {
         (
             self.chain_id.to_string(),
-            CHAIN_ID_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -777,7 +780,7 @@ where
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
         (
             self.block.height,
-            BLOCK_HEIGHT_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -785,7 +788,7 @@ where
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (
             self.block.hash.clone(),
-            BLOCK_HASH_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            BLOCK_HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -949,7 +952,7 @@ where
     pub fn get_current_epoch(&self) -> (Epoch, u64) {
         (
             self.block.epoch,
-            EPOCH_TYPE_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -957,7 +960,7 @@ where
     pub fn get_last_epoch(&self) -> (Epoch, u64) {
         (
             self.last_epoch,
-            EPOCH_TYPE_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -984,17 +987,24 @@ where
     ) -> Result<(Option<Header>, u64)> {
         match height {
             Some(h) if h == self.get_block_height().0 => {
-                Ok((self.header.clone(), DATA_ACCESS_GAS_PER_BYTE))
+                let header = self.header.clone();
+                let gas = match header {
+                    Some(ref header) => {
+                        header.encoded_len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE
+                    }
+                    None => MEMORY_ACCESS_GAS_PER_BYTE,
+                };
+                Ok((header, gas))
             }
             Some(h) => match self.db.read_block_header(h)? {
                 Some(header) => {
-                    let gas =
-                        header.encoded_len() as u64 * DATA_ACCESS_GAS_PER_BYTE;
+                    let gas = header.encoded_len() as u64
+                        * STORAGE_ACCESS_GAS_PER_BYTE;
                     Ok((Some(header), gas))
                 }
-                None => Ok((None, DATA_ACCESS_GAS_PER_BYTE)),
+                None => Ok((None, STORAGE_ACCESS_GAS_PER_BYTE)),
             },
-            None => Ok((self.header.clone(), DATA_ACCESS_GAS_PER_BYTE)),
+            None => Ok((self.header.clone(), STORAGE_ACCESS_GAS_PER_BYTE)),
         }
     }
 

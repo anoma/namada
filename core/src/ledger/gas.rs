@@ -22,22 +22,37 @@ pub enum Error {
     GasOverflow,
 }
 
-const COMPILE_GAS_PER_BYTE: u64 = 1;
+const COMPILE_GAS_PER_BYTE: u64 = 24;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
-const TX_SIZE_GAS_PER_BYTE: u64 = 10;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 1;
-const WRAPPER_TX_VALIDATION_GAS: u64 = 1;
+const WRAPPER_TX_VALIDATION_GAS: u64 = 58_371;
+const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
+    100 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+// NOTE: this accounts for the latency of a physical drive access. For read
+// accesses we have no way to tell if data was in cache or in storage. Moreover,
+// the latency shouldn't really be accounted per single byte but rather per
+// storage blob but this would make it more tedious to compute gas in the
+// codebase. For these two reasons we just set an arbitrary value (based on
+// actual SSDs latency) per byte here
+const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 75;
 
-/// The cost of accessing data, per byte, regardless of its location (memory or
-/// storage)
-pub const DATA_ACCESS_GAS_PER_BYTE: u64 = 1;
-/// The cost of writing to storage, per byte
-pub const STORAGE_WRITE_GAS_PER_BYTE: u64 = 100;
+/// The cost of accessing data from memory (both read and write mode), per byte
+pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 2;
+/// The cost of accessing data from storage, per byte
+pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
+    3 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+/// The cost of writing data to storage, per byte
+pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
+    MEMORY_ACCESS_GAS_PER_BYTE + 848 + STORAGE_OCCUPATION_GAS_PER_BYTE;
 /// The cost of verifying a signle signature of a transaction
-pub const VERIFY_TX_SIG_GAS: u64 = 10;
+pub const VERIFY_TX_SIG_GAS: u64 = 9_793;
 /// The cost for requesting one more page in wasm (64KiB)
 pub const WASM_MEMORY_PAGE_GAS: u32 =
-    DATA_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
+    MEMORY_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
+/// The cost to validate an Ibc action
+pub const IBC_ACTION_VALIDATE_GAS: u64 = 7_511;
+/// The cost to execute an Ibc action
+pub const IBC_ACTION_EXECUTE_GAS: u64 = 47_452;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -162,7 +177,7 @@ pub trait GasMetering {
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
         self.consume(
             bytes_len
-                .checked_mul(DATA_ACCESS_GAS_PER_BYTE)
+                .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
                 .ok_or(Error::GasOverflow)?,
         )
     }
@@ -262,7 +277,7 @@ impl TxGasMeter {
         let bytes_len = tx_bytes.len() as u64;
         self.consume(
             bytes_len
-                .checked_mul(TX_SIZE_GAS_PER_BYTE)
+                .checked_mul(STORAGE_OCCUPATION_GAS_PER_BYTE)
                 .ok_or(Error::GasOverflow)?,
         )
     }
