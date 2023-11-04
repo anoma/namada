@@ -2,6 +2,7 @@
 
 use std::num::TryFromIntError;
 
+use namada_core::ledger::gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_core::types::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::types::hash::{Hash, HASH_LENGTH};
 use namada_core::types::storage::{
@@ -9,7 +10,6 @@ use namada_core::types::storage::{
 };
 use thiserror::Error;
 
-use super::gas::DATA_ACCESS_GAS_PER_BYTE;
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
 use crate::ledger::storage::write_log::WriteLog;
@@ -288,7 +288,7 @@ pub fn get_tx_code_hash(
     gas_meter: &mut VpGasMeter,
     tx: &Tx,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(gas_meter, HASH_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE)?;
+    add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -317,7 +317,10 @@ pub fn get_tx_index(
     gas_meter: &mut VpGasMeter,
     tx_index: &TxIndex,
 ) -> EnvResult<TxIndex> {
-    add_gas(gas_meter, TX_INDEX_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE)?;
+    add_gas(
+        gas_meter,
+        TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+    )?;
     Ok(*tx_index)
 }
 
@@ -332,7 +335,7 @@ where
 {
     add_gas(
         gas_meter,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * DATA_ACCESS_GAS_PER_BYTE,
+        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
     )?;
     Ok(storage.native_token.clone())
 }

@@ -6,7 +6,7 @@ use eth_bridge_pool::{GasFee, PendingTransfer, TransferToEthereum};
 use namada_tx_prelude::borsh_ext::BorshSerializeExt;
 use namada_tx_prelude::*;
 
-#[transaction(gas = 100000)]
+#[transaction(gas = 1038546)]
 fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     let data = signed.data().ok_or_err_msg("Missing data")?;
     let transfer = PendingTransfer::try_from_slice(&data[..])

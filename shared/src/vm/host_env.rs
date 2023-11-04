@@ -7,7 +7,9 @@ use std::num::TryFromIntError;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada_core::ledger::gas::{GasMetering, TxGasMeter};
+use namada_core::ledger::gas::{
+    GasMetering, TxGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
+};
 use namada_core::types::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::types::internal::KeyVal;
 use namada_core::types::storage::TX_INDEX_LENGTH;
@@ -18,7 +20,7 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::ledger::gas::{self, VpGasMeter, DATA_ACCESS_GAS_PER_BYTE};
+use crate::ledger::gas::{self, VpGasMeter};
 use crate::ledger::storage::write_log::{self, WriteLog};
 use crate::ledger::storage::{self, Storage, StorageHasher};
 use crate::ledger::vp_host_fns;
@@ -1382,7 +1384,7 @@ where
     let verifiers = unsafe { env.ctx.verifiers.get() };
     // This is not a storage write, use the same multiplier used for a storage
     // read
-    tx_charge_gas(env, addr_len * DATA_ACCESS_GAS_PER_BYTE)?;
+    tx_charge_gas(env, addr_len * MEMORY_ACCESS_GAS_PER_BYTE)?;
     verifiers.insert(addr);
 
     Ok(())
@@ -1515,7 +1517,7 @@ where
     H: StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_charge_gas(env, TX_INDEX_LENGTH as u64 * DATA_ACCESS_GAS_PER_BYTE)?;
+    tx_charge_gas(env, TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
     let tx_index = unsafe { env.ctx.tx_index.get() };
     Ok(tx_index.0)
 }
@@ -1593,7 +1595,7 @@ where
     // Gas for getting the native token address from storage
     tx_charge_gas(
         env,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * DATA_ACCESS_GAS_PER_BYTE,
+        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
     )?;
     let storage = unsafe { env.ctx.storage.get() };
     let native_token = storage.native_token.clone();
@@ -2493,7 +2495,7 @@ where
     CA: WasmCacheAccess,
 {
     let tx_index = unsafe { ctx.tx_index.get() };
-    ibc_tx_charge_gas(ctx, crate::vm::host_env::gas::DATA_ACCESS_GAS_PER_BYTE)?;
+    ibc_tx_charge_gas(ctx, MEMORY_ACCESS_GAS_PER_BYTE)?;
     Ok(TxIndex(tx_index.0))
 }
 
