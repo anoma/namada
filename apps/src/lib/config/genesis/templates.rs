@@ -470,11 +470,11 @@ pub struct EthBridgeParams {
     /// Minimum number of confirmations needed to trust an Ethereum branch.
     /// This must be at least one.
     pub min_confirmations: MinimumConfirmations,
+    /// List of ERC20 token types whitelisted at genesis time.
+    pub erc20_whitelist: Vec<Erc20WhitelistEntry>,
     /// The addresses of the Ethereum contracts that need to be directly known
     /// by validators.
     pub contracts: Contracts,
-    /// List of ERC20 token types whitelisted at genesis time.
-    pub erc20_whitelist: Vec<Erc20WhitelistEntry>,
 }
 
 impl TokenBalances {

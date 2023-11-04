@@ -266,7 +266,10 @@ impl From<TryFromSliceError> for HexKeyError {
 /// This includes adding the Ethereum bridge parameters and
 /// adding a specified number of validators.
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
-pub fn make_dev_genesis(num_validators: u64) -> Finalized {
+pub fn make_dev_genesis(
+    num_validators: u64,
+    target_chain_dir: std::path::PathBuf,
+) -> Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
@@ -447,6 +450,14 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
             })
         }
     }
+
+    // Write out the TOML files for benches
+    #[cfg(feature = "benches")]
+    genesis
+        .write_toml_files(&target_chain_dir)
+        .expect("Must be able to write the finalized genesis");
+    #[cfg(not(feature = "benches"))]
+    let _ = target_chain_dir; // avoid unused warn
 
     genesis
 }

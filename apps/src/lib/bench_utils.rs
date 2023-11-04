@@ -86,6 +86,7 @@ use tempfile::TempDir;
 
 use crate::cli::context::FromContext;
 use crate::cli::Context;
+use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
@@ -682,13 +683,24 @@ impl Client for BenchShell {
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
+        let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
+
+        // Create a global config and an empty wallet in the chain dir - this is
+        // needed in `Context::new`
+        let config = GlobalConfig::new(shell.inner.chain_id.clone());
+        config.write(&base_dir).unwrap();
+        let wallet = crate::wallet::CliWalletUtils::new(
+            base_dir.join(shell.inner.chain_id.as_str()),
+        );
+        wallet.save().unwrap();
 
         let ctx = Context::new::<StdIo>(crate::cli::args::Global {
-            chain_id: None,
-            base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
+            chain_id: Some(shell.inner.chain_id.clone()),
+            base_dir,
             wasm_dir: Some(WASM_DIR.into()),
         })
         .unwrap();
+
         let mut chain_ctx = ctx.take_chain_or_exit();
 
         // Generate spending key for Albert and Bertha
