@@ -1,6 +1,6 @@
 //! IBC integration as a native validity predicate
 
-mod context;
+pub mod context;
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
@@ -8,6 +8,9 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
+use namada_core::ledger::gas::{
+    IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS,
+};
 use namada_core::ledger::ibc::{
     Error as ActionError, IbcActions, TransferModule, ValidationParams,
 };
@@ -104,6 +107,10 @@ where
         let mut actions = IbcActions::new(ctx.clone());
         let module = TransferModule::new(ctx.clone());
         actions.add_transfer_route(module.module_id(), module);
+        // Charge gas for the expensive execution
+        self.ctx
+            .charge_gas(IBC_ACTION_EXECUTE_GAS)
+            .map_err(Error::NativeVpError)?;
         actions.execute(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -146,10 +153,15 @@ where
 
         let module = TransferModule::new(ctx);
         actions.add_transfer_route(module.module_id(), module);
+        // Charge gas for the expensive validation
+        self.ctx
+            .charge_gas(IBC_ACTION_VALIDATE_GAS)
+            .map_err(Error::NativeVpError)?;
         actions.validate(tx_data).map_err(Error::IbcAction)
     }
 
-    fn validation_params(&self) -> VpResult<ValidationParams> {
+    /// Retrieve the validation params
+    pub fn validation_params(&self) -> VpResult<ValidationParams> {
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
         let pos_params =
