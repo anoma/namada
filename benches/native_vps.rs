@@ -3,7 +3,6 @@ use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 use std::str::FromStr;
 
-use borsh::BorshSerialize;
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
@@ -39,8 +38,6 @@ use namada::ledger::native_vp::parameters::ParametersVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
-use namada::ledger::storage::LastBlock;
-use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
 use namada::proto::{Code, Section, Tx};
@@ -51,8 +48,7 @@ use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_apps::bench_utils::{
-    generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
-    generate_tx, BenchShell, TX_BRIDGE_POOL_WASM, TX_IBC_WASM,
+    generate_foreign_key_tx, BenchShell, TX_BRIDGE_POOL_WASM, TX_IBC_WASM,
     TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_TRANSFER_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
@@ -214,13 +210,15 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(governance
-                    .validate_tx(
-                        &signed_tx,
-                        governance.ctx.keys_changed,
-                        governance.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    governance
+                        .validate_tx(
+                            &signed_tx,
+                            governance.ctx.keys_changed,
+                            governance.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -386,13 +384,14 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }
@@ -451,13 +450,15 @@ fn vp_multitoken(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(multitoken
-                    .validate_tx(
-                        signed_tx,
-                        multitoken.ctx.keys_changed,
-                        multitoken.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    multitoken
+                        .validate_tx(
+                            signed_tx,
+                            multitoken.ctx.keys_changed,
+                            multitoken.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -537,13 +538,14 @@ fn pgf(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(pgf
-                    .validate_tx(
+                assert!(
+                    pgf.validate_tx(
                         &signed_tx,
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }
@@ -608,13 +610,14 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
-            assert!(nut
-                .validate_tx(
+            assert!(
+                nut.validate_tx(
                     &signed_tx,
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .unwrap())
+                .unwrap()
+            )
         })
     });
 }
@@ -675,13 +678,15 @@ fn eth_bridge(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
-            assert!(eth_bridge
-                .validate_tx(
-                    &signed_tx,
-                    eth_bridge.ctx.keys_changed,
-                    eth_bridge.ctx.verifiers,
-                )
-                .unwrap())
+            assert!(
+                eth_bridge
+                    .validate_tx(
+                        &signed_tx,
+                        eth_bridge.ctx.keys_changed,
+                        eth_bridge.ctx.verifiers,
+                    )
+                    .unwrap()
+            )
         })
     });
 }
@@ -770,13 +775,15 @@ fn eth_bridge_pool(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
-            assert!(bridge_pool
-                .validate_tx(
-                    &signed_tx,
-                    bridge_pool.ctx.keys_changed,
-                    bridge_pool.ctx.verifiers,
-                )
-                .unwrap())
+            assert!(
+                bridge_pool
+                    .validate_tx(
+                        &signed_tx,
+                        bridge_pool.ctx.keys_changed,
+                        bridge_pool.ctx.verifiers,
+                    )
+                    .unwrap()
+            )
         })
     });
 }
@@ -812,7 +819,9 @@ fn parameters(c: &mut Criterion) {
                         namada::types::transaction::DecryptedTx::Decrypted,
                     ),
                 );
-                tx.set_data(namada::proto::Data::new(0.try_to_vec().unwrap()));
+                tx.set_data(namada::proto::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
                 tx
             }
             _ => panic!("Unexpected bench test"),
@@ -842,13 +851,15 @@ fn parameters(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(parameters
-                    .validate_tx(
-                        &signed_tx,
-                        parameters.ctx.keys_changed,
-                        parameters.ctx.verifiers,
-                    )
-                    .unwrap())
+                assert!(
+                    parameters
+                        .validate_tx(
+                            &signed_tx,
+                            parameters.ctx.keys_changed,
+                            parameters.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
             })
         });
     }
@@ -887,7 +898,9 @@ fn pos(c: &mut Criterion) {
                         namada::types::transaction::DecryptedTx::Decrypted,
                     ),
                 );
-                tx.set_data(namada::proto::Data::new(0.try_to_vec().unwrap()));
+                tx.set_data(namada::proto::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
                 tx
             }
             _ => panic!("Unexpected bench test"),
@@ -917,13 +930,14 @@ fn pos(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(pos
-                    .validate_tx(
+                assert!(
+                    pos.validate_tx(
                         &signed_tx,
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .unwrap())
+                    .unwrap()
+                )
             })
         });
     }

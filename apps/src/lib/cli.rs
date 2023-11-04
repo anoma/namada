@@ -1087,15 +1087,19 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Config {
         Gen(ConfigGen),
+        UpdateLocalConfig(LocalConfig),
     }
 
     impl SubCmd for Config {
         const CMD: &'static str = "config";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .and_then(|matches| SubCmd::parse(matches).map(Self::Gen))
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let gen = SubCmd::parse(matches).map(Self::Gen);
+                let gas_tokens =
+                    SubCmd::parse(matches).map(Self::UpdateLocalConfig);
+                gen.or(gas_tokens)
+            })
         }
 
         fn def() -> App {
@@ -1104,6 +1108,7 @@ pub mod cmds {
                 .arg_required_else_help(true)
                 .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
+                .subcommand(LocalConfig::def())
         }
     }
 
@@ -1120,6 +1125,25 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate the default configuration file.")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LocalConfig(pub args::UpdateLocalConfig);
+
+    impl SubCmd for LocalConfig {
+        const CMD: &'static str = "update-local-config";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::UpdateLocalConfig::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Update the validator's local configuration.")
+                .add_args::<args::UpdateLocalConfig>()
         }
     }
 
@@ -3025,6 +3049,25 @@ pub mod args {
                     .def()
                     .help("If provided, dump also the diff of the last height"),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UpdateLocalConfig {
+        pub config_path: PathBuf,
+    }
+
+    impl Args for UpdateLocalConfig {
+        fn parse(matches: &ArgMatches) -> Self {
+            let config_path = DATA_PATH.parse(matches);
+            Self { config_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DATA_PATH.def().help(
+                "The path to the toml file containing the updated local \
+                 configuration.",
+            ))
         }
     }
 

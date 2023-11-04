@@ -20,7 +20,7 @@ use namada::types::transaction::governance::VoteProposalData;
 use namada::types::transaction::pos::{Bond, CommissionChange};
 use namada::vm::wasm::run;
 use namada_apps::bench_utils::{
-    generate_foreign_key_tx, generate_tx, BenchShell, BenchShieldedCtx,
+    generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_REVEAL_PK_WASM,
     TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UPDATE_ACCOUNT_WASM,
@@ -296,21 +296,23 @@ fn vp_implicit(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    vp_code_hash,
-                    tx,
-                    &TxIndex(0),
-                    &Address::from(&implicit_account.to_public()),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                    ),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
+                assert!(
+                    run::vp(
+                        vp_code_hash,
+                        tx,
+                        &TxIndex(0),
+                        &Address::from(&implicit_account.to_public()),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                    )
+                    .unwrap()
                 )
-                .unwrap())
             })
         });
     }
@@ -443,21 +445,23 @@ fn vp_validator(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(run::vp(
-                    vp_code_hash,
-                    signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shell.wl_storage.storage,
-                    &shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                    ),
-                    &keys_changed,
-                    &verifiers,
-                    shell.vp_wasm_cache.clone(),
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        vp_code_hash,
+                        signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shell.wl_storage.storage,
+                        &shell.wl_storage.write_log,
+                        &mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ),
+                        &keys_changed,
+                        &verifiers,
+                        shell.vp_wasm_cache.clone(),
+                    )
+                    .unwrap()
+                );
             })
         });
     }
@@ -530,21 +534,23 @@ fn vp_masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&BTreeSet::default());
 
             b.iter(|| {
-                assert!(run::vp(
-                    vp_code_hash,
-                    &signed_tx,
-                    &TxIndex(0),
-                    &defaults::validator_address(),
-                    &shielded_ctx.shell.wl_storage.storage,
-                    &shielded_ctx.shell.wl_storage.write_log,
-                    &mut VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                    ),
-                    &keys_changed,
-                    &verifiers,
-                    shielded_ctx.shell.vp_wasm_cache.clone(),
-                )
-                .unwrap());
+                assert!(
+                    run::vp(
+                        vp_code_hash,
+                        &signed_tx,
+                        &TxIndex(0),
+                        &defaults::validator_address(),
+                        &shielded_ctx.shell.wl_storage.storage,
+                        &shielded_ctx.shell.wl_storage.write_log,
+                        &mut VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
+                        ),
+                        &keys_changed,
+                        &verifiers,
+                        shielded_ctx.shell.vp_wasm_cache.clone(),
+                    )
+                    .unwrap()
+                );
             })
         });
     }

@@ -86,13 +86,13 @@ use tempfile::TempDir;
 
 use crate::cli::context::FromContext;
 use crate::cli::Context;
+use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
-use crate::{config, wasm_loader};
 
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -273,7 +273,7 @@ impl BenchShell {
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
         tx.set_code(Code::from_hash(code_hash));
-        tx.set_data(Data::new(data.try_to_vec().unwrap()));
+        tx.set_data(Data::new(borsh::to_vec(&data).unwrap()));
 
         if let Some(transaction) = shielded {
             tx.add_section(Section::MaspTx(transaction));

@@ -260,6 +260,7 @@ where
                 vp_wasm_cache,
                 tx_wasm_cache,
                 Some(block_proposer),
+                true,
             ) {
                 Ok(()) => Ok(u64::from(wrapper.gas_limit)),
                 Err(_) => Err(()),
@@ -528,6 +529,7 @@ mod test_prepare_proposal {
     use namada::types::vote_extensions::VoteExtension;
 
     use super::*;
+    use crate::config::ValidatorLocalConfig;
     #[cfg(feature = "abcipp")]
     use crate::facade::tendermint_proto::abci::{
         ExtendedCommitInfo, ExtendedVoteInfo,
@@ -1493,11 +1495,21 @@ mod test_prepare_proposal {
         assert!(result.txs.is_empty());
     }
 
-    // Check that a wrapper using a non-whitelisted token for fee payment is not
-    // included in the block
+    // Check that a wrapper using a token not accepted byt the validator for fee
+    // payment is not included in the block
     #[test]
-    fn test_fee_non_whitelisted_token() {
-        let (shell, _recv, _, _) = test_utils::setup();
+    fn test_fee_non_accepted_token() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        // Update local validator configuration for gas tokens
+        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+            // Remove the allowed btc
+            *local_config = Some(ValidatorLocalConfig {
+                accepted_gas_tokens: std::collections::HashMap::from([(
+                    namada::core::types::address::nam(),
+                    Amount::from(1),
+                )]),
+            });
+        }
 
         let wrapper = WrapperTx::new(
             Fee {
@@ -1534,7 +1546,98 @@ mod test_prepare_proposal {
         assert!(result.txs.is_empty());
     }
 
-    // Check that a wrapper setting a fee amount lower than the minimum required
+    // Check that a wrapper using a non-whitelisted token for fee payment is not
+    // included in the block
+    #[test]
+    fn test_fee_non_whitelisted_token() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 100.into(),
+                token: address::apfel(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            None,
+        );
+
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum accepted
+    // by the validator is not included in the block
+    #[test]
+    fn test_fee_wrong_minimum_accepted_amount() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        // Update local validator configuration for gas tokens
+        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+            // Remove btc and increase minimum for nam
+            *local_config = Some(ValidatorLocalConfig {
+                accepted_gas_tokens: std::collections::HashMap::from([(
+                    namada::core::types::address::nam(),
+                    Amount::from(100),
+                )]),
+            });
+        }
+
+        let wrapper = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: 10.into(),
+                token: shell.wl_storage.storage.native_token.clone(),
+            },
+            crate::wallet::defaults::albert_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            None,
+        );
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
+        wrapper_tx.header.chain_id = shell.chain_id.clone();
+        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.sechashes(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
+            None,
+        )));
+
+        let req = RequestPrepareProposal {
+            txs: vec![wrapper_tx.to_bytes()],
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        eprintln!("Proposal: {:?}", result.txs);
+        assert!(result.txs.is_empty());
+    }
+
+    // Check that a wrapper setting a fee amount lower than the minimum allowed
     // is not included in the block
     #[test]
     fn test_fee_wrong_minimum_amount() {
