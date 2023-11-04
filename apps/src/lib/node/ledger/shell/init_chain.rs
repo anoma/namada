@@ -391,10 +391,7 @@ where
                 );
                 for (key, value) in storage {
                     self.wl_storage
-                        .write_bytes(
-                            &sub_key.join(key),
-                            value.to_bytes().unwrap(),
-                        )
+                        .write_bytes(&sub_key.join(key), value.parse().unwrap())
                         .unwrap();
                 }
             }
