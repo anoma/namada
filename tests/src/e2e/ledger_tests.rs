@@ -3199,3 +3199,170 @@ fn prepare_proposal_data(
     );
     valid_proposal_json_path
 }
+
+#[test]
+fn deactivate_and_reactivate_validator() -> Result<()> {
+    let pipeline_len = 2;
+    let unbonding_len = 4;
+    let test = setup::network(
+        |genesis| {
+            let parameters = ParametersConfig {
+                min_num_of_blocks: 6,
+                max_expected_time_per_block: 1,
+                epochs_per_year: 31_536_000,
+                ..genesis.parameters
+            };
+            let pos_params = PosParamsConfig {
+                pipeline_len,
+                unbonding_len,
+                ..genesis.pos_params
+            };
+            let genesis = GenesisConfig {
+                parameters,
+                pos_params,
+                ..genesis
+            };
+            // let mut genesis =
+            setup::set_validators(4, genesis, default_port_offset)
+            // Remove stake from the 2nd validator so chain can run with a
+            // single node
+            // genesis.validator.get_mut("validator-1").unwrap().tokens = None;
+            // genesis
+            //     .validator
+            //     .get_mut("validator-1")
+            //     .unwrap()
+            //     .non_staked_balance = Some(1);
+            // genesis
+        },
+        None,
+    )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        &Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let _bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+
+    let _bg_validator_2 =
+        start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
+            .background();
+
+    let _bg_validator_3 =
+        start_namada_ledger_node_wait_wasm(&test, Some(3), Some(40))?
+            .background();
+
+    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+
+    // Check the state of validator-0
+    let tx_args = vec![
+        "validator-state",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("consensus set")?;
+    client.assert_success();
+
+    // Deactivate validator-0
+    let tx_args = vec![
+        "deactivate-validator",
+        "--validator",
+        "validator-0",
+        "--signing-keys",
+        "validator-0-account-key",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    let deactivate_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let start = Instant::now();
+    let loop_timeout = Duration::new(120, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!(
+                "Timed out waiting for epoch: {}",
+                deactivate_epoch + pipeline_len
+            );
+        }
+        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
+        if epoch >= deactivate_epoch + pipeline_len {
+            break;
+        }
+    }
+
+    // Check the state of validator-0 again
+    let tx_args = vec![
+        "validator-state",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("inactive")?;
+    client.assert_success();
+
+    // Reactivate validator-0
+    let tx_args = vec![
+        "reactivate-validator",
+        "--validator",
+        "validator-0",
+        "--signing-keys",
+        "validator-0-account-key",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
+    let reactivate_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let start = Instant::now();
+    let loop_timeout = Duration::new(120, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!(
+                "Timed out waiting for epoch: {}",
+                reactivate_epoch + pipeline_len
+            );
+        }
+        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
+        if epoch >= reactivate_epoch + pipeline_len {
+            break;
+        }
+    }
+
+    // Check the state of validator-0 again
+    let tx_args = vec![
+        "validator-state",
+        "--validator",
+        "validator-0",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string("consensus")?;
+    client.assert_success();
+
+    Ok(())
+}

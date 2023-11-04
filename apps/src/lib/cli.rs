@@ -225,6 +225,8 @@ pub mod cmds {
                 // PoS transactions
                 .subcommand(TxInitValidator::def().display_order(2))
                 .subcommand(TxUnjailValidator::def().display_order(2))
+                .subcommand(TxDeactivateValidator::def().display_order(2))
+                .subcommand(TxReactivateValidator::def().display_order(2))
                 .subcommand(Bond::def().display_order(2))
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
@@ -1394,7 +1396,7 @@ pub mod cmds {
     );
 
     impl SubCmd for TxDeactivateValidator {
-        const CMD: &'static str = "unjail-validator";
+        const CMD: &'static str = "deactivate-validator";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
@@ -1406,9 +1408,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(
-                    "Send a signed transaction to unjail a jailed validator.",
-                )
+                .about("Send a signed transaction to deactivate a validator.")
                 .add_args::<args::TxDeactivateValidator<args::CliTypes>>()
         }
     }
@@ -1419,7 +1419,7 @@ pub mod cmds {
     );
 
     impl SubCmd for TxReactivateValidator {
-        const CMD: &'static str = "unjail-validator";
+        const CMD: &'static str = "reactivate-validator";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
@@ -1432,7 +1432,8 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Send a signed transaction to unjail a jailed validator.",
+                    "Send a signed transaction to reactivate an inactive \
+                     validator.",
                 )
                 .add_args::<args::TxReactivateValidator<args::CliTypes>>()
         }
