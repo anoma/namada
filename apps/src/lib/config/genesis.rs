@@ -286,7 +286,8 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
         .expect("Current directory should exist")
         .canonicalize()
         .expect("Current directory should exist");
-    while current_path.file_name().unwrap() != "namada" {
+    // Find the project root dir
+    while !current_path.join("rust-toolchain.toml").exists() {
         current_path.pop();
     }
     let chain_dir = current_path.join("genesis").join("localnet");
