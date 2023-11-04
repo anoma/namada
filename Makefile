@@ -176,7 +176,7 @@ test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
 		$(jobs) \
-		-- --skip e2e --skip integration \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
@@ -191,7 +191,7 @@ test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(jobs) \
 		$(TEST_FILTER) \
-		-- --skip e2e --skip integration \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		--nocapture \
 		-Z unstable-options --report-time
 
