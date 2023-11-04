@@ -85,9 +85,6 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
-#[cfg(feature = "dev")]
-use crate::wallet;
-#[allow(unused_imports)]
 use crate::wallet::{ValidatorData, ValidatorKeys};
 
 fn key_to_tendermint(

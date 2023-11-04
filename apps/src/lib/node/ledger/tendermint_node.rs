@@ -364,9 +364,7 @@ async fn update_tendermint_config(
         Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
             .expect("Invalid moniker");
 
-    // In "dev", only produce blocks when there are txs or when the AppHash
-    // changes
-    config.consensus.create_empty_blocks = true; // !cfg!(feature = "dev");
+    config.consensus.create_empty_blocks = true;
 
     // We set this to true as we don't want any invalid tx be re-applied. This
     // also implies that it's not possible for an invalid tx to become valid
