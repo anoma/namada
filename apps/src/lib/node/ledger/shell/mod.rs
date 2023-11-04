@@ -82,6 +82,7 @@ use crate::facade::tendermint_proto::abci::{
 use crate::facade::tendermint_proto::crypto::public_key;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tower_abci::{request, response};
+use crate::node::ledger;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
@@ -572,6 +573,13 @@ where
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&mut self) -> response::Info {
+        if ledger::migrating_state().is_some() {
+            // when migrating state, return a height of 0, such
+            // that CometBFT calls InitChain and subsequently
+            // updates the apphash in its state
+            return response::Info::default();
+        }
+
         let mut response = response::Info::default();
         let result = self.wl_storage.storage.get_state();
 
