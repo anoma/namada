@@ -4088,6 +4088,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
+ "tempfile",
 ]
 
 [[package]]

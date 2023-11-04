@@ -859,6 +859,7 @@ where
                         vp_wasm_cache,
                         tx_wasm_cache,
                         Some(block_proposer),
+                        false,
                     ) {
                         Ok(()) => TxResult {
                             code: ErrorCodes::Ok.into(),

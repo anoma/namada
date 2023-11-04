@@ -43,16 +43,14 @@ use namada::types::transaction::pos::{
 };
 use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
-    generate_ibc_transfer_tx, generate_ibc_tx, generate_tx, BenchShell,
-    BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
+    BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM,
-    TX_UNBOND_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
+    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
     TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
     TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
-use namada_apps::wallet::defaults;
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -314,7 +312,7 @@ fn redelegate(c: &mut Criterion) {
     let shell = BenchShell::default();
 
     let redelegation = |dest_validator| {
-        generate_tx(
+        shell.generate_tx(
             TX_REDELEGATE_WASM,
             Redelegation {
                 src_validator: defaults::validator_address(),
