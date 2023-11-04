@@ -4,8 +4,8 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
-    ester_address, ester_keypair, keys, validator_address, validator_keypair,
-    validator_keys,
+    ester_address, ester_keypair, keys, tokens, validator_address,
+    validator_keypair, validator_keys,
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
@@ -67,8 +67,8 @@ mod dev {
         ]
     }
 
-    /// Deprecated function, soon to be deleted. Generates default tokens
-    fn tokens() -> HashMap<Address, &'static str> {
+    /// The default tokens with their aliases.
+    pub fn tokens() -> HashMap<Address, &'static str> {
         vec![
             (nam(), "NAM"),
             (btc(), "BTC"),

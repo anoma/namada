@@ -317,6 +317,8 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
     if let Some(vals) = genesis.transactions.validator_account.as_mut() {
         vals[0].address = defaults::validator_address();
     }
+
+    // Use the default address for matching established accounts
     let default_addresses: HashMap<Alias, Address> =
         defaults::addresses().into_iter().collect();
     if let Some(accs) = genesis.transactions.established_account.as_mut() {
@@ -326,6 +328,18 @@ pub fn make_dev_genesis(num_validators: u64) -> Finalized {
             }
         }
     }
+
+    // Use the default token address for matching tokens
+    let default_tokens: HashMap<Alias, Address> = defaults::tokens()
+        .into_iter()
+        .map(|(address, alias)| (Alias::from(alias), address))
+        .collect();
+    for (alias, token) in genesis.tokens.token.iter_mut() {
+        if let Some(addr) = default_tokens.get(alias) {
+            token.address = addr.clone();
+        }
+    }
+
     // remove Albert's bond since it messes up existing unit test math
     if let Some(bonds) = genesis.transactions.bond.as_mut() {
         bonds.retain(|bond| {
