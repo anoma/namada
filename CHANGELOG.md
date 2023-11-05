@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.25.0
+
+This release includes only the new genesis creation flow.
+
 ## v0.24.1
 
 Namada 0.24.1 is patch release addressing ledger startup problems with wasm artifacts and several other minor fixes.
@@ -69,9 +73,9 @@ Namada 0.24.0 is a minor release that introduces an SDK crate, PoS redelegation,
 
 ### MISCELLANEOUS
 
-- Switched from using `libsecp256k1` to `k256` crate.
-  ([\#1958](https://github.com/anoma/namada/pull/1958))
 - Tag `ed25519` keys with `ZeroizeOnDrop`
+  ([\#1958](https://github.com/anoma/namada/pull/1958))
+- Switched from using `libsecp256k1` to `k256` crate.
   ([\#1958](https://github.com/anoma/namada/pull/1958))
 
 ### SDK
