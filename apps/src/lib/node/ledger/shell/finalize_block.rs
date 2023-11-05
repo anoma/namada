@@ -1667,7 +1667,6 @@ mod test_finalize_block {
     /// Test that adding a new erc20 transfer to the bridge pool
     /// increments the pool's nonce.
     fn test_bp_nonce_is_incremented() {
-        use crate::node::ledger::shell::address::nam;
         test_bp(|shell: &mut TestShell| {
             let asset = EthAddress([0xff; 20]);
             let receiver = EthAddress([0xaa; 20]);
@@ -1694,7 +1693,7 @@ mod test_finalize_block {
             {
                 let amt: Amount = 999_999_u64.into();
                 let pool_balance_key = token::balance_key(
-                    &nam(),
+                    &shell.wl_storage.storage.native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
                 );
                 shell
@@ -1717,7 +1716,7 @@ mod test_finalize_block {
                         sender: bertha.clone(),
                     },
                     gas_fee: GasFee {
-                        token: nam(),
+                        token: shell.wl_storage.storage.native_token.clone(),
                         amount: 10u64.into(),
                         payer: bertha.clone(),
                     },
@@ -3090,11 +3089,12 @@ mod test_finalize_block {
             &val1.address,
             del_1_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 
         // Self-unbond
-        let self_unbond_1_amount = token::Amount::native_whole(154_654);
+        let self_unbond_1_amount = token::Amount::native_whole(54_654);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.wl_storage,
             None,
@@ -3190,6 +3190,7 @@ mod test_finalize_block {
             &val1.address,
             self_bond_1_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 
@@ -3231,6 +3232,7 @@ mod test_finalize_block {
             &val1.address,
             del_2_amount,
             current_epoch,
+            None,
         )
         .unwrap();
 

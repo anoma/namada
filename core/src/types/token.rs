@@ -1,5 +1,6 @@
 //! A basic fungible token
 
+use std::cmp::Ordering;
 use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
@@ -313,8 +314,6 @@ impl From<Denomination> for u8 {
     Hash,
     PartialEq,
     Eq,
-    PartialOrd,
-    Ord,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -348,6 +347,10 @@ impl DenominatedAmount {
     pub fn to_string_precise(&self) -> String {
         let decimals = self.denom.0 as usize;
         let mut string = self.amount.raw.to_string();
+        // escape hatch if there are no decimal places
+        if decimals == 0 {
+            return string;
+        }
         if string.len() > decimals {
             string.insert(string.len() - decimals, '.');
         } else {
@@ -403,7 +406,11 @@ impl DenominatedAmount {
 impl Display for DenominatedAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = self.to_string_precise();
-        let string = string.trim_end_matches(&['0']);
+        let string = if self.denom.0 > 0 {
+            string.trim_end_matches(&['0'])
+        } else {
+            &string
+        };
         let string = string.trim_end_matches(&['.']);
         f.write_str(string)
     }
@@ -450,6 +457,50 @@ impl FromStr for DenominatedAmount {
             amount: Amount { raw: value },
             denom,
         })
+    }
+}
+
+impl PartialOrd for DenominatedAmount {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.denom < other.denom {
+            let diff = other.denom.0 - self.denom.0;
+            let (div, rem) =
+                other.amount.raw.div_mod(Uint::exp10(diff as usize));
+            let div_ceil = if rem.is_zero() {
+                div
+            } else {
+                div + Uint::one()
+            };
+            let ord = self.amount.raw.partial_cmp(&div_ceil);
+            if let Some(Ordering::Equal) = ord {
+                if rem.is_zero() {
+                    Some(Ordering::Equal)
+                } else {
+                    Some(Ordering::Greater)
+                }
+            } else {
+                ord
+            }
+        } else {
+            let diff = self.denom.0 - other.denom.0;
+            let (div, rem) =
+                self.amount.raw.div_mod(Uint::exp10(diff as usize));
+            let div_ceil = if rem.is_zero() {
+                div
+            } else {
+                div + Uint::one()
+            };
+            let ord = div_ceil.partial_cmp(&other.amount.raw);
+            if let Some(Ordering::Equal) = ord {
+                if rem.is_zero() {
+                    Some(Ordering::Equal)
+                } else {
+                    Some(Ordering::Less)
+                }
+            } else {
+                ord
+            }
+        }
     }
 }
 
@@ -976,6 +1027,16 @@ impl Parameters {
             locked_ratio_target: locked_target,
         } = self;
         wl_storage
+            .write(&masp_last_inflation_key(address), Amount::zero())
+            .expect(
+                "last inflation key for the given asset must be initialized",
+            );
+        wl_storage
+            .write(&masp_last_locked_ratio_key(address), Dec::zero())
+            .expect(
+                "last locked ratio key for the given asset must be initialized",
+            );
+        wl_storage
             .write(&masp_max_reward_rate_key(address), max_rate)
             .expect("max reward rate for the given asset must be initialized");
         wl_storage
@@ -1216,6 +1277,13 @@ mod tests {
         };
         assert_eq!("0.0112", amount.to_string());
         assert_eq!("0.01120", amount.to_string_precise());
+
+        let amount = DenominatedAmount {
+            amount: Amount::from_uint(200, 0).expect("Test failed"),
+            denom: 0.into(),
+        };
+        assert_eq!("200", amount.to_string());
+        assert_eq!("200", amount.to_string_precise());
     }
 
     #[test]
@@ -1342,6 +1410,62 @@ mod tests {
         assert_eq!(two.mul_ceil(dec), one);
         assert_eq!(three.mul_ceil(dec), two);
     }
+
+    #[test]
+    fn test_denominated_amt_ord() {
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1500, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        // The psychedelic case. Partial ordering works on the underlying
+        // amounts but `Eq` also checks the equality of denoms.
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Equal
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Equal
+        );
+        assert_ne!(denom_1, denom_2);
+
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1501, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Less
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Greater
+        );
+        let denom_1 = DenominatedAmount {
+            amount: Amount::from_uint(15, 0).expect("Test failed"),
+            denom: 1.into(),
+        };
+        let denom_2 = DenominatedAmount {
+            amount: Amount::from_uint(1499, 0).expect("Test failed"),
+            denom: 3.into(),
+        };
+        assert_eq!(
+            denom_1.partial_cmp(&denom_2).expect("Test failed"),
+            Ordering::Greater
+        );
+        assert_eq!(
+            denom_2.partial_cmp(&denom_1).expect("Test failed"),
+            Ordering::Less
+        );
+    }
 }
 
 /// Helpers for testing with addresses.
@@ -1367,51 +1491,5 @@ pub mod testing {
         max: u64,
     ) -> impl Strategy<Value = Amount> {
         (1..=max).prop_map(|val| Amount::from_uint(val, 0).unwrap())
-    }
-
-    /// init_token_storage is useful when the initialization of the network is
-    /// not properly made. This properly sets up the storage such that
-    /// inflation calculations can be ran on the token addresses. We assume
-    /// a total supply that may not be real
-    pub fn init_token_storage<D, H>(
-        wl_storage: &mut ledger_storage::WlStorage<D, H>,
-        epochs_per_year: u64,
-    ) where
-        D: 'static
-            + ledger_storage::DB
-            + for<'iter> ledger_storage::DBIter<'iter>,
-        H: 'static + ledger_storage::StorageHasher,
-    {
-        use crate::ledger::parameters::storage::get_epochs_per_year_key;
-        use crate::types::address::tokens;
-
-        let tokens = tokens();
-        let masp_reward_keys: Vec<_> = tokens.keys().collect();
-
-        wl_storage
-            .write(&get_epochs_per_year_key(), epochs_per_year)
-            .unwrap();
-        let params = Parameters {
-            max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_ratio_target: Dec::zero(),
-        };
-
-        for address in masp_reward_keys {
-            params.init_storage(address, wl_storage);
-            wl_storage
-                .write(
-                    &minted_balance_key(address),
-                    Amount::native_whole(5), // arbitrary amount
-                )
-                .unwrap();
-            wl_storage
-                .write(&masp_last_inflation_key(address), Amount::zero())
-                .expect("inflation ought to be written");
-            wl_storage
-                .write(&masp_last_locked_ratio_key(address), Dec::zero())
-                .expect("last locked set default");
-        }
     }
 }

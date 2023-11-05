@@ -73,7 +73,11 @@ impl RewardsController {
             .expect("Should not fail to convert Uint to Dec");
         let epochs_py: Dec = epochs_per_year.into();
 
-        let locked_ratio = locked / total;
+        let locked_ratio = if total.is_zero() {
+            Dec::one()
+        } else {
+            locked / total
+        };
         let max_inflation = total_native * max_reward_rate / epochs_py;
         let p_gain = p_gain_nom * max_inflation;
         let d_gain = d_gain_nom * max_inflation;

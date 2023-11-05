@@ -54,16 +54,16 @@ build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	NAMADA_DEV=false $(cargo) build $(jobs) --release --timings --package namada_apps --manifest-path Cargo.toml 
+	$(cargo) build $(jobs) --release --timings --package namada_apps --manifest-path Cargo.toml
 
 build-debug:
-	NAMADA_DEV=false $(cargo) build --package namada_apps --manifest-path Cargo.toml
+	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 
 install-release:
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 check-release:
-	NAMADA_DEV=false $(cargo) check --release --package namada_apps
+	$(cargo) check --release --package namada_apps
 
 package: build-release
 	scripts/make-package.sh
@@ -88,7 +88,7 @@ check-crates:
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 clippy:
-	NAMADA_DEV=false $(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy && \
 	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
@@ -103,7 +103,7 @@ tendermint:
 	./scripts/get_tendermint.sh
 
 install: cometbft
-	NAMADA_DEV=false $(cargo) install --path ./apps --locked
+	$(cargo) install --path ./apps --locked
 
 cometbft:
 	./scripts/get_cometbft.sh
@@ -126,14 +126,19 @@ audit:
 test: test-unit test-e2e test-wasm test-benches
 
 test-coverage:
-	# Run integration tests with pre-built MASP proofs
-	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
-	NAMADA_MASP_TEST_PROOFS=load \
+	# Run integration tests separately because they require `integration`
+	# feature (and without coverage) and run them with pre-built MASP proofs
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e --skip pos_state_machine_test \
-		-Z unstable-options --report-time
+		-- --skip e2e --skip pos_state_machine_test --skip integration \
+		-Z unstable-options --report-time && \
+	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
+	NAMADA_MASP_TEST_PROOFS=load \
+	$(cargo) +$(nightly) test integration:: --output-dir target \
+		--features integration \
+		--html \
+		-- -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
@@ -167,7 +172,7 @@ test-integration-save-proofs:
 # Run integration tests without specifiying any pre-built MASP proofs option
 test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test integration::$(TEST_FILTER) \
+	$(cargo) +$(nightly) test integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	-Z unstable-options --report-time
@@ -176,7 +181,7 @@ test-unit:
 	$(cargo) +$(nightly) test \
 		$(TEST_FILTER) \
 		$(jobs) \
-		-- --skip e2e --skip integration \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
@@ -191,7 +196,7 @@ test-unit-debug:
 	$(debug-cargo) +$(nightly) test \
 		$(jobs) \
 		$(TEST_FILTER) \
-		-- --skip e2e --skip integration \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		--nocapture \
 		-Z unstable-options --report-time
 
