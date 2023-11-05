@@ -120,10 +120,21 @@ where
             )?;
         }
 
-        // Invariant: Has to be applied before `record_slashes_from_evidence`
-        // because it potentially needs to be able to read validator state from
-        // previous epoch and jailing validator removes the historical state
-        self.log_block_rewards(&req.votes, height, current_epoch, new_epoch)?;
+        // NOTE: this condition is required for hard-forks
+        // TODO: load block signatures from external sources for
+        // hard-forks, so we can still distribute PoS rewards
+        if hints::likely(!req.votes.is_empty()) {
+            // Invariant: Has to be applied before
+            // `record_slashes_from_evidence` because it potentially
+            // needs to be able to read validator state from
+            // previous epoch and jailing validator removes the historical state
+            self.log_block_rewards(
+                &req.votes,
+                height,
+                current_epoch,
+                new_epoch,
+            )?;
+        }
         if new_epoch {
             self.apply_inflation(current_epoch)?;
         }

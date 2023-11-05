@@ -191,6 +191,22 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Reset CometBFT to genesis state.
+pub fn reset_state(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+    let tendermint_path = from_env_or_default()?;
+    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
+    std::process::Command::new(tendermint_path)
+        .args([
+            "unsafe-reset-all",
+            "--keep-addr-book",
+            "--home",
+            &tendermint_dir,
+        ])
+        .output()
+        .expect("Failed to reset tendermint node's data");
+    Ok(())
+}
+
 pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
@@ -405,6 +421,12 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
+    if let Some(height) = super::migrating_state() {
+        genesis.initial_height = height
+            .0
+            .try_into()
+            .expect("Failed to convert initial genesis height");
+    }
     let size = block::Size {
         // maximum size of a serialized Tendermint block
         // cannot go over 100 MiB

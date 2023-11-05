@@ -945,6 +945,7 @@ pub mod cmds {
         RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        SetFunds(LedgerSetFunds),
         RollBack(LedgerRollBack),
     }
 
@@ -956,10 +957,12 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let set_funds = SubCmd::parse(matches).map(Self::SetFunds);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
+                    .or(set_funds)
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
@@ -979,6 +982,7 @@ pub mod cmds {
                 .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerSetFunds::def())
                 .subcommand(LedgerRollBack::def())
         }
     }
@@ -1058,6 +1062,29 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerSetFunds(pub args::LedgerSetFunds<args::CliTypes>);
+
+    impl SubCmd for LedgerSetFunds {
+        const CMD: &'static str = "set-funds";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerSetFunds::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Change the funds of an account in-place. Use with \
+                     caution, as this modifies state in storage without going \
+                     through the consensus protocol.",
+                )
+                .add_args::<args::LedgerSetFunds<args::CliTypes>>()
         }
     }
 
@@ -2961,6 +2988,51 @@ pub mod args {
                     .def()
                     .help("If provided, dump also the diff of the last height"),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerSetFunds<C: NamadaTypes = SdkTypes> {
+        pub account: C::Address,
+        pub token: C::Address,
+        pub amount: token::Amount,
+    }
+
+    impl CliToSdk<LedgerSetFunds<SdkTypes>> for LedgerSetFunds<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> LedgerSetFunds<SdkTypes> {
+            LedgerSetFunds {
+                account: ctx.get(&self.account),
+                token: ctx.get(&self.token),
+                amount: self.amount,
+            }
+        }
+    }
+
+    impl Args for LedgerSetFunds<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let account = ADDRESS.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = AMOUNT.parse(matches).into();
+
+            Self {
+                account,
+                token,
+                amount,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                ADDRESS
+                    .def()
+                    .help("The target account whose funds will be modified."),
+            )
+            .arg(
+                AMOUNT.def().help(
+                    "The amount of tokens to set for the target account.",
+                ),
+            )
+            .arg(TOKEN.def().help("The asset to be changed in storage."))
         }
     }
 

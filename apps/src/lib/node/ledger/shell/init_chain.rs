@@ -21,6 +21,7 @@ use namada_sdk::eth_bridge::EthBridgeStatus;
 use super::*;
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
+use crate::node::ledger;
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
@@ -47,6 +48,18 @@ where
                 "Current chain ID: {}, Tendermint chain ID: {}",
                 current_chain_id, init.chain_id
             )));
+        }
+        if ledger::migrating_state().is_some() {
+            let rsp = response::InitChain {
+                validators: self
+                    .get_abci_validator_updates(true)
+                    .expect("Must be able to set genesis validator set"),
+                app_hash: self.wl_storage.storage.merkle_root().0.to_vec(),
+                ..Default::default()
+            };
+            debug_assert!(!rsp.validators.is_empty());
+            debug_assert!(!rsp.app_hash.iter().all(|&b| b == 0));
+            return Ok(rsp);
         }
         #[cfg(not(any(test, feature = "dev")))]
         let genesis =

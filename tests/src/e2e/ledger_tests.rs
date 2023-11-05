@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::types::address::Address;
+use namada::types::address::{nam, Address};
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada_apps::config::ethereum_bridge;
@@ -39,8 +39,8 @@ use setup::constants::*;
 use setup::Test;
 
 use super::helpers::{
-    epochs_per_year_from_min_duration, get_height, wait_for_block_height,
-    wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, get_height, rpc_client_do,
+    wait_for_block_height, wait_for_wasm_pre_compile,
 };
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
 use crate::e2e::helpers::{
@@ -49,6 +49,48 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup::{self, default_port_offset, sleep, Bin, Who};
 use crate::{run, run_as};
+
+fn kill_namada_ledger(mut node: NamadaCmd) -> Result<()> {
+    node.interrupt()?;
+    node.exp_string("Namada ledger node has shut down.")?;
+    node.exp_eof()?;
+    Ok(())
+}
+
+fn run_namada_ledger_node_until(
+    test: &Test,
+    idx: Option<u64>,
+    timeout_sec: Option<u64>,
+    until_height: u64,
+) -> Result<NamadaCmd> {
+    let who = match idx {
+        Some(idx) => Who::Validator(idx),
+        _ => Who::NonValidator,
+    };
+    let mut node = run_as!(
+        test,
+        who.clone(),
+        Bin::Node,
+        &[
+            "ledger",
+            "run-until",
+            "--block-height",
+            &format!("{until_height}"),
+            "--suspend"
+        ],
+        timeout_sec
+    )?;
+    node.exp_string("Namada ledger node started")?;
+    if let Who::Validator(_) = who {
+        node.exp_string("This node is a validator")?;
+    } else {
+        node.exp_string("This node is not a validator")?;
+    }
+    node.exp_string(&format!(
+        "Reached block height {until_height}, suspending."
+    ))?;
+    Ok(node)
+}
 
 fn start_namada_ledger_node(
     test: &Test,
@@ -112,6 +154,124 @@ fn run_ledger() -> Result<()> {
         ledger.exp_string("Namada ledger node started")?;
         ledger.exp_string("This node is not a validator")?;
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_hardfork_set_funds() -> Result<()> {
+    const HARDFORK_HEIGHT: u64 = 3;
+    const ACCOUNT_ALIAS: &str = "garfo";
+
+    let test = setup::single_node_net()?;
+
+    // Generate a new key for an implicit account
+    let account_address = {
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &[
+                "key",
+                "gen",
+                "--alias",
+                ACCOUNT_ALIAS,
+                "--unsafe-dont-encrypt"
+            ],
+            Some(20),
+        )?;
+        cmd.assert_success();
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &["address", "find", "--alias", ACCOUNT_ALIAS],
+            Some(20),
+        )?;
+        let (_, matched) = cmd.exp_regex(r"Found address Implicit: .*\n")?;
+        let (_, account_address) = matched
+            .trim()
+            .split_once("Found address Implicit: ")
+            .unwrap();
+        Address::from_str(account_address).unwrap()
+    };
+
+    // Run a validator and a full node until `HARDFORK_HEIGHT`
+    let validator = run_namada_ledger_node_until(
+        &test,
+        Some(0),
+        Some(120),
+        HARDFORK_HEIGHT,
+    )?
+    .background();
+    let fullnode =
+        run_namada_ledger_node_until(&test, None, Some(120), HARDFORK_HEIGHT)?
+            .background();
+
+    let validator_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    let fullnode_rpc = get_actor_rpc(&test, &Who::NonValidator);
+
+    // Assert that `account_address` has a balance of 0
+    let bal = rpc_client_do(
+        &validator_rpc,
+        &account_address,
+        |rpc, client, addr| async move {
+            rpc.vp().token().balance(&client, &nam(), addr).await
+        },
+    )
+    .await?;
+    assert!(bal.is_zero());
+
+    // Wait until we reach the desired height on each node
+    let mut validator_ready = false;
+    let mut fullnode_ready = false;
+    let start = Instant::now();
+    let loop_timeout = Duration::new(20, 0);
+    loop {
+        if Instant::now().duration_since(start) > loop_timeout {
+            panic!("Timeout waiting for block height");
+        }
+        if !validator_ready {
+            let last_block = rpc_client_do(
+                &validator_rpc,
+                (),
+                |rpc, client, ()| async move {
+                    rpc.shell().last_block(&client).await
+                },
+            )
+            .await?;
+
+            if let Some(block) = last_block {
+                if block.height.0 == HARDFORK_HEIGHT {
+                    validator_ready = true;
+                }
+            }
+        }
+        if !fullnode_ready {
+            let last_block = rpc_client_do(
+                &fullnode_rpc,
+                (),
+                |rpc, client, ()| async move {
+                    rpc.shell().last_block(&client).await
+                },
+            )
+            .await?;
+
+            if let Some(block) = last_block {
+                if block.height.0 == HARDFORK_HEIGHT {
+                    fullnode_ready = true;
+                }
+            }
+        }
+        if fullnode_ready && validator_ready {
+            break;
+        }
+    }
+
+    // Kill the nodes
+    kill_namada_ledger(validator.foreground())?;
+    kill_namada_ledger(fullnode.foreground())?;
+
+    // TODO: call `set-funds`, and check that the balances were
+    // updated on each node
 
     Ok(())
 }
