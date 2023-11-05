@@ -3222,17 +3222,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 pos_params,
                 ..genesis
             };
-            // let mut genesis =
             setup::set_validators(4, genesis, default_port_offset)
-            // Remove stake from the 2nd validator so chain can run with a
-            // single node
-            // genesis.validator.get_mut("validator-1").unwrap().tokens = None;
-            // genesis
-            //     .validator
-            //     .get_mut("validator-1")
-            //     .unwrap()
-            //     .non_staked_balance = Some(1);
-            // genesis
         },
         None,
     )?;
@@ -3273,7 +3263,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("consensus set")?;
+    client.exp_regex(r"Validator [a-z0-9]+ is in the consensus set")?;
     client.assert_success();
 
     // Deactivate validator-0
@@ -3317,7 +3307,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("inactive")?;
+    client.exp_regex(r"Validator [a-z0-9]+ is inactive")?;
     client.assert_success();
 
     // Reactivate validator-0
@@ -3361,7 +3351,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         &validator_0_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string("consensus")?;
+    client.exp_regex(r"Validator [a-z0-9]+ is in the consensus set")?;
     client.assert_success();
 
     Ok(())

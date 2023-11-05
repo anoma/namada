@@ -1482,6 +1482,40 @@ pub async fn to_ledger_vector<'a>(
         ]);
 
         tv.output_expert.push(format!("Validator : {}", address));
+    } else if code_hash == deactivate_validator_hash {
+        let address = Address::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Deactivate_Validator_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Deactivate Validator"),
+            format!("Validator : {}", address),
+        ]);
+
+        tv.output_expert.push(format!("Validator : {}", address));
+    } else if code_hash == reactivate_validator_hash {
+        let address = Address::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Reactivate_Validator_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Reactivate Validator"),
+            format!("Validator : {}", address),
+        ]);
+
+        tv.output_expert.push(format!("Validator : {}", address));
     } else {
         tv.name = "Custom_0".to_string();
         tv.output.push("Type : Custom".to_string());
