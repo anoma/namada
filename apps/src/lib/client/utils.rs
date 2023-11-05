@@ -33,6 +33,7 @@ use crate::wasm_loader;
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
+pub const ENV_VAR_NETWORK_CONFIGS_DIR: &str = "NAMADA_NETWORK_CONFIGS_DIR";
 /// Github URL prefix of released Namada network configs
 pub const ENV_VAR_NETWORK_CONFIGS_SERVER: &str =
     "NAMADA_NETWORK_CONFIGS_SERVER";
@@ -125,24 +126,37 @@ pub async fn join_network(
     });
 
     let release_filename = format!("{}.tar.gz", chain_id);
-    let release_url = format!(
-        "{}/{}",
-        network_configs_url_prefix(&chain_id),
-        release_filename
-    );
+    let net_config = if let Some(configs_dir) = network_configs_dir() {
+        fs::read(PathBuf::from(&configs_dir).join(release_filename))
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Network config not found or couldn't be read from dir \
+                     \"{configs_dir}\" set by an env var \
+                     {ENV_VAR_NETWORK_CONFIGS_DIR}. Error: {err}."
+                )
+            })
+    } else {
+        let release_url = format!(
+            "{}/{}",
+            network_configs_url_prefix(&chain_id),
+            release_filename
+        );
 
-    // Read or download the release archive
-    println!("Downloading config release from {} ...", release_url);
-    let release = match download_file(release_url).await {
-        Ok(contents) => contents,
-        Err(error) => {
-            eprintln!("Error downloading release: {}", error);
-            safe_exit(1);
-        }
+        // Read or download the release archive
+        println!("Downloading config release from {} ...", release_url);
+        let release: Bytes = match download_file(release_url).await {
+            Ok(contents) => contents,
+            Err(error) => {
+                eprintln!("Error downloading release: {}", error);
+                safe_exit(1);
+            }
+        };
+        release.to_vec()
     };
 
     // Decode and unpack the archive
-    let decoder = GzDecoder::new(&release[..]);
+    let decoder = GzDecoder::new(&net_config[..]);
     let mut archive = tar::Archive::new(decoder);
 
     // If the base-dir is non-default, unpack the archive into a temp dir inside
@@ -704,6 +718,10 @@ fn network_configs_url_prefix(chain_id: &ChainId) -> String {
     std::env::var(ENV_VAR_NETWORK_CONFIGS_SERVER).unwrap_or_else(|_| {
         format!("{DEFAULT_NETWORK_CONFIGS_SERVER}/{chain_id}")
     })
+}
+
+fn network_configs_dir() -> Option<String> {
+    std::env::var(ENV_VAR_NETWORK_CONFIGS_DIR).ok()
 }
 
 /// Write the node key into tendermint config dir.
