@@ -804,16 +804,6 @@ where
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
 
-    // Check that validator is not inactive at anywhere between the current
-    // epoch and pipeline offset
-    for epoch in current_epoch.iter_range(offset) {
-        if let Some(ValidatorState::Inactive) =
-            validator_state_handle.get(storage, epoch, &params)?
-        {
-            return Err(BondError::InactiveValidator(validator.clone()).into());
-        }
-    }
-
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
         tracing::debug!("\nBonds before incrementing: {bonds:#?}");
@@ -831,13 +821,11 @@ where
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
-    let is_jailed_at_pipeline = matches!(
-        validator_state_handle
-            .get(storage, offset_epoch, &params)?
-            .unwrap(),
-        ValidatorState::Jailed
+    let is_jailed_or_inactive_at_pipeline = matches!(
+        validator_state_handle.get(storage, pipeline_epoch, &params)?,
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,
@@ -1712,8 +1700,6 @@ where
         return Err(UnbondError::ValidatorIsFrozen(validator.clone()).into());
     }
 
-    // TODO: check that validator is not inactive (when implemented)!
-
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
 
@@ -1961,13 +1947,15 @@ where
     // Update the validator set at the pipeline offset. Since unbonding from a
     // jailed validator who is no longer frozen is allowed, only update the
     // validator set if the validator is not jailed
-    let is_jailed_at_pipeline = matches!(
-        validator_state_handle(validator)
-            .get(storage, pipeline_epoch, &params)?
-            .unwrap(),
-        ValidatorState::Jailed
+    let is_jailed_or_inactive_at_pipeline = matches!(
+        validator_state_handle(validator).get(
+            storage,
+            pipeline_epoch,
+            &params
+        )?,
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,
@@ -5296,15 +5284,15 @@ where
     )?;
 
     // Update validator set for dest validator
-    let is_jailed_at_pipeline = matches!(
+    let is_jailed_or_inactive_at_pipeline = matches!(
         validator_state_handle(dest_validator).get(
             storage,
             pipeline_epoch,
             &params
         )?,
-        Some(ValidatorState::Jailed)
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,

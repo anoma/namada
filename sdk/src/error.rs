@@ -153,10 +153,9 @@ pub enum TxError {
     ValidatorNotCurrentlyJailed(Address),
     /// Already inactive at pipeline epoch
     #[error(
-        "The validator address {0} is already inactive at the pipeline epoch \
-         {1}."
+        "The validator address {0} is inactive at the pipeline epoch {1}."
     )]
-    ValidatorAlreadyInactive(Address, Epoch),
+    ValidatorInactive(Address, Epoch),
     /// Validator not inactive
     #[error(
         "The validator address {0} is not inactive at epoch {1} and so cannot \
