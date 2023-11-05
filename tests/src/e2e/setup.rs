@@ -384,16 +384,11 @@ pub fn network(
 
     drop(init_network);
 
-    // Host the network archive to make it available for `join-network` commands
-    // TODO: allow to unpack from a file instead of having to host it
-    let network_archive_server = file_serve::Server::new(&archive_dir);
-    let network_archive_addr = network_archive_server.addr().to_owned();
-    std::thread::spawn(move || {
-        network_archive_server.serve().unwrap();
-    });
+    // Set the network archive dir to make it available for `join-network`
+    // commands
     std::env::set_var(
-        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_SERVER,
-        format!("http://{network_archive_addr}"),
+        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_DIR,
+        archive_dir,
     );
 
     let genesis_new = chain::Finalized::read_toml_files(
