@@ -126,14 +126,19 @@ audit:
 test: test-unit test-e2e test-wasm test-benches
 
 test-coverage:
-	# Run integration tests with pre-built MASP proofs
-	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
-	NAMADA_MASP_TEST_PROOFS=load \
+	# Run integration tests separately because they require `integration`
+	# feature (and without coverage) and run them with pre-built MASP proofs
 	$(cargo) +$(nightly) llvm-cov --output-dir target \
 		--features namada/testing \
 		--html \
-		-- --skip e2e --skip pos_state_machine_test \
-		-Z unstable-options --report-time
+		-- --skip e2e --skip pos_state_machine_test --skip integration \
+		-Z unstable-options --report-time && \
+	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
+	NAMADA_MASP_TEST_PROOFS=load \
+	$(cargo) +$(nightly) test integration:: --output-dir target \
+		--features integration \
+		--html \
+		-- -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
