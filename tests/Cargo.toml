@@ -68,7 +68,6 @@ data-encoding.workspace = true
 escargot = {workspace = true} # , features = ["print"]}
 expectrl.workspace = true
 eyre.workspace = true
-file-serve.workspace = true
 fs_extra.workspace = true
 itertools.workspace = true
 once_cell.workspace = true
