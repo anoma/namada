@@ -191,6 +191,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Reset CometBFT to genesis state.
 pub fn reset_state(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
