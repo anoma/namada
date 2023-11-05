@@ -203,7 +203,7 @@ async fn test_hardfork_set_funds() -> Result<()> {
     )?
     .background();
     let fullnode =
-        run_namada_ledger_node_until(&test, None, Some(40), HARDFORK_HEIGHT)?
+        run_namada_ledger_node_until(&test, None, Some(120), HARDFORK_HEIGHT)?
             .background();
 
     let validator_rpc = get_actor_rpc(&test, &Who::Validator(0));
