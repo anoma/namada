@@ -198,8 +198,7 @@ pub fn reset_state(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     std::process::Command::new(tendermint_path)
         .args([
             "unsafe-reset-all",
-            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
-            // "--log-level=\"*debug\"",
+            "--keep-addr-book",
             "--home",
             &tendermint_dir,
         ])
