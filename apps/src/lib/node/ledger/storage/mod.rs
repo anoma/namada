@@ -5,12 +5,12 @@ mod rocksdb;
 
 use std::fmt;
 
-use sparse_merkle_tree::blake2b::Blake2bHasher;
-use sparse_merkle_tree::traits::Hasher;
-use sparse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::Storage;
+use sparse_merkle_tree::blake2b::Blake2bHasher;
+use sparse_merkle_tree::traits::Hasher;
+use sparse_merkle_tree::H256;
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);

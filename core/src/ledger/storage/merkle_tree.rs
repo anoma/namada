@@ -2,15 +2,15 @@
 use std::fmt;
 use std::str::FromStr;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
+use ics23::commitment_proof::Proof as Ics23Proof;
+use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::error::Error as MtError;
 use sparse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
-use ics23::commitment_proof::Proof as Ics23Proof;
-use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use thiserror::Error;
 
 use super::traits::{StorageHasher, SubTreeRead, SubTreeWrite};

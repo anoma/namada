@@ -3,13 +3,13 @@
 use std::convert::TryInto;
 use std::fmt;
 
-use sparse_merkle_tree::traits::{Hasher, Value};
-use sparse_merkle_tree::{Key as TreeKey, H256};
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof};
 use sha2::{Digest, Sha256};
+use sparse_merkle_tree::traits::{Hasher, Value};
+use sparse_merkle_tree::{Key as TreeKey, H256};
 use tiny_keccak::Hasher as KHasher;
 
 use super::ics23_specs;

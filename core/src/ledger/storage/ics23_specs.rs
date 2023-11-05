@@ -1,7 +1,7 @@
 //! A module that contains
 
-use sparse_merkle_tree::H256;
 use ics23::{HashOp, LeafOp, LengthOp, ProofSpec};
+use sparse_merkle_tree::H256;
 
 use super::traits::StorageHasher;
 
