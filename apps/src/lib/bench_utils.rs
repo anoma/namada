@@ -257,7 +257,7 @@ impl BenchShell {
         wasm_code_path: &str,
         data: impl BorshSerialize,
         shielded: Option<Transaction>,
-        extra_section: Option<Vec<Section>>,
+        extra_sections: Option<Vec<Section>>,
         signer: Option<&SecretKey>,
     ) -> Tx {
         let mut tx =
@@ -279,7 +279,7 @@ impl BenchShell {
             tx.add_section(Section::MaspTx(transaction));
         }
 
-        if let Some(sections) = extra_section {
+        if let Some(sections) = extra_sections {
             for section in sections {
                 if let Section::ExtraData(_) = section {
                     tx.add_section(section);
@@ -289,7 +289,7 @@ impl BenchShell {
 
         if let Some(signer) = signer {
             tx.add_section(Section::Signature(Signature::new(
-                tx.sechashes(),
+                vec![tx.raw_header_hash()],
                 [(0, signer.clone())].into_iter().collect(),
                 None,
             )));

@@ -750,7 +750,7 @@ mod tests {
         // read a non-existing key
         let (value, gas) = write_log.read(&key);
         assert!(value.is_none());
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, (key.len() as u64) * MEMORY_ACCESS_GAS_PER_BYTE);
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
@@ -774,7 +774,10 @@ mod tests {
             }
             _ => panic!("unexpected read result"),
         }
-        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+        assert_eq!(
+            gas,
+            ((key.len() + inserted.len()) as u64) * MEMORY_ACCESS_GAS_PER_BYTE
+        );
 
         // update the value
         let updated = "updated".as_bytes().to_vec();
