@@ -719,6 +719,63 @@ fn unjail_validator(c: &mut Criterion) {
     });
 }
 
+fn deactivate_validator(c: &mut Criterion) {
+    let signed_tx = generate_tx(
+        TX_DEACTIVATE_VALIDATOR_WASM,
+        defaults::validator_address(),
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("deactivate_validator", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
+fn reactivate_validator(c: &mut Criterion) {
+    let signed_tx = generate_tx(
+        TX_REACTIVATE_VALIDATOR_WASM,
+        defaults::validator_address(),
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("reactivate_validator", |b| {
+        b.iter_batched_ref(
+            || {
+                let mut shell = BenchShell::default();
+
+                // Deactivate the validator
+                let pos_params = read_pos_params(&shell.wl_storage).unwrap();
+                let current_epoch = shell.wl_storage.storage.block.epoch;
+                proof_of_stake::deactivate_validator(
+                    &mut shell.wl_storage,
+                    &defaults::validator_address(),
+                    current_epoch,
+                )
+                .unwrap();
+
+                shell.wl_storage.commit_tx();
+                shell.commit();
+                // Advance by slash epoch offset epochs
+                for _ in 0..=pos_params.pipeline_len {
+                    shell.advance_epoch();
+                }
+
+                shell
+            },
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 criterion_group!(
     whitelisted_txs,
     transfer,
@@ -734,6 +791,8 @@ criterion_group!(
     init_validator,
     change_validator_commission,
     ibc,
-    unjail_validator
+    unjail_validator,
+    deactivate_validator,
+    reactivate_validator
 );
 criterion_main!(whitelisted_txs);
