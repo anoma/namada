@@ -135,9 +135,8 @@ test-coverage:
 		-Z unstable-options --report-time && \
 	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
 	NAMADA_MASP_TEST_PROOFS=load \
-	$(cargo) +$(nightly) test integration:: --output-dir target \
+	$(cargo) +$(nightly) test integration:: \
 		--features integration \
-		--html \
 		-- -Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
