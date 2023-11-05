@@ -396,7 +396,7 @@ pub fn sign_delegation_bond_tx(
     unsigned_tx.sign(&source_key)
 }
 
-fn sign_tx<T: BorshSerialize>(
+pub fn sign_tx<T: BorshSerialize>(
     tx_data: &T,
     keypair: &common::SecretKey,
 ) -> StringEncoded<common::Signature> {

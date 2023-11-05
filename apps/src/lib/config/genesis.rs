@@ -265,6 +265,7 @@ pub fn make_dev_genesis(
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::finalize;
+    use crate::config::genesis::transactions::UnsignedValidatorAccountTx;
     use crate::wallet::defaults;
 
     let mut current_path = std::env::current_dir()
@@ -300,7 +301,20 @@ pub fn make_dev_genesis(
     });
 
     if let Some(vals) = genesis.transactions.validator_account.as_mut() {
-        vals[0].address = defaults::validator_address();
+        let tx = vals.get_mut(0).unwrap();
+        // Use the default validator address
+        tx.address = defaults::validator_address();
+
+        // Use the default validator key - have to add it with a sig
+        tx.address = defaults::validator_address();
+        let sk = defaults::validator_keypair();
+        let pk = StringEncoded::new(sk.to_public());
+        let unsigned_tx = UnsignedValidatorAccountTx::from(&tx.tx);
+        let sig = transactions::sign_tx(&unsigned_tx, &sk);
+        tx.tx.account_key = transactions::SignedPk {
+            pk,
+            authorization: sig,
+        };
     }
 
     // Use the default address for matching established accounts
