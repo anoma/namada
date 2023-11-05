@@ -198,7 +198,7 @@ async fn test_hardfork_set_funds() -> Result<()> {
     let validator = run_namada_ledger_node_until(
         &test,
         Some(0),
-        Some(40),
+        Some(120),
         HARDFORK_HEIGHT,
     )?
     .background();
