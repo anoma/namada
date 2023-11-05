@@ -579,10 +579,8 @@ jobs:
           name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             /tmp/.*/logs/
-            /tmp/.*/e2e-test.*/setup/validator-*/.namada/logs/*.log
-            /tmp/.*/logs/*
-            /tmp/.*/setup/validator-*
-            /tmp/.*/setup/validator-*/*  
+            /tmp/.*/setup/validator-*/logs/
+            /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
           retention-days: 5
       - name: Print sccache stats
         if: always()
