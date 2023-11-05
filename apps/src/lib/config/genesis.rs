@@ -7,7 +7,6 @@ pub mod transactions;
 
 use std::array::TryFromSliceError;
 use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
@@ -253,6 +252,7 @@ pub fn make_dev_genesis(
     target_chain_dir: std::path::PathBuf,
 ) -> Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::str::FromStr;
     use std::time::Duration;
 
     use namada::core::types::string_encoding::StringEncoded;
