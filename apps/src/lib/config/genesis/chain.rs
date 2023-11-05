@@ -100,9 +100,7 @@ impl Finalized {
         validator: Option<(Alias, pre_genesis::ValidatorWallet)>,
     ) -> Wallet<CliWalletUtils> {
         let mut wallet = crate::wallet::load_or_new(base_dir);
-        dbg!(&wallet);
         for (alias, config) in &self.tokens.token {
-            dbg!("add token", alias);
             wallet.add_address(
                 alias.normalize(),
                 config.address.clone(),
