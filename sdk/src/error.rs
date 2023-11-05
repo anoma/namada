@@ -19,7 +19,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// The general mentality should be that this error type should cover all
 /// possible errors that one may face.
-#[derive(Clone, Error, Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
     /// Errors that are caused by trying to retrieve a pinned transaction
     #[error("Error in retrieving pinned balance: {0}")]

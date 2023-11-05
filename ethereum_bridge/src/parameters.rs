@@ -150,7 +150,7 @@ pub struct Contracts {
     BorshSerialize,
     BorshDeserialize,
 )]
-pub struct EthereumBridgeConfig {
+pub struct EthereumBridgeParams {
     /// Initial Ethereum block height when events will first be extracted from.
     pub eth_start_height: ethereum_structs::BlockHeight,
     /// Minimum number of confirmations needed to trust an Ethereum branch.
@@ -163,7 +163,7 @@ pub struct EthereumBridgeConfig {
     pub contracts: Contracts,
 }
 
-impl EthereumBridgeConfig {
+impl EthereumBridgeParams {
     /// Initialize the Ethereum bridge parameters in storage.
     ///
     /// If these parameters are initialized, the storage subspaces
@@ -248,7 +248,7 @@ impl EthereumBridgeConfig {
     }
 }
 
-/// Subset of [`EthereumBridgeConfig`], containing only Ethereum
+/// Subset of [`EthereumBridgeParams`], containing only Ethereum
 /// oracle specific parameters.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EthereumOracleConfig {
@@ -262,9 +262,9 @@ pub struct EthereumOracleConfig {
     pub contracts: Contracts,
 }
 
-impl From<EthereumBridgeConfig> for EthereumOracleConfig {
-    fn from(config: EthereumBridgeConfig) -> Self {
-        let EthereumBridgeConfig {
+impl From<EthereumBridgeParams> for EthereumOracleConfig {
+    fn from(config: EthereumBridgeParams) -> Self {
+        let EthereumBridgeParams {
             eth_start_height,
             min_confirmations,
             contracts,
@@ -374,7 +374,7 @@ mod tests {
 
     use super::*;
     use crate::parameters::{
-        ContractVersion, Contracts, EthereumBridgeConfig, MinimumConfirmations,
+        ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
         UpgradeableContract,
     };
 
@@ -383,7 +383,7 @@ mod tests {
     /// in any of the config structs.
     #[test]
     fn test_round_trip_toml_serde() -> Result<()> {
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
@@ -396,7 +396,7 @@ mod tests {
             },
         };
         let serialized = toml::to_string(&config)?;
-        let deserialized: EthereumBridgeConfig = toml::from_str(&serialized)?;
+        let deserialized: EthereumBridgeParams = toml::from_str(&serialized)?;
 
         assert_eq!(config, deserialized);
         Ok(())
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
         let mut wl_storage = TestWlStorage::default();
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),
@@ -437,7 +437,7 @@ mod tests {
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut wl_storage = TestWlStorage::default();
-        let config = EthereumBridgeConfig {
+        let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
             eth_start_height: Default::default(),
             min_confirmations: MinimumConfirmations::default(),

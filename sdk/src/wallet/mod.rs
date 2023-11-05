@@ -346,8 +346,17 @@ impl<U> Wallet<U> {
     }
 
     /// Find the stored address by an alias.
-    pub fn find_address(&self, alias: impl AsRef<str>) -> Option<&Address> {
-        self.store.find_address(alias)
+    pub fn find_address(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<std::borrow::Cow<Address>> {
+        Alias::is_reserved(alias.as_ref())
+            .map(std::borrow::Cow::Owned)
+            .or_else(|| {
+                self.store
+                    .find_address(alias)
+                    .map(std::borrow::Cow::Borrowed)
+            })
     }
 
     /// Find an alias by the address if it's in the wallet.
@@ -882,5 +891,11 @@ impl<U: WalletIo> Wallet<U> {
         self.store
             .insert_payment_addr::<U>(alias.into(), payment_addr, force_alias)
             .map(Into::into)
+    }
+
+    /// Extend this wallet from another wallet (typically pre-genesis).
+    /// Note that this method ignores `store.validator_data` if any.
+    pub fn extend(&mut self, wallet: Self) {
+        self.store.extend(wallet.store)
     }
 }
