@@ -483,7 +483,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum WalletKey {
-        Restore(KeyRestore),
+        Derive(KeyDerive),
         Gen(KeyGen),
         Find(KeyFind),
         List(KeyList),
@@ -496,7 +496,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let generate = SubCmd::parse(matches).map(Self::Gen);
-                let restore = SubCmd::parse(matches).map(Self::Restore);
+                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let lookup = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let export = SubCmd::parse(matches).map(Self::Export);
@@ -512,7 +512,7 @@ pub mod cmds {
                 )
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .subcommand(KeyRestore::def())
+                .subcommand(KeyDerive::def())
                 .subcommand(KeyGen::def())
                 .subcommand(KeyFind::def())
                 .subcommand(KeyList::def())
@@ -522,26 +522,27 @@ pub mod cmds {
 
     /// Restore a keypair and implicit address from the mnemonic code
     #[derive(Clone, Debug)]
-    pub struct KeyRestore(pub args::KeyAndAddressRestore);
+    pub struct KeyDerive(pub args::KeyAndAddressDerive);
 
-    impl SubCmd for KeyRestore {
-        const CMD: &'static str = "restore";
+    impl SubCmd for KeyDerive {
+        const CMD: &'static str = "derive";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
                 .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::KeyAndAddressRestore::parse(matches)))
+                .map(|matches| Self(args::KeyAndAddressDerive::parse(matches)))
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and HD \
+                    "Derives a keypair from the given mnemonic code and HD \
                      derivation path and derives the implicit address from \
                      its public key. Stores the keypair and the address with \
-                     the given alias.",
+                     the given alias. A hardware wallet can be used, in which \
+                     case a private key is not derivable.",
                 )
-                .add_args::<args::KeyAndAddressRestore>()
+                .add_args::<args::KeyAndAddressDerive>()
         }
     }
 
@@ -794,7 +795,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum WalletAddress {
         Gen(AddressGen),
-        Restore(AddressRestore),
+        Derive(AddressDerive),
         Find(AddressOrAliasFind),
         List(AddressList),
         Add(AddressAdd),
@@ -806,7 +807,7 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
-                let restore = SubCmd::parse(matches).map(Self::Restore);
+                let restore = SubCmd::parse(matches).map(Self::Derive);
                 let find = SubCmd::parse(matches).map(Self::Find);
                 let list = SubCmd::parse(matches).map(Self::List);
                 let add = SubCmd::parse(matches).map(Self::Add);
@@ -823,7 +824,7 @@ pub mod cmds {
                 .subcommand_required(true)
                 .arg_required_else_help(true)
                 .subcommand(AddressGen::def())
-                .subcommand(AddressRestore::def())
+                .subcommand(AddressDerive::def())
                 .subcommand(AddressOrAliasFind::def())
                 .subcommand(AddressList::def())
                 .subcommand(AddressAdd::def())
@@ -856,26 +857,27 @@ pub mod cmds {
 
     /// Restore a keypair and an implicit address from the mnemonic code
     #[derive(Clone, Debug)]
-    pub struct AddressRestore(pub args::KeyAndAddressRestore);
+    pub struct AddressDerive(pub args::KeyAndAddressDerive);
 
-    impl SubCmd for AddressRestore {
-        const CMD: &'static str = "restore";
+    impl SubCmd for AddressDerive {
+        const CMD: &'static str = "derive";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                AddressRestore(args::KeyAndAddressRestore::parse(matches))
+                AddressDerive(args::KeyAndAddressDerive::parse(matches))
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(
-                    "Restores a keypair from the given mnemonic code and HD \
+                    "Derives a keypair from the given mnemonic code and HD \
                      derivation path and derives the implicit address from \
                      its public key. Stores the keypair and the address with \
-                     the given alias.",
+                     the given alias. A hardware wallet can be used, in which \
+                     case a private key is not derivable.",
                 )
-                .add_args::<args::KeyAndAddressRestore>()
+                .add_args::<args::KeyAndAddressDerive>()
         }
     }
 
@@ -5408,7 +5410,7 @@ pub mod args {
         }
     }
 
-    impl Args for KeyAndAddressRestore {
+    impl Args for KeyAndAddressDerive {
         fn parse(matches: &ArgMatches) -> Self {
             let scheme = SCHEME.parse(matches);
             let alias = ALIAS_OPT.parse(matches);

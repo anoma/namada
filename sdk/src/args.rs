@@ -1683,7 +1683,7 @@ pub struct KeyAndAddressGen {
 
 /// Wallet restore key and implicit address arguments
 #[derive(Clone, Debug)]
-pub struct KeyAndAddressRestore {
+pub struct KeyAndAddressDerive {
     /// Scheme type
     pub scheme: SchemeType,
     /// Key alias

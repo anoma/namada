@@ -39,8 +39,8 @@ impl CliApi {
     ) -> Result<()> {
         match cmd {
             cmds::NamadaWallet::Key(sub) => match sub {
-                cmds::WalletKey::Restore(cmds::KeyRestore(args)) => {
-                    key_and_address_restore(&mut ctx.wallet, io, args).await
+                cmds::WalletKey::Derive(cmds::KeyDerive(args)) => {
+                    key_and_address_derive(&mut ctx.wallet, io, args).await
                 }
                 cmds::WalletKey::Gen(cmds::KeyGen(args)) => {
                     key_and_address_gen(&mut ctx.wallet, io, &mut OsRng, args)
@@ -59,8 +59,8 @@ impl CliApi {
                 cmds::WalletAddress::Gen(cmds::AddressGen(args)) => {
                     key_and_address_gen(&mut ctx.wallet, io, &mut OsRng, args)
                 }
-                cmds::WalletAddress::Restore(cmds::AddressRestore(args)) => {
-                    key_and_address_restore(&mut ctx.wallet, io, args).await
+                cmds::WalletAddress::Derive(cmds::AddressDerive(args)) => {
+                    key_and_address_derive(&mut ctx.wallet, io, args).await
                 }
                 cmds::WalletAddress::Find(cmds::AddressOrAliasFind(args)) => {
                     address_or_alias_find(&mut ctx.wallet, io, args)
@@ -366,17 +366,17 @@ pub fn decode_derivation_path(
 
 /// Restore a keypair and an implicit address from the mnemonic code in the
 /// wallet.
-async fn key_and_address_restore(
+async fn key_and_address_derive(
     wallet: &mut Wallet<impl WalletStorage + WalletIo>,
     io: &impl Io,
-    args::KeyAndAddressRestore {
+    args::KeyAndAddressDerive {
         scheme,
         alias,
         alias_force,
         unsafe_dont_encrypt,
         derivation_path,
         use_device,
-    }: args::KeyAndAddressRestore,
+    }: args::KeyAndAddressDerive,
 ) {
     let derivation_path = decode_derivation_path(scheme, derivation_path)
         .unwrap_or_else(|err| {

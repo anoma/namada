@@ -3503,7 +3503,7 @@ dependencies = [
 [[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
-source = "git+https://github.com/heliaxdev/ledger-namada?branch=murisi/fix-rs-0.24.0#ba1936ef6dc3b9aaecdd194c3c22dccafa9c2d7c"
+source = "git+https://github.com/heliaxdev/ledger-namada?branch=murisi/fix-rs-0.24.0#920c6288de42a7e1cd782ad7c18f5b106a94de6f"
 dependencies = [
  "bincode",
  "byteorder",
