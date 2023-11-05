@@ -54,6 +54,7 @@ mod tests {
     use std::collections::HashMap;
 
     use itertools::Itertools;
+    use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::write_log::WriteLog;
     use namada::ledger::storage::{
@@ -91,10 +92,10 @@ mod tests {
         // before insertion
         let (result, gas) = storage.has_key(&key).expect("has_key failed");
         assert!(!result);
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
         let (result, gas) = storage.read(&key).expect("read failed");
         assert_eq!(result, None);
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
 
         // insert
         storage.write(&key, value_bytes).expect("write failed");
@@ -102,13 +103,17 @@ mod tests {
         // read
         let (result, gas) = storage.has_key(&key).expect("has_key failed");
         assert!(result);
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
         let (result, gas) = storage.read(&key).expect("read failed");
         let read_value: u64 =
             types::decode(result.expect("value doesn't exist"))
                 .expect("decoding failed");
         assert_eq!(read_value, value);
-        assert_eq!(gas, key.len() as u64 + value_bytes_len as u64);
+        assert_eq!(
+            gas,
+            (key.len() as u64 + value_bytes_len as u64)
+                * STORAGE_ACCESS_GAS_PER_BYTE
+        );
 
         // delete
         storage.delete(&key).expect("delete failed");
@@ -276,7 +281,7 @@ mod tests {
         storage.commit_block(batch).expect("commit failed");
 
         let (iter, gas) = storage.iter_prefix(&prefix);
-        assert_eq!(gas, prefix.len() as u64);
+        assert_eq!(gas, (prefix.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
         for (k, v, gas) in iter {
             match expected.pop() {
                 Some((expected_key, expected_val)) => {
@@ -312,7 +317,7 @@ mod tests {
         let (vp, gas) =
             storage.validity_predicate(&addr).expect("VP load failed");
         assert_eq!(vp, None);
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, (key.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
 
         // insert
         let vp1 = Hash::sha256("vp1".as_bytes());
@@ -322,7 +327,10 @@ mod tests {
         let (vp_code_hash, gas) =
             storage.validity_predicate(&addr).expect("VP load failed");
         assert_eq!(vp_code_hash.expect("no VP"), vp1);
-        assert_eq!(gas, (key.len() + vp1.len()) as u64);
+        assert_eq!(
+            gas,
+            ((key.len() + vp1.len()) as u64) * STORAGE_ACCESS_GAS_PER_BYTE
+        );
     }
 
     proptest! {

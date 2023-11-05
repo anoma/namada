@@ -149,7 +149,7 @@ fn vp_user(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     // NOTE: the wasm code is always in cache so we don't
-                    // include here the cost to read and compile the code
+                    // include here the cost to read and compile the vp code
                     run::vp(
                         vp_code_hash,
                         signed_tx,

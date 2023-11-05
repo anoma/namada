@@ -58,7 +58,7 @@ pub const IBC_ACTION_EXECUTE_GAS: u64 = 47_452;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-const SCALE: u64 = 1_000;
+const SCALE: u64 = 10_000;
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from
 /// storage

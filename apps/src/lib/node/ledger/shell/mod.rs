@@ -2808,7 +2808,7 @@ mod shell_tests {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: 100.into(),
-                    token: address::btc(),
+                    token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
