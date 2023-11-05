@@ -410,9 +410,9 @@ pub async fn query_pinned_balance<'a>(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Print the token balances by payment address
-    let pinned_error = Err(Error::from(PinnedBalanceError::InvalidViewingKey));
     for owner in owners {
-        let mut balance = pinned_error.clone();
+        let mut balance =
+            Err(Error::from(PinnedBalanceError::InvalidViewingKey));
         // Find the viewing key that can recognize payments the current payment
         // address
         for vk in &viewing_keys {

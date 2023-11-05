@@ -2,23 +2,30 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use namada::ledger::parameters::{self, Parameters};
-use namada::ledger::pos::{staking_token_address, OwnedPosParams};
+use namada::ledger::parameters::Parameters;
 use namada::ledger::storage::traits::StorageHasher;
 use namada::ledger::storage::{DBIter, DB};
-use namada::ledger::storage_api::token::{
-    credit_tokens, read_balance, read_total_supply, write_denom,
-};
-use namada::ledger::storage_api::{ResultExt, StorageRead, StorageWrite};
+use namada::ledger::storage_api::token::{credit_tokens, write_denom};
+use namada::ledger::storage_api::StorageWrite;
 use namada::ledger::{ibc, pos};
-use namada::types::dec::Dec;
+use namada::proof_of_stake::BecomeValidator;
 use namada::types::hash::Hash as CodeHash;
 use namada::types::key::*;
+use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
+use namada_sdk::proof_of_stake::PosParams;
 
 use super::*;
+use crate::config::genesis::chain::{
+    FinalizedEstablishedAccountTx, FinalizedTokenConfig,
+    FinalizedValidatorAccountTx,
+};
+use crate::config::genesis::templates::{TokenBalances, TokenConfig};
+use crate::config::genesis::transactions::{
+    BondTx, EstablishedAccountTx, TransferTx, ValidatorAccountTx,
+};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
@@ -39,32 +46,44 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        #[cfg(any(test, feature = "dev"))] num_validators: u64,
+        #[cfg(any(test, feature = "testing"))] _num_validators: u64,
     ) -> Result<response::InitChain> {
-        let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
-        if current_chain_id != init.chain_id {
+        let mut response = response::InitChain::default();
+        let chain_id = self.wl_storage.storage.chain_id.as_str();
+        if chain_id != init.chain_id.as_str() {
             return Err(Error::ChainId(format!(
                 "Current chain ID: {}, Tendermint chain ID: {}",
-                current_chain_id, init.chain_id
+                chain_id, init.chain_id
             )));
         }
-        #[cfg(not(any(test, feature = "dev")))]
-        let genesis =
-            genesis::genesis(&self.base_dir, &self.wl_storage.storage.chain_id);
-        #[cfg(not(any(test, feature = "dev")))]
+
+        // Read the genesis files
+        #[cfg(any(
+            feature = "integration",
+            not(any(test, feature = "benches"))
+        ))]
+        let genesis = {
+            let chain_dir = self.base_dir.join(chain_id);
+            genesis::chain::Finalized::read_toml_files(&chain_dir)
+                .expect("Missing genesis files")
+        };
+        #[cfg(all(
+            any(test, feature = "benches"),
+            not(feature = "integration")
+        ))]
+        let genesis = {
+            let chain_dir = self.base_dir.join(chain_id);
+            genesis::make_dev_genesis(_num_validators, chain_dir)
+        };
+        #[cfg(all(
+            any(test, feature = "benches"),
+            not(feature = "integration")
+        ))]
         {
-            let genesis_bytes = genesis.serialize_to_vec();
-            let errors =
-                self.wl_storage.storage.chain_id.validate(genesis_bytes);
-            use itertools::Itertools;
-            assert!(
-                errors.is_empty(),
-                "Chain ID validation failed: {}",
-                errors.into_iter().format(". ")
-            );
+            // update the native token from the genesis file
+            let native_token = genesis.get_native_token().clone();
+            self.wl_storage.storage.native_token = native_token;
         }
-        #[cfg(any(test, feature = "dev"))]
-        let genesis = genesis::genesis(num_validators);
 
         let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
         let initial_height = init
@@ -79,26 +98,112 @@ where
         .into();
 
         // Initialize protocol parameters
-        let genesis::Parameters {
-            epoch_duration,
-            max_proposal_bytes,
-            max_block_gas,
-            max_expected_time_per_block,
-            vp_whitelist,
+        let parameters = genesis.get_chain_parameters(&self.wasm_dir);
+        self.store_wasms(&parameters)?;
+        parameters.init_storage(&mut self.wl_storage)?;
+
+        // Initialize governance parameters
+        let gov_params = genesis.get_gov_params();
+        gov_params.init_storage(&mut self.wl_storage)?;
+
+        // configure the Ethereum bridge if the configuration is set.
+        if let Some(config) = genesis.get_eth_bridge_params() {
+            tracing::debug!("Initializing Ethereum bridge storage.");
+            config.init_storage(&mut self.wl_storage);
+            self.update_eth_oracle();
+        } else {
+            self.wl_storage
+                .write_bytes(
+                    &namada::eth_bridge::storage::active_key(),
+                    EthBridgeStatus::Disabled.serialize_to_vec(),
+                )
+                .unwrap();
+        }
+
+        // Depends on parameters being initialized
+        self.wl_storage
+            .storage
+            .init_genesis_epoch(initial_height, genesis_time, &parameters)
+            .expect("Initializing genesis epoch must not fail");
+
+        // PoS system depends on epoch being initialized
+        let pos_params = genesis.get_pos_params();
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        pos::namada_proof_of_stake::init_genesis(
+            &mut self.wl_storage,
+            &pos_params,
+            current_epoch,
+        )
+        .expect("Must be able to initialize PoS genesis storage");
+
+        // PGF parameters
+        let pgf_params = genesis.get_pgf_params();
+        pgf_params
+            .init_storage(&mut self.wl_storage)
+            .expect("Should be able to initialized PGF at genesis");
+
+        // Loaded VP code cache to avoid loading the same files multiple times
+        let mut vp_cache: HashMap<String, Vec<u8>> = HashMap::default();
+        self.init_token_accounts(&genesis);
+        self.init_token_balances(&genesis);
+        self.apply_genesis_txs_established_account(&genesis, &mut vp_cache);
+        self.apply_genesis_txs_validator_account(
+            &genesis,
+            &mut vp_cache,
+            &pos_params,
+            current_epoch,
+        );
+        self.apply_genesis_txs_transfer(&genesis);
+        self.apply_genesis_txs_bonds(&genesis);
+
+        pos::namada_proof_of_stake::store_total_consensus_stake(
+            &mut self.wl_storage,
+            Default::default(),
+        )
+        .expect("Could not compute total consensus stake at genesis");
+        // This has to be done after `apply_genesis_txs_validator_account`
+        pos::namada_proof_of_stake::copy_genesis_validator_sets(
+            &mut self.wl_storage,
+            &pos_params,
+            current_epoch,
+        )
+        .expect("Must be able to copy PoS genesis validator sets");
+
+        ibc::init_genesis_storage(&mut self.wl_storage);
+
+        // Set the initial validator set
+        response.validators = self
+            .get_abci_validator_updates(true)
+            .expect("Must be able to set genesis validator set");
+        debug_assert!(!response.validators.is_empty());
+        Ok(response)
+    }
+
+    /// Look-up WASM code of a genesis VP by its name
+    fn lookup_vp(
+        &self,
+        name: &str,
+        genesis: &genesis::chain::Finalized,
+        vp_cache: &mut HashMap<String, Vec<u8>>,
+    ) -> Vec<u8> {
+        let config =
+            genesis.vps.wasm.get(name).unwrap_or_else(|| {
+                panic!("Missing validity predicate for {name}")
+            });
+        let vp_filename = &config.filename;
+        vp_cache.get_or_insert_with(vp_filename.clone(), || {
+            wasm_loader::read_wasm(&self.wasm_dir, vp_filename).unwrap()
+        })
+    }
+
+    fn store_wasms(&mut self, params: &Parameters) -> Result<()> {
+        let Parameters {
             tx_whitelist,
-            implicit_vp_code_path,
-            implicit_vp_sha256,
-            epochs_per_year,
-            max_signatures_per_transaction,
-            pos_gain_p,
-            pos_gain_d,
-            staked_ratio,
-            pos_inflation_amount,
-            minimum_gas_price,
-            fee_unshielding_gas_limit,
-            fee_unshielding_descriptions_limit,
-        } = genesis.parameters;
-        // Store wasm codes into storage
+            vp_whitelist,
+            implicit_vp_code_hash,
+            ..
+        } = params;
+        let mut is_implicit_vp_stored = false;
         let checksums = wasm_loader::Checksums::read_checksums(&self.wasm_dir);
         for (name, full_name) in checksums.0.iter() {
             let code = wasm_loader::read_wasm(&self.wasm_dir, name)
@@ -140,6 +245,9 @@ where
                 self.wl_storage.write_bytes(&code_key, code)?;
                 self.wl_storage.write(&code_len_key, code_len)?;
                 self.wl_storage.write_bytes(&hash_key, code_hash)?;
+                if &code_hash == implicit_vp_code_hash {
+                    is_implicit_vp_stored = true;
+                }
                 self.wl_storage.write_bytes(&code_name_key, code_hash)?;
             } else {
                 tracing::warn!("The wasm {name} isn't whitelisted.");
@@ -147,353 +255,357 @@ where
         }
 
         // check if implicit_vp wasm is stored
-        let implicit_vp_code_hash =
-            read_wasm_hash(&self.wl_storage, &implicit_vp_code_path)?.ok_or(
-                Error::LoadingWasm(format!(
-                    "Unknown vp code path: {}",
-                    implicit_vp_code_path
-                )),
-            )?;
-        // In dev, we don't check the hash
-        #[cfg(feature = "dev")]
-        let _ = implicit_vp_sha256;
-        #[cfg(not(feature = "dev"))]
-        {
-            assert_eq!(
-                implicit_vp_code_hash.0.as_slice(),
-                &implicit_vp_sha256,
-                "Invalid implicit account's VP sha256 hash for {}",
-                implicit_vp_code_path
-            );
-        }
-
-        let parameters = Parameters {
-            epoch_duration,
-            max_proposal_bytes,
-            max_block_gas,
-            max_expected_time_per_block,
-            vp_whitelist,
-            tx_whitelist,
-            implicit_vp_code_hash,
-            epochs_per_year,
-            max_signatures_per_transaction,
-            pos_gain_p,
-            pos_gain_d,
-            staked_ratio,
-            pos_inflation_amount,
-            minimum_gas_price,
-            fee_unshielding_gas_limit,
-            fee_unshielding_descriptions_limit,
-        };
-        parameters
-            .init_storage(&mut self.wl_storage)
-            .expect("Initializing chain parameters must not fail");
-
-        // Initialize governance parameters
-        genesis
-            .gov_params
-            .init_storage(&mut self.wl_storage)
-            .expect("Initializing chain parameters must not fail");
-
-        // Initialize pgf parameters
-        genesis
-            .pgf_params
-            .init_storage(&mut self.wl_storage)
-            .expect("Initializing chain parameters must not fail");
-
-        // configure the Ethereum bridge if the configuration is set.
-        if let Some(config) = genesis.ethereum_bridge_params {
-            tracing::debug!("Initializing Ethereum bridge storage.");
-            config.init_storage(&mut self.wl_storage);
-            self.update_eth_oracle();
-        } else {
-            self.wl_storage
-                .write_bytes(
-                    &namada::eth_bridge::storage::active_key(),
-                    EthBridgeStatus::Disabled.serialize_to_vec(),
-                )
-                .unwrap();
-        }
-
-        // Depends on parameters being initialized
-        self.wl_storage
-            .storage
-            .init_genesis_epoch(initial_height, genesis_time, &parameters)
-            .expect("Initializing genesis epoch must not fail");
-
-        // Initialize genesis established accounts
-        self.initialize_established_accounts(
-            genesis.established_accounts,
-            &implicit_vp_code_path,
-        )?;
-
-        // Initialize genesis implicit
-        self.initialize_implicit_accounts(genesis.implicit_accounts);
-
-        // Initialize genesis token accounts
-        self.initialize_token_accounts(genesis.token_accounts);
-
-        // Initialize genesis validator accounts
-        let staking_token = staking_token_address(&self.wl_storage);
-        self.initialize_validators(
-            &staking_token,
-            &genesis.validators,
-            &implicit_vp_code_path,
+        assert!(
+            is_implicit_vp_stored,
+            "No VP found matching the expected implicit VP sha256 hash: {}",
+            implicit_vp_code_hash
         );
-        // set the initial validators set
-        self.set_initial_validators(
-            &staking_token,
-            genesis.validators,
-            &genesis.pos_params,
-        )
-    }
-
-    /// Initialize genesis established accounts
-    fn initialize_established_accounts(
-        &mut self,
-        accounts: Vec<genesis::EstablishedAccount>,
-        implicit_vp_code_path: &str,
-    ) -> Result<()> {
-        for genesis::EstablishedAccount {
-            address,
-            vp_code_path,
-            vp_sha256,
-            public_key,
-            storage,
-        } in accounts
-        {
-            let vp_code_hash = read_wasm_hash(&self.wl_storage, &vp_code_path)?
-                .ok_or(Error::LoadingWasm(format!(
-                    "Unknown vp code path: {}",
-                    implicit_vp_code_path
-                )))?;
-
-            // In dev, we don't check the hash
-            #[cfg(feature = "dev")]
-            let _ = vp_sha256;
-            #[cfg(not(feature = "dev"))]
-            {
-                assert_eq!(
-                    vp_code_hash.0.as_slice(),
-                    &vp_sha256,
-                    "Invalid established account's VP sha256 hash for {}",
-                    vp_code_path
-                );
-            }
-
-            self.wl_storage
-                .write_bytes(&Key::validity_predicate(&address), vp_code_hash)
-                .unwrap();
-
-            if let Some(pk) = public_key {
-                storage_api::account::set_public_key_at(
-                    &mut self.wl_storage,
-                    &address,
-                    &pk,
-                    0,
-                )?;
-            }
-
-            for (key, value) in storage {
-                self.wl_storage.write_bytes(&key, value).unwrap();
-            }
-        }
-
         Ok(())
     }
 
-    /// Initialize genesis implicit accounts
-    fn initialize_implicit_accounts(
-        &mut self,
-        accounts: Vec<genesis::ImplicitAccount>,
-    ) {
-        // Initialize genesis implicit
-        for genesis::ImplicitAccount { public_key } in accounts {
-            let address: address::Address = (&public_key).into();
-            storage_api::account::set_public_key_at(
-                &mut self.wl_storage,
-                &address,
-                &public_key,
-                0,
-            )
-            .unwrap();
+    /// Init genesis token accounts
+    fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
+        let masp_rewards = address::tokens();
+        for (alias, token) in &genesis.tokens.token {
+            tracing::debug!("Initializing token {alias}");
+
+            let FinalizedTokenConfig {
+                address,
+                config: TokenConfig { denom, parameters },
+            } = token;
+            // associate a token with its denomination.
+            write_denom(&mut self.wl_storage, address, *denom).unwrap();
+            parameters.init_storage(address, &mut self.wl_storage);
+            // add token addresses to the masp reward conversions lookup table.
+            let alias = alias.to_string();
+            if masp_rewards.contains_key(&alias.as_str()) {
+                self.wl_storage
+                    .storage
+                    .conversion_state
+                    .tokens
+                    .insert(alias, address.clone());
+            }
         }
+        let key_prefix: Key = address::masp().to_db_key().into();
+        // Save the current conversion state
+        let state_key = key_prefix
+            .push(&(token::CONVERSION_KEY_PREFIX.to_owned()))
+            .unwrap();
+        let conv_bytes =
+            self.wl_storage.storage.conversion_state.serialize_to_vec();
+        self.wl_storage.write_bytes(&state_key, conv_bytes).unwrap();
     }
 
-    /// Initialize genesis token accounts
-    fn initialize_token_accounts(
-        &mut self,
-        accounts: Vec<genesis::TokenAccount>,
-    ) {
-        // Initialize genesis token accounts
-        for genesis::TokenAccount {
-            address,
-            denom,
-            balances,
-            parameters,
-            last_inflation,
-            last_locked_ratio,
-        } in accounts
-        {
-            // Init token parameters and last inflation and caching rates
-            parameters.init_storage(&address, &mut self.wl_storage);
-            self.wl_storage
-                .write(
-                    &token::masp_last_inflation_key(&address),
-                    last_inflation,
-                )
-                .unwrap();
-            self.wl_storage
-                .write(
-                    &token::masp_last_locked_ratio_key(&address),
-                    last_locked_ratio,
-                )
-                .unwrap();
-            // associate a token with its denomination.
-            write_denom(&mut self.wl_storage, &address, denom).unwrap();
+    /// Init genesis token balances
+    fn init_token_balances(&mut self, genesis: &genesis::chain::Finalized) {
+        for (token_alias, TokenBalances(balances)) in &genesis.balances.token {
+            tracing::debug!("Initializing token balances {token_alias}");
 
-            let mut total_balance_for_token = token::Amount::default();
-            for (owner, amount) in balances {
-                total_balance_for_token += amount;
-                credit_tokens(&mut self.wl_storage, &address, &owner, amount)
-                    .unwrap();
+            let token_address = &genesis
+                .tokens
+                .token
+                .get(token_alias)
+                .expect("Token with configured balance not found in genesis.")
+                .address;
+            let mut total_token_balance = token::Amount::zero();
+            for (owner_pk, balance) in balances {
+                let owner = Address::from(&owner_pk.raw);
+                storage_api::account::set_public_key_at(
+                    &mut self.wl_storage,
+                    &owner,
+                    &owner_pk.raw,
+                    0,
+                )
+                .unwrap();
+                tracing::info!(
+                    "Crediting {} {} tokens to {}",
+                    balance,
+                    token_alias,
+                    owner_pk.raw
+                );
+                credit_tokens(
+                    &mut self.wl_storage,
+                    token_address,
+                    &owner,
+                    balance.amount,
+                )
+                .expect("Couldn't credit initial balance");
+                total_token_balance += balance.amount;
             }
             // Write the total amount of tokens for the ratio
             self.wl_storage
                 .write(
-                    &token::minted_balance_key(&address),
-                    total_balance_for_token,
+                    &token::minted_balance_key(token_address),
+                    total_token_balance,
                 )
                 .unwrap();
         }
     }
 
-    /// Initialize genesis validator accounts
-    fn initialize_validators(
+    /// Apply genesis txs to initialize established accounts
+    fn apply_genesis_txs_established_account(
         &mut self,
-        staking_token: &Address,
-        validators: &[genesis::Validator],
-        implicit_vp_code_path: &str,
+        genesis: &genesis::chain::Finalized,
+        vp_cache: &mut HashMap<String, Vec<u8>>,
     ) {
-        // Initialize genesis validator accounts
-        for validator in validators {
-            let vp_code_hash = read_wasm_hash(
-                &self.wl_storage,
-                &validator.validator_vp_code_path,
-            )
-            .unwrap()
-            .ok_or(Error::LoadingWasm(format!(
-                "Unknown vp code path: {}",
-                implicit_vp_code_path
-            )))
-            .expect("Reading wasms should not fail");
-
-            #[cfg(not(feature = "dev"))]
+        let vp_code = self.lookup_vp("vp_masp", genesis, vp_cache);
+        let code_hash = CodeHash::sha256(&vp_code);
+        self.wl_storage
+            .write_bytes(&Key::validity_predicate(&address::masp()), code_hash)
+            .unwrap();
+        if let Some(txs) = genesis.transactions.established_account.as_ref() {
+            for FinalizedEstablishedAccountTx {
+                address,
+                tx:
+                    EstablishedAccountTx {
+                        alias,
+                        vp,
+                        public_key,
+                        storage,
+                    },
+            } in txs
             {
-                assert_eq!(
-                    vp_code_hash.0.as_slice(),
-                    &validator.validator_vp_sha256,
-                    "Invalid validator VP sha256 hash for {}",
-                    validator.validator_vp_code_path
+                tracing::debug!(
+                    "Applying genesis tx to init an established account \
+                     {alias}"
                 );
+                let vp_code = self.lookup_vp(vp, genesis, vp_cache);
+                let code_hash = CodeHash::sha256(&vp_code);
+                self.wl_storage
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .unwrap();
+
+                if let Some(pk) = public_key {
+                    storage_api::account::set_public_key_at(
+                        &mut self.wl_storage,
+                        address,
+                        &pk.pk.raw,
+                        0,
+                    )
+                    .unwrap();
+                }
+
+                // Place the keys under the owners sub-storage
+                let sub_key = namada::core::types::storage::Key::from(
+                    address.to_db_key(),
+                );
+                for (key, value) in storage {
+                    self.wl_storage
+                        .write_bytes(&sub_key.join(key), value.parse().unwrap())
+                        .unwrap();
+                }
             }
-
-            let addr = &validator.pos_data.address;
-            self.wl_storage
-                .write_bytes(&Key::validity_predicate(addr), vp_code_hash)
-                .expect("Unable to write user VP");
-            // Validator account key
-            storage_api::account::set_public_key_at(
-                &mut self.wl_storage,
-                addr,
-                &validator.account_key,
-                0,
-            )
-            .unwrap();
-
-            // Balances
-            // Account balance (tokens not staked in PoS)
-            credit_tokens(
-                &mut self.wl_storage,
-                staking_token,
-                addr,
-                validator.non_staked_balance,
-            )
-            .unwrap();
-
-            self.wl_storage
-                .write(
-                    &dkg_session_keys::dkg_pk_key(addr),
-                    &validator.dkg_public_key,
-                )
-                .expect("Unable to set genesis user public DKG session key");
         }
     }
 
-    /// Initialize the PoS and set the initial validator set
-    fn set_initial_validators(
+    /// Apply genesis txs to initialize validator accounts
+    fn apply_genesis_txs_validator_account(
         &mut self,
-        staking_token: &Address,
-        validators: Vec<genesis::Validator>,
-        pos_params: &OwnedPosParams,
-    ) -> Result<response::InitChain> {
-        let mut response = response::InitChain::default();
-        // PoS system depends on epoch being initialized. Write the total
-        // genesis staking token balance to storage after
-        // initialization.
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
-        pos::init_genesis_storage(
-            &mut self.wl_storage,
-            pos_params,
-            validators.into_iter().map(|validator| validator.pos_data),
-            current_epoch,
-        );
+        genesis: &genesis::chain::Finalized,
+        vp_cache: &mut HashMap<String, Vec<u8>>,
+        params: &PosParams,
+        current_epoch: namada::types::storage::Epoch,
+    ) {
+        if let Some(txs) = genesis.transactions.validator_account.as_ref() {
+            for FinalizedValidatorAccountTx {
+                address,
+                tx:
+                    ValidatorAccountTx {
+                        alias,
+                        vp,
+                        dkg_key,
+                        commission_rate,
+                        max_commission_rate_change,
+                        net_address: _,
+                        account_key,
+                        consensus_key,
+                        protocol_key,
+                        tendermint_node_key: _,
+                        eth_hot_key,
+                        eth_cold_key,
+                    },
+            } in txs
+            {
+                tracing::debug!(
+                    "Applying genesis tx to init a validator account {alias}"
+                );
 
-        let total_nam = read_total_supply(&self.wl_storage, staking_token)?;
-        // At this stage in the chain genesis, the PoS address balance is the
-        // same as the number of staked tokens
-        let total_staked_nam =
-            read_balance(&self.wl_storage, staking_token, &address::POS)?;
+                let vp_code = self.lookup_vp(vp, genesis, vp_cache);
+                let code_hash = CodeHash::sha256(&vp_code);
+                self.wl_storage
+                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .expect("Unable to write user VP");
+                // Validator account key
+                storage_api::account::set_public_key_at(
+                    &mut self.wl_storage,
+                    address,
+                    &account_key.pk.raw,
+                    0,
+                )
+                .unwrap();
 
-        tracing::info!(
-            "Genesis total native tokens: {}.",
-            total_nam.to_string_native()
-        );
-        tracing::info!(
-            "Total staked tokens: {}.",
-            total_staked_nam.to_string_native()
-        );
+                self.wl_storage
+                    .write(&protocol_pk_key(address), &protocol_key.pk.raw)
+                    .expect("Unable to set genesis user protocol public key");
 
-        // Set the ratio of staked to total NAM tokens in the parameters storage
-        parameters::update_staked_ratio_parameter(
-            &mut self.wl_storage,
-            &(Dec::from(total_staked_nam) / Dec::from(total_nam)),
-        )
-        .expect("unable to set staked ratio of NAM in storage");
+                self.wl_storage
+                    .write(&dkg_session_keys::dkg_pk_key(address), &dkg_key.raw)
+                    .expect(
+                        "Unable to set genesis user public DKG session key",
+                    );
 
-        ibc::init_genesis_storage(&mut self.wl_storage);
-
-        // Set the initial validator set
-        response.validators = self
-            .get_abci_validator_updates(true)
-            .expect("Must be able to set genesis validator set");
-        debug_assert!(!response.validators.is_empty());
-
-        Ok(response)
-    }
-}
-
-fn read_wasm_hash(
-    storage: &impl StorageRead,
-    path: impl AsRef<str>,
-) -> storage_api::Result<Option<CodeHash>> {
-    let hash_key = Key::wasm_hash(path);
-    match storage.read_bytes(&hash_key)? {
-        Some(value) => {
-            let hash = CodeHash::try_from(&value[..]).into_storage_result()?;
-            Ok(Some(hash))
+                // TODO: replace pos::init_genesis validators arg with
+                // init_genesis_validator from here
+                if let Err(err) = pos::namada_proof_of_stake::become_validator(
+                    BecomeValidator {
+                        storage: &mut self.wl_storage,
+                        params,
+                        address,
+                        consensus_key: &consensus_key.pk.raw,
+                        protocol_key: &protocol_key.pk.raw,
+                        eth_cold_key: &eth_cold_key.pk.raw,
+                        eth_hot_key: &eth_hot_key.pk.raw,
+                        current_epoch,
+                        commission_rate: *commission_rate,
+                        max_commission_rate_change: *max_commission_rate_change,
+                        offset_opt: Some(0),
+                    },
+                ) {
+                    tracing::warn!(
+                        "Genesis init genesis validator tx for {alias} failed \
+                         with {err}. Skipping."
+                    );
+                    continue;
+                }
+            }
         }
-        None => Ok(None),
+    }
+
+    /// Apply genesis txs to transfer tokens
+    fn apply_genesis_txs_transfer(
+        &mut self,
+        genesis: &genesis::chain::Finalized,
+    ) {
+        if let Some(txs) = &genesis.transactions.transfer {
+            for TransferTx {
+                token,
+                source,
+                target,
+                amount,
+                ..
+            } in txs
+            {
+                let token = match genesis.get_token_address(token) {
+                    Some(token) => {
+                        tracing::debug!(
+                            "Applying genesis tx to transfer {} of token \
+                             {token} from {source} to {target}",
+                            amount
+                        );
+                        token
+                    }
+                    None => {
+                        tracing::warn!(
+                            "Genesis token transfer tx uses an unknown token \
+                             alias {token}. Skipping."
+                        );
+                        continue;
+                    }
+                };
+                let target = match genesis.get_user_address(target) {
+                    Some(target) => target,
+                    None => {
+                        tracing::warn!(
+                            "Genesis token transfer tx uses an unknown target \
+                             alias {target}. Skipping."
+                        );
+                        continue;
+                    }
+                };
+                let source: Address = (&source.raw).into();
+                tracing::debug!(
+                    "Transfer addresses: token {token} from {source} to \
+                     {target}"
+                );
+
+                if let Err(err) = storage_api::token::transfer(
+                    &mut self.wl_storage,
+                    token,
+                    &source,
+                    &target,
+                    amount.amount,
+                ) {
+                    tracing::warn!(
+                        "Genesis token transfer tx failed with: {err}. \
+                         Skipping."
+                    );
+                    continue;
+                };
+            }
+        }
+    }
+
+    /// Apply genesis txs to transfer tokens
+    fn apply_genesis_txs_bonds(&mut self, genesis: &genesis::chain::Finalized) {
+        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        if let Some(txs) = &genesis.transactions.bond {
+            for BondTx {
+                source,
+                validator,
+                amount,
+                ..
+            } in txs
+            {
+                tracing::debug!(
+                    "Applying genesis tx to bond {} native tokens from \
+                     {source} to {validator}",
+                    amount,
+                );
+
+                let source = match source {
+                    genesis::transactions::AliasOrPk::Alias(alias) => {
+                        match genesis.get_user_address(alias) {
+                            Some(addr) => addr,
+                            None => {
+                                tracing::warn!(
+                                    "Cannot find bond source address with \
+                                     alias \"{alias}\". Skipping."
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                    genesis::transactions::AliasOrPk::PublicKey(pk) => {
+                        Address::from(&pk.raw)
+                    }
+                };
+
+                let validator = match genesis.get_validator_address(validator) {
+                    Some(addr) => addr,
+                    None => {
+                        tracing::warn!(
+                            "Cannot find bond validator address with alias \
+                             \"{validator}\". Skipping."
+                        );
+                        continue;
+                    }
+                };
+
+                if let Err(err) = pos::namada_proof_of_stake::bond_tokens(
+                    &mut self.wl_storage,
+                    Some(&source),
+                    validator,
+                    amount.amount,
+                    current_epoch,
+                    Some(0),
+                ) {
+                    tracing::warn!(
+                        "Genesis bond tx failed with: {err}. Skipping."
+                    );
+                    continue;
+                };
+            }
+        }
     }
 }
 

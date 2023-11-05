@@ -10,6 +10,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Check if the given `duration` has passed since the given `start.
 pub fn duration_passed(
@@ -30,6 +31,8 @@ pub fn duration_passed(
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -73,6 +76,8 @@ impl Display for DurationSecs {
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,
@@ -93,8 +98,26 @@ impl From<std::time::Duration> for DurationNanos {
     }
 }
 
+impl From<DurationNanos> for std::time::Duration {
+    fn from(DurationNanos { secs, nanos }: DurationNanos) -> Self {
+        Self::new(secs, nanos)
+    }
+}
+
 /// An RFC 3339 timestamp (e.g., "1970-01-01T00:00:00Z").
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
@@ -113,6 +136,9 @@ pub struct Rfc3339String(pub String);
 )]
 #[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
+
+/// The minimum possible DateTime<Utc>.
+pub const MIN_UTC: DateTimeUtc = DateTimeUtc(chrono::DateTime::<Utc>::MIN_UTC);
 
 impl Display for DateTimeUtc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -290,5 +316,19 @@ impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
 
     fn try_from(t: crate::tendermint::time::Time) -> Result<Self, Self::Error> {
         Rfc3339String(t.to_rfc3339()).try_into()
+    }
+}
+
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<crate::tendermint::Timeout> for DurationNanos {
+    fn from(val: crate::tendermint::Timeout) -> Self {
+        Self::from(std::time::Duration::from(val))
+    }
+}
+
+#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
+impl From<DurationNanos> for crate::tendermint::Timeout {
+    fn from(val: DurationNanos) -> Self {
+        Self::from(std::time::Duration::from(val))
     }
 }
