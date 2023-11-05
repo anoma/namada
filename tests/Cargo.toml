@@ -27,6 +27,7 @@ abciplus = [
 ]
 
 wasm-runtime = ["namada/wasm-runtime"]
+integration = ["namada_apps/integration"]
 
 [dependencies]
 namada = {path = "../shared", features = ["testing"]}
@@ -39,6 +40,7 @@ async-trait.workspace = true
 chrono.workspace = true
 clap.workspace = true
 concat-idents.workspace = true
+copy_dir = "0.1.3"
 derivative.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
 lazy_static.workspace = true
@@ -66,7 +68,6 @@ data-encoding.workspace = true
 escargot = {workspace = true} # , features = ["print"]}
 expectrl.workspace = true
 eyre.workspace = true
-file-serve.workspace = true
 fs_extra.workspace = true
 itertools.workspace = true
 once_cell.workspace = true

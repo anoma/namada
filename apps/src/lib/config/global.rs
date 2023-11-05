@@ -14,8 +14,6 @@ pub const FILENAME: &str = "global-config.toml";
 pub enum Error {
     #[error("Error while reading config: {0}")]
     ReadError(config::ConfigError),
-    #[error("Error while reading config: {0}")]
-    FileNotFound(String),
     #[error("Error while deserializing config: {0}")]
     DeserializationError(config::ConfigError),
     #[error("Error while writing config: {0}")]
@@ -26,29 +24,31 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct GlobalConfig {
     /// The default chain ID
-    pub default_chain_id: ChainId,
+    pub default_chain_id: Option<ChainId>,
     // NOTE: There will be sub-chains in here in future
 }
 
 impl GlobalConfig {
     pub fn new(default_chain_id: ChainId) -> Self {
-        Self { default_chain_id }
+        Self {
+            default_chain_id: Some(default_chain_id),
+        }
     }
 
-    /// Try to read the global config from a file.
+    /// Try to read the global config from a file. Returns a config without
+    /// a `default_chain_id` if none exists.
     pub fn read(base_dir: impl AsRef<Path>) -> Result<Self> {
         let file_path = Self::file_path(base_dir.as_ref());
         let file_name = file_path.to_str().expect("Expected UTF-8 file path");
-        if !file_path.exists() {
-            return Err(Error::FileNotFound(file_name.to_string()));
-        };
         let mut config = config::Config::new();
-        config
-            .merge(config::File::with_name(file_name))
-            .map_err(Error::ReadError)?;
+        if file_path.exists() {
+            config
+                .merge(config::File::with_name(file_name))
+                .map_err(Error::ReadError)?;
+        }
         config.try_into().map_err(Error::DeserializationError)
     }
 

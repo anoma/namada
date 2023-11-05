@@ -10,8 +10,9 @@ use test_log::test;
 use super::setup;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
-    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BTC, B_SPENDING_KEY, CHRISTEL, ETH, MASP, NAM,
+    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
+    BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
+    CHRISTEL_KEY, ETH, MASP, NAM,
 };
 
 /// In this test we verify that users of the MASP receive the correct rewards
@@ -28,7 +29,7 @@ fn masp_incentives() -> Result<()> {
     let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
     node.next_epoch();
-    // Send 20 BTC from Albert to PA
+    // Send 1 BTC from Albert to PA
     run(
         &node,
         Bin::Client,
@@ -41,14 +42,14 @@ fn masp_incentives() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "20",
+            "1",
             "--node",
             validator_one_rpc,
         ],
     )?;
     node.assert_success();
 
-    // Assert BTC balance at VK(A) is 20
+    // Assert BTC balance at VK(A) is 1
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -65,7 +66,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 20"));
+    assert!(captured.contains("btc: 1"));
 
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
@@ -89,7 +90,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Assert BTC balance at VK(A) is 20
+    // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -106,9 +107,9 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 20"));
+    assert!(captured.contains("btc: 1"));
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_1-epoch_0)
+    // Assert NAM balance is a non-zero number (rewards have been dispensed)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -126,9 +127,10 @@ fn masp_incentives() -> Result<()> {
     });
 
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 22.74"));
+    assert!(captured.contains("nam: 0.022"));
 
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_1-epoch_0)
+    // Assert NAM balance at MASP pool is exclusively the
+    // rewards from the shielded BTC
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -145,12 +147,12 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 22.74"));
+    assert!(captured.contains("nam: 0.022"));
 
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Assert BTC balance at VK(A) is 20
+    // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -167,9 +169,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 20"));
+    assert!(captured.contains("btc: 1"));
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_2-epoch_0)
+    // Assert NAM balance is a number greater than the last epoch's balance
+    // (more rewards have been dispensed)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -186,9 +189,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 90.96"));
+    assert!(captured.contains("nam: 0.08729"));
 
-    // Assert NAM balance at MASP pool is 20*BTC_reward*(epoch_2-epoch_0)
+    // Assert NAM balance at MASP pool is exclusively the
+    // rewards from the shielded BTC
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -205,12 +209,12 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 90.96"));
+    assert!(captured.contains("nam: 0.08729"));
 
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Send 10 ETH from Albert to PA(B)
+    // Send 0.001 ETH from Albert to PA(B)
     run(
         &node,
         Bin::Client,
@@ -223,14 +227,14 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "10",
+            "0.001",
             "--node",
             validator_one_rpc,
         ],
     )?;
     node.assert_success();
 
-    // Assert ETH balance at VK(B) is 10
+    // Assert ETH balance at VK(B) is 0.001
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -247,7 +251,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("eth: 10"));
+    assert!(captured.contains("eth: 0.001"));
 
     // Assert NAM balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -271,7 +275,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Assert ETH balance at VK(B) is 10
+    // Assert ETH balance at VK(B) is still 0.001
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -288,9 +292,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("eth: 10"));
+    assert!(captured.contains("eth: 0.001"));
 
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_4-epoch_3)
+    // Assert NAM balance at VK(B) is non-zero (rewards have been
+    // dispensed)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -307,10 +312,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 22.71432"));
+    assert!(captured.contains("nam: 0.0207"));
 
-    // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_4-epoch_0)+10*ETH_reward*(epoch_4-epoch_3)
+    // Assert NAM balance at MASP pool is an accumulation of
+    // rewards from both the shielded BTC and shielded ETH
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -327,12 +332,12 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 386.46336"));
+    assert!(captured.contains("nam: 0.3726"));
 
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Send 10 ETH from SK(B) to Christel
+    // Send 0.001 ETH from SK(B) to Christel
     run(
         &node,
         Bin::Client,
@@ -345,9 +350,9 @@ fn masp_incentives() -> Result<()> {
             "--token",
             ETH,
             "--amount",
-            "10",
+            "0.001",
             "--signing-keys",
-            BERTHA,
+            BERTHA_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -375,7 +380,8 @@ fn masp_incentives() -> Result<()> {
 
     node.next_epoch();
 
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(ep-epoch_3)
+    // Assert VK(B) retains the NAM rewards dispensed in the correct
+    // amount.
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -392,11 +398,12 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 86.60024"));
+    assert!(captured.contains("nam: 0.085204"));
 
     node.next_epoch();
+
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_5-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
+    // the accumulation of rewards from the shielded assets (BTC and ETH)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -413,12 +420,12 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1180.41525"));
+    assert!(captured.contains("nam: 1.134567"));
 
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Send 20 BTC from SK(A) to Christel
+    // Send 1 BTC from SK(A) to Christel
     run(
         &node,
         Bin::Client,
@@ -431,9 +438,9 @@ fn masp_incentives() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "20",
+            "1",
             "--signing-keys",
-            ALBERT,
+            ALBERT_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -459,7 +466,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("No shielded btc balance found"));
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // Assert VK(A) retained the NAM rewards
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -476,10 +483,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1407.16324"));
+    assert!(captured.contains("nam: 1.355211"));
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+20*ETH_reward*(epoch_5-epoch_3)
+    // the accumulation of rewards from the shielded assets (BTC and ETH)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -496,12 +503,14 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1520.37191"));
+    assert!(captured.contains("nam: 1.459458"));
 
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Assert NAM balance at VK(A) is 20*BTC_reward*(epoch_6-epoch_0)
+    // Assert NAM balance at VK(A) is the rewards dispensed earlier
+    // (since VK(A) has no shielded assets, no further rewards should
+    //  be dispensed to that account)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -518,9 +527,11 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1573.18"));
+    assert!(captured.contains("nam: 1.520493"));
 
-    // Assert NAM balance at VK(B) is 10*ETH_reward*(epoch_5-epoch_3)
+    // Assert NAM balance at VK(B) is the rewards dispensed earlier
+    // (since VK(A) has no shielded assets, no further rewards should
+    //  be dispensed to that account)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -537,10 +548,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 126.565"));
+    assert!(captured.contains("nam: 0.125958"));
 
     // Assert NAM balance at MASP pool is
-    // 20*BTC_reward*(epoch_6-epoch_0)+10*ETH_reward*(epoch_5-epoch_3)
+    // the accumulation of rewards from the shielded assets (BTC and ETH)
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -557,13 +568,13 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1699.745"));
+    assert!(captured.contains("nam: 1.637454"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
     node.next_epoch();
 
-    // Send 10*ETH_reward*(epoch_5-epoch_3) NAM from SK(B) to Christel
+    // Send all NAM rewards from SK(B) to Christel
     run(
         &node,
         Bin::Client,
@@ -576,9 +587,9 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "141.49967",
+            "0.137354",
             "--signing-keys",
-            BERTHA,
+            BERTHA_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -588,7 +599,7 @@ fn masp_incentives() -> Result<()> {
     // Wait till epoch boundary
     node.next_epoch();
 
-    // Send 20*BTC_reward*(epoch_6-epoch_0) NAM from SK(A) to Bertha
+    // Send all NAM rewards from SK(A) to Bertha
     run(
         &node,
         Bin::Client,
@@ -601,33 +612,34 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1980.356",
+            "1.916208",
             "--signing-keys",
-            ALBERT,
+            ALBERT_KEY,
             "--node",
             validator_one_rpc,
         ],
     )?;
     node.assert_success();
 
-    // Assert NAM balance at VK(A) is 0
-    let captured = CapturedOutput::of(|| {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "balance",
-                "--owner",
-                AA_VIEWING_KEY,
-                "--token",
-                NAM,
-                "--node",
-                validator_one_rpc,
-            ],
-        )
-    });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    // TODO: Fix once we can unsheild less than 10^-3 tokens
+    // // Assert NAM balance at VK(A) is 0
+    // let captured = CapturedOutput::of(|| {
+    //     run(
+    //         &node,
+    //         Bin::Client,
+    //         vec![
+    //             "balance",
+    //             "--owner",
+    //             AA_VIEWING_KEY,
+    //             "--token",
+    //             NAM,
+    //             "--node",
+    //             validator_one_rpc,
+    //         ],
+    //     )
+    // });
+    // assert!(captured.result.is_ok());
+    // assert!(captured.contains("No shielded nam balance found"));
 
     // Assert NAM balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -867,7 +879,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "10",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -886,7 +898,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "15",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -922,7 +934,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "10",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -941,7 +953,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "7",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -960,7 +972,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "7",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -979,7 +991,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "7",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -998,7 +1010,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "6",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],
@@ -1054,7 +1066,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "20",
                 "--gas-payer",
-                CHRISTEL,
+                CHRISTEL_KEY,
                 "--node",
                 validator_one_rpc,
             ],

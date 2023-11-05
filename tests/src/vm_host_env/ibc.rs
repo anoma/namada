@@ -71,7 +71,7 @@ use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::traits::Sha256Hasher;
 use namada::ledger::tx_env::TxEnv;
 use namada::ledger::{ibc, pos};
-use namada::proof_of_stake::parameters::PosParams;
+use namada::proof_of_stake::OwnedPosParams;
 use namada::proto::Tx;
 use namada::tendermint::time::Time as TmTime;
 use namada::tendermint_proto::Protobuf as TmProtobuf;
@@ -214,12 +214,13 @@ pub fn init_storage() -> (Address, Address) {
         ibc::init_genesis_storage(&mut env.wl_storage);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut env.wl_storage).unwrap();
-        pos::init_genesis_storage(
+        pos::test_utils::test_init_genesis(
             &mut env.wl_storage,
-            &PosParams::default(),
+            OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        );
+        )
+        .unwrap();
         // store wasm code
         let key = Key::wasm_code(&code_hash);
         env.wl_storage.storage.write(&key, code.clone()).unwrap();
