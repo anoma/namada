@@ -71,7 +71,7 @@ namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runti
 namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true
 ark-std.workspace = true
-arse-merkle-tree = { workspace = true, features = ["blake2b"] }
+sparse-merkle-tree = { workspace = true, features = ["blake2b"] }
 assert_matches.workspace = true
 async-trait.workspace = true
 base64.workspace = true

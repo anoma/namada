@@ -3,8 +3,8 @@
 use std::convert::TryInto;
 use std::fmt;
 
-use arse_merkle_tree::traits::{Hasher, Value};
-use arse_merkle_tree::{Key as TreeKey, H256};
+use sparse_merkle_tree::traits::{Hasher, Value};
+use sparse_merkle_tree::{Key as TreeKey, H256};
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use ics23::commitment_proof::Proof as Ics23Proof;

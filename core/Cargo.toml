@@ -53,7 +53,7 @@ namada_macros = {path = "../macros"}
 ark-bls12-381.workspace = true
 ark-ec = {version = "0.3", optional = true}
 ark-serialize.workspace = true
-arse-merkle-tree.workspace = true
+sparse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true

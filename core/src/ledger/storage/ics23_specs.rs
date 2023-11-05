@@ -1,6 +1,6 @@
 //! A module that contains
 
-use arse_merkle_tree::H256;
+use sparse_merkle_tree::H256;
 use ics23::{HashOp, LeafOp, LengthOp, ProofSpec};
 
 use super::traits::StorageHasher;
@@ -47,7 +47,7 @@ pub fn ibc_leaf_spec<H: StorageHasher>() -> LeafOp {
 /// Get the proof specs for ibc
 #[allow(dead_code)]
 pub fn ibc_proof_specs<H: StorageHasher>() -> Vec<ProofSpec> {
-    let spec = arse_merkle_tree::proof_ics23::get_spec(H::hash_op());
+    let spec = sparse_merkle_tree::proof_ics23::get_spec(H::hash_op());
     let sub_tree_spec = ProofSpec {
         leaf_spec: Some(ibc_leaf_spec::<H>()),
         ..spec.clone()
@@ -62,7 +62,7 @@ pub fn ibc_proof_specs<H: StorageHasher>() -> Vec<ProofSpec> {
 /// Get the proof specs
 #[allow(dead_code)]
 pub fn proof_specs<H: StorageHasher>() -> Vec<ProofSpec> {
-    let spec = arse_merkle_tree::proof_ics23::get_spec(H::hash_op());
+    let spec = sparse_merkle_tree::proof_ics23::get_spec(H::hash_op());
     let sub_tree_spec = ProofSpec {
         leaf_spec: Some(leaf_spec::<H>()),
         ..spec.clone()

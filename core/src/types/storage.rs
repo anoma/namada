@@ -7,7 +7,7 @@ use std::num::ParseIntError;
 use std::ops::{Add, AddAssign, Deref, Div, Drop, Mul, Rem, Sub};
 use std::str::FromStr;
 
-use arse_merkle_tree::InternalKey;
+use sparse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};

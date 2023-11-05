@@ -2,9 +2,9 @@
 use std::fmt;
 use std::str::FromStr;
 
-use arse_merkle_tree::default_store::DefaultStore;
-use arse_merkle_tree::error::Error as MtError;
-use arse_merkle_tree::{
+use sparse_merkle_tree::default_store::DefaultStore;
+use sparse_merkle_tree::error::Error as MtError;
+use sparse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
