@@ -243,10 +243,9 @@ pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
 /// Load a wallet from the store file.
 pub fn load(store_dir: &Path) -> Option<Wallet<CliWalletUtils>> {
     let mut wallet = CliWalletUtils::new(store_dir.to_path_buf());
-    wallet.load().unwrap_or_else(|err| {
-        eprintln!("Unable to load the wallet: {}", err);
-        cli::safe_exit(1)
-    });
+    if wallet.load().is_err() {
+        return None;
+    }
     Some(wallet)
 }
 
