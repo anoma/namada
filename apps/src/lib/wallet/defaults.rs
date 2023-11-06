@@ -194,17 +194,20 @@ mod dev {
         sk.try_to_sk().unwrap()
     }
 
-    /// N.B. this is the consensus key from
-    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
-    /// If that wallet is regenerated, this value must be changed to fix unit
-    /// tests.
+    /// Get the validator consensus keypair from the wallet.
     pub fn validator_keypair() -> common::SecretKey {
-        let bytes = [
-            194, 41, 223, 103, 103, 178, 152, 145, 161, 212, 82, 133, 69, 13,
-            133, 136, 238, 11, 198, 182, 29, 41, 75, 249, 88, 0, 28, 215, 217,
-            63, 234, 78,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        let mut root_dir = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        // Find the project root dir
+        while !root_dir.join("rust-toolchain.toml").exists() {
+            root_dir.pop();
+        }
+        let path =
+            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+
+        let wallet = crate::wallet::pre_genesis::load(&path).unwrap();
+        wallet.consensus_key
     }
 }
