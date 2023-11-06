@@ -64,8 +64,7 @@ pub fn main() -> Result<()> {
                 let _validator_local_config: ValidatorLocalConfig =
                     toml::from_slice(&updated_config).unwrap();
 
-                // Update validator configuration file with the new accepted
-                // tokens
+                // Update the validator configuration file with the new one
                 let config_path = ctx
                     .global_args
                     .base_dir
