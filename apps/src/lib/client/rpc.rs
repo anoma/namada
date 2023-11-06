@@ -1970,7 +1970,6 @@ pub async fn query_and_print_metadata<'a>(
             email,
             description,
             website,
-            alias,
             discord_handle,
         }) => {
             display_line!(
@@ -1988,11 +1987,6 @@ pub async fn query_and_print_metadata<'a>(
                 display_line!(context.io(), "Website: {}", website);
             } else {
                 display_line!(context.io(), "No website");
-            }
-            if let Some(alias) = alias {
-                display_line!(context.io(), "Alias: {}", alias);
-            } else {
-                display_line!(context.io(), "No alias");
             }
             if let Some(discord_handle) = discord_handle {
                 display_line!(

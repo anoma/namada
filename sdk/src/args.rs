@@ -746,6 +746,14 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub commission_rate: Dec,
     /// Maximum commission rate change
     pub max_commission_rate_change: Dec,
+    /// The validator email
+    pub email: String,
+    /// The validator description
+    pub description: Option<String>,
+    /// The validator website
+    pub website: Option<String>,
+    /// The validator's discord handle
+    pub discord_handle: Option<String>,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -1279,8 +1287,6 @@ pub struct MetaDataChange<C: NamadaTypes = SdkTypes> {
     pub description: Option<String>,
     /// New validator website
     pub website: Option<String>,
-    /// New validator alias
-    pub alias: Option<String>,
     /// New validator discord handle
     pub discord_handle: Option<String>,
     /// New validator commission rate

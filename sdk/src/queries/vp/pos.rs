@@ -21,7 +21,7 @@ use namada_proof_of_stake::{
     read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_alias, read_validator_description,
+    read_total_stake, read_validator_description,
     read_validator_discord_handle, read_validator_email,
     read_validator_max_commission_rate_change, read_validator_stake,
     read_validator_website, unbond_handle, validator_commission_rate_handle,
@@ -247,7 +247,6 @@ where
     let email = read_validator_email(ctx.wl_storage, &validator)?;
     let description = read_validator_description(ctx.wl_storage, &validator)?;
     let website = read_validator_website(ctx.wl_storage, &validator)?;
-    let alias = read_validator_alias(ctx.wl_storage, &validator)?;
     let discord_handle =
         read_validator_discord_handle(ctx.wl_storage, &validator)?;
 
@@ -257,7 +256,6 @@ where
             email,
             description,
             website,
-            alias,
             discord_handle,
         })),
         _ => Ok(None),

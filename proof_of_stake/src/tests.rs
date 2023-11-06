@@ -951,6 +951,7 @@ fn test_become_validator_aux(
         commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
         max_commission_rate_change: Dec::new(5, 2)
             .expect("Dec creation failed"),
+        metadata: Default::default(),
         offset_opt: None,
     })
     .unwrap();

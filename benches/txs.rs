@@ -617,6 +617,10 @@ fn init_validator(c: &mut Criterion) {
         dkg_key,
         commission_rate: namada::types::dec::Dec::default(),
         max_commission_rate_change: namada::types::dec::Dec::default(),
+        email: "null@null.net".to_string(),
+        description: None,
+        website: None,
+        discord_handle: None,
         validator_vp_code_hash: extra_hash,
     };
     let tx = generate_tx(
@@ -664,7 +668,6 @@ fn change_validator_metadata(c: &mut Criterion) {
         email: None,
         description: Some("I will change this piece of data".to_string()),
         website: None,
-        alias: None,
         discord_handle: None,
         commission_rate: None,
     };

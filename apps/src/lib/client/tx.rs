@@ -196,6 +196,10 @@ pub async fn submit_init_validator<'a>(
         protocol_key,
         commission_rate,
         max_commission_rate_change,
+        email,
+        website,
+        description,
+        discord_handle,
         validator_vp_code_path,
         unsafe_dont_encrypt,
         tx_code_path: _,
@@ -368,6 +372,17 @@ pub async fn submit_init_validator<'a>(
             safe_exit(1)
         }
     }
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            namada.io(),
+            "The validator email must not be an empty string"
+        );
+        if !tx_args.force {
+            safe_exit(1)
+        }
+    }
+
     let tx_code_hash =
         query_wasm_code_hash(namada, args::TX_INIT_VALIDATOR_WASM)
             .await
@@ -390,6 +405,10 @@ pub async fn submit_init_validator<'a>(
         dkg_key,
         commission_rate,
         max_commission_rate_change,
+        email,
+        description,
+        website,
+        discord_handle,
         validator_vp_code_hash: extra_section_hash,
     };
 

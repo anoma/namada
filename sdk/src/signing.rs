@@ -1494,13 +1494,6 @@ pub async fn to_ledger_vector<'a>(
                 other_items.push(format!("New website : {}", website));
             }
         }
-        if let Some(alias) = metadata_change.alias {
-            if alias.is_empty() {
-                other_items.push("Alias removed".to_string());
-            } else {
-                other_items.push(format!("New alias : {}", alias));
-            }
-        }
         if let Some(discord_handle) = metadata_change.discord_handle {
             if discord_handle.is_empty() {
                 other_items.push("Discord handle removed".to_string());

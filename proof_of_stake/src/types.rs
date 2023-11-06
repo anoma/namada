@@ -351,8 +351,6 @@ pub struct ValidatorMetaData {
     pub description: Option<String>,
     /// Validator website
     pub website: Option<String>,
-    /// Validator alias
-    pub alias: Option<String>,
     /// Validator's discord handle
     pub discord_handle: Option<String>,
 }
@@ -364,7 +362,6 @@ impl Default for ValidatorMetaData {
             email: String::from("null@null.net"),
             description: Default::default(),
             website: Default::default(),
-            alias: Default::default(),
             discord_handle: Default::default(),
         }
     }

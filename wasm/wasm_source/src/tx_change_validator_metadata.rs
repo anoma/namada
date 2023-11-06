@@ -14,7 +14,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         email,
         description,
         website,
-        alias,
         discord_handle,
         commission_rate,
     } = transaction::pos::MetaDataChange::try_from_slice(&data[..])
@@ -24,7 +23,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         email,
         description,
         website,
-        alias,
         discord_handle,
         commission_rate,
     )

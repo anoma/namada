@@ -2851,7 +2851,6 @@ pub mod args {
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
-    pub const NEW_ALIAS: ArgOpt<String> = arg_opt("new-alias");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NUT: ArgFlag = flag("nut");
@@ -3900,6 +3899,10 @@ pub mod args {
                     .map(|x| chain_ctx.get_cached(&x)),
                 commission_rate: self.commission_rate,
                 max_commission_rate_change: self.max_commission_rate_change,
+                email: self.email,
+                description: self.description,
+                website: self.website,
+                discord_handle: self.discord_handle,
                 validator_vp_code_path: self
                     .validator_vp_code_path
                     .to_path_buf(),
@@ -3921,6 +3924,10 @@ pub mod args {
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
                 MAX_COMMISSION_RATE_CHANGE.parse(matches);
+            let email = EMAIL.parse(matches);
+            let description = DESCRIPTION_OPT.parse(matches);
+            let website = WEBSITE_OPT.parse(matches);
+            let discord_handle = DISCORD_OPT.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
@@ -3938,6 +3945,10 @@ pub mod args {
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
+                email,
+                description,
+                website,
+                discord_handle,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
                 tx_code_path,
@@ -3984,6 +3995,24 @@ pub mod args {
                      charged by the validator for delegation rewards. \
                      Expressed as a decimal between 0 and 1. This is a \
                      required parameter.",
+                ))
+                .arg(EMAIL_OPT.def().help(
+                    "The desired new validator email. To remove the existing \
+                     email, pass an empty string to this argument.",
+                ))
+                .arg(DESCRIPTION_OPT.def().help(
+                    "The desired new validator description. To remove the \
+                     existing description, pass an empty string to this \
+                     argument.",
+                ))
+                .arg(WEBSITE_OPT.def().help(
+                    "The desired new validator website. To remove the \
+                     existing website, pass an empty string to this argument.",
+                ))
+                .arg(DISCORD_OPT.def().help(
+                    "The desired new validator discord handle. To remove the \
+                     existing discord handle, pass an empty string to this \
+                     argument.",
                 ))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
@@ -4960,11 +4989,10 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> MetaDataChange<SdkTypes> {
             MetaDataChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 email: self.email,
                 description: self.description,
                 website: self.website,
-                alias: self.alias,
                 discord_handle: self.discord_handle,
                 commission_rate: self.commission_rate,
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -4979,7 +5007,6 @@ pub mod args {
             let email = EMAIL_OPT.parse(matches);
             let description = DESCRIPTION_OPT.parse(matches);
             let website = WEBSITE_OPT.parse(matches);
-            let alias = NEW_ALIAS.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let commission_rate = COMMISSION_RATE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
@@ -4989,7 +5016,6 @@ pub mod args {
                 email,
                 description,
                 website,
-                alias,
                 discord_handle,
                 commission_rate,
                 tx_code_path,
@@ -5013,10 +5039,6 @@ pub mod args {
                 .arg(WEBSITE_OPT.def().help(
                     "The desired new validator website. To remove the \
                      existing website, pass an empty string to this argument.",
-                ))
-                .arg(NEW_ALIAS.def().help(
-                    "The desired new validator alias. To remove the existing \
-                     website, pass an empty string to this argument.",
                 ))
                 .arg(DISCORD_OPT.def().help(
                     "The desired new validator discord handle. To remove the \
@@ -5195,7 +5217,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> QueryMetaData<SdkTypes> {
             QueryMetaData::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
             }
         }
     }
@@ -6343,18 +6365,17 @@ pub mod args {
             )
             .arg(EMAIL.def().help(
                 "The email address of the validator. This is a required \
-                parameter.",
+                 parameter.",
             ))
             .arg(DESCRIPTION_OPT.def().help(
-                "The validator's description. This is an optional \
-                parameter.",
+                "The validator's description. This is an optional parameter.",
             ))
             .arg(WEBSITE_OPT.def().help(
                 "The validator's website. This is an optional parameter.",
             ))
             .arg(DISCORD_OPT.def().help(
                 "The validator's discord handle. This is an optional \
-                parameter.",
+                 parameter.",
             ))
         }
     }

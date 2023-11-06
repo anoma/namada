@@ -2003,6 +2003,7 @@ impl StateMachineTest for ConcretePosState {
                     current_epoch,
                     commission_rate,
                     max_commission_rate_change,
+                    metadata: Default::default(),
                     offset_opt: None,
                 })
                 .unwrap();

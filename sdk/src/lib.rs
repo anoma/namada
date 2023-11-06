@@ -306,7 +306,6 @@ pub trait Namada<'a>: Sized {
         email: Option<String>,
         description: Option<String>,
         website: Option<String>,
-        alias: Option<String>,
         discord_handle: Option<String>,
         commission_rate: Option<Dec>,
     ) -> args::MetaDataChange {
@@ -315,7 +314,6 @@ pub trait Namada<'a>: Sized {
             email,
             description,
             website,
-            alias,
             discord_handle,
             commission_rate,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
@@ -328,6 +326,7 @@ pub trait Namada<'a>: Sized {
         &self,
         commission_rate: Dec,
         max_commission_rate_change: Dec,
+        email: String,
     ) -> args::TxInitValidator {
         args::TxInitValidator {
             commission_rate,
@@ -343,6 +342,10 @@ pub trait Namada<'a>: Sized {
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
             tx: self.tx_builder(),
+            email,
+            description: None,
+            website: None,
+            discord_handle: None,
         }
     }
 

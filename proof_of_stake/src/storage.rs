@@ -53,7 +53,6 @@ const DELEGATOR_REDELEGATED_UNBONDS_KEY: &str = "delegator_redelegated_unbonds";
 const VALIDATOR_EMAIL_KEY: &str = "email";
 const VALIDATOR_DESCRIPTION_KEY: &str = "description";
 const VALIDATOR_WEBSITE_KEY: &str = "website";
-const VALIDATOR_ALIAS_KEY: &str = "alias";
 const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
 
 /// Is the given key a PoS storage key?
@@ -775,13 +774,6 @@ pub fn validator_description_key(validator: &Address) -> Key {
 pub fn validator_website_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_WEBSITE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-}
-
-/// Storage key for a validator's alias
-pub fn validator_alias_key(validator: &Address) -> Key {
-    validator_prefix(validator)
-        .push(&VALIDATOR_ALIAS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

@@ -618,7 +618,6 @@ pub async fn build_validator_metadata_change<'a>(
         email,
         description,
         website,
-        alias,
         discord_handle,
         commission_rate,
         tx_code_path,
@@ -722,7 +721,6 @@ pub async fn build_validator_metadata_change<'a>(
         email: email.clone(),
         website: website.clone(),
         description: description.clone(),
-        alias: alias.clone(),
         discord_handle: discord_handle.clone(),
         commission_rate: *commission_rate,
     };

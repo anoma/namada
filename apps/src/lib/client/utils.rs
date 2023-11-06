@@ -636,6 +636,11 @@ pub fn init_genesis_validator(
         );
         safe_exit(1)
     }
+    // Validate the email
+    if email.is_empty() {
+        eprintln!("The validator email must not be an empty string");
+        safe_exit(1)
+    }
     let pre_genesis_dir =
         validator_pre_genesis_dir(&global_args.base_dir, &alias);
     println!("Generating validator keys...");
@@ -666,9 +671,9 @@ pub fn init_genesis_validator(
             transfer_from_source_amount,
             self_bond_amount,
             email,
-                description,
-                website,
-                discord_handle,
+            description,
+            website,
+            discord_handle,
         },
         &mut source_wallet,
         &validator_wallet,

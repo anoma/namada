@@ -41,6 +41,10 @@ pub struct GenesisValidatorData {
     pub net_address: SocketAddr,
     pub transfer_from_source_amount: token::DenominatedAmount,
     pub self_bond_amount: token::DenominatedAmount,
+    pub email: String,
+    pub description: Option<String>,
+    pub website: Option<String>,
+    pub discord_handle: Option<String>,
 }
 
 /// Panics if given `txs.validator_accounts` is not empty, because validator
@@ -120,6 +124,10 @@ pub fn init_validator(
         net_address,
         transfer_from_source_amount,
         self_bond_amount,
+        email,
+        description,
+        website,
+        discord_handle,
     }: GenesisValidatorData,
     source_wallet: &mut Wallet<CliWalletUtils>,
     validator_wallet: &ValidatorWallet,
@@ -158,6 +166,10 @@ pub fn init_validator(
         vp: "vp_validator".to_string(),
         commission_rate,
         max_commission_rate_change,
+        email,
+        description,
+        website,
+        discord_handle,
         net_address,
     };
     let validator_account = Some(vec![sign_validator_account_tx(
@@ -256,6 +268,10 @@ pub fn sign_validator_account_tx(
         vp,
         commission_rate,
         max_commission_rate_change,
+        email,
+        description,
+        website,
+        discord_handle,
         net_address,
         eth_hot_key,
         eth_cold_key,
@@ -298,6 +314,10 @@ pub fn sign_validator_account_tx(
         vp,
         commission_rate,
         max_commission_rate_change,
+        email,
+        description,
+        website,
+        discord_handle,
         net_address,
         eth_hot_key,
         eth_cold_key,
@@ -554,6 +574,11 @@ pub struct ValidatorAccountTx<PK> {
     pub commission_rate: Dec,
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Dec,
+    /// Validator metadata
+    pub email: String,
+    pub description: Option<String>,
+    pub website: Option<String>,
+    pub discord_handle: Option<String>,
     /// P2P IP:port
     pub net_address: SocketAddr,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
@@ -1443,6 +1468,10 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
             vp,
             commission_rate,
             max_commission_rate_change,
+            email,
+            description,
+            website,
+            discord_handle,
             net_address,
             account_key,
             consensus_key,
@@ -1458,6 +1487,10 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
             vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,
+            email: email.clone(),
+            description: description.clone(),
+            website: website.clone(),
+            discord_handle: discord_handle.clone(),
             net_address: *net_address,
             account_key: account_key.pk.clone(),
             consensus_key: consensus_key.pk.clone(),
