@@ -822,7 +822,7 @@ where
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
     let is_jailed_or_inactive_at_pipeline = matches!(
-        validator_state_handle.get(storage, pipeline_epoch, &params)?,
+        validator_state_handle.get(storage, offset_epoch, &params)?,
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
     if !is_jailed_or_inactive_at_pipeline {

@@ -4990,7 +4990,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxDeactivateValidator<SdkTypes> {
             TxDeactivateValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -5023,7 +5023,7 @@ pub mod args {
         fn to_sdk(self, ctx: &mut Context) -> TxReactivateValidator<SdkTypes> {
             TxReactivateValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
+                validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }

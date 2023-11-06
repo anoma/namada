@@ -3205,24 +3205,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     let pipeline_len = 2;
     let unbonding_len = 4;
     let test = setup::network(
-        |genesis| {
-            let parameters = ParametersConfig {
-                min_num_of_blocks: 6,
-                max_expected_time_per_block: 1,
-                epochs_per_year: 31_536_000,
-                ..genesis.parameters
-            };
-            let pos_params = PosParamsConfig {
-                pipeline_len,
-                unbonding_len,
-                ..genesis.pos_params
-            };
-            let genesis = GenesisConfig {
-                parameters,
-                pos_params,
-                ..genesis
-            };
-            setup::set_validators(4, genesis, default_port_offset)
+        |mut genesis, base_dir: &_| {
+            genesis.parameters.pos_params.pipeline_len = pipeline_len;
+            genesis.parameters.pos_params.unbonding_len = unbonding_len;
+            // genesis.parameters.parameters.min_num_of_blocks = 6;
+            // genesis.parameters.parameters.max_expected_time_per_block = 1;
+            // genesis.parameters.parameters.epochs_per_year = 31_536_000;
+            setup::set_validators(4, genesis, base_dir, default_port_offset)
         },
         None,
     )?;
