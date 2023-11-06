@@ -245,10 +245,6 @@ where
             let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
-            // Check replay protection, safe to do here. Even if the tx is a
-            // replay attempt, we can leave its hashes in the write log since,
-            // having we already checked the signature, no other tx with the
-            // same hash can be deemed valid
             self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
