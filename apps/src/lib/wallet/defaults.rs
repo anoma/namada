@@ -12,7 +12,6 @@ pub use dev::{
 mod dev {
     use std::collections::HashMap;
 
-    use borsh::BorshDeserialize;
     use namada::ledger::{governance, pgf, pos};
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
@@ -20,39 +19,24 @@ mod dev {
     use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
+    use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 
-    /// N.B. these are the corresponding values from
-    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
-    ///
-    /// If that wallet is regenerated, these values must be changed to fix unit
-    /// tests.
+    /// Get protocol, eth_bridge, and dkg keys from the validator pre-genesis
+    /// wallet
     pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
     {
-        // ed25519 bytes
-        let bytes: [u8; 33] = [
-            0, 217, 87, 83, 250, 179, 159, 135, 229, 194, 14, 202, 177, 38,
-            144, 254, 250, 103, 233, 113, 100, 202, 111, 23, 214, 122, 235,
-            165, 8, 131, 185, 61, 222,
-        ];
-        // secp256k1 bytes
-        let eth_bridge_key_bytes = [
-            1, 38, 59, 91, 81, 119, 89, 252, 48, 195, 171, 237, 19, 144, 123,
-            117, 231, 121, 218, 231, 14, 54, 117, 19, 90, 120, 141, 231, 199,
-            7, 110, 254, 191,
-        ];
-        // DkgKeypair
-        let dkg_bytes = [
-            32, 0, 0, 0, 208, 36, 153, 32, 179, 193, 163, 222, 29, 238, 154,
-            53, 181, 71, 213, 162, 59, 130, 225, 93, 57, 20, 161, 254, 52, 1,
-            172, 184, 112, 189, 160, 102,
-        ];
+        let protocol_key = get_validator_pre_genesis_wallet()
+            .store
+            .validator_keys
+            .protocol_keypair;
+        let eth_bridge_key = get_validator_pre_genesis_wallet().eth_hot_key;
+        let dkg_key = get_validator_pre_genesis_wallet()
+            .store
+            .validator_keys
+            .dkg_keypair
+            .unwrap();
 
-        (
-            BorshDeserialize::deserialize(&mut bytes.as_ref()).unwrap(),
-            BorshDeserialize::deserialize(&mut eth_bridge_key_bytes.as_ref())
-                .unwrap(),
-            BorshDeserialize::deserialize(&mut dkg_bytes.as_ref()).unwrap(),
-        )
+        (protocol_key, eth_bridge_key, dkg_key)
     }
 
     /// The default keys with their aliases.
@@ -134,64 +118,69 @@ mod dev {
         Address::decode("atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q").expect("The token address decoding shouldn't fail")
     }
 
-    /// N.B. this is the corresponding value from
-    /// `genesis/pre-genesis/wallet.toml`.
+    /// Get an unecrypted keypair from the pre-genesis wallet.
+    pub fn get_unencrypted_keypair(name: &str) -> common::SecretKey {
+        let mut root_dir = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        // Find the project root dir
+        while !root_dir.join("rust-toolchain.toml").exists() {
+            root_dir.pop();
+        }
+        let path = root_dir.join("genesis/localnet/src/pre-genesis");
+        let wallet = crate::wallet::load(&path).unwrap();
+        let sk = match wallet.get_keys().get(name).unwrap().0 {
+            namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
+                panic!("Ester's keypair should not be encrypted")
+            }
+            namada_sdk::wallet::StoredKeypair::Raw(sk) => sk,
+        };
+        sk.clone()
+    }
+
+    /// Get albert's
     pub fn albert_keypair() -> common::SecretKey {
-        let bytes = [
-            131, 49, 140, 204, 234, 198, 192, 138, 1, 119, 102, 120, 64, 180,
-            185, 63, 14, 69, 94, 69, 212, 195, 140, 40, 183, 59, 143, 132, 98,
-            251, 245, 72,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        get_unencrypted_keypair("albert-key")
     }
 
     /// N.B. this is the corresponding value from
     /// `genesis/pre-genesis/wallet.toml`.
     pub fn bertha_keypair() -> common::SecretKey {
-        let bytes = [
-            115, 237, 97, 129, 119, 32, 210, 119, 132, 231, 169, 188, 164, 166,
-            6, 104, 215, 99, 166, 247, 236, 172, 45, 69, 237, 31, 36, 26, 165,
-            197, 158, 153,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        get_unencrypted_keypair("bertha-key")
     }
 
     /// N.B. this is the corresponding value from
     /// `genesis/pre-genesis/wallet.toml`.
     pub fn christel_keypair() -> common::SecretKey {
-        let bytes = [
-            54, 37, 185, 57, 165, 142, 246, 4, 2, 215, 207, 143, 192, 66, 80,
-            2, 108, 193, 186, 144, 204, 48, 40, 175, 28, 230, 178, 43, 232, 87,
-            255, 199,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        get_unencrypted_keypair("christel-key")
     }
 
     /// N.B. this is the corresponding value from
     /// `genesis/pre-genesis/wallet.toml`.
     pub fn daewon_keypair() -> common::SecretKey {
-        let bytes = [
-            209, 158, 34, 108, 14, 125, 18, 61, 121, 245, 144, 139, 89, 72,
-            212, 196, 97, 182, 106, 95, 138, 169, 86, 0, 194, 139, 85, 171,
-            111, 93, 199, 114,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        get_unencrypted_keypair("daewon")
     }
 
     /// N.B. this is the corresponding value from
     /// `genesis/pre-genesis/wallet.toml`.
     pub fn ester_keypair() -> common::SecretKey {
-        let bytes = [
-            54, 144, 147, 226, 3, 93, 132, 247, 42, 126, 90, 23, 200, 155, 122,
-            147, 139, 93, 8, 204, 135, 178, 40, 152, 5, 227, 175, 204, 102,
-            239, 154, 66,
-        ];
-        let sk = secp256k1::SecretKey::try_from_slice(&bytes).unwrap();
-        sk.try_to_sk().unwrap()
+        get_unencrypted_keypair("ester")
+    }
+
+    /// Get validator pre-genesis wallet
+    pub fn get_validator_pre_genesis_wallet() -> ValidatorWallet {
+        let mut root_dir = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        // Find the project root dir
+        while !root_dir.join("rust-toolchain.toml").exists() {
+            root_dir.pop();
+        }
+        let path =
+            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+        crate::wallet::pre_genesis::load(&path).unwrap()
     }
 
     /// Get the validator consensus keypair from the wallet.
