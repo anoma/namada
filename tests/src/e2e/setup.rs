@@ -189,6 +189,8 @@ where
             "0.05",
             "--max-commission-rate-change",
             "0.01",
+            "--email",
+            "null@null.net",
             "--transfer-from-source-amount",
             "2000000",
             "--self-bond-amount",

@@ -1586,6 +1586,8 @@ fn pos_init_validator() -> Result<()> {
         "0.05",
         "--max-commission-rate-change",
         "0.01",
+        "--email",
+        "null@null.net",
         "--signing-keys",
         "bertha-key",
         "--node",
@@ -3220,6 +3222,26 @@ fn change_validator_metadata() -> Result<()> {
 
     let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
 
+    // put money in the validator account from its balance account so that it
+    // can pay gas fees
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        "validator-0-balance-key",
+        "--target",
+        "validator-0-validator-key",
+        "--amount",
+        "100.0",
+        "--token",
+        "NAM",
+        "--node",
+        &validator_0_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
+
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
         "validator-metadata",
@@ -3233,7 +3255,6 @@ fn change_validator_metadata() -> Result<()> {
     client.exp_string("Email:")?;
     client.exp_string("No description")?;
     client.exp_string("No website")?;
-    client.exp_string("No alias")?;
     client.exp_string("No discord handle")?;
     client.exp_string("commission rate:")?;
     client.exp_string("max change per epoch:")?;
@@ -3250,8 +3271,6 @@ fn change_validator_metadata() -> Result<()> {
         "We are just an okay validator node trying to get by",
         "--website",
         "theokayestvalidator.com",
-        "--new-alias",
-        "okaydingus",
         "--node",
         &validator_0_rpc,
     ];
@@ -3273,7 +3292,6 @@ fn change_validator_metadata() -> Result<()> {
         "Description: We are just an okay validator node trying to get by",
     )?;
     client.exp_string("Website: theokayestvalidator.com")?;
-    client.exp_string("Alias: okaydingus")?;
     client.exp_string("No discord handle")?;
     client.exp_string("commission rate:")?;
     client.exp_string("max change per epoch:")?;
@@ -3307,7 +3325,6 @@ fn change_validator_metadata() -> Result<()> {
         "Description: We are just an okay validator node trying to get by",
     )?;
     client.exp_string("No website")?;
-    client.exp_string("Alias: okaydingus")?;
     client.exp_string("No discord handle")?;
     client.exp_string("commission rate:")?;
     client.exp_string("max change per epoch:")?;
