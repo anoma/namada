@@ -5103,6 +5103,7 @@ pub mod args {
                 wrapper_fee_payer: self
                     .wrapper_fee_payer
                     .map(|x| ctx.get_cached(&x)),
+                use_device: self.use_device,
             }
         }
     }
@@ -5228,6 +5229,10 @@ pub mod args {
                     )
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
+            .arg(USE_DEVICE.def().help(
+                "Use an attached hardware wallet device to sign the \
+                 transaction.",
+            ))
         }
 
         fn parse(matches: &ArgMatches) -> Self {
@@ -5255,6 +5260,7 @@ pub mod args {
             let password = None;
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -5278,6 +5284,7 @@ pub mod args {
                 chain_id,
                 wrapper_fee_payer,
                 output_folder,
+                use_device,
             }
         }
     }

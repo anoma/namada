@@ -1471,6 +1471,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub verification_key: Option<C::PublicKey>,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
+    /// Use device to sign the transaction
+    pub use_device: bool,
 }
 
 /// Builder functions for Tx

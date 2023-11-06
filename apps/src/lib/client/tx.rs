@@ -73,11 +73,19 @@ pub async fn sign<'a>(
     signing_data: SigningTxData,
 ) -> Result<(), error::Error> {
     // Setup a reusable context for signing transactions using the Ledger
-    if let Some(app) = HidApi::new()
-        .ok()
-        .and_then(|hidapi| TransportNativeHID::new(&hidapi).ok())
-        .map(NamadaApp::new)
-    {
+    if args.use_device {
+        // Setup a reusable context for signing transactions using the Ledger
+        let hidapi = HidApi::new().map_err(|err| {
+            error::Error::Other(format!("Failed to create Hidapi: {}", err))
+        })?;
+        let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
+            |err| {
+                error::Error::Other(format!(
+                    "Unable to connect to Ledger: {}",
+                    err
+                ))
+            },
+        )?);
         // A closure to facilitate signing transactions also using the Ledger
         let with_hw =
             |mut tx: Tx,

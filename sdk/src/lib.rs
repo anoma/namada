@@ -140,6 +140,7 @@ pub trait Namada<'a>: Sized {
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             verification_key: None,
             password: None,
+            use_device: false,
         }
     }
 
@@ -494,6 +495,7 @@ where
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 verification_key: None,
                 password: None,
+                use_device: false,
             },
         }
     }
