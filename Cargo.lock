@@ -406,6 +406,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "backoff"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
+dependencies = [
+ "futures-core",
+ "getrandom 0.2.9",
+ "instant",
+ "pin-project-lite",
+ "rand 0.8.5",
+ "tokio",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7077,8 +7091,9 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=cf9573dc02eba0faf1f9807244b156630e4c18d1#cf9573dc02eba0faf1f9807244b156630e4c18d1"
+source = "git+https://github.com/heliaxdev/tower-abci.git?rev=c22bdb42eec522a12866dd3355dd489ecfaf04b7#c22bdb42eec522a12866dd3355dd489ecfaf04b7"
 dependencies = [
+ "backoff",
  "bytes",
  "futures",
  "pin-project",
