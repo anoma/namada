@@ -1925,10 +1925,11 @@ where
                 sentinel.set_out_of_gas();
                 Err(vp_host_fns::RuntimeError::OutOfGas(inner))
             }
-            _ => {
+            namada_core::proto::Error::InvalidSectionSignature(_) => {
                 sentinel.set_invalid_signature();
                 Ok(HostEnvResult::Fail.to_i64())
             }
+            _ => Ok(HostEnvResult::Fail.to_i64()),
         },
     }
 }
