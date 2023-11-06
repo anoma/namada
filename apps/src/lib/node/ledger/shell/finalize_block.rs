@@ -210,17 +210,13 @@ where
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
                 // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed, remove its hash
-                // from storage and write the hash of the corresponding wrapper
+                // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &tx_header.tx_type {
-                    let wrapper_tx = self
-                        .wl_storage
+                    self.wl_storage
                         .storage
                         .tx_queue
                         .pop()
-                        .expect("Missing wrapper tx in queue")
-                        .tx;
-                    self.allow_tx_replay(wrapper_tx);
+                        .expect("Missing wrapper tx in queue");
                 }
 
                 #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
@@ -314,9 +310,6 @@ where
                                     "Tx with hash {} was un-decryptable",
                                     tx_in_queue.tx.header_hash()
                                 );
-                                // Remove inner tx hash from storage
-                                self.allow_tx_replay(tx_in_queue.tx);
-
                                 event["info"] =
                                     "Transaction is invalid.".into();
                                 event["log"] = "Transaction could not be \
@@ -456,6 +449,9 @@ where
                                 result
                             );
                             stats.increment_successful_txs();
+                            if let Some(wrapper) = embedding_wrapper {
+                                self.commit_inner_tx_hash(wrapper);
+                            }
                         }
                         self.wl_storage.commit_tx();
                         if !tx_event.contains_key("code") {
@@ -497,10 +493,11 @@ where
                         );
 
                         if let Some(wrapper) = embedding_wrapper {
-                            if result.vps_result.invalid_sig {
-                                // Invalid signature was found, remove the tx
-                                // hash from storage to allow replay
-                                self.allow_tx_replay(wrapper);
+                            // If decrypted tx failed for any reason but invalid
+                            // signature, commit its hash to storage, otherwise
+                            // allow for a replay
+                            if !result.vps_result.invalid_sig {
+                                self.commit_inner_tx_hash(wrapper);
                             }
                         }
 
@@ -518,26 +515,19 @@ where
                         msg
                     );
 
-                    // If transaction type is Decrypted and failed because of
-                    // out of gas or invalid section commtiment, remove its hash
-                    // from storage to allow rewrapping it
+                    // If transaction type is Decrypted and didn't failed
+                    // because of out of gas nor invalid
+                    // section commitment, commit its hash to prevent replays
                     if let Some(wrapper) = embedding_wrapper {
-                        if matches!(
+                        if !matches!(
                             msg,
                             Error::TxApply(protocol::Error::GasError(_))
                                 | Error::TxApply(
                                     protocol::Error::MissingSection(_)
                                 )
                         ) {
-                            self.allow_tx_replay(wrapper);
+                            self.commit_inner_tx_hash(wrapper);
                         }
-                    } else if let Some(wrapper) = wrapper {
-                        // If transaction type was Wrapper and failed, write its
-                        // hash to storage to prevent
-                        // replay
-                        self.wl_storage
-                            .write_tx_hash(wrapper.header_hash())
-                            .expect("Error while writing tx hash to storage");
                     }
 
                     stats.increment_errored_txs();
@@ -950,15 +940,16 @@ where
         Ok(())
     }
 
-    // Allow to replay a specific wasm transaction. Needs as argument the
-    // corresponding wrapper transaction to avoid replay of that in the process
-    fn allow_tx_replay(&mut self, wrapper_tx: Tx) {
+    // Write the inner tx hash to storage and remove the corresponding wrapper
+    // hash since it's redundant. Requires the wrapper transaction as argument
+    // to recover both the hashes.
+    fn commit_inner_tx_hash(&mut self, wrapper_tx: Tx) {
         self.wl_storage
-            .write_tx_hash(wrapper_tx.header_hash())
+            .write_tx_hash(wrapper_tx.raw_header_hash())
             .expect("Error while writing tx hash to storage");
 
         self.wl_storage
-            .delete_tx_hash(wrapper_tx.raw_header_hash())
+            .delete_tx_hash(wrapper_tx.header_hash())
             .expect("Error while deleting tx hash from storage");
     }
 }
