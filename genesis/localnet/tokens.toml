@@ -1,0 +1,64 @@
+# Token accounts with their validity predicates
+
+[token.NAM]
+denom = 6
+
+[token.NAM.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.BTC]
+denom = 8
+
+[token.BTC.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.ETH]
+denom = 18
+
+[token.ETH.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.DOT]
+denom = 10
+
+[token.DOT.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.Schnitzel]
+denom = 6
+
+[token.Schnitzel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.Apfel]
+denom = 6
+
+[token.Apfel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"
+
+[token.Kartoffel]
+denom = 6
+
+[token.Kartoffel.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"

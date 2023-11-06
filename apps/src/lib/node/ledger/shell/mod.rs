@@ -85,9 +85,6 @@ use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
-#[cfg(feature = "dev")]
-use crate::wallet;
-#[allow(unused_imports)]
 use crate::wallet::{ValidatorData, ValidatorKeys};
 
 fn key_to_tendermint(
@@ -372,8 +369,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     /// The id of the current chain
-    #[allow(dead_code)]
-    chain_id: ChainId,
+    pub chain_id: ChainId,
     /// The persistent storage with write log
     pub wl_storage: WlStorage<D, H>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
@@ -439,7 +435,6 @@ where
         db_cache: Option<&D::Cache>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
-        native_token: Address,
     ) -> Self {
         let chain_id = config.chain_id;
         let db_path = config.shell.db_dir(&chain_id);
@@ -451,6 +446,18 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
+        let native_token = if cfg!(feature = "integration")
+            || (!cfg!(test) && !cfg!(feature = "benches"))
+        {
+            let chain_dir = base_dir.join(chain_id.as_str());
+            let genesis =
+                genesis::chain::Finalized::read_toml_files(&chain_dir)
+                    .expect("Missing genesis files");
+            genesis.get_native_token().clone()
+        } else {
+            address::nam()
+        };
+
         // load last state from storage
         let mut storage = Storage::open(
             db_path,
@@ -472,26 +479,19 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(feature = "dev"))]
+                #[cfg(not(test))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
-                    let genesis_path =
-                        &base_dir.join(format!("{}.toml", chain_id.as_str()));
                     tracing::debug!(
-                        "{}",
-                        wallet_path.as_path().to_str().unwrap()
+                        "Loading wallet from {}",
+                        wallet_path.to_string_lossy()
                     );
-                    let mut wallet = crate::wallet::load_or_new_from_genesis(
-                        wallet_path,
-                        genesis::genesis_config::open_genesis_config(
-                            genesis_path,
-                        )
-                        .unwrap(),
-                    );
+                    let mut wallet = crate::wallet::load(wallet_path)
+                        .expect("Validator node must have a wallet");
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
-                            data: data.clone(),
+                            data,
                             broadcast_sender,
                             eth_oracle,
                         })
@@ -500,14 +500,15 @@ where
                              wallet",
                         )
                 }
-                #[cfg(feature = "dev")]
+                #[cfg(test)]
                 {
                     let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
-                        wallet::defaults::validator_keys();
+                        crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
-                        data: wallet::ValidatorData {
-                            address: wallet::defaults::validator_address(),
-                            keys: wallet::ValidatorKeys {
+                        data: ValidatorData {
+                            address: crate::wallet::defaults::validator_address(
+                            ),
+                            keys: ValidatorKeys {
                                 protocol_keypair,
                                 eth_bridge_keypair,
                                 dkg_keypair: Some(dkg_keypair),
@@ -546,6 +547,7 @@ where
             // TODO: config event log params
             event_log: EventLog::default(),
         };
+
         shell.update_eth_oracle();
         shell
     }
@@ -1495,6 +1497,7 @@ mod test_utils {
 
     use data_encoding::HEXUPPER;
     use namada::core::ledger::storage::EPOCH_SWITCH_BLOCKS_DELAY;
+    use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::ledger::storage::mockdb::MockDB;
     use namada::ledger::storage::{
         update_allowed_conversions, LastBlock, Sha256Hasher,
@@ -1511,7 +1514,7 @@ mod test_utils {
     use namada::types::keccak::KeccakHash;
     use namada::types::key::*;
     use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::DateTimeUtc;
+    use namada::types::time::{DateTimeUtc, DurationSecs};
     use namada::types::transaction::{Fee, TxType, WrapperTx};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
@@ -1689,7 +1692,6 @@ mod test_utils {
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
-                address::nam(),
             );
             shell.wl_storage.storage.block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
@@ -1967,7 +1969,6 @@ mod test_utils {
 
     /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
     /// on startup it is read successfully
-    #[cfg(feature = "testing")]
     #[test]
     fn test_tx_queue_persistence() {
         let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
@@ -1998,14 +1999,12 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            native_token.clone(),
         );
         shell
             .wl_storage
             .storage
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
-        token::testing::init_token_storage(&mut shell.wl_storage, 60);
         let keypair = gen_keypair();
         // enqueue a wrapper tx
         let mut wrapper =
@@ -2035,6 +2034,74 @@ mod test_utils {
             .block
             .pred_epochs
             .new_epoch(BlockHeight(1));
+        // initialize parameter storage
+        let params = Parameters {
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 1,
+                min_duration: DurationSecs(3600),
+            },
+            max_expected_time_per_block: DurationSecs(3600),
+            max_proposal_bytes: Default::default(),
+            max_block_gas: 100,
+            vp_whitelist: vec![],
+            tx_whitelist: vec![],
+            implicit_vp_code_hash: Default::default(),
+            epochs_per_year: 365,
+            max_signatures_per_transaction: 10,
+            pos_gain_p: Default::default(),
+            pos_gain_d: Default::default(),
+            staked_ratio: Default::default(),
+            pos_inflation_amount: Default::default(),
+            fee_unshielding_gas_limit: 0,
+            fee_unshielding_descriptions_limit: 0,
+            minimum_gas_price: Default::default(),
+        };
+        params
+            .init_storage(&mut shell.wl_storage)
+            .expect("Test failed");
+        // make wl_storage to update conversion for a new epoch
+        let token_params = token::Parameters {
+            max_reward_rate: Default::default(),
+            kd_gain_nom: Default::default(),
+            kp_gain_nom: Default::default(),
+            locked_ratio_target: Default::default(),
+        };
+        // Insert a map assigning random addresses to each token alias.
+        // Needed for storage but not for this test.
+        for (token, _) in address::tokens() {
+            let addr = address::gen_deterministic_established_address(token);
+            token_params.init_storage(&addr, &mut shell.wl_storage);
+            shell
+                .wl_storage
+                .write(&token::minted_balance_key(&addr), token::Amount::zero())
+                .unwrap();
+            shell
+                .wl_storage
+                .storage
+                .conversion_state
+                .tokens
+                .insert(token.to_string(), addr);
+        }
+        shell.wl_storage.storage.conversion_state.tokens.insert(
+            "nam".to_string(),
+            shell.wl_storage.storage.native_token.clone(),
+        );
+        token_params.init_storage(
+            &shell.wl_storage.storage.native_token.clone(),
+            &mut shell.wl_storage,
+        );
+        // final adjustments so that updating allowed conversions doesn't panic
+        // with divide by zero
+        shell
+            .wl_storage
+            .write(
+                &token::minted_balance_key(
+                    &shell.wl_storage.storage.native_token.clone(),
+                ),
+                token::Amount::zero(),
+            )
+            .unwrap();
+        shell.wl_storage.storage.conversion_state.normed_inflation = Some(1);
         update_allowed_conversions(&mut shell.wl_storage)
             .expect("update conversions failed");
         shell.wl_storage.commit_block().expect("commit failed");
@@ -2064,7 +2131,6 @@ mod test_utils {
             None,
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
-            address::nam(),
         );
         assert!(!shell.wl_storage.storage.tx_queue.is_empty());
     }

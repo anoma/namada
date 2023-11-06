@@ -54,11 +54,11 @@ default = ["std", "abciplus"]
 mainnet = [
   "namada/mainnet",
 ]
-dev = ["namada/dev"]
 std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std", "namada_sdk/std"]
 # for integration tests and test utilies
-testing = ["dev", "namada_test_utils"]
-
+testing = ["namada_test_utils"]
+benches = ["testing", "namada_test_utils"]
+integration = []
 abciplus = [
     "namada/abciplus",
     "namada/tendermint-rpc",
@@ -111,6 +111,7 @@ num-rational.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 orion.workspace = true
+pretty_assertions.workspace = true
 prost-types.workspace = true
 prost.workspace = true
 rand_core.workspace = true
@@ -120,7 +121,6 @@ regex.workspace = true
 reqwest.workspace = true
 ripemd.workspace = true
 rlimit.workspace = true
-rocksdb.workspace = true
 rpassword.workspace = true
 serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
@@ -143,9 +143,14 @@ tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tra
 tracing.workspace = true
 winapi.workspace = true
 zeroize.workspace = true
-
 warp = "0.3.2"
 bytes = "1.1.0"
+
+[target.'cfg(not(windows))'.dependencies]
+rocksdb = { workspace = true, features = ['jemalloc'] } # jemalloc is not supported on windows
+
+[target.'cfg(windows)'.dependencies]
+rocksdb = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

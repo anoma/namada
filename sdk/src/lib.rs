@@ -5,6 +5,7 @@ pub use namada_core::proto;
 pub use tendermint_rpc;
 #[cfg(feature = "tendermint-rpc-abcipp")]
 pub use tendermint_rpc_abcipp as tendermint_rpc;
+use tx::{TX_INIT_ACCOUNT_WASM, VP_VALIDATOR_WASM};
 pub use {
     bip39, borsh, masp_primitives, masp_proofs, namada_core as core,
     namada_proof_of_stake as proof_of_stake, zeroize,
@@ -161,6 +162,21 @@ pub trait Namada<'a>: Sized {
         }
     }
 
+    /// Make a InitAccount builder from the given minimum set of arguments
+    fn new_init_account(
+        &self,
+        public_keys: Vec<common::PublicKey>,
+        threshold: Option<u8>,
+    ) -> args::TxInitAccount {
+        args::TxInitAccount {
+            tx: self.tx_builder(),
+            vp_code_path: PathBuf::from(VP_USER_WASM),
+            tx_code_path: PathBuf::from(TX_INIT_ACCOUNT_WASM),
+            public_keys,
+            threshold,
+        }
+    }
+
     /// Make a RevealPK builder from the given minimum set of arguments
     fn new_reveal_pk(&self, public_key: common::PublicKey) -> args::RevealPk {
         args::RevealPk {
@@ -297,7 +313,7 @@ pub trait Namada<'a>: Sized {
             eth_cold_key: None,
             eth_hot_key: None,
             protocol_key: None,
-            validator_vp_code_path: PathBuf::from(VP_USER_WASM),
+            validator_vp_code_path: PathBuf::from(VP_VALIDATOR_WASM),
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_INIT_VALIDATOR_WASM),
             tx: self.tx_builder(),
