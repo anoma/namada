@@ -327,6 +327,7 @@ pub(crate) enum ProcessEventAction {
 impl ProcessEventAction {
     /// Check whether the action commands a new block to be processed.
     #[inline]
+    #[allow(dead_code)]
     pub fn process_new_block(&self) -> bool {
         matches!(self, Self::ProceedToNextBlock)
     }

@@ -4,8 +4,9 @@ pub mod generated;
 mod types;
 
 pub use types::{
-    Code, Commitment, CompressedSignature, Data, Dkg, Error, Header,
-    MaspBuilder, Section, Signable, SignableEthMessage, Signature,
+    standalone_signature, verify_standalone_sig, Code, Commitment,
+    CompressedSignature, Data, Dkg, Error, Header, MaspBuilder, Section,
+    SerializeWithBorsh, Signable, SignableEthMessage, Signature,
     SignatureIndex, Signed, Signer, Tx, TxError,
 };
 

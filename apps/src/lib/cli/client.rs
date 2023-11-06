@@ -114,19 +114,21 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(io).await?;
                         let args = args.to_sdk(&mut ctx);
+                        let cli::context::ChainContext {
+                            mut wallet,
+                            mut config,
+                            mut shielded,
+                            native_token,
+                        } = ctx.take_chain_or_exit();
                         let namada = NamadaImpl::native_new(
                             &client,
-                            &mut ctx.wallet,
-                            &mut ctx.shielded,
+                            &mut wallet,
+                            &mut shielded,
                             io,
-                            ctx.native_token,
+                            native_token,
                         );
-                        tx::submit_init_validator(
-                            &namada,
-                            &mut ctx.config,
-                            args,
-                        )
-                        .await?;
+                        tx::submit_init_validator(&namada, &mut config, args)
+                            .await?;
                     }
                     Sub::TxInitProposal(TxInitProposal(mut args)) => {
                         let client = client.unwrap_or_else(|| {
@@ -537,6 +539,12 @@ impl CliApi {
                     let args = args.to_sdk(&mut ctx);
                     let namada = ctx.to_sdk(&client, io);
                     rpc::epoch_sleep(&namada, args).await;
+                }
+                Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
+                    args,
+                )) => utils::validate_genesis_templates(global_args, args),
+                Utils::SignGenesisTx(SignGenesisTx(args)) => {
+                    utils::sign_genesis_tx(global_args, args)
                 }
             },
         }

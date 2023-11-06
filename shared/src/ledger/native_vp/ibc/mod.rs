@@ -391,7 +391,6 @@ mod tests {
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::storage_api::StorageRead;
     use crate::ledger::{ibc, pos};
-    use crate::proof_of_stake::parameters::PosParams;
     use crate::proto::{Code, Data, Section, Signature, Tx};
     use crate::tendermint::time::Time as TmTime;
     use crate::tendermint_proto::Protobuf as TmProtobuf;
@@ -418,12 +417,13 @@ mod tests {
         ibc::init_genesis_storage(&mut wl_storage);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut wl_storage).unwrap();
-        pos::init_genesis_storage(
+        pos::test_utils::test_init_genesis(
             &mut wl_storage,
-            &PosParams::default(),
+            namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
-        );
+        )
+        .unwrap();
         // epoch duration
         let epoch_duration_key = get_epoch_duration_storage_key();
         let epoch_duration = EpochDuration {

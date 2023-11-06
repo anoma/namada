@@ -25,6 +25,7 @@ use namada::ledger::native_vp::ibc::Ibc;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
+use namada::proof_of_stake;
 use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
 use namada::types::storage::{Epoch, TxIndex};
@@ -88,7 +89,10 @@ fn governance(c: &mut Criterion) {
             }
             "minimal_proposal" => {
                 let content_section = Section::ExtraData(Code::new(vec![]));
-                let voting_start_epoch = Epoch(25);
+                let params =
+                    proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+                let voting_start_epoch =
+                    Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
                 debug_assert_eq!(
                     shell.wl_storage.get_block_epoch().unwrap().next(),
@@ -102,8 +106,8 @@ fn governance(c: &mut Criterion) {
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default(None),
                         voting_start_epoch,
-                        voting_end_epoch: 28.into(),
-                        grace_epoch: 34.into(),
+                        voting_end_epoch: voting_start_epoch + 3_u64,
+                        grace_epoch: voting_start_epoch + 9_u64,
                     },
                     None,
                     Some(vec![content_section]),
@@ -135,7 +139,10 @@ fn governance(c: &mut Criterion) {
                 let wasm_code_section =
                     Section::ExtraData(Code::new(vec![0; max_code_size as _]));
 
-                let voting_start_epoch = Epoch(25);
+                let params =
+                    proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
+                let voting_start_epoch =
+                    Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
                 debug_assert_eq!(
                     shell.wl_storage.get_block_epoch().unwrap().next(),
@@ -151,8 +158,8 @@ fn governance(c: &mut Criterion) {
                             wasm_code_section.get_hash(),
                         )),
                         voting_start_epoch,
-                        voting_end_epoch: 28.into(),
-                        grace_epoch: 34.into(),
+                        voting_end_epoch: voting_start_epoch + 3_u64,
+                        grace_epoch: voting_start_epoch + 9_u64,
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
