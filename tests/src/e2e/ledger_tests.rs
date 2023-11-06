@@ -3211,7 +3211,22 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
             // genesis.parameters.parameters.min_num_of_blocks = 6;
             // genesis.parameters.parameters.max_expected_time_per_block = 1;
             // genesis.parameters.parameters.epochs_per_year = 31_536_000;
-            setup::set_validators(4, genesis, base_dir, default_port_offset)
+            let mut genesis = setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+            );
+            let bonds = genesis.transactions.bond.unwrap();
+            genesis.transactions.bond = Some(
+                bonds
+                    .into_iter()
+                    .filter(|bond| {
+                        (&bond.data.validator).as_ref() != "validator-1"
+                    })
+                    .collect(),
+            );
+            genesis
         },
         None,
     )?;
@@ -3233,45 +3248,58 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
 
-    let _bg_validator_2 =
-        start_namada_ledger_node_wait_wasm(&test, Some(2), Some(40))?
-            .background();
+    let validator_1_rpc = get_actor_rpc(&test, &Who::Validator(1));
 
-    let _bg_validator_3 =
-        start_namada_ledger_node_wait_wasm(&test, Some(3), Some(40))?
-            .background();
-
-    let validator_0_rpc = get_actor_rpc(&test, &Who::Validator(0));
+    // put money in the validator-1 account from its balance account so that it
+    // can deactivate and reactivate
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        "validator-1-balance-key",
+        "--target",
+        "validator-1-validator-key",
+        "--amount",
+        "100.0",
+        "--token",
+        "NAM",
+        "--node",
+        &validator_1_rpc,
+    ];
+    let mut client =
+        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
+    client.exp_string("Transaction applied with result:")?;
+    client.exp_string("Transaction is valid.")?;
+    client.assert_success();
 
     // Check the state of validator-0
     let tx_args = vec![
         "validator-state",
         "--validator",
-        "validator-0",
+        "validator-1",
         "--node",
-        &validator_0_rpc,
+        &validator_1_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_regex(r"Validator [a-z0-9]+ is in the consensus set")?;
+    client.exp_regex(r"Validator [a-z0-9]+ is in the below-threshold set")?;
     client.assert_success();
 
-    // Deactivate validator-0
+    // Deactivate validator-1
     let tx_args = vec![
         "deactivate-validator",
         "--validator",
-        "validator-0",
+        "validator-1",
         "--signing-keys",
-        "validator-0-account-key",
+        "validator-1-validator-key",
         "--node",
-        &validator_0_rpc,
+        &validator_1_rpc,
     ];
     let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    let deactivate_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
@@ -3281,7 +3309,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 deactivate_epoch + pipeline_len
             );
         }
-        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
+        let epoch = epoch_sleep(&test, &validator_1_rpc, 40)?;
         if epoch >= deactivate_epoch + pipeline_len {
             break;
         }
@@ -3291,31 +3319,31 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     let tx_args = vec![
         "validator-state",
         "--validator",
-        "validator-0",
+        "validator-1",
         "--node",
-        &validator_0_rpc,
+        &validator_1_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_regex(r"Validator [a-z0-9]+ is inactive")?;
     client.assert_success();
 
-    // Reactivate validator-0
+    // Reactivate validator-1
     let tx_args = vec![
         "reactivate-validator",
         "--validator",
-        "validator-0",
+        "validator-1",
         "--signing-keys",
-        "validator-0-account-key",
+        "validator-1-validator-key",
         "--node",
-        &validator_0_rpc,
+        &validator_1_rpc,
     ];
     let mut client =
-        run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+        run_as!(test, Who::Validator(1), Bin::Client, tx_args, Some(40))?;
     client.exp_string("Transaction applied with result:")?;
     client.exp_string("Transaction is valid.")?;
     client.assert_success();
 
-    let reactivate_epoch = get_epoch(&test, &validator_0_rpc)?;
+    let reactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
@@ -3325,7 +3353,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 reactivate_epoch + pipeline_len
             );
         }
-        let epoch = epoch_sleep(&test, &validator_0_rpc, 40)?;
+        let epoch = epoch_sleep(&test, &validator_1_rpc, 40)?;
         if epoch >= reactivate_epoch + pipeline_len {
             break;
         }
@@ -3335,12 +3363,12 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     let tx_args = vec![
         "validator-state",
         "--validator",
-        "validator-0",
+        "validator-1",
         "--node",
-        &validator_0_rpc,
+        &validator_1_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_regex(r"Validator [a-z0-9]+ is in the consensus set")?;
+    client.exp_regex(r"Validator [a-z0-9]+ is in the below-threshold set")?;
     client.assert_success();
 
     Ok(())
