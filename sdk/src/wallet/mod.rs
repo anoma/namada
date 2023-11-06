@@ -423,6 +423,15 @@ impl<U> Wallet<U> {
             .collect()
     }
 
+    /// Get all known public keys by their alias.
+    pub fn get_public_keys(&self) -> HashMap<String, common::PublicKey> {
+        self.store
+            .get_public_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), value.clone()))
+            .collect()
+    }
+
     /// Get all known addresses by their alias, paired with PKH, if known.
     pub fn get_addresses(&self) -> HashMap<String, Address> {
         self.store

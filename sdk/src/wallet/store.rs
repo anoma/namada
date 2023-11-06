@@ -230,6 +230,11 @@ impl Store {
         keys
     }
 
+    /// Get all known public keys by their alias.
+    pub fn get_public_keys(&self) -> &HashMap<Alias, common::PublicKey> {
+        &self.public_keys
+    }
+
     /// Get all known addresses by their alias.
     pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
         &self.addresses

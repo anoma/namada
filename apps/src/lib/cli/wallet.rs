@@ -364,7 +364,7 @@ pub fn decode_derivation_path(
     Ok(parsed_derivation_path)
 }
 
-/// Restore a keypair and an implicit address from the mnemonic code in the
+/// Derives a keypair and an implicit address from the mnemonic code in the
 /// wallet.
 async fn key_and_address_derive(
     wallet: &mut Wallet<impl WalletStorage + WalletIo>,
@@ -564,8 +564,8 @@ fn key_list(
         unsafe_show_secret,
     }: args::KeyList,
 ) {
-    let known_keys = wallet.get_secret_keys();
-    if known_keys.is_empty() {
+    let known_public_keys = wallet.get_public_keys();
+    if known_public_keys.is_empty() {
         display_line!(
             io,
             "No known keys. Try `key gen --alias my-key` to generate a new \
@@ -575,45 +575,47 @@ fn key_list(
         let stdout = io::stdout();
         let mut w = stdout.lock();
         display_line!(io, &mut w; "Known keys:").unwrap();
-        for (alias, (stored_keypair, pkh)) in known_keys {
-            let encrypted = if stored_keypair.is_encrypted() {
-                "encrypted"
-            } else {
-                "not encrypted"
+        let known_secret_keys = wallet.get_secret_keys();
+        for (alias, public_key) in known_public_keys {
+            let stored_keypair = known_secret_keys.get(&alias);
+            let encrypted = match stored_keypair {
+                None => "external",
+                Some((stored_keypair, _pkh))
+                    if stored_keypair.is_encrypted() =>
+                {
+                    "encrypted"
+                }
+                Some(_) => "not encrypted",
             };
             display_line!(io,
                 &mut w;
                 "  Alias \"{}\" ({}):", alias, encrypted,
             )
             .unwrap();
-            if let Some(pkh) = pkh {
-                display_line!(io, &mut w; "    Public key hash: {}", pkh)
-                    .unwrap();
-            }
-            match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
-                Ok(keypair) => {
-                    display_line!(io,
-                        &mut w;
-                        "    Public key: {}", keypair.ref_to(),
-                    )
-                    .unwrap();
-                    if unsafe_show_secret {
+            display_line!(io, &mut w; "    Public key hash: {}", PublicKeyHash::from(&public_key))
+                .unwrap();
+            display_line!(io, &mut w; "    Public key: {}", public_key)
+                .unwrap();
+            if let Some((stored_keypair, _pkh)) = stored_keypair {
+                match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
+                    Ok(keypair) if unsafe_show_secret => {
                         display_line!(io,
-                            &mut w;
-                            "    Secret key: {}", keypair,
+                                      &mut w;
+                                      "    Secret key: {}", keypair,
                         )
                         .unwrap();
                     }
-                }
-                Err(DecryptionError::NotDecrypting) if !decrypt => {
-                    continue;
-                }
-                Err(err) => {
-                    display_line!(io,
-                        &mut w;
-                        "    Couldn't decrypt the keypair: {}", err,
-                    )
-                    .unwrap();
+                    Ok(_keypair) => {}
+                    Err(DecryptionError::NotDecrypting) if !decrypt => {
+                        continue;
+                    }
+                    Err(err) => {
+                        display_line!(io,
+                                      &mut w;
+                                      "    Couldn't decrypt the keypair: {}", err,
+                        )
+                            .unwrap();
+                    }
                 }
             }
         }
