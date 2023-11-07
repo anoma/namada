@@ -721,7 +721,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -825,7 +824,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -958,7 +956,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1080,7 +1077,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1140,7 +1136,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1310,7 +1305,6 @@ mod tests {
         let mut gas_meter = VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         );
-        let _invalid_sig = false;
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
