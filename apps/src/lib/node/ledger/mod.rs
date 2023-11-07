@@ -308,6 +308,7 @@ pub fn set_funds(
     .expect("Failed to overwrite funds in storage");
 
     db.exec_batch(batch).expect("Failed to execute write batch");
+    db.flush(true).expect("Failed to flush data to disk");
 
     // reset CometBFT's state, such that we can resume with a different app hash
     tendermint_node::reset_state(cometbft_path)
