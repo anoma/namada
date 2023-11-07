@@ -952,6 +952,7 @@ mod test_finalize_block {
         read_validator_stake, rewards_accumulator_handle, unjail_validator,
         validator_consensus_key_handle, validator_rewards_products_handle,
         validator_slashes_handle, validator_state_handle, write_pos_params,
+        ADDRESS as pos_address,
     };
     use namada::proto::{Code, Data, Section, Signature};
     use namada::types::dec::POS_DECIMAL_PRECISION;
@@ -2108,6 +2109,187 @@ mod test_finalize_block {
         assert!(rp3 > rp4);
     }
 
+    /// A unit test for PoS inflationary rewards claiming
+    #[test]
+    fn test_claim_rewards() {
+        let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
+            last_height: 0,
+            num_validators: 1,
+            ..Default::default()
+        });
+
+        let mut validator_set: BTreeSet<WeightedValidator> =
+            read_consensus_validator_set_addresses_with_stake(
+                &shell.wl_storage,
+                Epoch::default(),
+            )
+            .unwrap()
+            .into_iter()
+            .collect();
+
+        let params = read_pos_params(&shell.wl_storage).unwrap();
+
+        let validator = validator_set.pop_first().unwrap();
+
+        let get_pkh = |address, epoch| {
+            let ck = validator_consensus_key_handle(&address)
+                .get(&shell.wl_storage, epoch, &params)
+                .unwrap()
+                .unwrap();
+            let hash_string = tm_consensus_key_raw_hash(&ck);
+            HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+        };
+
+        let pkh1 = get_pkh(validator.address.clone(), Epoch::default());
+        let votes = vec![VoteInfo {
+            validator: Some(Validator {
+                address: pkh1.clone(),
+                power: u128::try_from(validator.bonded_stake)
+                    .expect("Test failed") as i64,
+            }),
+            signed_last_block: true,
+        }];
+        // let rewards_prod_1 =
+        // validator_rewards_products_handle(&val1.address);
+
+        let is_reward_equal_enough = |expected: token::Amount,
+                                      actual: token::Amount,
+                                      tolerance: u64|
+         -> bool {
+            let diff = expected - actual;
+            diff <= tolerance.into()
+        };
+
+        let bond_id = BondId {
+            source: validator.address.clone(),
+            validator: validator.address.clone(),
+        };
+
+        let mut total_rewards = token::Amount::zero();
+
+        // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
+        // won't receive votes from TM since we receive votes at a 1-block
+        // delay, so votes will be empty here
+        next_block_for_inflation(&mut shell, pkh1.clone(), vec![], None);
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+
+        let (current_epoch, inflation) =
+            advance_epoch(&mut shell, &pkh1, &votes, None);
+        total_rewards += inflation;
+
+        println!("\nMINTED INFLATION: {}", inflation.to_string_native());
+
+        // Claim the rewards from the initial epoch
+        let reward_1 = namada_proof_of_stake::claim_reward_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert!(is_reward_equal_enough(total_rewards, reward_1, 1));
+
+        // Try a claim the next block and ensure we get 0 tokens back
+        next_block_for_inflation(&mut shell, pkh1.clone(), votes.clone(), None);
+        let att = namada_proof_of_stake::claim_reward_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(att, token::Amount::zero());
+
+        // Go to the next epoch
+        let (current_epoch, inflation) =
+            advance_epoch(&mut shell, &pkh1, &votes, None);
+        total_rewards += inflation;
+
+        // Unbond some tokens
+        let unbond_amount = token::Amount::native_whole(50_000);
+        let unbond_res = namada_proof_of_stake::unbond_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            unbond_amount,
+            current_epoch,
+            false,
+        )
+        .unwrap();
+        assert_eq!(unbond_res.sum, unbond_amount);
+
+        // Check the bond amounts for rewards up thru the withdrawable epoch
+        let withdraw_epoch = current_epoch + params.withdrawable_epoch_offset();
+        let last_claim_epoch =
+            namada_proof_of_stake::get_last_reward_claim_epoch(
+                &shell.wl_storage,
+                &validator.address,
+                &validator.address,
+            )
+            .unwrap();
+        let bond_amounts = namada_proof_of_stake::bond_amounts_for_rewards(
+            &shell.wl_storage,
+            &bond_id,
+            last_claim_epoch.unwrap_or_default(),
+            withdraw_epoch,
+        )
+        .unwrap();
+
+        let mut exp_bond_amounts = BTreeMap::<Epoch, token::Amount>::new();
+        for epoch in Epoch::iter_bounds_inclusive(
+            last_claim_epoch.unwrap_or_default(),
+            withdraw_epoch,
+        ) {
+            if epoch < current_epoch + params.pipeline_len {
+                exp_bond_amounts.insert(epoch, validator.bonded_stake);
+            } else {
+                exp_bond_amounts
+                    .insert(epoch, validator.bonded_stake - unbond_amount);
+            }
+        }
+        assert_eq!(exp_bond_amounts, bond_amounts);
+
+        // Advance to the withdrawable epoch
+        let mut current_epoch = current_epoch;
+        while current_epoch < withdraw_epoch {
+            let votes = get_default_true_votes(
+                &shell.wl_storage,
+                shell.wl_storage.storage.block.epoch,
+            );
+            let (new_epoch, inflation) =
+                advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = new_epoch;
+            total_rewards += inflation;
+        }
+
+        // Withdraw tokens
+        let withdraw_amount = namada_proof_of_stake::withdraw_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+        assert_eq!(withdraw_amount, unbond_amount);
+
+        // Claim tokens
+        let reward_2 = namada_proof_of_stake::claim_reward_tokens(
+            &mut shell.wl_storage,
+            None,
+            &validator.address,
+            current_epoch,
+        )
+        .unwrap();
+
+        // Hacky solution until I come up with smth better
+        let diff = total_rewards - reward_2 - reward_1;
+        assert!(diff < 2 * token::Amount::from(current_epoch.0));
+    }
+
     fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Dec>
     where
         S: StorageRead,
@@ -2972,7 +3154,7 @@ mod test_finalize_block {
         // Advance to epoch 1 and
         // 1. Delegate 67231 NAM to validator
         // 2. Validator self-unbond 154654 NAM
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(shell.wl_storage.storage.block.epoch.0, 1_u64);
 
         // Make an account with balance and delegate some tokens
@@ -3038,7 +3220,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         println!("\nUnbonding in epoch 2");
         let del_unbond_1_amount = token::Amount::native_whole(18_000);
         namada_proof_of_stake::unbond_tokens(
@@ -3083,7 +3265,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         println!("\nBonding in epoch 3");
 
         let self_bond_1_amount = token::Amount::native_whole(9_123);
@@ -3103,7 +3285,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 4_u64);
 
         let self_unbond_2_amount = token::Amount::native_whole(15_000);
@@ -3123,7 +3305,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 5_u64);
         println!("Delegating in epoch 5");
 
@@ -3146,7 +3328,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 6_u64);
 
         // Discover a misbehavior committed in epoch 3
@@ -3211,7 +3393,7 @@ mod test_finalize_block {
         println!("Advancing to epoch 7");
 
         // Advance to epoch 7
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
 
         // Discover two more misbehaviors, one committed in epoch 3, one in
         // epoch 4
@@ -3315,7 +3497,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 9_u64);
 
         let val_stake_3 = namada_proof_of_stake::read_validator_stake(
@@ -3443,7 +3625,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        let current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 10_u64);
 
         // Check the balance of the Slash Pool
@@ -3806,7 +3988,7 @@ mod test_finalize_block {
                 &shell.wl_storage,
                 shell.wl_storage.storage.block.epoch,
             );
-            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
         }
         assert_eq!(shell.wl_storage.storage.block.epoch.0, default_past_epochs);
         assert_eq!(current_epoch.0, default_past_epochs);
@@ -3823,7 +4005,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
         assert_eq!(current_epoch.0, default_past_epochs + 1);
 
         check_is_data(
@@ -3862,7 +4044,7 @@ mod test_finalize_block {
                 &shell.wl_storage,
                 shell.wl_storage.storage.block.epoch,
             );
-            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+            current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
             if current_epoch.0 == consensus_val_set_len + 1 {
                 break;
             }
@@ -3880,7 +4062,7 @@ mod test_finalize_block {
             &shell.wl_storage,
             shell.wl_storage.storage.block.epoch,
         );
-        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None);
+        current_epoch = advance_epoch(&mut shell, &pkh1, &votes, None).0;
         for ep in Epoch::default().iter_range(2) {
             assert!(
                 consensus_val_set
@@ -3935,8 +4117,21 @@ mod test_finalize_block {
         proposer_address: &[u8],
         consensus_votes: &[VoteInfo],
         misbehaviors: Option<Vec<Misbehavior>>,
-    ) -> Epoch {
+    ) -> (Epoch, token::Amount) {
         let current_epoch = shell.wl_storage.storage.block.epoch;
+        let staking_token = staking_token_address(&shell.wl_storage);
+
+        // NOTE: assumed that the only change in pos address balance by
+        // advancing to the next epoch is minted inflation - no change occurs
+        // due to slashing
+        let pos_balance_pre = shell
+            .wl_storage
+            .read::<token::Amount>(&token::balance_key(
+                &staking_token,
+                &pos_address,
+            ))
+            .unwrap()
+            .unwrap_or_default();
         loop {
             next_block_for_inflation(
                 shell,
@@ -3948,7 +4143,19 @@ mod test_finalize_block {
                 break;
             }
         }
-        shell.wl_storage.storage.block.epoch
+        let pos_balance_post = shell
+            .wl_storage
+            .read::<token::Amount>(&token::balance_key(
+                &staking_token,
+                &pos_address,
+            ))
+            .unwrap()
+            .unwrap_or_default();
+
+        (
+            shell.wl_storage.storage.block.epoch,
+            pos_balance_post - pos_balance_pre,
+        )
     }
 
     /// Test that updating the ethereum bridge params via governance works.

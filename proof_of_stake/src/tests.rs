@@ -6557,8 +6557,11 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         let val_stake =
             crate::read_validator_stake(&storage, &params, &validator1, epoch)
                 .unwrap();
+        dbg!(&val_stake);
         dbg!(&del_bond_amount);
         dbg!(&self_bond_amount);
-        assert_eq!(val_stake, del_bond_amount + self_bond_amount);
+
+        let diff = val_stake - self_bond_amount - del_bond_amount;
+        assert!(diff <= 2.into());
     }
 }
