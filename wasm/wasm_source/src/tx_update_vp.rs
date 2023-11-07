@@ -7,16 +7,27 @@ use namada_tx_prelude::*;
 #[transaction(gas = 40000)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+        ctx.set_commitment_sentinel();
+        err
+    })?;
     let update_vp = transaction::UpdateVp::try_from_slice(&data[..])
         .wrap_err("failed to decode UpdateVp")?;
 
     debug_log!("update VP for: {:#?}", update_vp.addr);
     let vp_code_hash = signed
         .get_section(&update_vp.vp_code_hash)
-        .ok_or_err_msg("vp code section not found")?
+        .ok_or_err_msg("vp code section not found")
+        .map_err(|err| {
+            ctx.set_commitment_sentinel();
+            err
+        })?
         .extra_data_sec()
-        .ok_or_err_msg("vp code section must be tagged as extra")?
+        .ok_or_err_msg("vp code section must be tagged as extra")
+        .map_err(|err| {
+            ctx.set_commitment_sentinel();
+            err
+        })?
         .code
         .hash();
     ctx.update_validity_predicate(&update_vp.addr, vp_code_hash)
