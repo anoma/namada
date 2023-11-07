@@ -245,10 +245,6 @@ where
             let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
             tx_gas_meter.add_tx_size_gas(tx_bytes).map_err(|_| ())?;
 
-            // Check replay protection, safe to do here. Even if the tx is a
-            // replay attempt, we can leave its hashes in the write log since,
-            // having we already checked the signature, no other tx with the
-            // same hash can ba deemed valid
             self.replay_protection_checks(&tx, temp_wl_storage)
                 .map_err(|_| ())?;
 
@@ -1201,14 +1197,8 @@ mod test_prepare_proposal {
             ..Default::default()
         };
 
-        let received =
-            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .data()
-                    .expect("Test failed")
-            });
-        assert_eq!(received.len(), 0);
+        let received_txs = shell.prepare_proposal(req).txs;
+        assert_eq!(received_txs.len(), 0);
     }
 
     /// Test that if two identical wrapper txs are proposed for this block, only
@@ -1242,14 +1232,8 @@ mod test_prepare_proposal {
             txs: vec![wrapper.to_bytes(); 2],
             ..Default::default()
         };
-        let received =
-            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .data()
-                    .expect("Test failed")
-            });
-        assert_eq!(received.len(), 1);
+        let received_txs = shell.prepare_proposal(req).txs;
+        assert_eq!(received_txs.len(), 1);
     }
 
     /// Test that if the unsigned inner tx hash is known (replay attack), the
@@ -1295,18 +1279,12 @@ mod test_prepare_proposal {
             ..Default::default()
         };
 
-        let received =
-            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .data()
-                    .expect("Test failed")
-            });
-        assert_eq!(received.len(), 0);
+        let received_txs = shell.prepare_proposal(req).txs;
+        assert_eq!(received_txs.len(), 0);
     }
 
     /// Test that if two identical decrypted txs are proposed for this block,
-    /// only one gets accepted
+    /// both get accepted
     #[test]
     fn test_inner_tx_hash_same_block() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -1347,7 +1325,7 @@ mod test_prepare_proposal {
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
-            wrapper.sechashes(),
+            new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
         )));
@@ -1356,14 +1334,8 @@ mod test_prepare_proposal {
             txs: vec![wrapper.to_bytes(), new_wrapper.to_bytes()],
             ..Default::default()
         };
-        let received =
-            shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_slice())
-                    .expect("Test failed")
-                    .data()
-                    .expect("Test failed")
-            });
-        assert_eq!(received.len(), 1);
+        let received_txs = shell.prepare_proposal(req).txs;
+        assert_eq!(received_txs.len(), 2);
     }
 
     /// Test that expired wrapper transactions are not included in the block
