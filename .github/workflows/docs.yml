@@ -61,7 +61,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: heliaxdev/setup-protoc@v2
         with:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -129,7 +129,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: heliaxdev/setup-protoc@v2
         with:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
