@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::ledger;
 use crate::ledger::gas::{
-    STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
+    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
 };
 use crate::ledger::replay_protection::{
     get_replay_protection_all_subkey, get_replay_protection_last_subkey,
@@ -169,9 +169,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
+                (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
+            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -197,9 +197,9 @@ impl WriteLog {
                         key.len() + value.len()
                     }
                 };
-                (Some(v), gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE)
+                (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
             }
-            None => (None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE),
+            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
         }
     }
 
@@ -302,7 +302,7 @@ impl WriteLog {
         };
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
-        Ok((gas as u64 * STORAGE_ACCESS_GAS_PER_BYTE, size_diff))
+        Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
@@ -383,7 +383,7 @@ impl WriteLog {
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
         self.ibc_events.insert(event);
-        len as u64 * STORAGE_ACCESS_GAS_PER_BYTE
+        len as u64 * MEMORY_ACCESS_GAS_PER_BYTE
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
@@ -750,7 +750,7 @@ mod tests {
         // read a non-existing key
         let (value, gas) = write_log.read(&key);
         assert!(value.is_none());
-        assert_eq!(gas, key.len() as u64);
+        assert_eq!(gas, (key.len() as u64) * MEMORY_ACCESS_GAS_PER_BYTE);
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
@@ -774,7 +774,10 @@ mod tests {
             }
             _ => panic!("unexpected read result"),
         }
-        assert_eq!(gas, (key.len() + inserted.len()) as u64);
+        assert_eq!(
+            gas,
+            ((key.len() + inserted.len()) as u64) * MEMORY_ACCESS_GAS_PER_BYTE
+        );
 
         // update the value
         let updated = "updated".as_bytes().to_vec();
@@ -804,7 +807,7 @@ mod tests {
             StorageModification::Delete => {}
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(gas, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE);
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
@@ -841,7 +844,7 @@ mod tests {
         }
         assert_eq!(
             gas,
-            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE
+            (vp_key.len() + vp_hash.len()) as u64 * MEMORY_ACCESS_GAS_PER_BYTE
         );
 
         // get all

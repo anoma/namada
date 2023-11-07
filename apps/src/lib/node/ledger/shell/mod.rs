@@ -74,8 +74,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
-use crate::config;
-use crate::config::{genesis, TendermintMode};
+use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
@@ -225,6 +224,7 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
+        local_config: Option<ValidatorLocalConfig>,
     },
     Full,
     Seed,
@@ -488,12 +488,29 @@ where
                     );
                     let mut wallet = crate::wallet::load(wallet_path)
                         .expect("Validator node must have a wallet");
+                    let validator_local_config_path =
+                        wallet_path.join("validator_local_config.toml");
+
+                    let validator_local_config: Option<ValidatorLocalConfig> =
+                        if Path::is_file(&validator_local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(validator_local_config_path)
+                                        .unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
                             eth_oracle,
+                            local_config: validator_local_config,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -516,6 +533,7 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
+                        local_config: None,
                     }
                 }
             }
@@ -1223,7 +1241,7 @@ where
             TxType::Wrapper(wrapper) => {
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if gas_meter.add_tx_size_gas(tx_bytes).is_err() {
+                if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ErrorCodes::TxGasLimit.into();
                     response.log = "{INVALID_MSG}: Wrapper transactions \
                                     exceeds its gas limit"
@@ -1291,6 +1309,7 @@ where
                     &mut self.vp_wasm_cache.clone(),
                     &mut self.tx_wasm_cache.clone(),
                     None,
+                    false,
                 ) {
                     response.code = ErrorCodes::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
@@ -1329,20 +1348,49 @@ where
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
         block_proposer: Option<&Address>,
+        is_prepare_proposal: bool,
     ) -> Result<()>
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // Check that fee token is an allowed one
-        let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-            &self.wl_storage,
-            &wrapper.fee.token,
-        )
-        .expect("Must be able to read gas cost parameter")
-        .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-            "The provided {} token is not allowed for fee payment",
-            wrapper.fee.token
-        ))))?;
+        let minimum_gas_price = {
+            let proposer_local_config = if is_prepare_proposal {
+                if let ShellMode::Validator {
+                    ref local_config, ..
+                } = self.mode
+                {
+                    local_config.as_ref()
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            match proposer_local_config {
+                Some(config) => config
+                    .accepted_gas_tokens
+                    .get(&wrapper.fee.token)
+                    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                        "The provided {} token is not accepted by the block \
+                         proposer for fee payment",
+                        wrapper.fee.token
+                    ))))?
+                    .to_owned(),
+                None => namada::ledger::parameters::read_gas_cost(
+                    &self.wl_storage,
+                    &wrapper.fee.token,
+                )
+                .expect("Must be able to read gas cost parameter")
+                .ok_or(Error::TxApply(
+                    protocol::Error::FeeError(format!(
+                        "The provided {} token is not allowed for fee payment",
+                        wrapper.fee.token
+                    )),
+                ))?,
+            }
+        };
 
         if wrapper.fee.amount_per_gas_unit < minimum_gas_price {
             // The fees do not match the minimum required
@@ -2757,7 +2805,7 @@ mod shell_tests {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: 100.into(),
-                    token: address::btc(),
+                    token: address::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),

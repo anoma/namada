@@ -86,13 +86,13 @@ use tempfile::TempDir;
 
 use crate::cli::context::FromContext;
 use crate::cli::Context;
+use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::node::ledger::shell::Shell;
 use crate::wallet::{defaults, CliWalletUtils};
-use crate::{config, wasm_loader};
 
 pub const WASM_DIR: &str = "../wasm";
 pub const TX_BOND_WASM: &str = "tx_bond.wasm";
@@ -111,6 +111,10 @@ pub const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 
+pub const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
+pub const TX_UPDATE_STEWARD_COMMISSION: &str =
+    "tx_update_steward_commission.wasm";
+pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 pub const VP_VALIDATOR_WASM: &str = "vp_validator.wasm";
 
 pub const ALBERT_PAYMENT_ADDRESS: &str = "albert_payment";
@@ -127,8 +131,8 @@ static SHELL_INIT: Once = Once::new();
 
 pub struct BenchShell {
     pub inner: Shell,
-    /// NOTE: Temporary directory should be dropped last since Shell need to
-    /// flush data on drop
+    // NOTE: Temporary directory should be dropped last since Shell need to
+    // flush data on drop
     tempdir: TempDir,
 }
 
@@ -183,6 +187,8 @@ impl Default for BenchShell {
                 2,
             )
             .unwrap();
+        // Commit tx hashes to storage
+        shell.commit();
 
         // Bond from Albert to validator
         let bond = Bond {
@@ -190,20 +196,19 @@ impl Default for BenchShell {
             amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         };
-        let signed_tx = generate_tx(
-            TX_BOND_WASM,
-            bond,
-            None,
-            None,
-            Some(&defaults::albert_keypair()),
-        );
-
         let params =
             proof_of_stake::read_pos_params(&shell.wl_storage).unwrap();
         let mut bench_shell = BenchShell {
             inner: shell,
             tempdir,
         };
+        let signed_tx = bench_shell.generate_tx(
+            TX_BOND_WASM,
+            bond,
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        );
 
         bench_shell.execute_tx(&signed_tx);
         bench_shell.wl_storage.commit_tx();
@@ -212,7 +217,7 @@ impl Default for BenchShell {
         let content_section = Section::ExtraData(Code::new(vec![]));
         let voting_start_epoch =
             Epoch(2 + params.pipeline_len + params.unbonding_len);
-        let signed_tx = generate_tx(
+        let signed_tx = bench_shell.generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
                 id: None,
@@ -247,6 +252,108 @@ impl Default for BenchShell {
 }
 
 impl BenchShell {
+    pub fn generate_tx(
+        &self,
+        wasm_code_path: &str,
+        data: impl BorshSerialize,
+        shielded: Option<Transaction>,
+        extra_sections: Option<Vec<Section>>,
+        signer: Option<&SecretKey>,
+    ) -> Tx {
+        let mut tx =
+            Tx::from_type(namada::types::transaction::TxType::Decrypted(
+                namada::types::transaction::DecryptedTx::Decrypted,
+            ));
+
+        // NOTE: here we use the code hash to avoid including the cost for the
+        // wasm validation. The wasm codes (both txs and vps) are always
+        // in cache so we don't end up computing the cost to read and
+        // compile the code which is the desired behaviour
+        let code_hash = self
+            .read_storage_key(&Key::wasm_hash(wasm_code_path))
+            .unwrap();
+        tx.set_code(Code::from_hash(code_hash));
+        tx.set_data(Data::new(borsh::to_vec(&data).unwrap()));
+
+        if let Some(transaction) = shielded {
+            tx.add_section(Section::MaspTx(transaction));
+        }
+
+        if let Some(sections) = extra_sections {
+            for section in sections {
+                if let Section::ExtraData(_) = section {
+                    tx.add_section(section);
+                }
+            }
+        }
+
+        if let Some(signer) = signer {
+            tx.add_section(Section::Signature(Signature::new(
+                vec![tx.raw_header_hash()],
+                [(0, signer.clone())].into_iter().collect(),
+                None,
+            )));
+        }
+
+        tx
+    }
+
+    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
+        // This function avoid serializaing the tx data with Borsh
+        let mut tx =
+            Tx::from_type(namada::types::transaction::TxType::Decrypted(
+                namada::types::transaction::DecryptedTx::Decrypted,
+            ));
+        let code_hash = self
+            .read_storage_key(&Key::wasm_hash(wasm_code_path))
+            .unwrap();
+        tx.set_code(Code::from_hash(code_hash));
+
+        let mut data = vec![];
+        prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+        tx.set_data(Data::new(data));
+
+        // NOTE: the Ibc VP doesn't actually check the signature
+        tx
+    }
+
+    pub fn generate_ibc_transfer_tx(&self) -> Tx {
+        let token = PrefixedCoin {
+            denom: address::nam().to_string().parse().unwrap(),
+            amount: Amount::native_whole(1000)
+                .to_string_native()
+                .split('.')
+                .next()
+                .unwrap()
+                .to_string()
+                .parse()
+                .unwrap(),
+        };
+
+        let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
+
+        let now: namada::tendermint::Time =
+            DateTimeUtc::now().try_into().unwrap();
+        let now: IbcTimestamp = now.into();
+        let timeout_timestamp =
+            (now + std::time::Duration::new(3600, 0)).unwrap();
+
+        let msg = MsgTransfer {
+            port_id_on_a: PortId::transfer(),
+            chan_id_on_a: ChannelId::new(5),
+            packet_data: PacketData {
+                token,
+                sender: defaults::albert_address().to_string().into(),
+                receiver: defaults::bertha_address().to_string().into(),
+                memo: "".parse().unwrap(),
+            },
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+
+        self.generate_ibc_tx(TX_IBC_WASM, msg)
+    }
+
     pub fn execute_tx(&mut self, tx: &Tx) {
         run::tx(
             &self.inner.wl_storage.storage,
@@ -277,75 +384,7 @@ impl BenchShell {
         .unwrap();
     }
 
-    pub fn init_ibc_channel(&mut self) {
-        // Set connection open
-        let client_id = ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
-            1,
-        )
-        .unwrap();
-        let connection = ConnectionEnd::new(
-            ConnectionState::Open,
-            client_id.clone(),
-            Counterparty::new(
-                client_id,
-                Some(ConnectionId::new(1)),
-                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-            ),
-            vec![Version::default()],
-            std::time::Duration::new(100, 0),
-        )
-        .unwrap();
-
-        let addr_key =
-            Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
-
-        let connection_key = connection_key(&NamadaConnectionId::new(1));
-        self.wl_storage
-            .storage
-            .write(&connection_key, connection.encode_vec())
-            .unwrap();
-
-        // Set port
-        let port_key = port_key(&NamadaPortId::transfer());
-
-        let index_key = addr_key
-            .join(&Key::from("capabilities/index".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&index_key, 1u64.to_be_bytes())
-            .unwrap();
-        self.wl_storage
-            .storage
-            .write(&port_key, 1u64.to_be_bytes())
-            .unwrap();
-        let cap_key =
-            addr_key.join(&Key::from("capabilities/1".to_string().to_db_key()));
-        self.wl_storage
-            .storage
-            .write(&cap_key, PortId::transfer().as_bytes())
-            .unwrap();
-
-        // Set Channel open
-        let counterparty = ChannelCounterparty::new(
-            PortId::transfer(),
-            Some(ChannelId::new(5)),
-        );
-        let channel = ChannelEnd::new(
-            State::Open,
-            Order::Unordered,
-            counterparty,
-            vec![ConnectionId::new(1)],
-            ChannelVersion::new("ics20-1".to_string()),
-        )
-        .unwrap();
-        let channel_key =
-            channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
-        self.wl_storage
-            .storage
-            .write(&channel_key, channel.encode_vec())
-            .unwrap();
-
+    pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
         // Set client state
         let client_id = ClientId::new(
             ClientType::new("01-tendermint".to_string()).unwrap(),
@@ -382,6 +421,81 @@ impl BenchShell {
             .write(&client_state_key, bytes)
             .expect("write failed");
 
+        client_id
+    }
+
+    pub fn init_ibc_connection(&mut self) -> (Key, ClientId) {
+        // Set client state
+        let addr_key =
+            Key::from(Address::Internal(InternalAddress::Ibc).to_db_key());
+        let client_id = self.init_ibc_client_state(addr_key.clone());
+
+        // Set connection open
+        let connection = ConnectionEnd::new(
+            ConnectionState::Open,
+            client_id.clone(),
+            Counterparty::new(
+                client_id.clone(),
+                Some(ConnectionId::new(1)),
+                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+            ),
+            vec![Version::default()],
+            std::time::Duration::new(100, 0),
+        )
+        .unwrap();
+
+        let connection_key = connection_key(&NamadaConnectionId::new(1));
+        self.wl_storage
+            .storage
+            .write(&connection_key, connection.encode_vec())
+            .unwrap();
+
+        // Set port
+        let port_key = port_key(&NamadaPortId::transfer());
+
+        let index_key = addr_key
+            .join(&Key::from("capabilities/index".to_string().to_db_key()));
+        self.wl_storage
+            .storage
+            .write(&index_key, 1u64.to_be_bytes())
+            .unwrap();
+        self.wl_storage
+            .storage
+            .write(&port_key, 1u64.to_be_bytes())
+            .unwrap();
+        let cap_key =
+            addr_key.join(&Key::from("capabilities/1".to_string().to_db_key()));
+        self.wl_storage
+            .storage
+            .write(&cap_key, PortId::transfer().as_bytes())
+            .unwrap();
+
+        (addr_key, client_id)
+    }
+
+    pub fn init_ibc_channel(&mut self) {
+        let (addr_key, client_id) = self.init_ibc_connection();
+
+        // Set Channel open
+        let counterparty = ChannelCounterparty::new(
+            PortId::transfer(),
+            Some(ChannelId::new(5)),
+        );
+        let channel = ChannelEnd::new(
+            State::Open,
+            Order::Unordered,
+            counterparty,
+            vec![ConnectionId::new(1)],
+            ChannelVersion::new("ics20-1".to_string()),
+        )
+        .unwrap();
+        let channel_key =
+            channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
+        self.wl_storage
+            .storage
+            .write(&channel_key, channel.encode_vec())
+            .unwrap();
+
         // Set consensus state
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
@@ -412,66 +526,6 @@ impl BenchShell {
     }
 }
 
-pub fn generate_tx(
-    wasm_code_path: &str,
-    data: impl BorshSerialize,
-    shielded: Option<Transaction>,
-    extra_section: Option<Vec<Section>>,
-    signer: Option<&SecretKey>,
-) -> Tx {
-    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted,
-    ));
-
-    // NOTE: don't use the hash to avoid computing the cost of loading the wasm
-    // code
-    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
-        wasm_code_path,
-    )));
-    tx.set_data(Data::new(data.serialize_to_vec()));
-
-    if let Some(transaction) = shielded {
-        tx.add_section(Section::MaspTx(transaction));
-    }
-
-    if let Some(sections) = extra_section {
-        for section in sections {
-            if let Section::ExtraData(_) = section {
-                tx.add_section(section);
-            }
-        }
-    }
-
-    if let Some(signer) = signer {
-        tx.add_section(Section::Signature(Signature::new(
-            vec![tx.raw_header_hash()],
-            [(0, signer.clone())].into_iter().collect(),
-            None,
-        )));
-    }
-
-    tx
-}
-
-pub fn generate_ibc_tx(wasm_code_path: &str, msg: impl Msg) -> Tx {
-    // This function avoid serializaing the tx data with Borsh
-    let mut tx = Tx::from_type(namada::types::transaction::TxType::Decrypted(
-        namada::types::transaction::DecryptedTx::Decrypted,
-    ));
-    tx.set_code(Code::new(wasm_loader::read_wasm_or_exit(
-        WASM_DIR,
-        wasm_code_path,
-    )));
-
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    tx.set_data(Data::new(data));
-
-    // NOTE: the Ibc VP doesn't actually check the signature
-    tx
-}
-
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code = std::fs::read("../wasm_for_tests/tx_write.wasm").unwrap();
 
@@ -493,41 +547,6 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     )));
 
     tx
-}
-
-pub fn generate_ibc_transfer_tx() -> Tx {
-    let token = PrefixedCoin {
-        denom: address::nam().to_string().parse().unwrap(),
-        amount: Amount::native_whole(1000)
-            .to_string_native()
-            .split('.')
-            .next()
-            .unwrap()
-            .to_string()
-            .parse()
-            .unwrap(),
-    };
-
-    let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
-
-    let now: namada::tendermint::Time = DateTimeUtc::now().try_into().unwrap();
-    let now: IbcTimestamp = now.into();
-    let timeout_timestamp = (now + std::time::Duration::new(3600, 0)).unwrap();
-
-    let msg = MsgTransfer {
-        port_id_on_a: PortId::transfer(),
-        chan_id_on_a: ChannelId::new(5),
-        packet_data: PacketData {
-            token,
-            sender: defaults::albert_address().to_string().into(),
-            receiver: defaults::bertha_address().to_string().into(),
-            memo: "".parse().unwrap(),
-        },
-        timeout_height_on_b: timeout_height,
-        timeout_timestamp_on_b: timeout_timestamp,
-    };
-
-    generate_ibc_tx(TX_IBC_WASM, msg)
 }
 
 pub struct BenchShieldedCtx {
@@ -822,7 +841,7 @@ impl BenchShieldedCtx {
             )
         });
 
-        generate_tx(
+        self.shell.generate_tx(
             TX_TRANSFER_WASM,
             Transfer {
                 source: source.effective_address(),

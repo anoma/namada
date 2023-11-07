@@ -3,6 +3,7 @@
 use eyre::{Context, Result};
 use namada::types::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
+use namada_apps::config::ValidatorLocalConfig;
 use namada_apps::node::ledger;
 
 pub fn main() -> Result<()> {
@@ -56,6 +57,23 @@ pub fn main() -> Result<()> {
                          {chain_id}"
                     );
                 }
+            }
+            cmds::Config::UpdateLocalConfig(cmds::LocalConfig(args)) => {
+                // Validate the new config
+                let updated_config = std::fs::read(args.config_path).unwrap();
+                let _validator_local_config: ValidatorLocalConfig =
+                    toml::from_slice(&updated_config).unwrap();
+
+                // Update the validator configuration file with the new one
+                let config_path = ctx
+                    .global_args
+                    .base_dir
+                    .join(format!(
+                        "{}",
+                        ctx.chain.unwrap().config.ledger.chain_id
+                    ))
+                    .join("validator_local_config.toml");
+                std::fs::write(config_path, updated_config).unwrap();
             }
         },
     }

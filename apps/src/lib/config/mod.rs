@@ -5,6 +5,7 @@ pub mod genesis;
 pub mod global;
 pub mod utils;
 
+use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -41,6 +42,12 @@ pub struct Config {
     pub ledger: Ledger,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ValidatorLocalConfig {
+    pub accepted_gas_tokens:
+        HashMap<namada::types::address::Address, namada::types::token::Amount>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TendermintMode {
     Full,
@@ -52,19 +59,8 @@ impl TendermintMode {
     pub fn to_str(&self) -> &str {
         match *self {
             TendermintMode::Full => "full",
-            TendermintMode::Validator => "validator",
+            TendermintMode::Validator { .. } => "validator",
             TendermintMode::Seed => "seed",
-        }
-    }
-}
-
-impl From<String> for TendermintMode {
-    fn from(mode: String) -> Self {
-        match mode.as_str() {
-            "full" => TendermintMode::Full,
-            "validator" => TendermintMode::Validator,
-            "seed" => TendermintMode::Seed,
-            _ => panic!("Unrecognized mode"),
         }
     }
 }

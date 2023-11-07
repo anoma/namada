@@ -26,9 +26,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::generated::types;
-use crate::ledger::gas::{
-    self, GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST,
-};
+use crate::ledger::gas::{self, GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::abci::ResponseDeliverTx;
@@ -594,7 +592,7 @@ impl Signature {
                     {
                         if let Some(meter) = gas_meter {
                             meter
-                                .consume(VERIFY_TX_SIG_GAS_COST)
+                                .consume(VERIFY_TX_SIG_GAS)
                                 .map_err(VerifySigError::OutOfGas)?;
                         }
                         common::SigScheme::verify_signature(
@@ -619,7 +617,7 @@ impl Signature {
                     {
                         if let Some(meter) = gas_meter {
                             meter
-                                .consume(VERIFY_TX_SIG_GAS_COST)
+                                .consume(VERIFY_TX_SIG_GAS)
                                 .map_err(VerifySigError::OutOfGas)?;
                         }
                         common::SigScheme::verify_signature(

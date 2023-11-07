@@ -1087,15 +1087,19 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Config {
         Gen(ConfigGen),
+        UpdateLocalConfig(LocalConfig),
     }
 
     impl SubCmd for Config {
         const CMD: &'static str = "config";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .and_then(|matches| SubCmd::parse(matches).map(Self::Gen))
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                let gen = SubCmd::parse(matches).map(Self::Gen);
+                let gas_tokens =
+                    SubCmd::parse(matches).map(Self::UpdateLocalConfig);
+                gen.or(gas_tokens)
+            })
         }
 
         fn def() -> App {
@@ -1104,6 +1108,7 @@ pub mod cmds {
                 .arg_required_else_help(true)
                 .about("Configuration sub-commands.")
                 .subcommand(ConfigGen::def())
+                .subcommand(LocalConfig::def())
         }
     }
 
@@ -1120,6 +1125,25 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about("Generate the default configuration file.")
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LocalConfig(pub args::UpdateLocalConfig);
+
+    impl SubCmd for LocalConfig {
+        const CMD: &'static str = "update-local-config";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::UpdateLocalConfig::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Update the validator's local configuration.")
+                .add_args::<args::UpdateLocalConfig>()
         }
     }
 
@@ -2658,7 +2682,6 @@ pub mod args {
     pub const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
     pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
     pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
-    pub const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
     pub const TX_UPDATE_STEWARD_COMMISSION: &str =
         "tx_update_steward_commission.wasm";
     pub const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
@@ -2748,7 +2771,7 @@ pub mod args {
     pub const FEE_PAYER_OPT: ArgOpt<WalletKeypair> = arg_opt("gas-payer");
     pub const FORCE: ArgFlag = flag("force");
     pub const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(20_000)));
+        arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddress> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "NAM".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -3026,6 +3049,25 @@ pub mod args {
                     .def()
                     .help("If provided, dump also the diff of the last height"),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UpdateLocalConfig {
+        pub config_path: PathBuf,
+    }
+
+    impl Args for UpdateLocalConfig {
+        fn parse(matches: &ArgMatches) -> Self {
+            let config_path = DATA_PATH.parse(matches);
+            Self { config_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DATA_PATH.def().help(
+                "The path to the toml file containing the updated local \
+                 configuration.",
+            ))
         }
     }
 
