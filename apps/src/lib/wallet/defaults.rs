@@ -19,30 +19,17 @@ mod dev {
     };
     use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
+    use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 
-    /// N.B. these are the corresponding values from
-    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
-    ///
-    /// If that wallet is regenerated, these values must be changed to fix unit
-    /// tests.
+    /// Get protocol, eth_bridge, and dkg keys from the validator pre-genesis
+    /// wallet
     pub fn validator_keys() -> (common::SecretKey, common::SecretKey) {
-        // ed25519 bytes
-        let bytes: [u8; 33] = [
-            0, 217, 87, 83, 250, 179, 159, 135, 229, 194, 14, 202, 177, 38,
-            144, 254, 250, 103, 233, 113, 100, 202, 111, 23, 214, 122, 235,
-            165, 8, 131, 185, 61, 222,
-        ];
-        // secp256k1 bytes
-        let eth_bridge_key_bytes = [
-            1, 38, 59, 91, 81, 119, 89, 252, 48, 195, 171, 237, 19, 144, 123,
-            117, 231, 121, 218, 231, 14, 54, 117, 19, 90, 120, 141, 231, 199,
-            7, 110, 254, 191,
-        ];
-        (
-            BorshDeserialize::deserialize(&mut bytes.as_ref()).unwrap(),
-            BorshDeserialize::deserialize(&mut eth_bridge_key_bytes.as_ref())
-                .unwrap(),
-        )
+        let protocol_key = get_validator_pre_genesis_wallet()
+            .store
+            .validator_keys
+            .protocol_keypair;
+        let eth_bridge_key = get_validator_pre_genesis_wallet().eth_hot_key;
+        (protocol_key, eth_bridge_key)
     }
 
     /// The default keys with their aliases.
@@ -184,17 +171,35 @@ mod dev {
         sk.try_to_sk().unwrap()
     }
 
-    /// N.B. this is the consensus key from
-    /// `genesis/pre-genesis/validator-0/validator-wallet.toml`.
-    /// If that wallet is regenerated, this value must be changed to fix unit
-    /// tests.
+    /// Get validator pre-genesis wallet
+    pub fn get_validator_pre_genesis_wallet() -> ValidatorWallet {
+        let mut root_dir = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        // Find the project root dir
+        while !root_dir.join("rust-toolchain.toml").exists() {
+            root_dir.pop();
+        }
+        let path =
+            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+        crate::wallet::pre_genesis::load(&path).unwrap()
+    }
+
+    /// Get the validator consensus keypair from the wallet.
     pub fn validator_keypair() -> common::SecretKey {
-        let bytes = [
-            194, 41, 223, 103, 103, 178, 152, 145, 161, 212, 82, 133, 69, 13,
-            133, 136, 238, 11, 198, 182, 29, 41, 75, 249, 88, 0, 28, 215, 217,
-            63, 234, 78,
-        ];
-        let ed_sk = ed25519::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_to_sk().unwrap()
+        let mut root_dir = std::env::current_dir()
+            .expect("Current directory should exist")
+            .canonicalize()
+            .expect("Current directory should exist");
+        // Find the project root dir
+        while !root_dir.join("rust-toolchain.toml").exists() {
+            root_dir.pop();
+        }
+        let path =
+            root_dir.join("genesis/localnet/src/pre-genesis/validator-0");
+
+        let wallet = crate::wallet::pre_genesis::load(&path).unwrap();
+        wallet.consensus_key
     }
 }
