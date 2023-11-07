@@ -267,9 +267,6 @@ where
                                 msg
                             )
                         }
-                        self.wl_storage
-                            .write_tx_hash(tx.header_hash())
-                            .expect("Error while writing tx hash to storage");
                     }
                 }
 
