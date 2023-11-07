@@ -48,10 +48,11 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_IBC_WASM, TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL,
+    TX_INIT_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -916,6 +917,8 @@ pub async fn to_ledger_vector<'a>(
     let user_hash = query_wasm_code_hash(context, VP_USER_WASM).await?;
     let unjail_validator_hash =
         query_wasm_code_hash(context, TX_UNJAIL_VALIDATOR_WASM).await?;
+    let claim_rewards_hash =
+        query_wasm_code_hash(context, TX_CLAIM_REWARDS_WASM).await?;
 
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = context
@@ -1439,6 +1442,28 @@ pub async fn to_ledger_vector<'a>(
         }
         tv.output_expert
             .push(format!("Validator : {}", withdraw.validator));
+    } else if code_hash == claim_rewards_hash {
+        let claim = pos::Withdraw::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Claim_Rewards_0".to_string();
+
+        tv.output.push("Type : Claim Rewards".to_string());
+        if let Some(source) = claim.source.as_ref() {
+            tv.output.push(format!("Source : {}", source));
+        }
+        tv.output.push(format!("Validator : {}", claim.validator));
+
+        if let Some(source) = claim.source.as_ref() {
+            tv.output_expert.push(format!("Source : {}", source));
+        }
+        tv.output_expert
+            .push(format!("Validator : {}", claim.validator));
     } else if code_hash == change_commission_hash {
         let commission_change = pos::CommissionChange::try_from_slice(
             &tx.data()

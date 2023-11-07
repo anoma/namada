@@ -27,11 +27,11 @@ use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_INIT_ACCOUNT_WASM,
-    TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_REVEAL_PK_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
-    VP_VALIDATOR_WASM,
+    TX_BOND_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_INIT_VALIDATOR_WASM,
+    TX_REDELEGATE_WASM, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL_WASM,
+    TX_WITHDRAW_WASM, VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
 use rand::rngs::StdRng;
@@ -718,6 +718,61 @@ fn unjail_validator(c: &mut Criterion) {
     });
 }
 
+fn claim_rewards(c: &mut Criterion) {
+    let mut group = c.benchmark_group("claim_rewards");
+
+    let claim = generate_tx(
+        TX_CLAIM_REWARDS_WASM,
+        Withdraw {
+            validator: defaults::validator_address(),
+            source: Some(defaults::albert_address()),
+        },
+        None,
+        None,
+        Some(&defaults::albert_keypair()),
+    );
+
+    let self_claim = generate_tx(
+        TX_CLAIM_REWARDS_WASM,
+        Withdraw {
+            validator: defaults::validator_address(),
+            source: None,
+        },
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    for (signed_tx, bench_name) in
+        [claim, self_claim].iter().zip(["claim", "self_claim"])
+    {
+        group.bench_function(bench_name, |b| {
+            b.iter_batched_ref(
+                || {
+                    let mut shell = BenchShell::default();
+
+                    // Advance Epoch for pipeline and unbonding length
+                    let params =
+                        proof_of_stake::read_pos_params(&shell.wl_storage)
+                            .unwrap();
+                    let advance_epochs =
+                        params.pipeline_len + params.unbonding_len;
+
+                    for _ in 0..=advance_epochs {
+                        shell.advance_epoch();
+                    }
+
+                    shell
+                },
+                |shell| shell.execute_tx(signed_tx),
+                criterion::BatchSize::LargeInput,
+            )
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     whitelisted_txs,
     transfer,
@@ -733,6 +788,7 @@ criterion_group!(
     init_validator,
     change_validator_commission,
     ibc,
-    unjail_validator
+    unjail_validator,
+    claim_rewards
 );
 criterion_main!(whitelisted_txs);

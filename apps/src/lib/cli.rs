@@ -229,6 +229,7 @@ pub mod cmds {
                 .subcommand(Unbond::def().display_order(2))
                 .subcommand(Withdraw::def().display_order(2))
                 .subcommand(Redelegate::def().display_order(2))
+                .subcommand(ClaimRewards::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
                 // Ethereum bridge transactions
                 .subcommand(AddToEthBridgePool::def().display_order(3))
@@ -288,6 +289,7 @@ pub mod cmds {
             let unbond = Self::parse_with_ctx(matches, Unbond);
             let withdraw = Self::parse_with_ctx(matches, Withdraw);
             let redelegate = Self::parse_with_ctx(matches, Redelegate);
+            let claim_rewards = Self::parse_with_ctx(matches, ClaimRewards);
             let query_epoch = Self::parse_with_ctx(matches, QueryEpoch);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
             let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
@@ -334,6 +336,7 @@ pub mod cmds {
                 .or(unbond)
                 .or(withdraw)
                 .or(redelegate)
+                .or(claim_rewards)
                 .or(add_to_eth_bridge_pool)
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)

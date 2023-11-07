@@ -10,10 +10,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("failed to decode Withdraw")?;
 
-    let slashed =
-        ctx.withdraw_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
-    if !slashed.is_zero() {
-        debug_log!("New withdrawal slashed for {}", slashed.to_string_native());
-    }
+    ctx.claim_reward_tokens(withdraw.source.as_ref(), &withdraw.validator)?;
     Ok(())
 }
