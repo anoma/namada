@@ -156,7 +156,7 @@ pub struct ImplicitAccount {
     BorshDeserialize,
 )]
 pub struct Parameters {
-    // Max payload size, in bytes, for a tx batch proposal.
+    /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
     /// Max block gas
     pub max_block_gas: u64,
