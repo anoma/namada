@@ -5834,6 +5834,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         10_000.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -5881,6 +5882,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         384.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -5928,6 +5930,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         4_384.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -6339,6 +6342,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         10_000.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -6386,6 +6390,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         384.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -6433,6 +6438,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         &validator1,
         4_384.into(),
         current_epoch,
+        None,
     )
     .unwrap();
 

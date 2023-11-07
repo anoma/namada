@@ -4620,10 +4620,12 @@ pub mod args {
 
     impl CliToSdk<ClaimRewards<SdkTypes>> for ClaimRewards<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> ClaimRewards<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_chain_or_exit();
             ClaimRewards::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                validator: ctx.get(&self.validator),
-                source: self.source.map(|x| ctx.get(&x)),
+                tx,
+                validator: chain_ctx.get(&self.validator),
+                source: self.source.map(|x| chain_ctx.get(&x)),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
