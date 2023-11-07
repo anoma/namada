@@ -901,7 +901,8 @@ fn update_steward_commission(c: &mut Criterion) {
 }
 
 fn deactivate_validator(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_DEACTIVATE_VALIDATOR_WASM,
         defaults::validator_address(),
         None,
@@ -919,7 +920,8 @@ fn deactivate_validator(c: &mut Criterion) {
 }
 
 fn reactivate_validator(c: &mut Criterion) {
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_REACTIVATE_VALIDATOR_WASM,
         defaults::validator_address(),
         None,
