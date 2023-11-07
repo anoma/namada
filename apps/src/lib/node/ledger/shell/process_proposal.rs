@@ -2257,7 +2257,7 @@ mod test_process_proposal {
     }
 
     /// Test that a block containing two identical inner transactions is
-    /// rejected
+    /// accepted
     #[test]
     fn test_inner_tx_hash_same_block() {
         let (shell, _recv, _, _) = test_utils::setup();
@@ -2285,7 +2285,6 @@ mod test_process_proposal {
             [(0, keypair)].into_iter().collect(),
             None,
         )));
-        let inner_unsigned_hash = wrapper.raw_header_hash();
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -2308,22 +2307,8 @@ mod test_process_proposal {
             txs: vec![wrapper.to_bytes(), new_wrapper.to_bytes()],
         };
         match shell.process_proposal(request) {
-            Ok(_) => panic!("Test failed"),
-            Err(TestError::RejectProposal(response)) => {
-                assert_eq!(response[0].result.code, u32::from(ErrorCodes::Ok));
-                assert_eq!(
-                    response[1].result.code,
-                    u32::from(ErrorCodes::ReplayTx)
-                );
-                assert_eq!(
-                    response[1].result.info,
-                    format!(
-                        "Transaction replay attempt: Inner transaction hash \
-                         {} already in storage",
-                        inner_unsigned_hash
-                    )
-                );
-            }
+            Ok(received) => assert_eq!(received.len(), 2),
+            Err(_) => panic!("Test failed"),
         }
     }
 
