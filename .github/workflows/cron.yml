@@ -57,6 +57,7 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: ${{ matrix.make.name }}
         working-directory: ./.github/workflows/scripts

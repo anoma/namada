@@ -63,6 +63,7 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
@@ -130,6 +131,7 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
