@@ -38,12 +38,11 @@
 //!     - `last`: the hashes included in the last block
 
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
 
-use ark_serialize::Write;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;

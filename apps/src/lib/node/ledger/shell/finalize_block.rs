@@ -349,16 +349,6 @@ where
                                 None,
                             )
                         }
-                        ref protocol_tx_type => {
-                            tracing::error!(
-                                ?protocol_tx_type,
-                                "Internal logic error: FinalizeBlock received \
-                                 an unsupported TxType::Protocol transaction: \
-                                 {:?}",
-                                protocol_tx
-                            );
-                            continue;
-                        }
                     },
                 };
 
@@ -1100,8 +1090,6 @@ mod test_finalize_block {
                 .unwrap();
         shell.enqueue_tx(outer_tx.clone(), gas_limit);
         outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        outer_tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
-                .expect("Test failed");
         ProcessedTx {
             tx: outer_tx.to_bytes().into(),
             result: TxResult {
@@ -1686,8 +1674,7 @@ mod test_finalize_block {
                 transfers: vec![transfer],
                 relayer: bertha,
             };
-            let (protocol_key, _, _) =
-                crate::wallet::defaults::validator_keys();
+            let (protocol_key, _) = crate::wallet::defaults::validator_keys();
             let validator_addr = crate::wallet::defaults::validator_address();
             let ext = {
                 let ext = ethereum_events::Vext {

@@ -23,7 +23,6 @@ use namada::types::transaction::governance::{
 use namada::types::transaction::pos::{
     Bond, CommissionChange, Redelegation, Withdraw,
 };
-use namada::types::transaction::EllipticCurve;
 use namada_apps::bench_utils::{
     generate_ibc_transfer_tx, generate_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -34,8 +33,6 @@ use namada_apps::bench_utils::{
     VP_VALIDATOR_WASM,
 };
 use namada_apps::wallet::defaults;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 use sha2::Digest;
 
 // TODO: need to benchmark tx_bridge_pool.wasm
@@ -588,12 +585,6 @@ fn init_validator(c: &mut Criterion) {
             .unwrap()
             .to_public();
 
-    let dkg_key = ferveo_common::Keypair::<EllipticCurve>::new(
-        &mut StdRng::from_entropy(),
-    )
-    .public()
-    .into();
-
     let shell = BenchShell::default();
     let validator_vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_VALIDATOR_WASM))
@@ -613,7 +604,6 @@ fn init_validator(c: &mut Criterion) {
         eth_cold_key,
         eth_hot_key,
         protocol_key,
-        dkg_key,
         commission_rate: namada::types::dec::Dec::default(),
         max_commission_rate_change: namada::types::dec::Dec::default(),
         validator_vp_code_hash: extra_hash,

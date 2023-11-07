@@ -17,7 +17,6 @@ mod dev {
     use namada::types::address::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel, Address,
     };
-    use namada::types::key::dkg_session_keys::DkgKeypair;
     use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
 
@@ -26,8 +25,7 @@ mod dev {
     ///
     /// If that wallet is regenerated, these values must be changed to fix unit
     /// tests.
-    pub fn validator_keys() -> (common::SecretKey, common::SecretKey, DkgKeypair)
-    {
+    pub fn validator_keys() -> (common::SecretKey, common::SecretKey) {
         // ed25519 bytes
         let bytes: [u8; 33] = [
             0, 217, 87, 83, 250, 179, 159, 135, 229, 194, 14, 202, 177, 38,
@@ -40,18 +38,10 @@ mod dev {
             117, 231, 121, 218, 231, 14, 54, 117, 19, 90, 120, 141, 231, 199,
             7, 110, 254, 191,
         ];
-        // DkgKeypair
-        let dkg_bytes = [
-            32, 0, 0, 0, 208, 36, 153, 32, 179, 193, 163, 222, 29, 238, 154,
-            53, 181, 71, 213, 162, 59, 130, 225, 93, 57, 20, 161, 254, 52, 1,
-            172, 184, 112, 189, 160, 102,
-        ];
-
         (
             BorshDeserialize::deserialize(&mut bytes.as_ref()).unwrap(),
             BorshDeserialize::deserialize(&mut eth_bridge_key_bytes.as_ref())
                 .unwrap(),
-            BorshDeserialize::deserialize(&mut dkg_bytes.as_ref()).unwrap(),
         )
     }
 

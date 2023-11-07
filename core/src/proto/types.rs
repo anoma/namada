@@ -3,14 +3,8 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
-#[cfg(feature = "ferveo-tpke")]
-use std::io::Read;
 use std::marker::PhantomData;
 
-#[cfg(feature = "ferveo-tpke")]
-use ark_ec::AffineCurve;
-#[cfg(feature = "ferveo-tpke")]
-use ark_ec::PairingEngine;
 use borsh::schema::{add_definition, Declaration, Definition};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -37,16 +31,7 @@ use crate::types::key::{self, *};
 use crate::types::storage::Epoch;
 use crate::types::time::DateTimeUtc;
 use crate::types::token::MaspDenom;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::token::Transfer;
-#[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::protocol::ProtocolTx;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::EllipticCurve;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::EncryptionKey;
-#[cfg(feature = "ferveo-tpke")]
-use crate::types::transaction::WrapperTxErr;
 use crate::types::transaction::{
     hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx,
 };
@@ -59,10 +44,6 @@ pub enum Error {
     TxDeserializingError(std::io::Error),
     #[error("Error deserializing transaction")]
     OfflineTxDeserializationError,
-    #[error("Error decoding an DkgGossipMessage from bytes: {0}")]
-    DkgDecodingError(prost::DecodeError),
-    #[error("Dkg is empty")]
-    NoDkgError,
     #[error("Timestamp is empty")]
     NoTimestampError,
     #[error("Timestamp is invalid: {0}")]
@@ -679,165 +660,26 @@ impl CompressedSignature {
 }
 
 /// Represents a section obtained by encrypting another section
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ferveo-tpke", serde(from = "SerializedCiphertext"))]
-#[cfg_attr(feature = "ferveo-tpke", serde(into = "SerializedCiphertext"))]
-#[cfg_attr(
-    not(feature = "ferveo-tpke"),
-    derive(BorshSerialize, BorshDeserialize, BorshSchema)
+#[derive(
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
 )]
 pub struct Ciphertext {
-    /// The ciphertext corresponding to the original section serialization
-    #[cfg(feature = "ferveo-tpke")]
-    pub ciphertext: tpke::Ciphertext<EllipticCurve>,
     /// Ciphertext representation when ferveo not available
-    #[cfg(not(feature = "ferveo-tpke"))]
     pub opaque: Vec<u8>,
 }
 
 impl Ciphertext {
-    /// Make a ciphertext section based on the given sections. Note that this
-    /// encryption is not idempotent
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn new(sections: Vec<Section>, pubkey: &EncryptionKey) -> Self {
-        let mut rng = rand::thread_rng();
-        let bytes = sections.serialize_to_vec();
-        Self {
-            ciphertext: tpke::encrypt(&bytes, pubkey.0, &mut rng),
-        }
-    }
-
-    /// Decrypt this ciphertext back to the original plaintext sections.
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn decrypt(
-        &self,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine,
-    ) -> std::io::Result<Vec<Section>> {
-        let bytes = tpke::decrypt(&self.ciphertext, privkey);
-        Vec::<Section>::try_from_slice(&bytes)
-    }
-
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
         hasher
-    }
-}
-
-#[cfg(feature = "ferveo-tpke")]
-impl borsh::ser::BorshSerialize for Ciphertext {
-    fn serialize<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        use ark_serialize::CanonicalSerialize;
-        let tpke::Ciphertext {
-            nonce,
-            ciphertext,
-            auth_tag,
-        } = &self.ciphertext;
-        // Serialize the nonce into bytes
-        let mut nonce_buffer = Vec::<u8>::new();
-        nonce.serialize(&mut nonce_buffer).map_err(|err| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-        })?;
-        // serialize the auth_tag to bytes
-        let mut tag_buffer = Vec::<u8>::new();
-        auth_tag.serialize(&mut tag_buffer).map_err(|err| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, err)
-        })?;
-        let mut payload = Vec::new();
-        // serialize the three byte arrays
-        BorshSerialize::serialize(
-            &(nonce_buffer, ciphertext, tag_buffer),
-            &mut payload,
-        )?;
-        // now serialize the ciphertext payload with length
-        BorshSerialize::serialize(&payload, writer)
-    }
-}
-
-#[cfg(feature = "ferveo-tpke")]
-impl borsh::BorshDeserialize for Ciphertext {
-    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
-        {
-            type VecTuple = (u32, Vec<u8>, Vec<u8>, Vec<u8>);
-            let (_length, nonce, ciphertext, auth_tag): VecTuple =
-                BorshDeserialize::deserialize_reader(reader)?;
-            Ok(Self {
-                ciphertext: tpke::Ciphertext {
-                    nonce: ark_serialize::CanonicalDeserialize::deserialize(
-                        &*nonce,
-                    )
-                    .map_err(|err| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            err,
-                        )
-                    })?,
-                    ciphertext,
-                    auth_tag: ark_serialize::CanonicalDeserialize::deserialize(
-                        &*auth_tag,
-                    )
-                    .map_err(|err| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            err,
-                        )
-                    })?,
-                },
-            })
-        }
-    }
-}
-
-#[cfg(feature = "ferveo-tpke")]
-impl borsh::BorshSchema for Ciphertext {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        // Encoded as `(Vec<u8>, Vec<u8>, Vec<u8>)`
-        let elements = "u8".into();
-        let definition = borsh::schema::Definition::Sequence { elements };
-        definitions.insert("Vec<u8>".into(), definition);
-        let elements =
-            vec!["Vec<u8>".into(), "Vec<u8>".into(), "Vec<u8>".into()];
-        let definition = borsh::schema::Definition::Tuple { elements };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "Ciphertext".into()
-    }
-}
-
-/// A helper struct for serializing EncryptedTx structs
-/// as an opaque blob
-#[cfg(feature = "ferveo-tpke")]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-struct SerializedCiphertext {
-    payload: Vec<u8>,
-}
-
-#[cfg(feature = "ferveo-tpke")]
-impl From<Ciphertext> for SerializedCiphertext {
-    fn from(tx: Ciphertext) -> Self {
-        SerializedCiphertext {
-            payload: tx.serialize_to_vec(),
-        }
-    }
-}
-
-#[cfg(feature = "ferveo-tpke")]
-impl From<SerializedCiphertext> for Ciphertext {
-    fn from(ser: SerializedCiphertext) -> Self {
-        BorshDeserialize::deserialize(&mut ser.payload.as_ref())
-            .expect("Unable to deserialize encrypted transactions")
     }
 }
 
@@ -1171,7 +1013,6 @@ impl Header {
         }
     }
 
-    #[cfg(feature = "ferveo-tpke")]
     /// Get the protocol header if it is present
     pub fn protocol(&self) -> Option<ProtocolTx> {
         if let TxType::Protocol(protocol) = &self.tx_type {
@@ -1491,22 +1332,6 @@ impl Tx {
         .map_err(|_| Error::InvalidWrapperSignature)
     }
 
-    /// Validate any and all ciphertexts stored in this transaction
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn validate_ciphertext(&self) -> bool {
-        let mut valid = true;
-        for section in &self.sections {
-            if let Section::Ciphertext(ct) = section {
-                valid = valid && ct.ciphertext.check(
-                    &<EllipticCurve as PairingEngine>::G1Prepared::from(
-                        -<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator(),
-                    )
-                );
-            }
-        }
-        valid
-    }
-
     pub fn compute_section_signature(
         &self,
         secret_keys: &[common::SecretKey],
@@ -1545,66 +1370,6 @@ impl Tx {
         signatures
     }
 
-    /// Decrypt any and all ciphertexts stored in this transaction use the
-    /// given decryption key
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn decrypt(
-        &mut self,
-        privkey: <EllipticCurve as PairingEngine>::G2Affine,
-    ) -> std::result::Result<(), WrapperTxErr> {
-        // Iterate backwrds to sidestep the effects of deletion on indexing
-        for i in (0..self.sections.len()).rev() {
-            if let Section::Ciphertext(ct) = &self.sections[i] {
-                // Add all the deecrypted sections
-                self.sections.extend(
-                    ct.decrypt(privkey).map_err(|_| WrapperTxErr::InvalidTx)?,
-                );
-                // Remove the original ciphertext
-                self.sections.remove(i);
-            }
-        }
-        self.data().ok_or(WrapperTxErr::DecryptedHash)?;
-        self.get_section(self.code_sechash())
-            .ok_or(WrapperTxErr::DecryptedHash)?;
-        Ok(())
-    }
-
-    /// Encrypt all sections in this transaction other than the header and
-    /// signatures over it
-    #[cfg(feature = "ferveo-tpke")]
-    pub fn encrypt(&mut self, pubkey: &EncryptionKey) -> &mut Self {
-        let header_hash = self.header_hash();
-        let mut plaintexts = vec![];
-        // Iterate backwrds to sidestep the effects of deletion on indexing
-        for i in (0..self.sections.len()).rev() {
-            match &self.sections[i] {
-                Section::Signature(sig)
-                    if sig.targets.contains(&header_hash) => {}
-                masp_section @ Section::MaspTx(_) => {
-                    // Do NOT encrypt the fee unshielding transaction
-                    if let Some(unshield_section_hash) = self
-                        .header()
-                        .wrapper()
-                        .expect("Tried to encrypt a non-wrapper tx")
-                        .unshield_section_hash
-                    {
-                        if unshield_section_hash == masp_section.get_hash() {
-                            continue;
-                        }
-                    }
-
-                    plaintexts.push(self.sections.remove(i))
-                }
-                // Add eligible section to the list of sections to encrypt
-                _ => plaintexts.push(self.sections.remove(i)),
-            }
-        }
-        // Encrypt all eligible sections in one go
-        self.sections
-            .push(Section::Ciphertext(Ciphertext::new(plaintexts, pubkey)));
-        self
-    }
-
     /// Determines the type of the input Tx
     ///
     /// If it is a raw Tx, signed or not, the Tx is
@@ -1634,7 +1399,6 @@ impl Tx {
                     ))
                 }),
             // verify signature and extract signed data
-            #[cfg(feature = "ferveo-tpke")]
             TxType::Protocol(protocol) => self
                 .verify_signature(&protocol.pk, &self.sechashes())
                 .map(Option::Some)
@@ -1843,238 +1607,7 @@ impl Tx {
 }
 
 impl From<Tx> for ResponseDeliverTx {
-    #[cfg(not(feature = "ferveo-tpke"))]
     fn from(_tx: Tx) -> ResponseDeliverTx {
         Default::default()
-    }
-
-    /// Annotate the Tx with meta-data based on its contents
-    #[cfg(feature = "ferveo-tpke")]
-    fn from(tx: Tx) -> ResponseDeliverTx {
-        use crate::tendermint_proto::v0_37::abci::{Event, EventAttribute};
-
-        // If data cannot be extracteed, then attach no events
-        let tx_data = if let Some(data) = tx.data() {
-            data
-        } else {
-            return Default::default();
-        };
-        // If the data is not a Transfer, then attach no events
-        let transfer = if let Ok(transfer) = Transfer::try_from_slice(&tx_data)
-        {
-            transfer
-        } else {
-            return Default::default();
-        };
-        // Otherwise attach all Transfer events
-        let events = vec![Event {
-            r#type: "transfer".to_string(),
-            attributes: vec![
-                EventAttribute {
-                    key: "source".to_string(),
-                    value: transfer.source.encode(),
-                    index: true,
-                },
-                EventAttribute {
-                    key: "target".to_string(),
-                    value: transfer.target.encode(),
-                    index: true,
-                },
-                EventAttribute {
-                    key: "token".to_string(),
-                    value: transfer.token.encode(),
-                    index: true,
-                },
-                EventAttribute {
-                    key: "amount".to_string(),
-                    value: transfer.amount.to_string(),
-                    index: true,
-                },
-            ],
-        }];
-        ResponseDeliverTx {
-            events,
-            info: "Transfer tx".to_string(),
-            ..Default::default()
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq)]
-pub struct DkgGossipMessage {
-    pub dkg: Dkg,
-}
-
-impl TryFrom<&[u8]> for DkgGossipMessage {
-    type Error = Error;
-
-    fn try_from(dkg_bytes: &[u8]) -> Result<Self> {
-        let message = types::DkgGossipMessage::decode(dkg_bytes)
-            .map_err(Error::DkgDecodingError)?;
-        match &message.dkg_message {
-            Some(types::dkg_gossip_message::DkgMessage::Dkg(dkg)) => {
-                Ok(DkgGossipMessage {
-                    dkg: dkg.clone().into(),
-                })
-            }
-            None => Err(Error::NoDkgError),
-        }
-    }
-}
-
-impl From<DkgGossipMessage> for types::DkgGossipMessage {
-    fn from(message: DkgGossipMessage) -> Self {
-        types::DkgGossipMessage {
-            dkg_message: Some(types::dkg_gossip_message::DkgMessage::Dkg(
-                message.dkg.into(),
-            )),
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl DkgGossipMessage {
-    pub fn new(dkg: Dkg) -> Self {
-        DkgGossipMessage { dkg }
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        let message: types::DkgGossipMessage = self.clone().into();
-        message
-            .encode(&mut bytes)
-            .expect("encoding a DKG gossip message failed");
-        bytes
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq)]
-pub struct Dkg {
-    pub data: String,
-}
-
-impl From<types::Dkg> for Dkg {
-    fn from(dkg: types::Dkg) -> Self {
-        Dkg { data: dkg.data }
-    }
-}
-
-impl From<Dkg> for types::Dkg {
-    fn from(dkg: Dkg) -> Self {
-        types::Dkg { data: dkg.data }
-    }
-}
-
-#[allow(dead_code)]
-impl Dkg {
-    pub fn new(data: String) -> Self {
-        Dkg { data }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dkg_gossip_message() {
-        let data = "arbitrary string".to_owned();
-        let dkg = Dkg::new(data);
-        let message = DkgGossipMessage::new(dkg);
-
-        let bytes = message.to_bytes();
-        let message_from_bytes = DkgGossipMessage::try_from(bytes.as_ref())
-            .expect("decoding failed");
-        assert_eq!(message_from_bytes, message);
-    }
-
-    #[test]
-    fn test_dkg() {
-        let data = "arbitrary string".to_owned();
-        let dkg = Dkg::new(data);
-
-        let types_dkg: types::Dkg = dkg.clone().into();
-        let dkg_from_types = Dkg::from(types_dkg);
-        assert_eq!(dkg_from_types, dkg);
-    }
-
-    /// Test that encryption and decryption are inverses.
-    #[cfg(feature = "ferveo-tpke")]
-    #[test]
-    fn test_encrypt_decrypt() {
-        // The trivial public - private keypair
-        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        // generate encrypted payload
-        let plaintext = vec![Section::Data(Data::new(
-            "Super secret stuff".as_bytes().to_vec(),
-        ))];
-        let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
-        // check that encryption doesn't do trivial things
-        assert_ne!(
-            encrypted.ciphertext.ciphertext,
-            plaintext.serialize_to_vec()
-        );
-        // decrypt the payload and check we got original data back
-        let decrypted = encrypted.decrypt(privkey);
-        assert_eq!(
-            decrypted.expect("Test failed").serialize_to_vec(),
-            plaintext.serialize_to_vec(),
-        );
-    }
-
-    /// Test that serializing and deserializing again via Borsh produces
-    /// original payload
-    #[cfg(feature = "ferveo-tpke")]
-    #[test]
-    fn test_encrypted_tx_round_trip_borsh() {
-        // The trivial public - private keypair
-        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        // generate encrypted payload
-        let plaintext = vec![Section::Data(Data::new(
-            "Super secret stuff".as_bytes().to_vec(),
-        ))];
-        let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
-        // serialize via Borsh
-        let borsh = encrypted.serialize_to_vec();
-        // deserialize again
-        let new_encrypted: Ciphertext =
-            BorshDeserialize::deserialize(&mut borsh.as_ref())
-                .expect("Test failed");
-        // check that decryption works as expected
-        let decrypted = new_encrypted.decrypt(privkey);
-        assert_eq!(
-            decrypted.expect("Test failed").serialize_to_vec(),
-            plaintext.serialize_to_vec(),
-        );
-    }
-
-    /// Test that serializing and deserializing again via Serde produces
-    /// original payload
-    #[cfg(feature = "ferveo-tpke")]
-    #[test]
-    fn test_encrypted_tx_round_trip_serde() {
-        // The trivial public - private keypair
-        let pubkey = EncryptionKey(<EllipticCurve as PairingEngine>::G1Affine::prime_subgroup_generator());
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-        // generate encrypted payload
-        let plaintext = vec![Section::Data(Data::new(
-            "Super secret stuff".as_bytes().to_vec(),
-        ))];
-        let encrypted = Ciphertext::new(plaintext.clone(), &pubkey);
-        // serialize via Serde
-        let js = serde_json::to_string(&encrypted).expect("Test failed");
-        // deserialize it again
-        let new_encrypted: Ciphertext =
-            serde_json::from_str(&js).expect("Test failed");
-        let decrypted = new_encrypted.decrypt(privkey);
-        // check that decryption works as expected
-        assert_eq!(
-            decrypted.expect("Test failed").serialize_to_vec(),
-            plaintext.serialize_to_vec(),
-        );
     }
 }

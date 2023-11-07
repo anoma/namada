@@ -9,7 +9,6 @@ use bip39::Seed;
 use itertools::Itertools;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::types::address::{Address, ImplicitAddress};
-use namada_core::types::key::dkg_session_keys::DkgKeypair;
 use namada_core::types::key::*;
 use namada_core::types::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
@@ -42,9 +41,6 @@ pub struct ValidatorKeys {
     pub protocol_keypair: common::SecretKey,
     /// Special hot keypair for signing Ethereum bridge txs
     pub eth_bridge_keypair: common::SecretKey,
-    /// Special session keypair needed by validators for participating
-    /// in the DKG protocol
-    pub dkg_keypair: Option<DkgKeypair>,
 }
 
 impl ValidatorKeys {

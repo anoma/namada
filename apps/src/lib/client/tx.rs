@@ -334,11 +334,6 @@ pub async fn submit_init_validator<'a>(
     )
     .unwrap();
     let protocol_key = validator_keys.get_protocol_keypair().ref_to();
-    let dkg_key = validator_keys
-        .dkg_keypair
-        .as_ref()
-        .expect("DKG sessions keys should have been created")
-        .public();
 
     let validator_vp_code_hash =
         query_wasm_code_hash(namada, validator_vp_code_path.to_str().unwrap())
@@ -387,7 +382,6 @@ pub async fn submit_init_validator<'a>(
         eth_hot_key: key::secp256k1::PublicKey::try_from_pk(&eth_hot_pk)
             .unwrap(),
         protocol_key,
-        dkg_key,
         commission_rate,
         max_commission_rate_change,
         validator_vp_code_hash: extra_section_hash,

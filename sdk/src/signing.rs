@@ -1027,7 +1027,6 @@ pub async fn to_ledger_vector<'a>(
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
             format!("Protocol key : {}", init_validator.protocol_key),
-            format!("DKG key : {}", init_validator.dkg_key),
             format!("Commission rate : {}", init_validator.commission_rate),
             format!(
                 "Maximum commission rate change : {}",
@@ -1048,7 +1047,6 @@ pub async fn to_ledger_vector<'a>(
             format!("Ethereum cold key : {}", init_validator.eth_cold_key),
             format!("Ethereum hot key : {}", init_validator.eth_hot_key),
             format!("Protocol key : {}", init_validator.protocol_key),
-            format!("DKG key : {}", init_validator.dkg_key),
             format!("Commission rate : {}", init_validator.commission_rate),
             format!(
                 "Maximum commission rate change : {}",

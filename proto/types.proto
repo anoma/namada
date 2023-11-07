@@ -7,9 +7,3 @@ package types;
 message Tx {
   bytes data = 1;
 }
-
-message Dkg { string data = 1; }
-
-message DkgGossipMessage {
-  oneof dkg_message { Dkg dkg = 1; }
-}

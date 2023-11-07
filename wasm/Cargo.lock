@@ -44,7 +44,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac1f845298e95f983ff1944b728ae08b8cebab80d684f0a832ed0fc74dfa27e2"
 dependencies = [
  "cfg-if 1.0.0",
- "cipher 0.4.4",
+ "cipher",
  "cpufeatures",
 ]
 
@@ -158,18 +158,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-ed-on-bls12-381"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43b7ada17db3854f5994e74e60b18e10e818594935ee7e1d329800c117b32970"
-dependencies = [
- "ark-bls12-381",
- "ark-ec",
- "ark-ff",
- "ark-std",
-]
-
-[[package]]
 name = "ark-ff"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,38 +198,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ark-poly"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b0f78f47537c2f15706db7e98fe64cc1711dbf9def81218194e17239e53e5aa"
-dependencies = [
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "derivative",
- "hashbrown 0.11.2",
-]
-
-[[package]]
 name = "ark-serialize"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d6c2b318ee6e10f8c2853e73a83adc0ccb88995aa978d8a3408d492ab2ee671"
 dependencies = [
- "ark-serialize-derive",
  "ark-std",
  "digest 0.9.0",
-]
-
-[[package]]
-name = "ark-serialize-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dd4e5f0bf8285d5ed538d27fab7411f3e297908fd93c62195de8bee3f199e82"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -455,15 +418,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blake2"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
-dependencies = [
- "digest 0.10.6",
-]
-
-[[package]]
 name = "blake2b_simd"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -553,35 +507,12 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15bf3650200d8bffa99015595e10f1fbd17de07abbc25bb067da79e769939bfa"
-dependencies = [
- "borsh-derive 0.9.3",
- "hashbrown 0.11.2",
-]
-
-[[package]]
-name = "borsh"
 version = "1.0.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41898277107b0d3f027593697912977397eba6ac39a55bdd2eb02c1d5d5013b5"
 dependencies = [
- "borsh-derive 1.0.0-alpha.4",
+ "borsh-derive",
  "cfg_aliases",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6441c552f230375d18e3cc377677914d2ca2b0d36e52129fe15450a2dce46775"
-dependencies = [
- "borsh-derive-internal",
- "borsh-schema-derive-internal",
- "proc-macro-crate 0.1.5",
- "proc-macro2",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -591,7 +522,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413cb435569fe499e89235f758304e0e7198016baa351d8f5827ea0f40526ce0"
 dependencies = [
  "once_cell",
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -599,33 +530,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-derive-internal"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5449c28a7b352f2d1e592a8a28bf139bc71afb0764a14f3c02500935d8c44065"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "borsh-ext"
 version = "1.0.0-alpha.4"
 source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.0.0-alpha.4#6bebf357002f96574ac37a28f547b6c88e91b799"
 dependencies = [
- "borsh 1.0.0-alpha.4",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdbd5696d8bfa21d53d9fe39a714a18538bad11492a42d066dbbc395fb1951c0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
+ "borsh",
 ]
 
 [[package]]
@@ -730,7 +639,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b52a9543ae338f279b96b0b9fed9c8093744685043739079ce85cd58f289a6"
 dependencies = [
- "cipher 0.4.4",
+ "cipher",
 ]
 
 [[package]]
@@ -762,23 +671,12 @@ checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
 
 [[package]]
 name = "chacha20"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c80e5460aa66fe3b91d40bcbdab953a597b60053e34d684ac6903f863b680a6"
-dependencies = [
- "cfg-if 1.0.0",
- "cipher 0.3.0",
- "cpufeatures",
-]
-
-[[package]]
-name = "chacha20"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
 dependencies = [
  "cfg-if 1.0.0",
- "cipher 0.4.4",
+ "cipher",
  "cpufeatures",
 ]
 
@@ -789,8 +687,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
 dependencies = [
  "aead",
- "chacha20 0.9.1",
- "cipher 0.4.4",
+ "chacha20",
+ "cipher",
  "poly1305",
  "zeroize",
 ]
@@ -805,15 +703,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "winapi",
-]
-
-[[package]]
-name = "cipher"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ee52072ec15386f770805afd189a01c8841be8696bed250fa2f13c4c0d6dfb7"
-dependencies = [
- "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -1202,20 +1091,7 @@ version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
 dependencies = [
- "cipher 0.4.4",
-]
-
-[[package]]
-name = "curve25519-dalek"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle 2.4.1",
- "zeroize",
+ "cipher",
 ]
 
 [[package]]
@@ -1414,18 +1290,8 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "serdect",
- "signature 2.1.0",
+ "signature",
  "spki",
-]
-
-[[package]]
-name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "serde",
- "signature 1.6.4",
 ]
 
 [[package]]
@@ -1435,7 +1301,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -1462,22 +1328,6 @@ dependencies = [
  "curve25519-dalek-ng",
  "hex",
  "rand_core 0.6.4",
- "sha2 0.9.9",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
-dependencies = [
- "curve25519-dalek",
- "ed25519 1.5.3",
- "merlin",
- "rand 0.7.3",
- "serde",
- "serde_bytes",
  "sha2 0.9.9",
  "zeroize",
 ]
@@ -1952,56 +1802,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferveo"
-version = "0.1.1"
-source = "git+https://github.com/anoma/ferveo?rev=e5abd0acc938da90140351a65a26472eb495ce4d#e5abd0acc938da90140351a65a26472eb495ce4d"
-dependencies = [
- "anyhow",
- "ark-bls12-381",
- "ark-ec",
- "ark-ed-on-bls12-381",
- "ark-ff",
- "ark-poly",
- "ark-serialize",
- "ark-std",
- "bincode",
- "blake2",
- "blake2b_simd",
- "borsh 0.9.3",
- "digest 0.10.6",
- "ed25519-dalek",
- "either",
- "ferveo-common",
- "group-threshold-cryptography",
- "hex",
- "itertools 0.10.5",
- "measure_time",
- "miracl_core",
- "num 0.4.0",
- "rand 0.7.3",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
- "serde_json",
- "subproductdomain",
- "subtle 2.4.1",
- "zeroize",
-]
-
-[[package]]
-name = "ferveo-common"
-version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo?rev=e5abd0acc938da90140351a65a26472eb495ce4d#e5abd0acc938da90140351a65a26472eb495ce4d"
-dependencies = [
- "anyhow",
- "ark-ec",
- "ark-serialize",
- "ark-std",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
 name = "ff"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2062,7 +1862,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26c4b37de5ae15812a764c958297cfc50f5c010438f60c6ce75d11b802abd404"
 dependencies = [
  "cbc",
- "cipher 0.4.4",
+ "cipher",
  "libm",
  "num-bigint 0.4.3",
  "num-integer",
@@ -2278,30 +2078,6 @@ dependencies = [
  "memuse",
  "rand_core 0.6.4",
  "subtle 2.4.1",
-]
-
-[[package]]
-name = "group-threshold-cryptography"
-version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo?rev=e5abd0acc938da90140351a65a26472eb495ce4d#e5abd0acc938da90140351a65a26472eb495ce4d"
-dependencies = [
- "anyhow",
- "ark-bls12-381",
- "ark-ec",
- "ark-ff",
- "ark-poly",
- "ark-serialize",
- "ark-std",
- "blake2b_simd",
- "chacha20 0.8.2",
- "hex",
- "itertools 0.10.5",
- "miracl_core",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rayon",
- "subproductdomain",
- "thiserror",
 ]
 
 [[package]]
@@ -2711,7 +2487,7 @@ name = "index-set"
 version = "0.8.0"
 source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.0#0c218cc300c1bb7a1acf34f21b6e9d489df5fda8"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "serde",
 ]
 
@@ -2762,9 +2538,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
- "js-sys",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
@@ -2864,7 +2637,7 @@ dependencies = [
  "once_cell",
  "serdect",
  "sha2 0.10.6",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -2983,10 +2756,10 @@ name = "masp_note_encryption"
 version = "0.2.0"
 source = "git+https://github.com/anoma/masp?rev=77e009626f3f52fe83c81ec6ee38fc2547d38da3#77e009626f3f52fe83c81ec6ee38fc2547d38da3"
 dependencies = [
- "borsh 1.0.0-alpha.4",
- "chacha20 0.9.1",
+ "borsh",
+ "chacha20",
  "chacha20poly1305",
- "cipher 0.4.4",
+ "cipher",
  "rand_core 0.6.4",
  "subtle 2.4.1",
 ]
@@ -3002,7 +2775,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "bls12_381",
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "byteorder",
  "ff",
  "fpe",
@@ -3059,16 +2832,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
-name = "measure_time"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56220900f1a0923789ecd6bf25fbae8af3b2f1ff3e9e297fc9b6b8674dd4d852"
-dependencies = [
- "instant",
- "log",
-]
-
-[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3120,18 +2883,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93c0d11ac30a033511ae414355d80f70d9f29a44a49140face477117a1ee90db"
 
 [[package]]
-name = "merlin"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e261cf0f8b3c42ded9f7d2bb59dea03aa52bc8a1cbc7482f9fc3fd1229d3b42"
-dependencies = [
- "byteorder",
- "keccak",
- "rand_core 0.5.1",
- "zeroize",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3172,12 +2923,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "miracl_core"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94c7128ba23c81f6471141b90f17654f89ef44a56e14b8a4dd0fddfccd655277"
-
-[[package]]
 name = "more-asserts"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3195,7 +2940,7 @@ version = "0.25.0"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "circular-queue",
  "clru",
@@ -3255,10 +3000,9 @@ name = "namada_core"
 version = "0.25.0"
 dependencies = [
  "ark-bls12-381",
- "ark-ec",
  "ark-serialize",
  "bech32 0.8.1",
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "chrono",
  "data-encoding",
@@ -3267,9 +3011,6 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
- "ferveo",
- "ferveo-common",
- "group-threshold-cryptography",
  "ibc",
  "ibc-derive",
  "ibc-proto",
@@ -3309,7 +3050,7 @@ dependencies = [
 name = "namada_ethereum_bridge"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "ethers",
  "eyre",
@@ -3339,7 +3080,7 @@ dependencies = [
 name = "namada_proof_of_stake"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "data-encoding",
  "derivative",
  "namada_core",
@@ -3355,7 +3096,7 @@ version = "0.25.0"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "circular-queue",
  "data-encoding",
@@ -3397,7 +3138,7 @@ dependencies = [
 name = "namada_test_utils"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "namada_core",
  "strum",
 ]
@@ -3438,7 +3179,7 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "masp_primitives",
  "namada_core",
@@ -3453,7 +3194,7 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "masp_primitives",
  "namada_core",
 ]
@@ -3462,7 +3203,7 @@ dependencies = [
 name = "namada_vp_prelude"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "borsh-ext",
  "namada_core",
  "namada_macros",
@@ -3476,7 +3217,7 @@ dependencies = [
 name = "namada_wasm"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "getrandom 0.2.10",
  "masp_primitives",
  "namada",
@@ -3672,7 +3413,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -3795,7 +3536,7 @@ version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86b26a931f824dd4eca30b3e43bb4f31cd5f0d3a403c5f5ff27106b805bfde7b"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -4063,15 +3804,6 @@ dependencies = [
  "impl-serde",
  "scale-info",
  "uint",
-]
-
-[[package]]
-name = "proc-macro-crate"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d6ea3c4595b96363c13943497db34af4460fb474a95c43f4446ad341b8c9785"
-dependencies = [
- "toml 0.5.11",
 ]
 
 [[package]]
@@ -4768,7 +4500,7 @@ version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
 dependencies = [
- "cipher 0.4.4",
+ "cipher",
 ]
 
 [[package]]
@@ -4798,7 +4530,7 @@ version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19df9bd9ace6cc2fe19387c96ce677e823e07d017ceed253e7bb3d1d1bd9c73b"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -5091,12 +4823,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
@@ -5156,7 +4882,7 @@ name = "sparse-merkle-tree"
 version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=aed81070ce2c83a41e1c6bada757347f33ef8eb6#aed81070ce2c83a41e1c6bada757347f33ef8eb6"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "cfg-if 1.0.0",
  "ics23",
  "sha2 0.9.9",
@@ -5222,19 +4948,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "subproductdomain"
-version = "0.1.0"
-source = "git+https://github.com/anoma/ferveo?rev=e5abd0acc938da90140351a65a26472eb495ce4d#e5abd0acc938da90140351a65a26472eb495ce4d"
-dependencies = [
- "anyhow",
- "ark-ec",
- "ark-ff",
- "ark-poly",
- "ark-serialize",
- "ark-std",
 ]
 
 [[package]]
@@ -5352,7 +5065,7 @@ checksum = "bc2294fa667c8b548ee27a9ba59115472d0a09c2ba255771092a7f1dcf03a789"
 dependencies = [
  "bytes",
  "digest 0.10.6",
- "ed25519 2.2.3",
+ "ed25519",
  "ed25519-consensus 2.1.0",
  "flex-error",
  "futures",
@@ -5365,7 +5078,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.10.6",
- "signature 2.1.0",
+ "signature",
  "subtle 2.4.1",
  "subtle-encoding",
  "tendermint-proto",
@@ -5797,7 +5510,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 name = "tx_template"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "getrandom 0.2.10",
  "namada_tests",
  "namada_tx_prelude",
@@ -5946,7 +5659,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_template"
 version = "0.25.0"
 dependencies = [
- "borsh 1.0.0-alpha.4",
+ "borsh",
  "getrandom 0.2.10",
  "namada_tests",
  "namada_vp_prelude",

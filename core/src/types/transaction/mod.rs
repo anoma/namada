@@ -5,8 +5,6 @@ pub mod account;
 /// txs that contain decrypted payloads or assertions of
 /// non-decryptability
 pub mod decrypted;
-/// tools for encrypted data
-pub mod encrypted;
 /// txs to manage governance
 pub mod governance;
 /// txs to manage pgf
@@ -24,9 +22,6 @@ use std::fmt;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 pub use decrypted::*;
-#[cfg(feature = "ferveo-tpke")]
-pub use encrypted::EncryptionKey;
-pub use protocol::UpdateDkgSessionKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -36,7 +31,6 @@ use crate::types::address::Address;
 use crate::types::hash::Hash;
 use crate::types::ibc::IbcEvent;
 use crate::types::storage;
-#[cfg(feature = "ferveo-tpke")]
 use crate::types::transaction::protocol::ProtocolTx;
 
 /// Get the hash of a transaction
@@ -154,7 +148,6 @@ pub enum TxType {
     /// An attempted decryption of a wrapper tx
     Decrypted(DecryptedTx),
     /// Txs issued by validators as part of internal protocols
-    #[cfg(feature = "ferveo-tpke")]
     Protocol(Box<ProtocolTx>),
 }
 
@@ -276,14 +269,6 @@ mod test_process_tx {
         )));
 
         tx.validate_tx().expect("Test failed");
-        match tx.header().tx_type {
-            TxType::Wrapper(_) => {
-                tx.decrypt(<EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator())
-                    .expect("Test failed");
-                // assert_eq!(tx, decrypted);
-            }
-            _ => panic!("Test failed: Expected Wrapper Tx"),
-        }
     }
 
     /// Test that process_tx correctly returns an error on a wrapper tx

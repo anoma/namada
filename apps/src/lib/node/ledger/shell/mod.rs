@@ -60,10 +60,7 @@ use namada::types::key::*;
 use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::protocol::EthereumTxData;
-use namada::types::transaction::{
-    hash_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
-    EllipticCurve, PairingEngine, TxType, WrapperTx,
-};
+use namada::types::transaction::{DecryptedTx, TxType, WrapperTx};
 use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
@@ -501,7 +498,7 @@ where
                 }
                 #[cfg(test)]
                 {
-                    let (protocol_keypair, eth_bridge_keypair, dkg_keypair) =
+                    let (protocol_keypair, eth_bridge_keypair) =
                         crate::wallet::defaults::validator_keys();
                     ShellMode::Validator {
                         data: ValidatorData {
@@ -510,7 +507,6 @@ where
                             keys: ValidatorKeys {
                                 protocol_keypair,
                                 eth_bridge_keypair,
-                                dkg_keypair: Some(dkg_keypair),
                             },
                         },
                         broadcast_sender,
@@ -2341,7 +2337,7 @@ mod shell_tests {
 
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {
@@ -2374,7 +2370,7 @@ mod shell_tests {
 
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let validator_addr = wallet::defaults::validator_address();
 
         let ethereum_event = EthereumEvent::TransfersToNamada {

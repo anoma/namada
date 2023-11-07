@@ -45,7 +45,6 @@ namada_apps = { path = "../apps", features = ["benches"] }
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
-ferveo-common.workspace = true
 rand_core.workspace = true
 rand.workspace = true
 sha2.workspace = true

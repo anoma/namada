@@ -118,17 +118,6 @@ impl Shell {
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
-            #[cfg(feature = "abcipp")]
-            Request::ExtendVote(_req) => {
-                Ok(Response::ExtendVote(self.extend_vote(_req)))
-            }
-            #[cfg(feature = "abcipp")]
-            Request::VerifyVoteExtension(_req) => {
-                tracing::debug!("Request VerifyVoteExtension");
-                Ok(Response::VerifyVoteExtension(
-                    self.verify_vote_extension(_req),
-                ))
-            }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
                 self.load_proposals();

@@ -16,7 +16,6 @@ use super::{
 use crate::ledger::storage::types::{self, KVBytes, PrefixIterator};
 use crate::types::ethereum_structs;
 use crate::types::hash::Hash;
-#[cfg(feature = "ferveo-tpke")]
 use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
@@ -93,7 +92,6 @@ impl DB for MockDB {
                 }
                 None => return Ok(None),
             };
-        #[cfg(feature = "ferveo-tpke")]
         let tx_queue: TxQueue = match self.0.borrow().get("tx_queue") {
             Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
@@ -201,7 +199,6 @@ impl DB for MockDB {
                 update_epoch_blocks_delay,
                 address_gen,
                 results,
-                #[cfg(feature = "ferveo-tpke")]
                 tx_queue,
                 ethereum_height,
                 eth_events_queue,
@@ -234,7 +231,6 @@ impl DB for MockDB {
             results,
             ethereum_height,
             eth_events_queue,
-            #[cfg(feature = "ferveo-tpke")]
             tx_queue,
         }: BlockStateWrite = state;
 
@@ -258,12 +254,9 @@ impl DB for MockDB {
             "eth_events_queue".into(),
             types::encode(&eth_events_queue),
         );
-        #[cfg(feature = "ferveo-tpke")]
-        {
-            self.0
-                .borrow_mut()
-                .insert("tx_queue".into(), types::encode(&tx_queue));
-        }
+        self.0
+            .borrow_mut()
+            .insert("tx_queue".into(), types::encode(&tx_queue));
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree

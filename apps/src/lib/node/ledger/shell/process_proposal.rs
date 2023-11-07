@@ -319,9 +319,6 @@ where
             Err(tx_result) => return tx_result,
         };
 
-        // TODO: This should not be hardcoded
-        let privkey = <EllipticCurve as PairingEngine>::G2Affine::prime_subgroup_generator();
-
         if let Err(err) = tx.validate_tx() {
             return TxResult {
                 code: ErrorCodes::InvalidSig.into(),
@@ -512,10 +509,6 @@ where
 
                         self.validate_vexts_in_proposal(valid_extensions)
                     }
-                    _ => TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
-                        info: "Unsupported protocol transaction type".into(),
-                    },
                 }
             }
             TxType::Decrypted(tx_header) => {
@@ -531,22 +524,22 @@ where
                                        determined in the previous block"
                                     .into(),
                             }
-                        } else if verify_decrypted_correctly(
-                            &tx_header,
-                            wrapper.tx.clone(),
-                            privkey,
+                        } else if matches!(
+                            tx_header,
+                            DecryptedTx::Undecryptable
                         ) {
-                            TxResult {
-                                code: ErrorCodes::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       tranasction"
-                                    .into(),
-                            }
-                        } else {
+                            // DKG is disabled, txs are not actually encrypted
                             TxResult {
                                 code: ErrorCodes::InvalidTx.into(),
                                 info: "The encrypted payload of tx was \
                                        incorrectly marked as un-decryptable"
+                                    .into(),
+                            }
+                        } else {
+                            TxResult {
+                                code: ErrorCodes::Ok.into(),
+                                info: "Process Proposal accepted this \
+                                       tranasction"
                                     .into(),
                             }
                         }
@@ -632,45 +625,34 @@ where
                     }
                 }
 
-                // validate the ciphertext via Ferveo
-                if !tx.validate_ciphertext() {
-                    TxResult {
-                        code: ErrorCodes::InvalidTx.into(),
-                        info: format!(
-                            "The ciphertext of the wrapped tx {} is invalid",
-                            hash_tx(tx_bytes)
-                        ),
-                    }
-                } else {
-                    // Replay protection checks
-                    if let Err(e) =
-                        self.replay_protection_checks(&tx, temp_wl_storage)
-                    {
-                        return TxResult {
-                            code: ErrorCodes::ReplayTx.into(),
-                            info: e.to_string(),
-                        };
-                    }
+                // Replay protection checks
+                if let Err(e) =
+                    self.replay_protection_checks(&tx, temp_wl_storage)
+                {
+                    return TxResult {
+                        code: ErrorCodes::ReplayTx.into(),
+                        info: e.to_string(),
+                    };
+                }
 
-                    // Check that the fee payer has sufficient balance.
-                    match self.wrapper_fee_check(
-                        &wrapper,
-                        get_fee_unshielding_transaction(&tx, &wrapper),
-                        temp_wl_storage,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                        Some(block_proposer),
-                    ) {
-                        Ok(()) => TxResult {
-                            code: ErrorCodes::Ok.into(),
-                            info: "Process proposal accepted this transaction"
-                                .into(),
-                        },
-                        Err(e) => TxResult {
-                            code: ErrorCodes::FeeError.into(),
-                            info: e.to_string(),
-                        },
-                    }
+                // Check that the fee payer has sufficient balance.
+                match self.wrapper_fee_check(
+                    &wrapper,
+                    get_fee_unshielding_transaction(&tx, &wrapper),
+                    temp_wl_storage,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                    Some(block_proposer),
+                ) {
+                    Ok(()) => TxResult {
+                        code: ErrorCodes::Ok.into(),
+                        info: "Process proposal accepted this transaction"
+                            .into(),
+                    },
+                    Err(e) => TxResult {
+                        code: ErrorCodes::FeeError.into(),
+                        info: e.to_string(),
+                    },
                 }
             }
         }
@@ -703,7 +685,6 @@ mod test_process_proposal {
         Code, Data, Section, SignableEthMessage, Signature, Signed,
     };
     use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::hash::Hash;
     use namada::types::key::*;
     use namada::types::storage::Epoch;
     use namada::types::time::DateTimeUtc;
@@ -853,7 +834,7 @@ mod test_process_proposal {
     fn test_drop_vext_with_invalid_sigs() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(2);
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
@@ -884,7 +865,7 @@ mod test_process_proposal {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
+        let (protocol_key, _) = wallet::defaults::validator_keys();
         let addr = wallet::defaults::validator_address();
         let event = EthereumEvent::TransfersToNamada {
             nonce: 0u64.into(),
@@ -1288,57 +1269,8 @@ mod test_process_proposal {
         )
     }
 
-    /// Test that a wrapper tx whose inner_tx does not have
-    /// the same hash as the wrappers tx_hash field is marked
-    /// undecryptable but still accepted
-    #[test]
-    fn test_invalid_hash_commitment() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = crate::wallet::defaults::daewon_keypair();
-
-        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: Default::default(),
-                token: shell.wl_storage.storage.native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            None,
-        ))));
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned()));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.set_code_sechash(Hash([0u8; 32]));
-        tx.set_data_sechash(Hash([0u8; 32]));
-
-        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
-            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
-            .unwrap();
-        shell.enqueue_tx(tx.clone(), gas_limit);
-
-        tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
-
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![tx.to_bytes()],
-            };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
-    }
-
-    /// Test that if a wrapper tx contains garbage bytes
-    /// as its encrypted inner tx, it is correctly
-    /// marked undecryptable and the errors handled correctly
+    /// Test that if a wrapper tx contains  marked undecryptable the proposal is
+    /// rejected
     #[test]
     fn test_undecryptable() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1365,21 +1297,10 @@ mod test_process_proposal {
             .unwrap();
         shell.enqueue_tx(tx, gas_limit);
 
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![decrypted.to_bytes()],
-            };
-            if let [resp] = shell
-                .process_proposal(request)
-                .expect("Test failed")
-                .as_slice()
-            {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
+        let request = ProcessProposal {
+            txs: vec![decrypted.to_bytes()],
         };
-        assert_eq!(response.result.code, u32::from(ErrorCodes::Ok));
+        shell.process_proposal(request).expect_err("Test failed");
     }
 
     /// Test that if more decrypted txs are submitted to

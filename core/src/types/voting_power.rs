@@ -239,7 +239,7 @@ impl Display for FractionalVotingPower {
 }
 
 impl BorshSerialize for FractionalVotingPower {
-    fn serialize<W: ark_serialize::Write>(
+    fn serialize<W: std::io::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {

@@ -13,7 +13,6 @@ use namada::proto::{
     standalone_signature, verify_standalone_sig, SerializeWithBorsh,
 };
 use namada::types::dec::Dec;
-use namada::types::key::dkg_session_keys::DkgPublicKey;
 use namada::types::key::{common, RefTo, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
@@ -137,15 +136,6 @@ pub fn init_validator(
                 .protocol_keypair
                 .ref_to(),
         ),
-        dkg_key: StringEncoded::new(
-            validator_wallet
-                .store
-                .validator_keys
-                .dkg_keypair
-                .as_ref()
-                .expect("Missing validator DKG key")
-                .public(),
-        ),
         tendermint_node_key: StringEncoded::new(
             validator_wallet.tendermint_node_key.ref_to(),
         ),
@@ -251,7 +241,6 @@ pub fn sign_validator_account_tx(
         account_key,
         consensus_key,
         protocol_key,
-        dkg_key,
         tendermint_node_key,
         vp,
         commission_rate,
@@ -293,7 +282,6 @@ pub fn sign_validator_account_tx(
         account_key,
         consensus_key,
         protocol_key,
-        dkg_key,
         tendermint_node_key,
         vp,
         commission_rate,
@@ -547,7 +535,6 @@ pub type SignedValidatorAccountTx = ValidatorAccountTx<SignedPk>;
 )]
 pub struct ValidatorAccountTx<PK> {
     pub alias: Alias,
-    pub dkg_key: StringEncoded<DkgPublicKey>,
     pub vp: String,
     /// Commission rate charged on rewards for delegators (bounded inside
     /// 0-1)
@@ -1439,7 +1426,6 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
     fn from(tx: &SignedValidatorAccountTx) -> Self {
         let SignedValidatorAccountTx {
             alias,
-            dkg_key,
             vp,
             commission_rate,
             max_commission_rate_change,
@@ -1454,7 +1440,6 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
 
         Self {
             alias: alias.clone(),
-            dkg_key: dkg_key.clone(),
             vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,

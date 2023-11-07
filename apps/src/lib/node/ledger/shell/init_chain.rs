@@ -413,7 +413,6 @@ where
                     ValidatorAccountTx {
                         alias,
                         vp,
-                        dkg_key,
                         commission_rate,
                         max_commission_rate_change,
                         net_address: _,
@@ -447,12 +446,6 @@ where
                 self.wl_storage
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
                     .expect("Unable to set genesis user protocol public key");
-
-                self.wl_storage
-                    .write(&dkg_session_keys::dkg_pk_key(address), &dkg_key.raw)
-                    .expect(
-                        "Unable to set genesis user public DKG session key",
-                    );
 
                 // TODO: replace pos::init_genesis validators arg with
                 // init_genesis_validator from here
