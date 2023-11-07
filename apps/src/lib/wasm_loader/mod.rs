@@ -33,7 +33,9 @@ pub enum Error {
 #[serde(transparent)]
 pub struct Checksums(pub HashMap<String, String>);
 
-const S3_URL: &str = "https://namada-wasm-master.s3.eu-west-1.amazonaws.com";
+/// Github URL prefix of released Namada network configs
+pub const ENV_VAR_WASM_SERVER: &str = "NAMADA_NETWORK_CONFIGS_SERVER";
+const DEFAULT_WASM_SERVER: &str = "https://artifacts.heliax.click/namada-wasm";
 
 impl Checksums {
     /// Read WASM checksums from the given path
@@ -101,34 +103,14 @@ impl Checksums {
     }
 }
 
+fn wasm_url_prefix(wasm_name: &str) -> String {
+    std::env::var(ENV_VAR_WASM_SERVER)
+        .unwrap_or_else(|_| format!("{DEFAULT_WASM_SERVER}/{wasm_name}"))
+}
+
 /// Download all the pre-built wasms, or if they're already downloaded, verify
 /// their checksums.
 pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
-    #[cfg(feature = "dev")]
-    {
-        let checksums_path = wasm_directory
-            .as_ref()
-            .join(crate::config::DEFAULT_WASM_CHECKSUMS_FILE);
-        // If the checksums file doesn't exists ...
-        if tokio::fs::canonicalize(&checksums_path).await.is_err() {
-            tokio::fs::create_dir_all(&wasm_directory).await.unwrap();
-            // ... try to copy checksums from the Namada WASM root dir
-            if tokio::fs::copy(
-                std::env::current_dir()
-                    .unwrap()
-                    .join(crate::config::DEFAULT_WASM_DIR)
-                    .join(crate::config::DEFAULT_WASM_CHECKSUMS_FILE),
-                &checksums_path,
-            )
-            .await
-            .is_ok()
-            {
-                tracing::info!("WASM checksums copied from WASM root dir.");
-                return;
-            }
-        }
-    }
-
     // load json with wasm hashes
     let checksums = Checksums::read_checksums_async(&wasm_directory).await;
 
@@ -159,28 +141,8 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                         &derived_name,
                         &full_name
                     );
-                    #[cfg(feature = "dev")]
-                    {
-                        // try to copy built file from the Namada WASM root dir
-                        if tokio::fs::copy(
-                            std::env::current_dir()
-                                .unwrap()
-                                .join(crate::config::DEFAULT_WASM_DIR)
-                                .join(&full_name),
-                            wasm_directory.join(&full_name),
-                        )
-                        .await
-                        .is_ok()
-                        {
-                            tracing::info!(
-                                "File {} copied from WASM root dir.",
-                                full_name
-                            );
-                            return;
-                        }
-                    }
 
-                    let url = format!("{}/{}", S3_URL, full_name);
+                    let url = wasm_url_prefix(&full_name);
                     match download_wasm(url).await {
                         Ok(bytes) => {
                             if let Err(e) =
@@ -202,29 +164,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the doesn't file exist, download it.
                 Err(err) => match err.kind() {
                     std::io::ErrorKind::NotFound => {
-                        #[cfg(feature = "dev")]
-                        {
-                            // try to copy built file from the Namada WASM root
-                            // dir
-                            if tokio::fs::copy(
-                                std::env::current_dir()
-                                    .unwrap()
-                                    .join(crate::config::DEFAULT_WASM_DIR)
-                                    .join(&full_name),
-                                wasm_directory.join(&full_name),
-                            )
-                            .await
-                            .is_ok()
-                            {
-                                tracing::info!(
-                                    "File {} copied from WASM root dir.",
-                                    full_name
-                                );
-                                return;
-                            }
-                        }
-
-                        let url = format!("{}/{}", S3_URL, full_name);
+                        let url = wasm_url_prefix(&full_name);
                         match download_wasm(url).await {
                             Ok(bytes) => {
                                 if let Err(e) =

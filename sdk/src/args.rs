@@ -666,6 +666,63 @@ pub struct TxInitAccount<C: NamadaTypes = SdkTypes> {
     pub threshold: Option<u8>,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxInitAccount<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxInitAccount {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxInitAccount<C> {
+    /// A vector of public key to associate with the new account
+    pub fn public_keys(self, public_keys: Vec<C::PublicKey>) -> Self {
+        Self {
+            public_keys,
+            ..self
+        }
+    }
+
+    /// A threshold to associate with the new account
+    pub fn threshold(self, threshold: u8) -> Self {
+        Self {
+            threshold: Some(threshold),
+            ..self
+        }
+    }
+
+    /// Path to the VP WASM code file
+    pub fn vp_code_path(self, vp_code_path: PathBuf) -> Self {
+        Self {
+            vp_code_path,
+            ..self
+        }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxInitAccount {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_init_account(context, self).await
+    }
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
@@ -1640,6 +1697,9 @@ pub struct MaspAddrKeyAdd {
     pub alias_force: bool,
     /// Any MASP value
     pub value: MaspValue,
+    /// Add a MASP key / address pre-genesis instead
+    /// of a current chain
+    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -1651,6 +1711,8 @@ pub struct MaspSpendKeyGen {
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
+    /// Generate spending key pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
 }
@@ -1666,6 +1728,8 @@ pub struct MaspPayAddrGen<C: NamadaTypes = SdkTypes> {
     pub viewing_key: C::ViewingKey,
     /// Pin
     pub pin: bool,
+    /// Generate an address pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Wallet generate key and implicit address arguments
@@ -1677,6 +1741,8 @@ pub struct KeyAndAddressGen {
     pub alias: Option<String>,
     /// Whether to force overwrite the alias, if provided
     pub alias_force: bool,
+    /// Generate a key for pre-genesis, instead of a current chain
+    pub is_pre_genesis: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
     /// BIP44 derivation path
@@ -1709,6 +1775,8 @@ pub struct KeyFind {
     pub alias: Option<String>,
     /// Public key hash to lookup keypair with
     pub value: Option<String>,
+    /// Find a key pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
@@ -1720,6 +1788,8 @@ pub struct AddrKeyFind {
     pub alias: String,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
+    /// Find shielded address / key pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Wallet list shielded keys arguments
@@ -1727,8 +1797,18 @@ pub struct AddrKeyFind {
 pub struct MaspKeysList {
     /// Don't decrypt spending keys
     pub decrypt: bool,
+    /// List shielded keys pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
+}
+
+/// Wallet list shielded payment addresses arguments
+#[derive(Clone, Debug)]
+pub struct MaspListPayAddrs {
+    /// List sheilded payment address pre-genesis instead
+    /// of a current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Wallet list keys arguments
@@ -1736,6 +1816,8 @@ pub struct MaspKeysList {
 pub struct KeyList {
     /// Don't decrypt keypairs
     pub decrypt: bool,
+    /// List keys pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
     /// Show secret keys to user
     pub unsafe_show_secret: bool,
 }
@@ -1745,6 +1827,8 @@ pub struct KeyList {
 pub struct KeyExport {
     /// Key alias
     pub alias: String,
+    /// Export key pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Wallet address lookup arguments
@@ -1754,6 +1838,15 @@ pub struct AddressOrAliasFind {
     pub alias: Option<String>,
     /// Address to find
     pub address: Option<Address>,
+    /// Lookup address pre-genesis instead of a current chain
+    pub is_pre_genesis: bool,
+}
+
+/// List wallet address
+#[derive(Clone, Debug)]
+pub struct AddressList {
+    /// List addresses pre-genesis instead of current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Wallet address add arguments
@@ -1765,6 +1858,8 @@ pub struct AddressAdd {
     pub alias_force: bool,
     /// Address to add
     pub address: Address,
+    /// Add an address pre-genesis instead of current chain
+    pub is_pre_genesis: bool,
 }
 
 /// Bridge pool batch recommendation.

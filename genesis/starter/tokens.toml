@@ -1,0 +1,11 @@
+# Token accounts with their validity predicates
+
+[token.NAM]
+vp = "vp_token"
+denom = 6
+
+[token.NAM.parameters]
+max_reward_rate = "0.1"
+kd_gain_nom = "0.1"
+kp_gain_nom = "0.1"
+locked_ratio_target = "0.6667"

@@ -1,10 +1,10 @@
 //! Wallet Store information
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::str::FromStr;
 
-use bimap::BiHashMap;
+use bimap::BiBTreeMap;
 use itertools::Itertools;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::types::address::{Address, ImplicitAddress};
@@ -64,30 +64,30 @@ pub struct ValidatorData {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
-    view_keys: HashMap<Alias, ExtendedViewingKey>,
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
     /// Known spending keys
-    spend_keys: HashMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
+    spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
     /// Known payment addresses
-    payment_addrs: HashMap<Alias, PaymentAddress>,
+    payment_addrs: BTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
-    secret_keys: HashMap<Alias, StoredKeypair<common::SecretKey>>,
+    secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
-    public_keys: HashMap<Alias, common::PublicKey>,
+    public_keys: BTreeMap<Alias, common::PublicKey>,
     /// Known derivation paths
-    derivation_paths: HashMap<Alias, DerivationPath>,
+    derivation_paths: BTreeMap<Alias, DerivationPath>,
     /// Namada address book
-    addresses: BiHashMap<Alias, Address>,
+    addresses: BiBTreeMap<Alias, Address>,
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
-    pkhs: HashMap<PublicKeyHash, Alias>,
+    pkhs: BTreeMap<PublicKeyHash, Alias>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
     /// Namada address vp type
-    address_vp_types: HashMap<AddressVpType, HashSet<Address>>,
+    address_vp_types: BTreeMap<AddressVpType, HashSet<Address>>,
 }
 
 /// Grouping of addresses by validity predicate.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, PartialOrd, Ord)]
 pub enum AddressVpType {
     /// The Token
     Token,
@@ -207,11 +207,11 @@ impl Store {
     /// Get all known keys by their alias, paired with PKH, if known.
     pub fn get_secret_keys(
         &self,
-    ) -> HashMap<
+    ) -> BTreeMap<
         Alias,
         (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
     > {
-        let mut keys: HashMap<
+        let mut keys: BTreeMap<
             Alias,
             (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
         > = self
@@ -231,29 +231,29 @@ impl Store {
     }
 
     /// Get all known public keys by their alias.
-    pub fn get_public_keys(&self) -> &HashMap<Alias, common::PublicKey> {
+    pub fn get_public_keys(&self) -> &BTreeMap<Alias, common::PublicKey> {
         &self.public_keys
     }
 
     /// Get all known addresses by their alias.
-    pub fn get_addresses(&self) -> &BiHashMap<Alias, Address> {
+    pub fn get_addresses(&self) -> &BiBTreeMap<Alias, Address> {
         &self.addresses
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &HashMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(&self) -> &BTreeMap<Alias, PaymentAddress> {
         &self.payment_addrs
     }
 
     /// Get all known viewing keys by their alias.
-    pub fn get_viewing_keys(&self) -> &HashMap<Alias, ExtendedViewingKey> {
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
-    ) -> &HashMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
+    ) -> &BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
         &self.spend_keys
     }
 
@@ -318,6 +318,12 @@ impl Store {
             }
         }
 
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
+
         if alias.is_empty() {
             alias = pkh.to_string().into();
             println!("Empty alias given, defaulting to {}.", alias);
@@ -358,6 +364,12 @@ impl Store {
         password: Option<Zeroizing<String>>,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
+
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -390,6 +402,12 @@ impl Store {
         viewkey: ExtendedViewingKey,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
+
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -468,6 +486,12 @@ impl Store {
         payment_addr: PaymentAddress,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
+
         if alias.is_empty() {
             eprintln!("Empty alias given.");
             return None;
@@ -500,6 +524,11 @@ impl Store {
         address: Address,
         force: bool,
     ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved", alias);
+            return None;
+        }
         // abort if the address already exists in the wallet
         if self.addresses.contains_right(&address) && !force {
             println!(
@@ -514,7 +543,7 @@ impl Store {
             alias = address.encode().into();
             println!("Empty alias given, defaulting to {}.", alias);
         }
-        if self.addresses.contains_left(&alias) && !force {
+        if self.contains_alias(&alias) && !force {
             match U::show_overwrite_confirmation(&alias, "an address") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
@@ -552,6 +581,32 @@ impl Store {
         self.pkhs.retain(|_key, val| val != alias);
         self.public_keys.remove(alias);
         self.derivation_paths.remove(alias);
+    }
+
+    /// Extend this store from another store (typically pre-genesis).
+    /// Note that this method ignores `validator_data` if any.
+    pub fn extend(&mut self, store: Store) {
+        let Self {
+            view_keys,
+            spend_keys,
+            payment_addrs,
+            secret_keys,
+            public_keys,
+            derivation_paths,
+            addresses,
+            pkhs,
+            validator_data: _,
+            address_vp_types,
+        } = self;
+        view_keys.extend(store.view_keys);
+        spend_keys.extend(store.spend_keys);
+        payment_addrs.extend(store.payment_addrs);
+        secret_keys.extend(store.secret_keys);
+        public_keys.extend(store.public_keys);
+        derivation_paths.extend(store.derivation_paths);
+        addresses.extend(store.addresses);
+        pkhs.extend(store.pkhs);
+        address_vp_types.extend(store.address_vp_types);
     }
 
     /// Extend this store from pre-genesis validator wallet.
@@ -716,10 +771,10 @@ impl<'de> Deserialize<'de> for AddressVpType {
     }
 }
 
-#[cfg(all(test, feature = "dev"))]
+#[cfg(test)]
 mod test_wallet {
     use base58::{self, FromBase58};
-    use bip39::{Language, Mnemonic};
+    use bip39::{Language, Mnemonic, Seed};
     use data_encoding::HEXLOWER;
 
     use super::super::derivation_path::DerivationPath;

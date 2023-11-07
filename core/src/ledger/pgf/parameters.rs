@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use super::storage::keys as pgf_storage;
 use super::storage::steward::StewardDetail;
@@ -18,6 +19,8 @@ use crate::types::dec::Dec;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    Serialize,
+    Deserialize,
 )]
 /// Pgf parameter structure
 pub struct PgfParameters {

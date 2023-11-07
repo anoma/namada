@@ -86,6 +86,7 @@ use tempfile::TempDir;
 
 use crate::cli::context::FromContext;
 use crate::cli::Context;
+use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_proto::abci::RequestInitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
@@ -167,7 +168,6 @@ impl Default for BenchShell {
             None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
-            address::nam(),
         );
 
         shell
@@ -210,7 +210,8 @@ impl Default for BenchShell {
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(vec![]));
-        let voting_start_epoch = Epoch(25);
+        let voting_start_epoch =
+            Epoch(2 + params.pipeline_len + params.unbonding_len);
         let signed_tx = generate_tx(
             TX_INIT_PROPOSAL_WASM,
             InitProposalData {
@@ -219,8 +220,8 @@ impl Default for BenchShell {
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default(None),
                 voting_start_epoch,
-                voting_end_epoch: 28.into(),
-                grace_epoch: 34.into(),
+                voting_end_epoch: voting_start_epoch + 3_u64,
+                grace_epoch: voting_start_epoch + 9_u64,
             },
             None,
             Some(vec![content_section]),
@@ -682,28 +683,40 @@ impl Client for BenchShell {
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let mut shell = BenchShell::default();
+        let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
 
-        let mut ctx = Context::new::<StdIo>(crate::cli::args::Global {
-            chain_id: None,
-            base_dir: shell.tempdir.as_ref().canonicalize().unwrap(),
+        // Create a global config and an empty wallet in the chain dir - this is
+        // needed in `Context::new`
+        let config = GlobalConfig::new(shell.inner.chain_id.clone());
+        config.write(&base_dir).unwrap();
+        let wallet = crate::wallet::CliWalletUtils::new(
+            base_dir.join(shell.inner.chain_id.as_str()),
+        );
+        wallet.save().unwrap();
+
+        let ctx = Context::new::<StdIo>(crate::cli::args::Global {
+            chain_id: Some(shell.inner.chain_id.clone()),
+            base_dir,
             wasm_dir: Some(WASM_DIR.into()),
         })
         .unwrap();
 
+        let mut chain_ctx = ctx.take_chain_or_exit();
+
         // Generate spending key for Albert and Bertha
-        ctx.wallet.gen_store_spending_key(
+        chain_ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
             None,
             true,
             &mut OsRng,
         );
-        ctx.wallet.gen_store_spending_key(
+        chain_ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
             None,
             true,
             &mut OsRng,
         );
-        crate::wallet::save(&ctx.wallet).unwrap();
+        crate::wallet::save(&chain_ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha
         for (alias, viewing_alias) in [
@@ -713,19 +726,21 @@ impl Default for BenchShieldedCtx {
         .map(|(p, s)| (p.to_owned(), s.to_owned()))
         {
             let viewing_key: FromContext<ExtendedViewingKey> = FromContext::new(
-                ctx.wallet
+                chain_ctx
+                    .wallet
                     .find_viewing_key(viewing_alias)
                     .unwrap()
                     .to_string(),
             );
-            let viewing_key =
-                ExtendedFullViewingKey::from(ctx.get_cached(&viewing_key))
-                    .fvk
-                    .vk;
+            let viewing_key = ExtendedFullViewingKey::from(
+                chain_ctx.get_cached(&viewing_key),
+            )
+            .fvk
+            .vk;
             let (div, _g_d) =
                 namada_sdk::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
-            let _ = ctx
+            let _ = chain_ctx
                 .wallet
                 .insert_payment_addr(
                     alias,
@@ -735,7 +750,7 @@ impl Default for BenchShieldedCtx {
                 .unwrap();
         }
 
-        crate::wallet::save(&ctx.wallet).unwrap();
+        crate::wallet::save(&chain_ctx.wallet).unwrap();
         namada::ledger::storage::update_allowed_conversions(
             &mut shell.wl_storage,
         )
@@ -744,7 +759,7 @@ impl Default for BenchShieldedCtx {
         Self {
             shielded: ShieldedContext::default(),
             shell,
-            wallet: ctx.wallet,
+            wallet: chain_ctx.wallet,
         }
     }
 }

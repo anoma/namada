@@ -110,5 +110,6 @@ wasmtimer = "0.2.0"
 
 [dev-dependencies]
 assert_matches.workspace = true
+base58.workspace = true
 namada_test_utils = {path = "../test_utils"}
 tempfile.workspace = true

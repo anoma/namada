@@ -2,19 +2,17 @@
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fmt::Display;
 use std::io::{Error, ErrorKind, Read};
-use std::str::FromStr;
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 
+use crate::impl_display_and_from_str_via_format;
 use crate::types::address::Address;
-use crate::types::key::ParsePublicKeyError;
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
+use crate::types::string_encoding;
 use crate::types::transaction::EllipticCurve;
 
 /// A keypair used in the DKG protocol
@@ -140,24 +138,22 @@ impl BorshSchema for DkgPublicKey {
     }
 }
 
-impl Display for DkgPublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let vec = self.serialize_to_vec();
-        write!(f, "{}", HEXLOWER.encode(&vec))
+impl string_encoding::Format for DkgPublicKey {
+    const HRP: &'static str = string_encoding::DKG_PK_HRP;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.serialize_to_vec()
+    }
+
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        BorshDeserialize::try_from_slice(bytes)
+            .map_err(string_encoding::DecodeError::InvalidBytes)
     }
 }
 
-impl FromStr for DkgPublicKey {
-    type Err = ParsePublicKeyError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = HEXLOWER
-            .decode(s.as_ref())
-            .map_err(ParsePublicKeyError::InvalidHex)?;
-        BorshDeserialize::try_from_slice(&vec)
-            .map_err(ParsePublicKeyError::InvalidEncoding)
-    }
-}
+impl_display_and_from_str_via_format!(DkgPublicKey);
 
 /// Obtain a storage key for user's public dkg session key.
 pub fn dkg_pk_key(owner: &Address) -> Key {

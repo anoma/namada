@@ -1929,7 +1929,7 @@ impl StateMachineTest for ConcretePosState {
                 .collect::<Vec<_>>()
         );
         let mut s = TestWlStorage::default();
-        crate::init_genesis(
+        crate::test_utils::init_genesis_helper(
             &mut s,
             &initial_state.params,
             initial_state.genesis_validators.clone().into_iter(),
@@ -2003,6 +2003,7 @@ impl StateMachineTest for ConcretePosState {
                     current_epoch,
                     commission_rate,
                     max_commission_rate_change,
+                    offset_opt: None,
                 })
                 .unwrap();
 
@@ -2066,6 +2067,7 @@ impl StateMachineTest for ConcretePosState {
                     &id.validator,
                     amount,
                     current_epoch,
+                    None,
                 )
                 .unwrap();
 

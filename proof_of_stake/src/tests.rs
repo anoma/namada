@@ -41,6 +41,7 @@ use test_log::test;
 use crate::epoched::DEFAULT_NUM_PAST_EPOCHS;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::{OwnedPosParams, PosParams};
+use crate::test_utils::test_init_genesis;
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     ConsensusValidator, EagerRedelegatedBondsMap, GenesisValidator, Position,
@@ -64,11 +65,10 @@ use crate::{
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, read_validator_stake, slash,
     slash_redelegation, slash_validator, slash_validator_redelegation,
-    staking_token_address, store_total_consensus_stake, test_init_genesis,
-    total_bonded_handle, total_deltas_handle, total_unbonded_handle,
-    unbond_handle, unbond_tokens, unjail_validator, update_validator_deltas,
-    update_validator_set, validator_consensus_key_handle,
-    validator_incoming_redelegations_handle,
+    staking_token_address, store_total_consensus_stake, total_bonded_handle,
+    total_deltas_handle, total_unbonded_handle, unbond_handle, unbond_tokens,
+    unjail_validator, update_validator_deltas, update_validator_set,
+    validator_consensus_key_handle, validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_set_positions_handle,
     validator_set_update_tendermint, validator_slashes_handle,
     validator_state_handle, validator_total_redelegated_bonded_handle,
@@ -390,6 +390,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_self_bond,
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -501,6 +502,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         &validator.address,
         amount_del,
         current_epoch,
+        None,
     )
     .unwrap();
     let val_stake_pre = read_validator_stake(
@@ -949,6 +951,7 @@ fn test_become_validator_aux(
         commission_rate: Dec::new(5, 2).expect("Dec creation failed"),
         max_commission_rate_change: Dec::new(5, 2)
             .expect("Dec creation failed"),
+        offset_opt: None,
     })
     .unwrap();
     assert!(is_validator(&s, &new_validator).unwrap());
@@ -967,7 +970,8 @@ fn test_become_validator_aux(
     let staking_token = staking_token_address(&s);
     let amount = token::Amount::from_uint(100_500_000, 0).unwrap();
     credit_tokens(&mut s, &staking_token, &new_validator, amount).unwrap();
-    bond_tokens(&mut s, None, &new_validator, amount, current_epoch).unwrap();
+    bond_tokens(&mut s, None, &new_validator, amount, current_epoch, None)
+        .unwrap();
 
     // Check the bond delta
     let bond_handle = bond_handle(&new_validator, &new_validator);
@@ -1318,14 +1322,8 @@ fn test_validator_sets() {
         )
         .unwrap();
 
-        update_validator_deltas(
-            s,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
+        update_validator_deltas(s, &params, addr, stake.change(), epoch, None)
+            .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -1547,20 +1545,15 @@ fn test_validator_sets() {
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
-    update_validator_set(
+    update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
         &mut s,
         &params,
         &val1,
         -unbond.change(),
-        pipeline_epoch,
-    )
-    .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val1,
-        -unbond.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
     // Epoch 6
@@ -1748,16 +1741,10 @@ fn test_validator_sets() {
     let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
     println!("val6 {val6} new stake {}", stake6.to_string_native());
-    update_validator_set(&mut s, &params, &val6, bond.change(), pipeline_epoch)
+    update_validator_set(&mut s, &params, &val6, bond.change(), epoch, None)
         .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val6,
-        bond.change(),
-        epoch,
-        params.pipeline_len,
-    )
-    .unwrap();
+    update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch, None)
+        .unwrap();
     let val6_bond_epoch = pipeline_epoch;
 
     let consensus_vals: Vec<_> = consensus_validator_set_handle()
@@ -1999,14 +1986,8 @@ fn test_validator_sets_swap() {
         )
         .unwrap();
 
-        update_validator_deltas(
-            s,
-            addr,
-            stake.change(),
-            epoch,
-            params.pipeline_len,
-        )
-        .unwrap();
+        update_validator_deltas(s, &params, addr, stake.change(), epoch, None)
+            .unwrap();
 
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
@@ -2035,37 +2016,27 @@ fn test_validator_sets_swap() {
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
 
-    update_validator_set(
+    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
         &mut s,
         &params,
         &val2,
         bond2.change(),
-        pipeline_epoch,
-    )
-    .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val2,
-        bond2.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
-    update_validator_set(
+    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
         &mut s,
         &params,
         &val3,
         bond3.change(),
-        pipeline_epoch,
-    )
-    .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val3,
-        bond3.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
@@ -2084,37 +2055,27 @@ fn test_validator_sets_swap() {
         into_tm_voting_power(params.tm_votes_per_token, stake3)
     );
 
-    update_validator_set(
+    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
         &mut s,
         &params,
         &val2,
         bonds.change(),
-        pipeline_epoch,
-    )
-    .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val2,
-        bonds.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
-    update_validator_set(
+    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch, None)
+        .unwrap();
+    update_validator_deltas(
         &mut s,
         &params,
         &val3,
         bonds.change(),
-        pipeline_epoch,
-    )
-    .unwrap();
-    update_validator_deltas(
-        &mut s,
-        &val3,
-        bonds.change(),
         epoch,
-        params.pipeline_len,
+        None,
     )
     .unwrap();
 
@@ -4373,6 +4334,7 @@ fn test_simple_redelegation_aux(
         &src_validator,
         amount_delegate,
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -4768,6 +4730,7 @@ fn test_redelegation_with_slashing_aux(
         &src_validator,
         amount_delegate,
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -5163,6 +5126,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
         &src_validator,
         bond_amount,
         current_epoch,
+        None,
     )
     .unwrap();
 
@@ -5643,6 +5607,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         &validator,
         amount_del,
         current_epoch,
+        None,
     )
     .unwrap();
 

@@ -29,6 +29,7 @@ env:
   SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
   AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+  AWS_REGION: us-east-1
 
 jobs:
   build-wasm:
@@ -578,7 +579,8 @@ jobs:
           name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             /tmp/.*/logs/
-            /tmp/.*/e2e-test.*/setup/validator-*/.namada/logs/*.log
+            /tmp/.*/setup/validator-*/logs/
+            /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
           retention-days: 5
       - name: Print sccache stats
         if: always()
