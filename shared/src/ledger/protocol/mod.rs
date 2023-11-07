@@ -253,12 +253,9 @@ where
     )?;
 
     // Account for gas
-    shell_params.tx_gas_meter.add_wrapper_gas(tx_bytes)?;
-
-    // If wrapper was succesful, write inner tx hash to storage
     shell_params
         .tx_gas_meter
-        .add_tx_size_gas(tx_bytes)
+        .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(changed_keys)

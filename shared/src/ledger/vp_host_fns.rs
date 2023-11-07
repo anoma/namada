@@ -303,7 +303,11 @@ pub fn get_tx_code_hash(
     tx: &Tx,
     sentinel: &mut VpSentinel,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
+    add_gas(
+        gas_meter,
+        HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        sentinel,
+    )?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -337,6 +341,7 @@ pub fn get_tx_index(
     add_gas(
         gas_meter,
         TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        sentinel,
     )?;
     Ok(*tx_index)
 }
@@ -354,6 +359,7 @@ where
     add_gas(
         gas_meter,
         ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        sentinel,
     )?;
     Ok(storage.native_token.clone())
 }

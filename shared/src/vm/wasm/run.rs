@@ -4,9 +4,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::ledger::gas::{
-    self, GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS,
-};
+use namada_core::ledger::gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_core::ledger::storage::write_log::StorageModification;
 use namada_core::types::transaction::TxSentinel;
 use namada_core::types::validity_predicate::VpSentinel;
@@ -565,10 +563,14 @@ where
         }
         Commitment::Id(code) => {
             let tx_len = code.len() as u64;
-            gas_meter.add_wasm_validation_gas(tx_len)?;
+            gas_meter
+                .add_wasm_validation_gas(tx_len)
+                .map_err(|e| Error::GasError(e.to_string()))?;
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
 
-            gas_meter.add_compiling_gas(tx_len)?;
+            gas_meter
+                .add_compiling_gas(tx_len)
+                .map_err(|e| Error::GasError(e.to_string()))?;
             match wasm_cache.compile_or_fetch(code)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
