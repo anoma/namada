@@ -253,6 +253,9 @@ where
     )?;
 
     // Account for gas
+    shell_params.tx_gas_meter.add_wrapper_gas(tx_bytes)?;
+
+    // If wrapper was succesful, write inner tx hash to storage
     shell_params
         .tx_gas_meter
         .add_tx_size_gas(tx_bytes)
@@ -411,40 +414,10 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))
             } else {
-                // Balance was insufficient for fee payment
-                #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
-                {
-                    // Move all the available funds in the transparent
-                    // balance of the fee payer
-                    token_transfer(
-                        wl_storage,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                        block_proposer,
-                        balance,
-                    )
-                    .map_err(|e| Error::FeeError(e.to_string()))?;
-
-                    return Err(Error::FeeError(
-                        "Transparent balance of wrapper's signer was \
-                         insufficient to pay fee. All the available \
-                         transparent funds have been moved to the block \
-                         proposer"
-                            .to_string(),
-                    ));
-                }
-                #[cfg(any(feature = "abciplus", feature = "abcipp"))]
-                return Err(Error::FeeError(
-                    "Insufficient transparent balance to pay fees".to_string(),
-                ));
-            }
-        }
-        Err(e) => {
-            // Fee overflow
-            #[cfg(not(any(feature = "abciplus", feature = "abcipp")))]
-            {
-                // Move all the available funds in the transparent balance of
-                // the fee payer
+                // Balance was insufficient for fee payment, move all the
+                // available funds in the transparent balance of
+                // the fee payer. This branch should only be taken when using
+                // ABCI
                 token_transfer(
                     wl_storage,
                     &wrapper.fee.token,
@@ -454,15 +427,32 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                return Err(Error::FeeError(format!(
-                    "{}. All the available transparent funds have been moved \
-                     to the block proposer",
-                    e
-                )));
+                Err(Error::FeeError(
+                    "Transparent balance of wrapper's signer was insufficient \
+                     to pay fee. All the available transparent funds have \
+                     been moved to the block proposer"
+                        .to_string(),
+                ))
             }
+        }
+        Err(e) => {
+            // Fee overflow, move all the available funds in the transparent
+            // balance of the fee payer. This branch should only be
+            // taken when using ABCI
+            token_transfer(
+                wl_storage,
+                &wrapper.fee.token,
+                &wrapper.fee_payer(),
+                block_proposer,
+                balance,
+            )
+            .map_err(|e| Error::FeeError(e.to_string()))?;
 
-            #[cfg(any(feature = "abciplus", feature = "abcipp"))]
-            return Err(Error::FeeError(e.to_string()));
+            Err(Error::FeeError(format!(
+                "{}. All the available transparent funds have been moved to \
+                 the block proposer",
+                e
+            )))
         }
     }
 }

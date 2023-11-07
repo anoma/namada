@@ -7,7 +7,7 @@ use namada::types::key::RefTo;
 use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use namada::types::transaction::{Fee, WrapperTx};
-use namada_apps::bench_utils::{generate_tx, BenchShell, TX_TRANSFER_WASM};
+use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
 
@@ -18,7 +18,7 @@ fn process_tx(c: &mut Criterion) {
     shell.wl_storage.storage.last_block.as_mut().unwrap().height =
         BlockHeight(2);
 
-    let mut tx = generate_tx(
+    let mut tx = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -42,6 +42,8 @@ fn process_tx(c: &mut Criterion) {
             defaults::albert_keypair().ref_to(),
             0.into(),
             1_000_000.into(),
+            // NOTE: The unshield operation has to be gas-free so don't include
+            // it here
             None,
         ),
     )));
@@ -92,7 +94,7 @@ fn process_tx(c: &mut Criterion) {
                     0
                 )
             },
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }

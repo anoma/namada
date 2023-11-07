@@ -437,28 +437,30 @@ fn start_abci_broadcaster_shell(
     let (broadcaster_sender, broadcaster_receiver) = mpsc::unbounded_channel();
 
     // Start broadcaster
-    let broadcaster =
-        if matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
-            let (bc_abort_send, bc_abort_recv) =
-                tokio::sync::oneshot::channel::<()>();
+    let broadcaster = if matches!(
+        config.shell.tendermint_mode,
+        TendermintMode::Validator { .. }
+    ) {
+        let (bc_abort_send, bc_abort_recv) =
+            tokio::sync::oneshot::channel::<()>();
 
-            spawner
-                .spawn_abortable("Broadcaster", move |aborter| async move {
-                    // Construct a service for broadcasting protocol txs from
-                    // the ledger
-                    let mut broadcaster =
-                        Broadcaster::new(rpc_address, broadcaster_receiver);
-                    broadcaster.run(bc_abort_recv).await;
-                    tracing::info!("Broadcaster is no longer running.");
+        spawner
+            .spawn_abortable("Broadcaster", move |aborter| async move {
+                // Construct a service for broadcasting protocol txs from
+                // the ledger
+                let mut broadcaster =
+                    Broadcaster::new(rpc_address, broadcaster_receiver);
+                broadcaster.run(bc_abort_recv).await;
+                tracing::info!("Broadcaster is no longer running.");
 
-                    drop(aborter);
-                })
-                .with_cleanup(async move {
-                    let _ = bc_abort_send.send(());
-                })
-        } else {
-            spawn_dummy_task(())
-        };
+                drop(aborter);
+            })
+            .with_cleanup(async move {
+                let _ = bc_abort_send.send(());
+            })
+    } else {
+        spawn_dummy_task(())
+    };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache =
@@ -506,7 +508,7 @@ fn start_abci_broadcaster_shell(
         .spawn(move || {
             tracing::info!("Namada ledger node started.");
             match tendermint_mode {
-                TendermintMode::Validator => {
+                TendermintMode::Validator { .. } => {
                     tracing::info!("This node is a validator");
                 }
                 TendermintMode::Full | TendermintMode::Seed => {
@@ -654,7 +656,10 @@ async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> EthereumOracleTask {
-    if !matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
+    if !matches!(
+        config.shell.tendermint_mode,
+        TendermintMode::Validator { .. }
+    ) {
         return EthereumOracleTask::NotEnabled {
             handle: spawn_dummy_task(()),
         };

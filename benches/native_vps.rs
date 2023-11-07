@@ -1,4 +1,6 @@
-use std::collections::BTreeSet;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -6,8 +8,12 @@ use namada::core::ledger::governance::storage::proposal::ProposalType;
 use namada::core::ledger::governance::storage::vote::{
     StorageProposalVote, VoteType,
 };
+use namada::core::ledger::ibc::{IbcActions, TransferModule};
+use namada::core::ledger::pgf::storage::steward::StewardDetail;
+use namada::core::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::core::types::address::{self, Address};
 use namada::core::types::token::{Amount, Transfer};
+use namada::eth_bridge::storage::whitelist;
 use namada::ibc::core::ics02_client::client_type::ClientType;
 use namada::ibc::core::ics03_connection::connection::Counterparty;
 use namada::ibc::core::ics03_connection::msgs::conn_open_init::MsgConnectionOpenInit;
@@ -19,23 +25,32 @@ use namada::ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use namada::ibc::core::ics24_host::identifier::{
     ClientId, ConnectionId, PortId,
 };
+use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
+use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
+use namada::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
+use namada::ledger::native_vp::ethereum_bridge::vp::EthBridge;
+use namada::ledger::native_vp::ibc::context::PseudoExecutionContext;
 use namada::ledger::native_vp::ibc::Ibc;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
+use namada::ledger::native_vp::parameters::ParametersVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::ledger::storage_api::StorageRead;
+use namada::ledger::pgf::PgfVp;
+use namada::ledger::pos::PosVP;
 use namada::proof_of_stake;
-use namada::proto::{Code, Section};
+use namada::proof_of_stake::KeySeg;
+use namada::proto::{Code, Section, Tx};
 use namada::types::address::InternalAddress;
+use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_apps::bench_utils::{
-    generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
-    generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
+    generate_foreign_key_tx, BenchShell, TX_BRIDGE_POOL_WASM, TX_IBC_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_TRANSFER_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
 use namada_apps::wallet::defaults;
 
@@ -58,7 +73,7 @@ fn governance(c: &mut Criterion) {
             "delegator_vote" => {
                 // Advance to the proposal voting period
                 shell.advance_epoch();
-                generate_tx(
+                shell.generate_tx(
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
@@ -74,7 +89,7 @@ fn governance(c: &mut Criterion) {
             "validator_vote" => {
                 // Advance to the proposal voting period
                 shell.advance_epoch();
-                generate_tx(
+                shell.generate_tx(
                     TX_VOTE_PROPOSAL_WASM,
                     VoteProposalData {
                         id: 0,
@@ -98,7 +113,7 @@ fn governance(c: &mut Criterion) {
                     shell.wl_storage.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
-                generate_tx(
+                shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: None,
@@ -148,7 +163,7 @@ fn governance(c: &mut Criterion) {
                     shell.wl_storage.get_block_epoch().unwrap().next(),
                     voting_start_epoch
                 );
-                generate_tx(
+                shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
                         id: Some(1),
@@ -211,12 +226,6 @@ fn governance(c: &mut Criterion) {
     group.finish();
 }
 
-// TODO: missing native vps
-//    - pos
-//    - parameters
-//    - eth bridge
-//    - eth bridge pool
-
 // TODO: uncomment when SlashFund internal address is brought back
 // fn slash_fund(c: &mut Criterion) {
 //      let mut group = c.benchmark_group("vp_slash_fund");
@@ -226,7 +235,7 @@ fn governance(c: &mut Criterion) {
 //          generate_foreign_key_tx(&defaults::albert_keypair());
 
 //      let content_section = Section::ExtraData(Code::new(vec![]));
-//      let governance_proposal = generate_tx(
+//      let governance_proposal = shell.generate_tx(
 //          TX_INIT_PROPOSAL_WASM,
 //          InitProposalData {
 //              id: None,
@@ -292,8 +301,10 @@ fn governance(c: &mut Criterion) {
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
+    let shell = BenchShell::default();
 
-    // Connection handshake
+    // NOTE: Ibc encompass a variety of different messages that can be executed,
+    // here we only benchmark a few of those Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
             ClientType::new("01-tendermint".to_string()).unwrap(),
@@ -309,7 +320,7 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -322,10 +333,10 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = generate_ibc_tx(TX_IBC_WASM, msg);
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
     // Ibc transfer
-    let outgoing_transfer = generate_ibc_transfer_tx();
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
     for (signed_tx, bench_name) in
         [open_connection, open_channel, outgoing_transfer]
@@ -333,7 +344,21 @@ fn ibc(c: &mut Criterion) {
             .zip(["open_connection", "open_channel", "outgoing_transfer"])
     {
         let mut shell = BenchShell::default();
-        shell.init_ibc_channel();
+        // Initialize the state according to the target tx
+        match bench_name {
+            "open_connection" => {
+                let _ = shell.init_ibc_client_state(
+                    namada::core::types::storage::Key::from(
+                        Address::Internal(InternalAddress::Ibc).to_db_key(),
+                    ),
+                );
+            }
+            "open_channel" => {
+                let _ = shell.init_ibc_connection();
+            }
+            "outgoing_transfer" => shell.init_ibc_channel(),
+            _ => panic!("Unexpected bench test"),
+        }
 
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
@@ -375,12 +400,13 @@ fn ibc(c: &mut Criterion) {
 }
 
 fn vp_multitoken(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_token");
+    let mut group = c.benchmark_group("vp_multitoken");
+    let shell = BenchShell::default();
 
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
 
-    let transfer = generate_tx(
+    let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -438,11 +464,696 @@ fn vp_multitoken(c: &mut Criterion) {
     }
 }
 
+fn pgf(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_pgf");
+
+    for bench_name in [
+        "foreign_key_write",
+        "remove_steward",
+        "steward_inflation_rate",
+    ] {
+        let mut shell = BenchShell::default();
+        namada::core::ledger::pgf::storage::keys::stewards_handle()
+            .insert(
+                &mut shell.wl_storage,
+                defaults::albert_address(),
+                StewardDetail::base(defaults::albert_address()),
+            )
+            .unwrap();
+
+        let signed_tx = match bench_name {
+            "foreign_key_write" => {
+                generate_foreign_key_tx(&defaults::albert_keypair())
+            }
+            "remove_steward" => shell.generate_tx(
+                TX_RESIGN_STEWARD,
+                defaults::albert_address(),
+                None,
+                None,
+                Some(&defaults::albert_keypair()),
+            ),
+            "steward_inflation_rate" => {
+                let data =
+                    namada::types::transaction::pgf::UpdateStewardCommission {
+                        steward: defaults::albert_address(),
+                        commission: HashMap::from([(
+                            defaults::albert_address(),
+                            namada::types::dec::Dec::zero(),
+                        )]),
+                    };
+                shell.generate_tx(
+                    TX_UPDATE_STEWARD_COMMISSION,
+                    data,
+                    None,
+                    None,
+                    Some(&defaults::albert_keypair()),
+                )
+            }
+            _ => panic!("Unexpected bench test"),
+        };
+
+        // Run the tx to validate
+        shell.execute_tx(&signed_tx);
+
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
+
+        let pgf = PgfVp {
+            ctx: Ctx::new(
+                &Address::Internal(InternalAddress::Pgf),
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                &signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                    u64::MAX.into(),
+                )),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
+
+        group.bench_function(bench_name, |b| {
+            b.iter(|| {
+                assert!(
+                    pgf.validate_tx(
+                        &signed_tx,
+                        pgf.ctx.keys_changed,
+                        pgf.ctx.verifiers,
+                    )
+                    .unwrap()
+                )
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn eth_bridge_nut(c: &mut Criterion) {
+    let mut shell = BenchShell::default();
+    let native_erc20_addres =
+        read_native_erc20_address(&shell.wl_storage).unwrap();
+
+    let signed_tx = {
+        let data = PendingTransfer{
+        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
+            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+            asset: native_erc20_addres,
+            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+            sender: defaults::albert_address(),
+            amount: Amount::from(1),
+        },
+        gas_fee: GasFee{
+            amount: Amount::from(100),
+            payer: defaults::albert_address(),
+            token: shell.wl_storage.storage.native_token.clone(),
+        },
+    };
+        shell.generate_tx(
+            TX_BRIDGE_POOL_WASM,
+            data,
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        )
+    };
+
+    // Run the tx to validate
+    shell.execute_tx(&signed_tx);
+
+    let (verifiers, keys_changed) = shell
+        .wl_storage
+        .write_log
+        .verifiers_and_changed_keys(&BTreeSet::default());
+
+    let vp_address =
+        Address::Internal(InternalAddress::Nut(native_erc20_addres));
+    let nut = NonUsableTokens {
+        ctx: Ctx::new(
+            &vp_address,
+            &shell.wl_storage.storage,
+            &shell.wl_storage.write_log,
+            &signed_tx,
+            &TxIndex(0),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                u64::MAX.into(),
+            )),
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ),
+    };
+
+    c.bench_function("vp_eth_bridge_nut", |b| {
+        b.iter(|| {
+            assert!(
+                nut.validate_tx(
+                    &signed_tx,
+                    nut.ctx.keys_changed,
+                    nut.ctx.verifiers,
+                )
+                .unwrap()
+            )
+        })
+    });
+}
+
+fn eth_bridge(c: &mut Criterion) {
+    let mut shell = BenchShell::default();
+    let native_erc20_addres =
+        read_native_erc20_address(&shell.wl_storage).unwrap();
+
+    let signed_tx = {
+        let data = PendingTransfer{
+                transfer: namada::types::eth_bridge_pool::TransferToEthereum {
+                    kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    asset: native_erc20_addres,
+                    recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+                    sender: defaults::albert_address(),
+                    amount: Amount::from(1),
+                },
+                gas_fee: GasFee{
+                    amount: Amount::from(100),
+                    payer: defaults::albert_address(),
+                    token: shell.wl_storage.storage.native_token.clone(),
+                },
+            };
+        shell.generate_tx(
+            TX_BRIDGE_POOL_WASM,
+            data,
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        )
+    };
+
+    // Run the tx to validate
+    shell.execute_tx(&signed_tx);
+
+    let (verifiers, keys_changed) = shell
+        .wl_storage
+        .write_log
+        .verifiers_and_changed_keys(&BTreeSet::default());
+
+    let vp_address = Address::Internal(InternalAddress::EthBridge);
+    let eth_bridge = EthBridge {
+        ctx: Ctx::new(
+            &vp_address,
+            &shell.wl_storage.storage,
+            &shell.wl_storage.write_log,
+            &signed_tx,
+            &TxIndex(0),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                u64::MAX.into(),
+            )),
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ),
+    };
+
+    c.bench_function("vp_eth_bridge", |b| {
+        b.iter(|| {
+            assert!(
+                eth_bridge
+                    .validate_tx(
+                        &signed_tx,
+                        eth_bridge.ctx.keys_changed,
+                        eth_bridge.ctx.verifiers,
+                    )
+                    .unwrap()
+            )
+        })
+    });
+}
+
+fn eth_bridge_pool(c: &mut Criterion) {
+    // NOTE: this vp is one of the most expensive but its cost comes from the
+    // numerous accesses to storage that we already account for, so no need to
+    // benchmark specific sections of it like for the ibc native vp
+    let mut shell = BenchShell::default();
+    let native_erc20_addres =
+        read_native_erc20_address(&shell.wl_storage).unwrap();
+
+    // Whitelist NAM token
+    let cap_key = whitelist::Key {
+        asset: native_erc20_addres,
+        suffix: whitelist::KeyType::Cap,
+    }
+    .into();
+    shell
+        .wl_storage
+        .write(&cap_key, Amount::from(1_000))
+        .unwrap();
+
+    let whitelisted_key = whitelist::Key {
+        asset: native_erc20_addres,
+        suffix: whitelist::KeyType::Whitelisted,
+    }
+    .into();
+    shell.wl_storage.write(&whitelisted_key, true).unwrap();
+
+    let denom_key = whitelist::Key {
+        asset: native_erc20_addres,
+        suffix: whitelist::KeyType::Denomination,
+    }
+    .into();
+    shell.wl_storage.write(&denom_key, 0).unwrap();
+
+    let signed_tx = {
+        let data = PendingTransfer{
+        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
+            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
+            asset: native_erc20_addres,
+            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+            sender: defaults::albert_address(),
+            amount: Amount::from(1),
+        },
+        gas_fee: GasFee{
+            amount: Amount::from(100),
+            payer: defaults::albert_address(),
+            token: shell.wl_storage.storage.native_token.clone(),
+        },
+    };
+        shell.generate_tx(
+            TX_BRIDGE_POOL_WASM,
+            data,
+            None,
+            None,
+            Some(&defaults::albert_keypair()),
+        )
+    };
+
+    // Run the tx to validate
+    shell.execute_tx(&signed_tx);
+
+    let (verifiers, keys_changed) = shell
+        .wl_storage
+        .write_log
+        .verifiers_and_changed_keys(&BTreeSet::default());
+
+    let vp_address = Address::Internal(InternalAddress::EthBridgePool);
+    let bridge_pool = BridgePoolVp {
+        ctx: Ctx::new(
+            &vp_address,
+            &shell.wl_storage.storage,
+            &shell.wl_storage.write_log,
+            &signed_tx,
+            &TxIndex(0),
+            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                u64::MAX.into(),
+            )),
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ),
+    };
+
+    c.bench_function("vp_eth_bridge_pool", |b| {
+        b.iter(|| {
+            assert!(
+                bridge_pool
+                    .validate_tx(
+                        &signed_tx,
+                        bridge_pool.ctx.keys_changed,
+                        bridge_pool.ctx.verifiers,
+                    )
+                    .unwrap()
+            )
+        })
+    });
+}
+
+fn parameters(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_parameters");
+
+    for bench_name in ["foreign_key_write", "parameter_change"] {
+        let mut shell = BenchShell::default();
+
+        let signed_tx = match bench_name {
+            "foreign_key_write" => {
+                let tx = generate_foreign_key_tx(&defaults::albert_keypair());
+                // Run the tx to validate
+                shell.execute_tx(&tx);
+                tx
+            }
+            "parameter_change" => {
+                // Simulate governance proposal to modify a parameter
+                let min_proposal_fund_key =
+            namada::core::ledger::governance::storage::keys::get_min_proposal_fund_key();
+                shell
+                    .wl_storage
+                    .write(&min_proposal_fund_key, 1_000)
+                    .unwrap();
+
+                let proposal_key = namada::core::ledger::governance::storage::keys::get_proposal_execution_key(0);
+                shell.wl_storage.write(&proposal_key, 0).unwrap();
+
+                // Return a dummy tx for validation
+                let mut tx = Tx::from_type(
+                    namada::types::transaction::TxType::Decrypted(
+                        namada::types::transaction::DecryptedTx::Decrypted,
+                    ),
+                );
+                tx.set_data(namada::proto::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
+                tx
+            }
+            _ => panic!("Unexpected bench test"),
+        };
+
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
+
+        let vp_address = Address::Internal(InternalAddress::Parameters);
+        let parameters = ParametersVp {
+            ctx: Ctx::new(
+                &vp_address,
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                &signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                    u64::MAX.into(),
+                )),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
+
+        group.bench_function(bench_name, |b| {
+            b.iter(|| {
+                assert!(
+                    parameters
+                        .validate_tx(
+                            &signed_tx,
+                            parameters.ctx.keys_changed,
+                            parameters.ctx.verifiers,
+                        )
+                        .unwrap()
+                )
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn pos(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_pos");
+
+    for bench_name in ["foreign_key_write", "parameter_change"] {
+        let mut shell = BenchShell::default();
+
+        let signed_tx = match bench_name {
+            "foreign_key_write" => {
+                let tx = generate_foreign_key_tx(&defaults::albert_keypair());
+                // Run the tx to validate
+                shell.execute_tx(&tx);
+                tx
+            }
+            "parameter_change" => {
+                // Simulate governance proposal to modify a parameter
+                let min_proposal_fund_key =
+            namada::core::ledger::governance::storage::keys::get_min_proposal_fund_key();
+                shell
+                    .wl_storage
+                    .write(&min_proposal_fund_key, 1_000)
+                    .unwrap();
+
+                let proposal_key = namada::core::ledger::governance::storage::keys::get_proposal_execution_key(0);
+                shell.wl_storage.write(&proposal_key, 0).unwrap();
+
+                // Return a dummy tx for validation
+                let mut tx = Tx::from_type(
+                    namada::types::transaction::TxType::Decrypted(
+                        namada::types::transaction::DecryptedTx::Decrypted,
+                    ),
+                );
+                tx.set_data(namada::proto::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
+                tx
+            }
+            _ => panic!("Unexpected bench test"),
+        };
+
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
+
+        let vp_address = Address::Internal(InternalAddress::PoS);
+        let pos = PosVP {
+            ctx: Ctx::new(
+                &vp_address,
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                &signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                    u64::MAX.into(),
+                )),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
+
+        group.bench_function(bench_name, |b| {
+            b.iter(|| {
+                assert!(
+                    pos.validate_tx(
+                        &signed_tx,
+                        pos.ctx.keys_changed,
+                        pos.ctx.verifiers,
+                    )
+                    .unwrap()
+                )
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn ibc_vp_validate_action(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_ibc_validate_action");
+    let shell = BenchShell::default();
+
+    // Connection handshake
+    let msg = MsgConnectionOpenInit {
+        client_id_on_a: ClientId::new(
+            ClientType::new("01-tendermint".to_string()).unwrap(),
+            1,
+        )
+        .unwrap(),
+        counterparty: Counterparty::new(
+            ClientId::from_str("01-tendermint-1").unwrap(),
+            None,
+            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+        ),
+        version: Some(Version::default()),
+        delay_period: std::time::Duration::new(100, 0),
+        signer: defaults::albert_address().to_string().into(),
+    };
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Channel handshake
+    let msg = MsgChannelOpenInit {
+        port_id_on_a: PortId::transfer(),
+        connection_hops_on_a: vec![ConnectionId::new(1)],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: defaults::albert_address().to_string().into(),
+        version_proposal: ChannelVersion::new("ics20-1".to_string()),
+    };
+
+    // Avoid serializing the data again with borsh
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Ibc transfer
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
+
+    for (signed_tx, bench_name) in
+        [open_connection, open_channel, outgoing_transfer]
+            .iter()
+            .zip(["open_connection", "open_channel", "outgoing_transfer"])
+    {
+        let mut shell = BenchShell::default();
+        // Initialize the state according to the target tx
+        match bench_name {
+            "open_connection" => {
+                let _ = shell.init_ibc_client_state(
+                    namada::core::types::storage::Key::from(
+                        Address::Internal(InternalAddress::Ibc).to_db_key(),
+                    ),
+                );
+            }
+            "open_channel" => {
+                let _ = shell.init_ibc_connection();
+            }
+            "outgoing_transfer" => shell.init_ibc_channel(),
+            _ => panic!("Unexpected bench test"),
+        }
+
+        shell.execute_tx(signed_tx);
+        let tx_data = signed_tx.data().unwrap();
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
+
+        let ibc = Ibc {
+            ctx: Ctx::new(
+                &Address::Internal(InternalAddress::Ibc),
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                    u64::MAX.into(),
+                )),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
+        let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
+        let ctx = Rc::new(RefCell::new(exec_ctx));
+        let mut actions = IbcActions::new(ctx.clone());
+        actions.set_validation_params(ibc.validation_params().unwrap());
+
+        let module = TransferModule::new(ctx);
+        actions.add_transfer_route(module.module_id(), module);
+
+        group.bench_function(bench_name, |b| {
+            b.iter(|| actions.validate(&tx_data).unwrap())
+        });
+    }
+
+    group.finish();
+}
+
+fn ibc_vp_execute_action(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_ibc_execute_action");
+    let shell = BenchShell::default();
+
+    // Connection handshake
+    let msg = MsgConnectionOpenInit {
+        client_id_on_a: ClientId::new(
+            ClientType::new("01-tendermint".to_string()).unwrap(),
+            1,
+        )
+        .unwrap(),
+        counterparty: Counterparty::new(
+            ClientId::from_str("01-tendermint-1").unwrap(),
+            None,
+            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+        ),
+        version: Some(Version::default()),
+        delay_period: std::time::Duration::new(100, 0),
+        signer: defaults::albert_address().to_string().into(),
+    };
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Channel handshake
+    let msg = MsgChannelOpenInit {
+        port_id_on_a: PortId::transfer(),
+        connection_hops_on_a: vec![ConnectionId::new(1)],
+        port_id_on_b: PortId::transfer(),
+        ordering: Order::Unordered,
+        signer: defaults::albert_address().to_string().into(),
+        version_proposal: ChannelVersion::new("ics20-1".to_string()),
+    };
+
+    // Avoid serializing the data again with borsh
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+
+    // Ibc transfer
+    let outgoing_transfer = shell.generate_ibc_transfer_tx();
+
+    for (signed_tx, bench_name) in
+        [open_connection, open_channel, outgoing_transfer]
+            .iter()
+            .zip(["open_connection", "open_channel", "outgoing_transfer"])
+    {
+        let mut shell = BenchShell::default();
+        // Initialize the state according to the target tx
+        match bench_name {
+            "open_connection" => {
+                let _ = shell.init_ibc_client_state(
+                    namada::core::types::storage::Key::from(
+                        Address::Internal(InternalAddress::Ibc).to_db_key(),
+                    ),
+                );
+            }
+            "open_channel" => {
+                let _ = shell.init_ibc_connection();
+            }
+            "outgoing_transfer" => shell.init_ibc_channel(),
+            _ => panic!("Unexpected bench test"),
+        }
+
+        shell.execute_tx(signed_tx);
+        let tx_data = signed_tx.data().unwrap();
+        let (verifiers, keys_changed) = shell
+            .wl_storage
+            .write_log
+            .verifiers_and_changed_keys(&BTreeSet::default());
+
+        let ibc = Ibc {
+            ctx: Ctx::new(
+                &Address::Internal(InternalAddress::Ibc),
+                &shell.wl_storage.storage,
+                &shell.wl_storage.write_log,
+                signed_tx,
+                &TxIndex(0),
+                VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
+                    u64::MAX.into(),
+                )),
+                &keys_changed,
+                &verifiers,
+                shell.vp_wasm_cache.clone(),
+            ),
+        };
+        let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
+        let ctx = Rc::new(RefCell::new(exec_ctx));
+        let mut actions = IbcActions::new(ctx.clone());
+        actions.set_validation_params(ibc.validation_params().unwrap());
+
+        let module = TransferModule::new(ctx);
+        actions.add_transfer_route(module.module_id(), module);
+
+        group.bench_function(bench_name, |b| {
+            b.iter(|| actions.execute(&tx_data).unwrap())
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     native_vps,
     governance,
     // slash_fund,
     ibc,
-    vp_multitoken
+    vp_multitoken,
+    pgf,
+    eth_bridge_nut,
+    eth_bridge,
+    eth_bridge_pool,
+    parameters,
+    pos,
+    ibc_vp_validate_action,
+    ibc_vp_execute_action
 );
 criterion_main!(native_vps);

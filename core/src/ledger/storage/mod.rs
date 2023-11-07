@@ -30,6 +30,7 @@ pub use self::masp_conversions::update_allowed_conversions;
 pub use self::masp_conversions::{
     calculate_masp_rewards, encode_asset_type, ConversionState,
 };
+use super::gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use crate::ledger::eth_bridge::storage::bridge_pool::is_pending_transfer_key;
 use crate::ledger::gas::{
     STORAGE_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE,
@@ -52,6 +53,7 @@ use crate::types::internal::TxQueue;
 use crate::types::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, MembershipProof, TxIndex, BLOCK_HASH_LENGTH,
+    BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
 };
 use crate::types::time::DateTimeUtc;
 use crate::types::{ethereum_structs, token};
@@ -669,7 +671,7 @@ where
         )
     }
 
-    /// Returns a prefix iterator and the gas cost
+    /// Returns an iterator over the block results
     pub fn iter_results(&self) -> (<D as DBIter<'_>>::PrefixIter, u64) {
         (self.db.iter_results(), 0)
     }
@@ -770,20 +772,23 @@ where
     pub fn get_chain_id(&self) -> (String, u64) {
         (
             self.chain_id.to_string(),
-            CHAIN_ID_LENGTH as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+            CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
     /// Get the block height
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
-        (self.block.height, STORAGE_ACCESS_GAS_PER_BYTE)
+        (
+            self.block.height,
+            BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Get the block hash
     pub fn get_block_hash(&self) -> (BlockHash, u64) {
         (
             self.block.hash.clone(),
-            BLOCK_HASH_LENGTH as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+            BLOCK_HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 
@@ -945,12 +950,18 @@ where
 
     /// Get the current (yet to be committed) block epoch
     pub fn get_current_epoch(&self) -> (Epoch, u64) {
-        (self.block.epoch, STORAGE_ACCESS_GAS_PER_BYTE)
+        (
+            self.block.epoch,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Get the epoch of the last committed block
     pub fn get_last_epoch(&self) -> (Epoch, u64) {
-        (self.last_epoch, STORAGE_ACCESS_GAS_PER_BYTE)
+        (
+            self.last_epoch,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
     }
 
     /// Initialize the first epoch. The first epoch begins at genesis time.
@@ -976,7 +987,14 @@ where
     ) -> Result<(Option<Header>, u64)> {
         match height {
             Some(h) if h == self.get_block_height().0 => {
-                Ok((self.header.clone(), STORAGE_ACCESS_GAS_PER_BYTE))
+                let header = self.header.clone();
+                let gas = match header {
+                    Some(ref header) => {
+                        header.encoded_len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE
+                    }
+                    None => MEMORY_ACCESS_GAS_PER_BYTE,
+                };
+                Ok((header, gas))
             }
             Some(h) => match self.db.read_block_header(h)? {
                 Some(header) => {
