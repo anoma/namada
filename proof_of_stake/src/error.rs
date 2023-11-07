@@ -145,6 +145,8 @@ pub enum RedelegationError {
 pub enum DeactivationError {
     #[error("The validator {0} is already inactive at the pipeline epoch {1}")]
     AlreadyInactive(Address, Epoch),
+    #[error("The given address {0} is not a validator address")]
+    NotAValidator(Address),
 }
 
 #[allow(missing_docs)]

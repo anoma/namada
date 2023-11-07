@@ -5335,10 +5335,18 @@ where
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    // TODO: handle error here
-    let pipeline_state = validator_state_handle(validator)
-        .get(storage, pipeline_epoch, &params)?
-        .unwrap();
+    let pipeline_state = match validator_state_handle(validator).get(
+        storage,
+        pipeline_epoch,
+        &params,
+    )? {
+        Some(state) => state,
+        None => {
+            return Err(
+                DeactivationError::NotAValidator(validator.clone()).into()
+            );
+        }
+    };
 
     let pipeline_stake =
         read_validator_stake(storage, &params, validator, pipeline_epoch)?;
