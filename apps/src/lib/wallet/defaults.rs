@@ -132,38 +132,34 @@ mod dev {
         let wallet = crate::wallet::load(&path).unwrap();
         let sk = match wallet.get_keys().get(name).unwrap().0 {
             namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
-                panic!("Ester's keypair should not be encrypted")
+                panic!("{}'s keypair should not be encrypted", name)
             }
             namada_sdk::wallet::StoredKeypair::Raw(sk) => sk,
         };
         sk.clone()
     }
 
-    /// Get albert's
+    /// Get albert's keypair from the pre-genesis wallet.
     pub fn albert_keypair() -> common::SecretKey {
         get_unencrypted_keypair("albert-key")
     }
 
-    /// N.B. this is the corresponding value from
-    /// `genesis/pre-genesis/wallet.toml`.
+    /// Get bertha's keypair from the pre-genesis wallet.
     pub fn bertha_keypair() -> common::SecretKey {
         get_unencrypted_keypair("bertha-key")
     }
 
-    /// N.B. this is the corresponding value from
-    /// `genesis/pre-genesis/wallet.toml`.
+    /// Get christel's keypair from the pre-genesis wallet.
     pub fn christel_keypair() -> common::SecretKey {
         get_unencrypted_keypair("christel-key")
     }
 
-    /// N.B. this is the corresponding value from
-    /// `genesis/pre-genesis/wallet.toml`.
+    /// Get daewon's keypair from the pre-genesis wallet.
     pub fn daewon_keypair() -> common::SecretKey {
         get_unencrypted_keypair("daewon")
     }
 
-    /// N.B. this is the corresponding value from
-    /// `genesis/pre-genesis/wallet.toml`.
+    /// Get ester's keypair from the pre-genesis wallet.
     pub fn ester_keypair() -> common::SecretKey {
         get_unencrypted_keypair("ester")
     }
