@@ -659,9 +659,8 @@ async fn query_tokens<'a>(
     let mut tokens = match base_token {
         Some(base_token) => {
             let mut map = BTreeMap::new();
-            let alias = wallet.lookup_alias(base_token);
-            if alias != base_token.to_string() {
-                map.insert(alias, base_token.clone());
+            if let Some(alias) = wallet.find_alias(base_token) {
+                map.insert(alias.to_string(), base_token.clone());
             }
             map
         }
