@@ -2397,7 +2397,7 @@ mod test_finalize_block {
                 .wl_storage
                 .storage
                 .write_replay_protection_entry(&mut batch, &hash_subkey)
-                .expect("Test failed");
+                .unwrap();
         }
 
         let mut processed_txs: Vec<ProcessedTx> = vec![];
@@ -2444,39 +2444,19 @@ mod test_finalize_block {
 
         // Check inner tx hash has been removed from storage
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[0].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::Undecryptable).as_str());
         assert_eq!(event[2].event_type.to_string(), String::from("applied"));
-        let code = event[2]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[2].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::InvalidTx).as_str());
         assert_eq!(event[3].event_type.to_string(), String::from("applied"));
-        let code = event[3]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[3].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
         assert_eq!(event[4].event_type.to_string(), String::from("applied"));
-        let code = event[4]
-            .attributes
-            .get("code")
-            .expect("Testfailed")
-            .as_str();
+        let code = event[4].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ErrorCodes::WasmRuntimeError).as_str());
 
         for (invalid_inner, valid_wrapper) in [
