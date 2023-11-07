@@ -147,6 +147,11 @@ pub enum DeactivationError {
     AlreadyInactive(Address, Epoch),
     #[error("The given address {0} is not a validator address")]
     NotAValidator(Address),
+    #[error(
+        "The given address {0} is jailed at the pipeline epoch {1} and is \
+         forbidden from being deactivated"
+    )]
+    ValidatorIsJailed(Address, Epoch),
 }
 
 #[allow(missing_docs)]

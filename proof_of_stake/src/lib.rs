@@ -5423,9 +5423,16 @@ where
                 .at(&pipeline_epoch)
                 .remove(storage, validator)?;
         }
-        ValidatorState::BelowThreshold | ValidatorState::Jailed => {}
+        ValidatorState::BelowThreshold => {}
         ValidatorState::Inactive => {
             return Err(DeactivationError::AlreadyInactive(
+                validator.clone(),
+                pipeline_epoch,
+            )
+            .into());
+        }
+        ValidatorState::Jailed => {
+            return Err(DeactivationError::ValidatorIsJailed(
                 validator.clone(),
                 pipeline_epoch,
             )
@@ -5440,8 +5447,6 @@ where
         current_epoch,
         params.pipeline_len,
     )?;
-
-    // TODO: what other kinds of data should be deleted, if any??
 
     Ok(())
 }
