@@ -654,16 +654,24 @@ async fn query_tokens<'a>(
     owner: Option<&Address>,
 ) -> BTreeMap<String, Address> {
     let wallet = context.wallet().await;
+    let mut base_token = base_token;
     // Base tokens
     let mut tokens = match base_token {
         Some(base_token) => {
             let mut map = BTreeMap::new();
-            map.insert(wallet.lookup_alias(base_token), base_token.clone());
+            let alias = wallet.lookup_alias(base_token);
+            if alias != base_token.to_string() {
+                map.insert(alias, base_token.clone());
+            }
             map
         }
         None => wallet.tokens_with_aliases(),
     };
 
+    // Check all IBC denoms if the token isn't an pre-existing token
+    if tokens.is_empty() {
+        base_token = None;
+    }
     let prefixes = match (base_token, owner) {
         (Some(base_token), Some(owner)) => vec![
             ibc_denom_key_prefix(Some(base_token.to_string())),
