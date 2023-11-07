@@ -7,6 +7,7 @@ use namada::core::ledger::storage::WlStorage;
 use namada::ledger::pos::PosQueries;
 use namada::ledger::protocol::get_fee_unshielding_transaction;
 use namada::ledger::storage::TempWlStorage;
+use namada::ledger::storage_api::tx::validate_tx_bytes;
 use namada::proof_of_stake::find_validator_by_raw_hash;
 use namada::types::internal::TxInQueue;
 use namada::types::transaction::protocol::{
@@ -266,6 +267,16 @@ where
     where
         CA: 'static + WasmCacheAccess + Sync,
     {
+        // check tx bytes
+        if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
+            .expect("Failed to get max tx bytes param from storage")
+        {
+            return TxResult {
+                code: ErrorCodes::TooLarge.into(),
+                info: "Tx too large".into(),
+            };
+        }
+
         // try to allocate space for this tx
         if let Err(e) = metadata.txs_bin.try_dump(tx_bytes) {
             return TxResult {

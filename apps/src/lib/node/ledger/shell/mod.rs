@@ -48,6 +48,7 @@ use namada::ledger::storage::{
     DBIter, Sha256Hasher, Storage, StorageHasher, TempWlStorage, WlStorage, DB,
     EPOCH_SWITCH_BLOCKS_DELAY,
 };
+use namada::ledger::storage_api::tx::validate_tx_bytes;
 use namada::ledger::storage_api::{self, StorageRead};
 use namada::ledger::{parameters, pos, protocol};
 use namada::proof_of_stake::{self, process_slashes, read_pos_params, slash};
@@ -1073,6 +1074,15 @@ where
 
         const VALID_MSG: &str = "Mempool validation passed";
         const INVALID_MSG: &str = "Mempool validation failed";
+
+        // Tx size check
+        if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
+            .expect("Failed to get max tx bytes param from storage")
+        {
+            response.code = ErrorCodes::TooLarge.into();
+            response.log = format!("{INVALID_MSG}: Tx too large");
+            return response;
+        }
 
         // Tx format check
         let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
