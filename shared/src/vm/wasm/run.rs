@@ -253,7 +253,19 @@ where
         gas_meter,
     ) {
         Ok(accept) => {
-            if !accept && sentinel.is_invalid_signature() {
+            if sentinel.is_invalid_signature() {
+                if accept {
+                    // This is unexpected, if the signature is invalid the vp
+                    // should have rejected the tx. Something must be wrong with
+                    // the VP logic and we take the signature verification
+                    // result as the reference. In this case we override the vp
+                    // result and log the issue
+                    tracing::warn!(
+                        "VP of {address} accepted the transaction but \
+                         signaled that the signature was invalid. Overriding \
+                         the vp result to reject the transaction..."
+                    );
+                }
                 Err(Error::InvalidTxSignature)
             } else {
                 Ok(accept)
