@@ -3,7 +3,6 @@
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
 use std::fmt::Debug;
-#[cfg(feature = "masp-tx-gen")]
 use std::ops::Deref;
 use std::path::PathBuf;
 
@@ -30,7 +29,6 @@ use masp_primitives::sapling::redjubjub::PublicKey;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
-#[cfg(feature = "masp-tx-gen")]
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
@@ -63,10 +61,8 @@ use namada_core::types::token::{
 use namada_core::types::transaction::{
     AffineCurve, EllipticCurve, PairingEngine, WrapperTx,
 };
-#[cfg(feature = "masp-tx-gen")]
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
-#[cfg(feature = "masp-tx-gen")]
 use sha2::Digest;
 use thiserror::Error;
 
@@ -419,7 +415,6 @@ pub fn to_viewing_key(esk: &ExtendedSpendingKey) -> FullViewingKey {
 
 /// Generate a valid diversifier, i.e. one that has a diversified base. Return
 /// also this diversified base.
-#[cfg(feature = "masp-tx-gen")]
 pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> (Diversifier, masp_primitives::jubjub::SubgroupPoint) {
@@ -1504,7 +1499,6 @@ impl<U: ShieldedUtils> ShieldedContext<U> {
     /// UTXOs are sometimes used to make transactions balanced, but it is
     /// understood that transparent account changes are effected only by the
     /// amounts and signatures specified by the containing Transfer object.
-    #[cfg(feature = "masp-tx-gen")]
     pub async fn gen_shielded_transfer<'a>(
         context: &impl Namada<'a>,
         source: &TransferSource,

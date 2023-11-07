@@ -241,7 +241,6 @@ pub fn gen_secret_key(
     .unwrap()
 }
 
-#[cfg(feature = "masp-tx-gen")]
 fn gen_spending_key(
     csprng: &mut (impl CryptoRng + RngCore),
 ) -> ExtendedSpendingKey {
@@ -527,7 +526,6 @@ impl<U: WalletIo> Wallet<U> {
     }
 
     /// Generate a spending key similarly to how it's done for keypairs
-    #[cfg(feature = "masp-tx-gen")]
     pub fn gen_store_spending_key(
         &mut self,
         alias: String,

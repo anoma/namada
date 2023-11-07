@@ -66,8 +66,8 @@ abciplus = [
 
 
 [dependencies]
-namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}
-namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "masp-tx-gen"]}
+namada = {path = "../shared", features = ["ferveo-tpke", "multicore", "http-client"]}
+namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true
 ark-std.workspace = true
