@@ -535,7 +535,9 @@ where
                         ) = msg
                         {
                             // Remove the wrapper hash but keep the inner tx
-                            // hash
+                            // hash. A replay of the wrapper is impossible since
+                            // the inner tx hash is committed to storage and
+                            // we validate the wrapper against that hash too
                             self.wl_storage
                                 .delete_tx_hash(wrapper.header_hash())
                                 .expect(
@@ -955,8 +957,9 @@ where
     }
 
     // Write the inner tx hash to storage and remove the corresponding wrapper
-    // hash since it's redundant. Requires the wrapper transaction as argument
-    // to recover both the hashes.
+    // hash since it's redundant (we check the inner tx hash too when validating
+    // the wrapper). Requires the wrapper transaction as argument to recover
+    // both the hashes.
     fn commit_inner_tx_hash(&mut self, wrapper_tx: Tx) {
         self.wl_storage
             .write_tx_hash(wrapper_tx.raw_header_hash())
