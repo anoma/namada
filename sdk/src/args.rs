@@ -1421,6 +1421,104 @@ impl TxUnjailValidator {
 }
 
 #[derive(Clone, Debug)]
+/// Deactivate validator args
+pub struct TxDeactivateValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address (should be self)
+    pub validator: C::Address,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxDeactivateValidator<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxDeactivateValidator {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxDeactivateValidator<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxDeactivateValidator {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_deactivate_validator(context, self).await
+    }
+}
+
+#[derive(Clone, Debug)]
+/// Re-activate a deactivated validator args
+pub struct TxReactivateValidator<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Validator address (should be self)
+    pub validator: C::Address,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxReactivateValidator<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxReactivateValidator {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxReactivateValidator<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxReactivateValidator {
+    /// Build a transaction from this builder
+    pub async fn build<'a>(
+        &self,
+        context: &impl Namada<'a>,
+    ) -> crate::error::Result<(crate::proto::Tx, SigningTxData, Option<Epoch>)>
+    {
+        tx::build_reactivate_validator(context, self).await
+    }
+}
+
+#[derive(Clone, Debug)]
 /// Sign a transaction offline
 pub struct SignTx<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments

@@ -804,16 +804,6 @@ where
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
 
-    // Check that validator is not inactive at anywhere between the current
-    // epoch and pipeline offset
-    for epoch in current_epoch.iter_range(offset) {
-        if let Some(ValidatorState::Inactive) =
-            validator_state_handle.get(storage, epoch, &params)?
-        {
-            return Err(BondError::InactiveValidator(validator.clone()).into());
-        }
-    }
-
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
         tracing::debug!("\nBonds before incrementing: {bonds:#?}");
@@ -831,13 +821,11 @@ where
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
-    let is_jailed_at_pipeline = matches!(
-        validator_state_handle
-            .get(storage, offset_epoch, &params)?
-            .unwrap(),
-        ValidatorState::Jailed
+    let is_jailed_or_inactive_at_pipeline = matches!(
+        validator_state_handle.get(storage, offset_epoch, &params)?,
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,
@@ -1712,8 +1700,6 @@ where
         return Err(UnbondError::ValidatorIsFrozen(validator.clone()).into());
     }
 
-    // TODO: check that validator is not inactive (when implemented)!
-
     let source = source.unwrap_or(validator);
     let bonds_handle = bond_handle(source, validator);
 
@@ -1961,13 +1947,15 @@ where
     // Update the validator set at the pipeline offset. Since unbonding from a
     // jailed validator who is no longer frozen is allowed, only update the
     // validator set if the validator is not jailed
-    let is_jailed_at_pipeline = matches!(
-        validator_state_handle(validator)
-            .get(storage, pipeline_epoch, &params)?
-            .unwrap(),
-        ValidatorState::Jailed
+    let is_jailed_or_inactive_at_pipeline = matches!(
+        validator_state_handle(validator).get(
+            storage,
+            pipeline_epoch,
+            &params
+        )?,
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,
@@ -5296,15 +5284,15 @@ where
     )?;
 
     // Update validator set for dest validator
-    let is_jailed_at_pipeline = matches!(
+    let is_jailed_or_inactive_at_pipeline = matches!(
         validator_state_handle(dest_validator).get(
             storage,
             pipeline_epoch,
             &params
         )?,
-        Some(ValidatorState::Jailed)
+        Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_at_pipeline {
+    if !is_jailed_or_inactive_at_pipeline {
         update_validator_set(
             storage,
             &params,
@@ -5330,6 +5318,203 @@ where
         amount_after_slashing.change(),
         current_epoch,
         None,
+    )?;
+
+    Ok(())
+}
+
+/// De-activate a validator by removing it from any validator sets
+pub fn deactivate_validator<S>(
+    storage: &mut S,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let params = read_pos_params(storage)?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    let pipeline_state = match validator_state_handle(validator).get(
+        storage,
+        pipeline_epoch,
+        &params,
+    )? {
+        Some(state) => state,
+        None => {
+            return Err(
+                DeactivationError::NotAValidator(validator.clone()).into()
+            );
+        }
+    };
+
+    let pipeline_stake =
+        read_validator_stake(storage, &params, validator, pipeline_epoch)?;
+
+    // Remove the validator from the validator set. If it is in the consensus
+    // set, promote the next validator.
+    match pipeline_state {
+        ValidatorState::Consensus => {
+            let consensus_set = consensus_validator_set_handle()
+                .at(&pipeline_epoch)
+                .at(&pipeline_stake);
+            // TODO: handle the unwrap better here
+            let val_position = validator_set_positions_handle()
+                .at(&pipeline_epoch)
+                .get(storage, validator)?
+                .unwrap();
+            let removed = consensus_set.remove(storage, &val_position)?;
+            debug_assert_eq!(removed, Some(validator.clone()));
+
+            // Remove position
+            validator_set_positions_handle()
+                .at(&pipeline_epoch)
+                .remove(storage, validator)?;
+
+            // Now promote the next below-capacity validator to the consensus
+            // set
+            let below_cap_set =
+                below_capacity_validator_set_handle().at(&pipeline_epoch);
+            let max_below_capacity_validator_amount =
+                get_max_below_capacity_validator_amount(
+                    &below_cap_set,
+                    storage,
+                )?;
+
+            if let Some(max_bc_amount) = max_below_capacity_validator_amount {
+                let below_cap_vals_max =
+                    below_cap_set.at(&max_bc_amount.into());
+                let lowest_position =
+                    find_first_position(&below_cap_vals_max, storage)?.unwrap();
+                let removed_max_below_capacity = below_cap_vals_max
+                    .remove(storage, &lowest_position)?
+                    .expect("Must have been removed");
+
+                insert_validator_into_set(
+                    &consensus_validator_set_handle()
+                        .at(&pipeline_epoch)
+                        .at(&max_bc_amount),
+                    storage,
+                    &pipeline_epoch,
+                    &removed_max_below_capacity,
+                )?;
+                validator_state_handle(&removed_max_below_capacity).set(
+                    storage,
+                    ValidatorState::Consensus,
+                    pipeline_epoch,
+                    0,
+                )?;
+            }
+        }
+        ValidatorState::BelowCapacity => {
+            let below_capacity_set = below_capacity_validator_set_handle()
+                .at(&pipeline_epoch)
+                .at(&pipeline_stake.into());
+            // TODO: handle the unwrap better here
+            let val_position = validator_set_positions_handle()
+                .at(&pipeline_epoch)
+                .get(storage, validator)?
+                .unwrap();
+            let removed = below_capacity_set.remove(storage, &val_position)?;
+            debug_assert_eq!(removed, Some(validator.clone()));
+
+            // Remove position
+            validator_set_positions_handle()
+                .at(&pipeline_epoch)
+                .remove(storage, validator)?;
+        }
+        ValidatorState::BelowThreshold => {}
+        ValidatorState::Inactive => {
+            return Err(DeactivationError::AlreadyInactive(
+                validator.clone(),
+                pipeline_epoch,
+            )
+            .into());
+        }
+        ValidatorState::Jailed => {
+            return Err(DeactivationError::ValidatorIsJailed(
+                validator.clone(),
+                pipeline_epoch,
+            )
+            .into());
+        }
+    }
+
+    // Set the state to inactive
+    validator_state_handle(validator).set(
+        storage,
+        ValidatorState::Inactive,
+        current_epoch,
+        params.pipeline_len,
+    )?;
+
+    Ok(())
+}
+
+/// Re-activate an inactive validator
+pub fn reactivate_validator<S>(
+    storage: &mut S,
+    validator: &Address,
+    current_epoch: Epoch,
+) -> storage_api::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // TODO: need to additionally check for past slashes, in case a jailed
+    // validator tries to deactivate and then reactivate
+    let params = read_pos_params(storage)?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Make sure state is Inactive at every epoch up through the pipeline
+    for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
+        let state =
+            validator_state_handle(validator).get(storage, epoch, &params)?;
+        if let Some(state) = state {
+            if state != ValidatorState::Inactive {
+                return Err(ReactivationError::NotInactive(
+                    validator.clone(),
+                    epoch,
+                )
+                .into());
+            }
+        } else {
+            return Err(ReactivationError::NoStateFound(
+                validator.clone(),
+                epoch,
+            )
+            .into());
+        }
+    }
+
+    // Check to see if the validator should still be jailed upon a reactivation
+    let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?;
+    if let Some(last_slash_epoch) = last_slash_epoch {
+        let eligible_epoch =
+            last_slash_epoch + params.slash_processing_epoch_offset();
+        if current_epoch < eligible_epoch {
+            // The validator should be set back to jailed
+            validator_state_handle(validator).set(
+                storage,
+                ValidatorState::Jailed,
+                pipeline_epoch,
+                0,
+            )?;
+            // End execution here?
+            return Ok(());
+        }
+    }
+
+    // Determine which validator set the validator should be added to again
+    let stake =
+        read_validator_stake(storage, &params, validator, pipeline_epoch)?;
+
+    insert_validator_into_validator_set(
+        storage,
+        &params,
+        validator,
+        stake,
+        current_epoch,
+        params.pipeline_len,
     )?;
 
     Ok(())

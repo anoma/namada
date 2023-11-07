@@ -74,6 +74,10 @@ pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 pub const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 /// Unjail validator transaction WASM path
 pub const TX_UNJAIL_VALIDATOR_WASM: &str = "tx_unjail_validator.wasm";
+/// Deactivate validator transaction WASM path
+pub const TX_DEACTIVATE_VALIDATOR_WASM: &str = "tx_deactivate_validator.wasm";
+/// Reactivate validator transaction WASM path
+pub const TX_REACTIVATE_VALIDATOR_WASM: &str = "tx_reactivate_validator.wasm";
 /// Initialize proposal transaction WASM path
 pub const TX_INIT_PROPOSAL: &str = "tx_init_proposal.wasm";
 /// Vote transaction WASM path
@@ -813,6 +817,147 @@ pub async fn build_unjail_validator<'a>(
     .map(|(tx, epoch)| (tx, signing_data, epoch))
 }
 
+/// Submit transaction to deactivate a validator
+pub async fn build_deactivate_validator<'a>(
+    context: &impl Namada<'a>,
+    args::TxDeactivateValidator {
+        tx: tx_args,
+        validator,
+        tx_code_path,
+    }: &args::TxDeactivateValidator,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(validator.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(validator.clone()),
+        default_signer,
+    )
+    .await?;
+
+    // Check if the validator address is actually a validator
+    if !rpc::is_validator(context.client(), validator).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {} is not a validator.",
+            &validator
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::InvalidValidatorAddress(
+                validator.clone(),
+            )));
+        }
+    }
+
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
+    let current_epoch = rpc::query_epoch(context.client()).await?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    let validator_state_at_pipeline = rpc::get_validator_state(
+        context.client(),
+        validator,
+        Some(pipeline_epoch),
+    )
+    .await?;
+    if validator_state_at_pipeline == Some(ValidatorState::Inactive) {
+        edisplay_line!(
+            context.io(),
+            "The given validator address {} is already inactive at the \
+             pipeline epoch {}.",
+            &validator,
+            &pipeline_epoch
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::ValidatorInactive(
+                validator.clone(),
+                pipeline_epoch,
+            )));
+        }
+    }
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        validator.clone(),
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    )
+    .await
+    .map(|(tx, epoch)| (tx, signing_data, epoch))
+}
+
+/// Submit transaction to deactivate a validator
+pub async fn build_reactivate_validator<'a>(
+    context: &impl Namada<'a>,
+    args::TxReactivateValidator {
+        tx: tx_args,
+        validator,
+        tx_code_path,
+    }: &args::TxReactivateValidator,
+) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let default_signer = Some(validator.clone());
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        Some(validator.clone()),
+        default_signer,
+    )
+    .await?;
+
+    // Check if the validator address is actually a validator
+    if !rpc::is_validator(context.client(), validator).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {} is not a validator.",
+            &validator
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxError::InvalidValidatorAddress(
+                validator.clone(),
+            )));
+        }
+    }
+
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
+    let current_epoch = rpc::query_epoch(context.client()).await?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
+        let validator_state =
+            rpc::get_validator_state(context.client(), validator, Some(epoch))
+                .await?;
+
+        if validator_state != Some(ValidatorState::Inactive) {
+            edisplay_line!(
+                context.io(),
+                "The given validator address {} is not inactive at epoch {}.",
+                &validator,
+                &epoch
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxError::ValidatorNotInactive(
+                    validator.clone(),
+                    epoch,
+                )));
+            }
+        }
+    }
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        validator.clone(),
+        do_nothing,
+        &signing_data.fee_payer,
+        None,
+    )
+    .await
+    .map(|(tx, epoch)| (tx, signing_data, epoch))
+}
+
 /// Redelegate bonded tokens from one validator to another
 pub async fn build_redelegation<'a>(
     context: &impl Namada<'a>,
@@ -905,6 +1050,32 @@ pub async fn build_redelegation<'a>(
                 owner.clone(),
             )));
         }
+    }
+
+    // Give a redelegation warning based on the pipeline state of the dest
+    // validator
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let dest_validator_state_at_pipeline = rpc::get_validator_state(
+        context.client(),
+        &dest_validator,
+        Some(pipeline_epoch),
+    )
+    .await?;
+    if dest_validator_state_at_pipeline == Some(ValidatorState::Inactive)
+        && !tx_args.force
+    {
+        edisplay_line!(
+            context.io(),
+            "WARNING: the given destination validator address {} is inactive \
+             at the pipeline epoch {}. If you would still like to bond to the \
+             inactive validator, use the --force option.",
+            &dest_validator,
+            &pipeline_epoch
+        );
+        return Err(Error::from(TxError::ValidatorInactive(
+            dest_validator.clone(),
+            pipeline_epoch,
+        )));
     }
 
     // There must be at least as many tokens in the bond as the requested
@@ -1257,6 +1428,33 @@ pub async fn build_bond<'a>(
             .map(Some),
         None => Ok(source.clone()),
     }?;
+
+    // Give a bonding warning based on the pipeline state
+    let params: PosParams = rpc::get_pos_params(context.client()).await?;
+    let current_epoch = rpc::query_epoch(context.client()).await?;
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let validator_state_at_pipeline = rpc::get_validator_state(
+        context.client(),
+        &validator,
+        Some(pipeline_epoch),
+    )
+    .await?;
+    if validator_state_at_pipeline == Some(ValidatorState::Inactive)
+        && !tx_args.force
+    {
+        edisplay_line!(
+            context.io(),
+            "WARNING: the given validator address {} is inactive at the \
+             pipeline epoch {}. If you would still like to bond to the \
+             inactive validator, use the --force option.",
+            &validator,
+            &pipeline_epoch
+        );
+        return Err(Error::from(TxError::ValidatorInactive(
+            validator.clone(),
+            pipeline_epoch,
+        )));
+    }
 
     let default_address = source.clone().unwrap_or(validator.clone());
     let default_signer = Some(default_address.clone());

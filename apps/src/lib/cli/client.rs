@@ -245,6 +245,32 @@ impl CliApi {
                         let namada = ctx.to_sdk(&client, io);
                         tx::submit_unjail_validator(&namada, args).await?;
                     }
+                    Sub::TxDeactivateValidator(TxDeactivateValidator(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        tx::submit_deactivate_validator(&namada, args).await?;
+                    }
+                    Sub::TxReactivateValidator(TxReactivateValidator(
+                        mut args,
+                    )) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(
+                                &mut args.tx.ledger_address,
+                            )
+                        });
+                        client.wait_until_node_is_synced(io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(&client, io);
+                        tx::submit_reactivate_validator(&namada, args).await?;
+                    }
                     Sub::TxUpdateStewardCommission(
                         TxUpdateStewardCommission(mut args),
                     ) => {

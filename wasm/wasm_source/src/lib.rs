@@ -4,6 +4,8 @@ pub mod tx_bond;
 pub mod tx_bridge_pool;
 #[cfg(feature = "tx_change_validator_commission")]
 pub mod tx_change_validator_commission;
+#[cfg(feature = "tx_deactivate_validator")]
+pub mod tx_deactivate_validator;
 #[cfg(feature = "tx_ibc")]
 pub mod tx_ibc;
 #[cfg(feature = "tx_init_account")]
@@ -12,6 +14,8 @@ pub mod tx_init_account;
 pub mod tx_init_proposal;
 #[cfg(feature = "tx_init_validator")]
 pub mod tx_init_validator;
+#[cfg(feature = "tx_reactivate_validator")]
+pub mod tx_reactivate_validator;
 #[cfg(feature = "tx_redelegate")]
 pub mod tx_redelegate;
 #[cfg(feature = "tx_resign_steward")]
