@@ -62,6 +62,7 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
