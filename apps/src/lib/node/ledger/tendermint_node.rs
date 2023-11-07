@@ -10,8 +10,6 @@ use namada::types::storage::BlockHeight;
 use namada::types::time::DateTimeUtc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-#[cfg(feature = "abcipp")]
-use tendermint_abcipp::Moniker;
 use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -20,9 +18,7 @@ use tokio::process::Command;
 use crate::cli::namada_version;
 use crate::config;
 use crate::facade::tendermint::node::Id as TendermintNodeId;
-#[cfg(feature = "abciplus")]
-use crate::facade::tendermint::Moniker;
-use crate::facade::tendermint::{block, Genesis};
+use crate::facade::tendermint::{block, Genesis, Moniker};
 use crate::facade::tendermint_config::{
     Error as TendermintError, TendermintConfig,
 };
@@ -96,9 +92,6 @@ pub async fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    #[cfg(feature = "abcipp")]
-    write_tm_genesis(&home_dir, chain_id, genesis_time, &config).await;
-    #[cfg(not(feature = "abcipp"))]
     write_tm_genesis(&home_dir, chain_id, genesis_time).await;
 
     update_tendermint_config(&home_dir, config.cometbft).await?;
@@ -392,7 +385,6 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-    #[cfg(feature = "abcipp")] config: &config::Tendermint,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("genesis.json");
@@ -428,11 +420,6 @@ async fn write_tm_genesis(
         time_iota_ms: block::Size::default_time_iota_ms(),
     };
     genesis.consensus_params.block = size;
-    #[cfg(feature = "abcipp")]
-    {
-        genesis.consensus_params.timeout.commit =
-            config.consensus_timeout_commit.into();
-    }
 
     let mut file = OpenOptions::new()
         .write(true)

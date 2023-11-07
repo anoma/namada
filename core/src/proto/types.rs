@@ -28,7 +28,6 @@ use thiserror::Error;
 use super::generated::types;
 use crate::ledger::gas::{GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint_proto::v0_37::abci::ResponseDeliverTx;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
@@ -1843,7 +1842,6 @@ impl Tx {
     }
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Tx> for ResponseDeliverTx {
     #[cfg(not(feature = "ferveo-tpke"))]
     fn from(_tx: Tx) -> ResponseDeliverTx {

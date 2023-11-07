@@ -6,20 +6,13 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::abci::{
-        RequestExtendVote, RequestVerifyVoteExtension, ResponseExtendVote,
-        ResponseVerifyVoteExtension,
-    };
-    #[cfg(not(feature = "abcipp"))]
-    use crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock;
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
         RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
         RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
         RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseFlush,
-        ResponseInfo, ResponseInitChain, ResponseListSnapshots,
+        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
+        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
         ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
         VoteInfo,
     };
@@ -62,10 +55,6 @@ pub mod shim {
         ProcessProposal(RequestProcessProposal),
         #[allow(dead_code)]
         RevertProposal(request::RevertProposal),
-        #[cfg(feature = "abcipp")]
-        ExtendVote(RequestExtendVote),
-        #[cfg(feature = "abcipp")]
-        VerifyVoteExtension(RequestVerifyVoteExtension),
         FinalizeBlock(request::FinalizeBlock),
         Commit(RequestCommit),
         Flush(RequestFlush),
@@ -89,12 +78,6 @@ pub mod shim {
                 Req::Commit(inner) => Ok(Request::Commit(inner)),
                 Req::Flush(inner) => Ok(Request::Flush(inner)),
                 Req::Echo(inner) => Ok(Request::Echo(inner)),
-                #[cfg(feature = "abcipp")]
-                Req::ExtendVote(inner) => Ok(Request::ExtendVote(inner)),
-                #[cfg(feature = "abcipp")]
-                Req::VerifyVoteExtension(inner) => {
-                    Ok(Request::VerifyVoteExtension(inner))
-                }
                 Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
                 Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
                 Req::OfferSnapshot(inner) => Ok(Request::OfferSnapshot(inner)),
@@ -124,12 +107,7 @@ pub mod shim {
         VerifyHeader(response::VerifyHeader),
         ProcessProposal(response::ProcessProposal),
         RevertProposal(response::RevertProposal),
-        #[cfg(feature = "abcipp")]
-        ExtendVote(ResponseExtendVote),
-        #[cfg(feature = "abcipp")]
-        VerifyVoteExtension(ResponseVerifyVoteExtension),
         FinalizeBlock(response::FinalizeBlock),
-        #[cfg(not(feature = "abcipp"))]
         EndBlock(ResponseEndBlock),
         Commit(ResponseCommit),
         Flush(ResponseFlush),
@@ -169,12 +147,6 @@ pub mod shim {
                 Response::PrepareProposal(inner) => {
                     Ok(Resp::PrepareProposal(inner.into()))
                 }
-                #[cfg(feature = "abcipp")]
-                Response::ExtendVote(inner) => Ok(Resp::ExtendVote(inner)),
-                #[cfg(feature = "abcipp")]
-                Response::VerifyVoteExtension(inner) => {
-                    Ok(Resp::VerifyVoteExtension(inner))
-                }
                 _ => Err(Error::ConvertResp(resp)),
             }
         }
@@ -184,18 +156,12 @@ pub mod shim {
     pub mod request {
         use std::convert::TryFrom;
 
-        #[cfg(not(feature = "abcipp"))]
         use namada::tendermint_proto::v0_37::abci::RequestBeginBlock;
         use namada::types::hash::Hash;
         use namada::types::storage::{BlockHash, Header};
         use namada::types::time::DateTimeUtc;
-        #[cfg(feature = "abcipp")]
-        use tendermint_proto_abcipp::abci::{
-            Misbehavior as Evidence, RequestFinalizeBlock,
-        };
 
         use super::VoteInfo;
-        #[cfg(not(feature = "abcipp"))]
         use crate::facade::tendermint_proto::v0_37::abci::Misbehavior as Evidence;
 
         pub struct VerifyHeader;
@@ -219,28 +185,6 @@ pub mod shim {
             pub votes: Vec<VoteInfo>,
         }
 
-        #[cfg(feature = "abcipp")]
-        impl From<RequestFinalizeBlock> for FinalizeBlock {
-            fn from(req: RequestFinalizeBlock) -> FinalizeBlock {
-                FinalizeBlock {
-                    hash: BlockHash::try_from(req.hash.as_slice()).unwrap(),
-                    header: Header {
-                        hash: Hash::try_from(req.hash.as_slice()).unwrap(),
-                        time: DateTimeUtc::try_from(req.time.unwrap()).unwrap(),
-                        next_validators_hash: Hash::try_from(
-                            req.next_validators_hash.as_slice(),
-                        )
-                        .unwrap(),
-                    },
-                    byzantine_validators: req.byzantine_validators,
-                    txs: vec![],
-                    proposer_address: req.proposer_address,
-                    votes: req.decided_last_commit.unwrap().votes,
-                }
-            }
-        }
-
-        #[cfg(not(feature = "abcipp"))]
         impl From<RequestBeginBlock> for FinalizeBlock {
             fn from(req: RequestBeginBlock) -> FinalizeBlock {
                 let header = req.header.unwrap();
@@ -268,36 +212,18 @@ pub mod shim {
     /// Custom types for response payloads
     pub mod response {
         use namada::ledger::events::Event;
-        #[cfg(feature = "abcipp")]
-        use namada::ledger::events::EventLevel;
 
         use crate::facade::tendermint_proto::v0_37::abci::{
             Event as TmEvent, ResponsePrepareProposal, ResponseProcessProposal,
             ValidatorUpdate,
         };
-        #[cfg(not(feature = "abcipp"))]
         use crate::facade::tendermint_proto::v0_37::types::ConsensusParams;
-        #[cfg(feature = "abcipp")]
-        use crate::facade::tendermint_proto::{
-            abci::{ExecTxResult, ResponseFinalizeBlock},
-            types::ConsensusParams,
-        };
 
         #[derive(Debug, Default)]
         pub struct PrepareProposal {
             pub txs: Vec<super::TxBytes>,
         }
 
-        #[cfg(feature = "abcipp")]
-        impl From<PrepareProposal> for ResponsePrepareProposal {
-            fn from(_: PrepareProposal) -> Self {
-                // TODO(namada#198): When abci++ arrives, we should return a
-                // real response.
-                Self::default()
-            }
-        }
-
-        #[cfg(not(feature = "abcipp"))]
         impl From<PrepareProposal> for ResponsePrepareProposal {
             fn from(resp: PrepareProposal) -> Self {
                 Self { txs: resp.txs }
@@ -312,49 +238,12 @@ pub mod shim {
             pub info: String,
         }
 
-        #[cfg(feature = "abcipp")]
-        impl From<TxResult> for ExecTxResult {
-            fn from(TxResult { code, info }: TxResult) -> Self {
-                ExecTxResult {
-                    code,
-                    info,
-                    ..Default::default()
-                }
-            }
-        }
-
-        #[cfg(feature = "abcipp")]
-        impl From<&ExecTxResult> for TxResult {
-            fn from(ExecTxResult { code, info, .. }: &ExecTxResult) -> Self {
-                TxResult {
-                    code: *code,
-                    info: info.clone(),
-                }
-            }
-        }
-
         #[derive(Debug, Default)]
         pub struct ProcessProposal {
             pub status: i32,
             pub tx_results: Vec<TxResult>,
         }
 
-        #[cfg(feature = "abcipp")]
-        impl From<&ProcessProposal> for ResponseProcessProposal {
-            fn from(resp: &ProcessProposal) -> Self {
-                Self {
-                    status: resp.status,
-                    tx_results: resp
-                        .tx_results
-                        .iter()
-                        .map(|res| ExecTxResult::from(res.clone()))
-                        .collect(),
-                    ..Default::default()
-                }
-            }
-        }
-
-        #[cfg(not(feature = "abcipp"))]
         impl From<&ProcessProposal> for ResponseProcessProposal {
             fn from(resp: &ProcessProposal) -> Self {
                 Self {
@@ -373,47 +262,6 @@ pub mod shim {
             pub consensus_param_updates: Option<ConsensusParams>,
         }
 
-        #[cfg(feature = "abcipp")]
-        impl From<FinalizeBlock> for ResponseFinalizeBlock {
-            fn from(resp: FinalizeBlock) -> Self {
-                ResponseFinalizeBlock {
-                    tx_results: resp
-                        .events
-                        .iter()
-                        .filter(|event| matches!(event.level, EventLevel::Tx))
-                        .map(|event| ExecTxResult {
-                            code: event
-                                .get("code")
-                                .map(|code| code.parse::<u32>().unwrap())
-                                .unwrap_or_default(),
-                            log: event
-                                .get("log")
-                                .map(|log| log.to_owned())
-                                .unwrap_or_default(),
-                            info: event
-                                .get("info")
-                                .map(|info| info.to_owned())
-                                .unwrap_or_default(),
-                            gas_used: event
-                                .get("gas_used")
-                                .map(|gas| gas.parse::<i64>().unwrap())
-                                .unwrap_or_default(),
-                            ..Default::default()
-                        })
-                        .collect(),
-                    events: resp
-                        .events
-                        .into_iter()
-                        .map(TmEvent::from)
-                        .collect(),
-                    consensus_param_updates: resp.consensus_param_updates,
-                    validator_updates: resp.validator_updates,
-                    ..Default::default()
-                }
-            }
-        }
-
-        #[cfg(not(feature = "abcipp"))]
         impl From<FinalizeBlock>
             for crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock
         {

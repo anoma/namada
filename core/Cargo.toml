@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["abciplus", "ferveo-tpke"]
+default = ["ferveo-tpke"]
 mainnet = []
 ferveo-tpke = [
   "ferveo",
@@ -24,14 +24,6 @@ ferveo-tpke = [
 ]
 wasm-runtime = [
   "rayon",
-]
-
-abciplus = [
-  "ibc",
-  "ibc-derive",
-  "ibc-proto",
-  "tendermint",
-  "tendermint-proto",
 ]
 
 ibc-mocks = [
@@ -68,9 +60,9 @@ eyre.workspace = true
 ferveo = {optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 ferveo-common = {git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
 tpke = {package = "group-threshold-cryptography", optional = true, git = "https://github.com/anoma/ferveo", rev = "e5abd0acc938da90140351a65a26472eb495ce4d"}
-ibc = { version = "0.47.0", default-features = false, features = ["serde"], optional = true}
-ibc-derive = { version = "0.3.0", optional = true}
-ibc-proto = {version = "0.37.1", default-features = false, optional = true}
+ibc = { version = "0.47.0", default-features = false, features = ["serde"]}
+ibc-derive = { version = "0.3.0"}
+ibc-proto = {version = "0.37.1", default-features = false}
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
@@ -91,8 +83,8 @@ rayon = {version = "=1.5.3", optional = true}
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-tendermint = {workspace = true, optional = true}
-tendermint-proto = {workspace = true, optional = true}
+tendermint = {workspace = true}
+tendermint-proto = {workspace = true}
 thiserror.workspace = true
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
 tracing.workspace = true

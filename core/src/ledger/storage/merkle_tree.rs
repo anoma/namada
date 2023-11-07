@@ -656,7 +656,6 @@ pub struct Proof {
     pub base_proof: CommitmentProof,
 }
 
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Proof> for crate::tendermint::merkle::proof::ProofOps {
     fn from(
         Proof {

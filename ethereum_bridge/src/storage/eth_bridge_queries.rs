@@ -250,24 +250,6 @@ where
 
     /// Determines if it is possible to send a validator set update vote
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    #[cfg(feature = "abcipp")]
-    #[inline]
-    pub fn must_send_valset_upd(self, can_send: SendValsetUpd) -> bool {
-        if matches!(can_send, SendValsetUpd::Now) {
-            self.wl_storage
-                .pos_queries()
-                .is_deciding_offset_within_epoch(1)
-        } else {
-            // TODO: implement this method for ABCI++; should only be able to
-            // send a validator set update at the second block of an
-            // epoch
-            false
-        }
-    }
-
-    /// Determines if it is possible to send a validator set update vote
-    /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
-    #[cfg(not(feature = "abcipp"))]
     #[inline]
     pub fn must_send_valset_upd(self, can_send: SendValsetUpd) -> bool {
         if matches!(can_send, SendValsetUpd::AtPrevHeight) {

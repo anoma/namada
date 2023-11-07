@@ -38,7 +38,6 @@ use crate::ledger::parameters::{self, EpochDuration, Parameters};
 use crate::ledger::storage::merkle_tree::{
     Error as MerkleTreeError, MerkleRoot,
 };
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::types::address::{
     masp, Address, EstablishedAddressGen, InternalAddress,
@@ -883,7 +882,6 @@ where
     /// Tendermint-compatible. Requesting for a key
     /// belonging to the bridge pool will cause this
     /// method to error.
-    #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
     pub fn get_existence_proof(
         &self,
         key: &Key,

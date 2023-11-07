@@ -12,8 +12,6 @@ use namada::types::internal::TxInQueue;
 use namada::types::transaction::protocol::{
     ethereum_tx_data_variants, ProtocolTxType,
 };
-#[cfg(feature = "abcipp")]
-use namada::types::voting_power::FractionalVotingPower;
 use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
 use super::block_alloc::{BlockSpace, EncryptedTxsBins};
@@ -31,8 +29,6 @@ pub struct ValidationMeta {
     /// Space and gas utilized by encrypted txs.
     pub encrypted_txs_bins: EncryptedTxsBins,
     /// Vote extension digest counters.
-    #[cfg(feature = "abcipp")]
-    pub digests: DigestCounters,
     /// Space utilized by all txs.
     pub txs_bin: TxBin<BlockSpace>,
     /// Check if the decrypted tx queue has any elements
@@ -59,27 +55,12 @@ where
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
         Self {
-            #[cfg(feature = "abcipp")]
-            digests: DigestCounters::default(),
             decrypted_queue_has_remaining_txs: false,
             has_decrypted_txs: false,
             encrypted_txs_bins: encrypted_txs_bin,
             txs_bin,
         }
     }
-}
-
-/// Contains stateful data about the number of vote extension
-/// digests found as protocol transactions in a proposed block.
-#[derive(Default)]
-#[cfg(feature = "abcipp")]
-pub struct DigestCounters {
-    /// The number of Ethereum events vote extensions found thus far.
-    pub eth_ev_digest_num: usize,
-    /// The number of Bridge pool root vote extensions found thus far.
-    pub bridge_pool_roots: usize,
-    /// The number of validator set update vote extensions found thus far.
-    pub valset_upd_digest_num: usize,
 }
 
 impl<D, H> Shell<D, H>
@@ -99,126 +80,6 @@ where
     /// but we only reject the entire block if the order of the
     /// included txs violates the order decided upon in the previous
     /// block.
-    #[cfg(feature = "abcipp")]
-    pub fn process_proposal(
-        &self,
-        req: RequestProcessProposal,
-    ) -> ProcessProposal {
-        let tm_raw_hash_string = tm_raw_hash_to_string(&req.proposer_address);
-        let block_proposer =
-            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
-                .unwrap()
-                .expect(
-                    "Unable to find native validator address of block \
-                     proposer from tendermint raw hash",
-                );
-        tracing::info!(
-            proposer = ?HEXUPPER.encode(&req.proposer_address),
-            height = req.height,
-            hash = ?HEXUPPER.encode(&req.hash),
-            n_txs = req.txs.len(),
-            "Received block proposal",
-        );
-        let (tx_results, metadata) =
-            self.process_txs(&req.txs, self.get_block_timestamp(req.time));
-
-        // We should not have more than one `ethereum_events::VextDigest` in
-        // a proposal from some round's leader.
-        let invalid_num_of_eth_ev_digests =
-            !self.has_proper_eth_events_num(&metadata);
-        if invalid_num_of_eth_ev_digests {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                eth_ev_digest_num = metadata.digests.eth_ev_digest_num,
-                "Found invalid number of Ethereum events vote extension digests, proposed block \
-                 will be rejected"
-            );
-        }
-
-        // We should not have more than one `bridge_pool_roots::VextDigest` in
-        // a proposal from some round's leader.
-        let invalid_num_of_bp_root_digests =
-            !self.has_proper_bp_roots_num(&metadata);
-        if invalid_num_of_bp_root_digests {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                eth_ev_digest_num = metadata.digests.bridge_pool_roots,
-                "Found invalid number of Ethereum bridge pool root vote extension \
-                 digests, proposed block will be rejected."
-            );
-        }
-
-        let invalid_num_of_valset_upd_digests =
-            !self.has_proper_valset_upd_num(&metadata);
-        if invalid_num_of_valset_upd_digests {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                valset_upd_digest_num = metadata.digests.valset_upd_digest_num,
-                "Found invalid number of validator set update vote extension digests, proposed block \
-                 will be rejected"
-            );
-        }
-
-        // Erroneous transactions were detected when processing
-        // the leader's proposal. We allow txs that do not
-        // deserialize properly, that have invalid signatures
-        // and that have invalid wasm code to reach FinalizeBlock.
-        let invalid_txs = tx_results.iter().any(|res| {
-            let error = ErrorCodes::from_u32(res.code).expect(
-                "All error codes returned from process_single_tx are valid",
-            );
-            !error.is_recoverable()
-        });
-        if invalid_txs {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                "Found invalid transactions, proposed block will be rejected"
-            );
-        }
-
-        let has_remaining_decrypted_txs =
-            metadata.decrypted_queue_has_remaining_txs;
-        if has_remaining_decrypted_txs {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                "Not all decrypted txs from the previous height were included in
-                 the proposal, the block will be rejected"
-            );
-        }
-
-        let will_reject_proposal = invalid_num_of_eth_ev_digests
-            || invalid_num_of_bp_root_digests
-            || invalid_num_of_valset_upd_digests
-            || invalid_txs
-            || has_remaining_decrypted_txs;
-
-        let status = if will_reject_proposal {
-            ProposalStatus::Reject
-        } else {
-            ProposalStatus::Accept
-        };
-
-        ProcessProposal {
-            status: status as i32,
-            tx_results,
-        }
-    }
-
-    /// Check all the txs in a block. Some txs may be incorrect,
-    /// but we only reject the entire block if the order of the
-    /// included txs violates the order decided upon in the previous
-    /// block.
-    #[cfg(not(feature = "abcipp"))]
     pub fn process_proposal(
         &self,
         req: RequestProcessProposal,
@@ -357,58 +218,10 @@ where
     where
         I: Iterator<Item = Option<namada::types::token::Amount>>,
     {
-        #[cfg(feature = "abcipp")]
-        let mut voting_power = FractionalVotingPower::default();
-        #[cfg(feature = "abcipp")]
-        let total_power = {
-            let epoch = self
-                .wl_storage
-                .pos_queries()
-                .get_epoch(self.wl_storage.storage.get_last_block_height());
-            u64::from(
-                self.wl_storage.pos_queries().get_total_voting_power(epoch),
-            )
-        };
-
-        if vote_extensions.all(|maybe_ext| {
-            maybe_ext
-                .map(|_power| {
-                    #[cfg(feature = "abcipp")]
-                    {
-                        voting_power += FractionalVotingPower::new(
-                            u64::from(_power),
-                            total_power,
-                        )
-                        .expect(
-                            "The voting power we obtain from storage should \
-                             always be valid",
-                        );
-                    }
-                })
-                .is_some()
-        }) {
-            #[cfg(feature = "abcipp")]
-            if voting_power > FractionalVotingPower::TWO_THIRDS {
-                TxResult {
-                    code: ErrorCodes::Ok.into(),
-                    info: "Process proposal accepted this transaction".into(),
-                }
-            } else {
-                TxResult {
-                    code: ErrorCodes::InvalidVoteExtension.into(),
-                    info: "Process proposal rejected this proposal because \
-                           the backing stake of the vote extensions published \
-                           in the proposal was insufficient"
-                        .into(),
-                }
-            }
-
-            #[cfg(not(feature = "abcipp"))]
-            {
-                TxResult {
-                    code: ErrorCodes::Ok.into(),
-                    info: "Process proposal accepted this transaction".into(),
-                }
+        if vote_extensions.all(|maybe_ext| maybe_ext.is_some()) {
+            TxResult {
+                code: ErrorCodes::Ok.into(),
+                info: "Process proposal accepted this transaction".into(),
             }
         } else {
             TxResult {
@@ -644,10 +457,6 @@ where
                                 &tx,
                             )
                             .unwrap();
-                        #[cfg(feature = "abcipp")]
-                        {
-                            metadata.digests.eth_ev_digest_num += 1;
-                        }
                         let extensions = digest.decompress(
                             self.wl_storage.storage.get_last_block_height(),
                         );
@@ -665,10 +474,6 @@ where
                                 &tx,
                             )
                             .unwrap();
-                        #[cfg(feature = "abcipp")]
-                        {
-                            metadata.digests.bridge_pool_roots += 1;
-                        }
                         let valid_extensions = self
                             .validate_bp_roots_vext_list(digest)
                             .map(|maybe_ext| {
@@ -694,10 +499,6 @@ where
                                        invalid block height"
                                     .into(),
                             };
-                        }
-                        #[cfg(feature = "abcipp")]
-                        {
-                            metadata.digests.valset_upd_digest_num += 1;
                         }
 
                         let extensions = digest.decompress(
@@ -882,55 +683,6 @@ where
         Default::default()
     }
 
-    /// Checks if we have found the correct number of Ethereum events
-    /// vote extensions in [`DigestCounters`].
-    #[cfg(feature = "abcipp")]
-    fn has_proper_eth_events_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active() {
-            meta.digests.eth_ev_digest_num
-                == usize::from(self.wl_storage.storage.last_block.is_some())
-        } else {
-            meta.digests.eth_ev_digest_num == 0
-        }
-    }
-
-    /// Checks if we have found the correct number of Ethereum bridge pool
-    /// root vote extensions in [`DigestCounters`].
-    #[cfg(feature = "abcipp")]
-    fn has_proper_bp_roots_num(&self, meta: &ValidationMeta) -> bool {
-        if self.wl_storage.ethbridge_queries().is_bridge_active() {
-            meta.digests.bridge_pool_roots
-                == usize::from(self.wl_storage.storage.last_block.is_some())
-        } else {
-            meta.digests.bridge_pool_roots == 0
-        }
-    }
-
-    /// Checks if we have found the correct number of validator set update
-    /// vote extensions in [`DigestCounters`].
-    #[cfg(feature = "abcipp")]
-    fn has_proper_valset_upd_num(&self, meta: &ValidationMeta) -> bool {
-        // TODO: check if this logic is correct for ABCI++
-        self.wl_storage
-            .ethbridge_queries()
-            .is_bridge_active()
-            .then(|| {
-                if self
-                    .wl_storage
-                    .ethbridge_queries()
-                    .must_send_valset_upd(SendValsetUpd::AtPrevHeight)
-                {
-                    meta.digests.valset_upd_digest_num
-                        == usize::from(
-                            self.wl_storage.storage.last_block.is_some(),
-                        )
-                } else {
-                    true
-                }
-            })
-            .unwrap_or(meta.digests.valset_upd_digest_num == 0)
-    }
-
     /// Checks if it is not possible to include encrypted txs at the current
     /// block height.
     pub(super) fn encrypted_txs_not_allowed(&self) -> bool {
@@ -945,11 +697,6 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    #[cfg(feature = "abcipp")]
-    use std::collections::HashMap;
-
-    #[cfg(feature = "abcipp")]
-    use assert_matches::assert_matches;
     use namada::ledger::replay_protection;
     use namada::ledger::storage_api::StorageWrite;
     use namada::proto::{
@@ -964,10 +711,6 @@ mod test_process_proposal {
     use namada::types::token::Amount;
     use namada::types::transaction::protocol::EthereumTxData;
     use namada::types::transaction::{Fee, Solution, WrapperTx};
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::bridge_pool_roots::MultiSignedVext;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::ethereum_events::MultiSignedEthEvent;
     use namada::types::vote_extensions::{bridge_pool_roots, ethereum_events};
 
     use super::*;
@@ -976,152 +719,9 @@ mod test_process_proposal {
         ProcessProposal, TestError, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
-    #[cfg(feature = "abcipp")]
-    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
     use crate::wallet;
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
-
-    #[cfg(feature = "abcipp")]
-    fn get_empty_eth_ev_digest(shell: &TestShell) -> TxBytes {
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-        let addr = shell
-            .mode
-            .get_validator_address()
-            .expect("Test failed")
-            .clone();
-        let ext = ethereum_events::Vext::empty(
-            shell.wl_storage.storage.get_last_block_height(),
-            addr.clone(),
-        )
-        .sign(protocol_key);
-        EthereumTxData::EthereumEvents(ethereum_events::VextDigest {
-            signatures: {
-                let mut s = HashMap::new();
-                s.insert(
-                    (addr, shell.wl_storage.storage.get_last_block_height()),
-                    ext.sig,
-                );
-                s
-            },
-            events: vec![],
-        })
-        .sign(protocol_key, shell.chain_id.clone())
-        .to_bytes()
-    }
-
-    /// Craft the tx bytes for the block proposal digest containing
-    /// all the Bridge pool root vote extensions.
-    #[cfg(feature = "abcipp")]
-    fn get_bp_roots_vext(shell: &TestShell) -> Vec<u8> {
-        let bp_root = shell.extend_vote_with_bp_roots().expect("Test failed");
-        let tx = shell
-            .compress_bridge_pool_roots(vec![bp_root])
-            .expect("Test failed");
-        EthereumTxData::BridgePool(tx)
-            .sign(
-                shell.mode.get_protocol_key().expect("Test failed"),
-                shell.chain_id.clone(),
-            )
-            .to_bytes()
-    }
-
-    /// Test that if a proposal contains more than one
-    /// `ethereum_events::VextDigest`, we reject it.
-    #[test]
-    #[cfg(feature = "abcipp")]
-    fn test_more_than_one_vext_digest_rejected() {
-        const LAST_HEIGHT: BlockHeight = BlockHeight(2);
-        let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
-        let (protocol_key, _, _) = wallet::defaults::validator_keys();
-        let vote_extension_digest = {
-            let validator_addr = wallet::defaults::validator_address();
-            let signed_vote_extension = {
-                let ext = ethereum_events::Vext::empty(
-                    LAST_HEIGHT,
-                    validator_addr.clone(),
-                )
-                .sign(&protocol_key);
-                assert!(ext.verify(&protocol_key.ref_to()).is_ok());
-                ext
-            };
-            // Ethereum events digest with no observed events
-            ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
-                    s.insert(
-                        (
-                            validator_addr,
-                            shell.wl_storage.storage.get_last_block_height(),
-                        ),
-                        signed_vote_extension.sig,
-                    );
-                    s
-                },
-                events: vec![],
-            }
-        };
-        let tx = EthereumTxData::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key, shell.chain_id.clone())
-            .to_bytes();
-        let request = ProcessProposal {
-            txs: vec![tx.clone(), tx],
-        };
-        let results = shell.process_proposal(request);
-        assert_matches!(
-            results, Err(TestError::RejectProposal(s)) if s.len() == 2
-        );
-    }
-
-    /// Test that if more than one bridge pool root vote extension
-    /// is added to a block, we reject the proposal.
-    #[cfg(feature = "abcipp")]
-    #[test]
-    fn check_multiple_bp_root_vexts_rejected() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let vext = shell.extend_vote_with_bp_roots().expect("Test failed");
-        let tx =
-            EthereumTxData::BridgePool(MultiSignedVext(HashSet::from([vext])))
-                .sign(
-                    shell.mode.get_protocol_key().expect("Test failed."),
-                    shell.chain_id.clone(),
-                )
-                .to_bytes();
-        assert!(
-            shell
-                .process_proposal(ProcessProposal {
-                    txs: vec![tx.clone(), tx]
-                })
-                .is_err()
-        );
-    }
-
-    #[cfg(feature = "abcipp")]
-    fn check_rejected_eth_events_digest(
-        shell: &mut TestShell,
-        vote_extension_digest: ethereum_events::VextDigest,
-        protocol_key: common::SecretKey,
-    ) {
-        let tx = EthereumTxData::EthereumEvents(vote_extension_digest)
-            .sign(&protocol_key, shell.chain_id.clone())
-            .to_bytes();
-        let request = ProcessProposal { txs: vec![tx] };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(
-            response.result.code,
-            u32::from(ErrorCodes::InvalidVoteExtension)
-        );
-    }
 
     /// Check that we reject an eth events protocol tx
     /// if the bridge is not active.
@@ -1145,15 +745,12 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let [resp]: [ProcessedTx; 1] = shell
-                .process_proposal(request.clone())
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
-            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
-        }
+        let [resp]: [ProcessedTx; 1] = shell
+            .process_proposal(request.clone())
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
+        assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
         deactivate_bridge(&mut shell);
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
@@ -1199,16 +796,13 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        #[cfg(not(feature = "abcipp"))]
-        {
-            let [resp]: [ProcessedTx; 1] = shell
-                .process_proposal(request.clone())
-                .expect("Test failed")
-                .try_into()
-                .expect("Test failed");
+        let [resp]: [ProcessedTx; 1] = shell
+            .process_proposal(request.clone())
+            .expect("Test failed")
+            .try_into()
+            .expect("Test failed");
 
-            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
-        }
+        assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
         deactivate_bridge(&mut shell);
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
@@ -1227,105 +821,6 @@ mod test_process_proposal {
         );
     }
 
-    /// Check that we reject an bp roots vext
-    /// if the bridge is not active.
-    #[cfg(feature = "abcipp")]
-    #[test]
-    fn check_rejected_vext_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
-        shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.get_last_block_height();
-        shell.commit();
-        let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
-        let addr = shell.mode.get_validator_address().expect("Test failed");
-        let to_sign = get_bp_bytes_to_sign();
-        let sig = Signed::<_, SignableEthMessage>::new(
-            shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-            to_sign,
-        )
-        .sig;
-        let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.get_last_block_height(),
-            validator_addr: addr.clone(),
-            sig,
-        }
-        .sign(shell.mode.get_protocol_key().expect("Test failed"));
-        let mut txs = vec![
-            EthereumTxData::BridgePool(vote_ext.into())
-                .sign(protocol_key, shell.chain_id.clone())
-                .to_bytes(),
-        ];
-
-        let event = EthereumEvent::TransfersToNamada {
-            nonce: 0u64.into(),
-            transfers: vec![],
-        };
-        let ext = ethereum_events::Vext {
-            validator_addr: addr.clone(),
-            block_height: shell.wl_storage.storage.get_last_block_height(),
-            ethereum_events: vec![event.clone()],
-        }
-        .sign(protocol_key);
-        let vote_extension_digest = ethereum_events::VextDigest {
-            signatures: {
-                let mut s = HashMap::new();
-                s.insert(
-                    (
-                        addr.clone(),
-                        shell.wl_storage.storage.get_last_block_height(),
-                    ),
-                    ext.sig,
-                );
-                s
-            },
-            events: vec![MultiSignedEthEvent {
-                event,
-                signers: {
-                    let mut s = BTreeSet::new();
-                    s.insert((
-                        addr.clone(),
-                        shell.wl_storage.storage.get_last_block_height(),
-                    ));
-                    s
-                },
-            }],
-        };
-        txs.push(
-            EthereumTxData::EthereumEvents(vote_extension_digest)
-                .sign(protocol_key, shell.chain_id.clone())
-                .to_bytes(),
-        );
-        let request = ProcessProposal { txs };
-        let resps: [ProcessedTx; 2] = shell
-            .process_proposal(request.clone())
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-        for resp in resps {
-            assert_eq!(resp.result.code, u32::from(ErrorCodes::Ok));
-        }
-        deactivate_bridge(&mut shell);
-        if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp1, resp2] = resp.as_slice() {
-                assert_eq!(
-                    resp1.result.code,
-                    u32::from(ErrorCodes::InvalidVoteExtension)
-                );
-                assert_eq!(
-                    resp2.result.code,
-                    u32::from(ErrorCodes::InvalidVoteExtension)
-                );
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-    }
-
-    #[cfg(not(feature = "abcipp"))]
     fn check_rejected_eth_events(
         shell: &mut TestShell,
         vote_extension: ethereum_events::SignedVext,
@@ -1379,42 +874,7 @@ mod test_process_proposal {
             ext.sig = test_utils::invalidate_signature(ext.sig);
             ext
         };
-        #[cfg(feature = "abcipp")]
-        {
-            let vote_extension_digest = ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
-                    s.insert(
-                        (
-                            addr.clone(),
-                            shell.wl_storage.storage.get_last_block_height(),
-                        ),
-                        ext.sig,
-                    );
-                    s
-                },
-                events: vec![MultiSignedEthEvent {
-                    event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        s.insert((
-                            addr,
-                            shell.wl_storage.storage.get_last_block_height(),
-                        ));
-                        s
-                    },
-                }],
-            };
-            check_rejected_eth_events_digest(
-                &mut shell,
-                vote_extension_digest,
-                protocol_key,
-            );
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            check_rejected_eth_events(&mut shell, ext, protocol_key);
-        }
+        check_rejected_eth_events(&mut shell, ext, protocol_key);
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -1422,9 +882,6 @@ mod test_process_proposal {
     #[test]
     fn test_drop_vext_with_invalid_bheights() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        #[cfg(feature = "abcipp")]
-        const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 - 1);
-        #[cfg(not(feature = "abcipp"))]
         const INVALID_HEIGHT: BlockHeight = BlockHeight(LAST_HEIGHT.0 + 1);
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         let (protocol_key, _, _) = wallet::defaults::validator_keys();
@@ -1444,33 +901,7 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        #[cfg(feature = "abcipp")]
-        {
-            let vote_extension_digest = ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
-                    s.insert((addr.clone(), INVALID_HEIGHT), ext.sig);
-                    s
-                },
-                events: vec![MultiSignedEthEvent {
-                    event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        s.insert((addr, INVALID_HEIGHT));
-                        s
-                    },
-                }],
-            };
-            check_rejected_eth_events_digest(
-                &mut shell,
-                vote_extension_digest,
-                protocol_key,
-            );
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            check_rejected_eth_events(&mut shell, ext, protocol_key);
-        }
+        check_rejected_eth_events(&mut shell, ext, protocol_key);
     }
 
     /// Test that if a proposal contains Ethereum events with
@@ -1499,33 +930,7 @@ mod test_process_proposal {
             assert!(ext.verify(&protocol_key.ref_to()).is_ok());
             ext
         };
-        #[cfg(feature = "abcipp")]
-        {
-            let vote_extension_digest = ethereum_events::VextDigest {
-                signatures: {
-                    let mut s = HashMap::new();
-                    s.insert((addr.clone(), LAST_HEIGHT), ext.sig);
-                    s
-                },
-                events: vec![MultiSignedEthEvent {
-                    event,
-                    signers: {
-                        let mut s = BTreeSet::new();
-                        s.insert((addr, LAST_HEIGHT));
-                        s
-                    },
-                }],
-            };
-            check_rejected_eth_events_digest(
-                &mut shell,
-                vote_extension_digest,
-                protocol_key,
-            );
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            check_rejected_eth_events(&mut shell, ext, protocol_key);
-        }
+        check_rejected_eth_events(&mut shell, ext, protocol_key);
     }
 
     /// Test that if a wrapper tx is not signed, the block is rejected
@@ -1803,26 +1208,6 @@ mod test_process_proposal {
             outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
             txs.push(outer_tx);
         }
-        #[cfg(feature = "abcipp")]
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![
-                    txs[0].to_bytes(),
-                    txs[2].to_bytes(),
-                    txs[1].to_bytes(),
-                    get_empty_eth_ev_digest(&shell),
-                ],
-            };
-            if let Err(TestError::RejectProposal(mut resp)) =
-                shell.process_proposal(request)
-            {
-                assert_eq!(resp.len(), 4);
-                resp.remove(1)
-            } else {
-                panic!("Test failed")
-            }
-        };
-        #[cfg(not(feature = "abcipp"))]
         let response = {
             let request = ProcessProposal {
                 txs: vec![

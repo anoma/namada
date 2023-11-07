@@ -50,7 +50,7 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = ["std", "abciplus"]
+default = ["std"]
 mainnet = [
   "namada/mainnet",
 ]
@@ -59,14 +59,10 @@ std = ["ed25519-consensus/std", "rand/std", "rand_core/std", "namada/std", "nama
 testing = ["namada_test_utils"]
 benches = ["testing", "namada_test_utils"]
 integration = []
-abciplus = [
-    "namada/abciplus",
-    "namada/tendermint-rpc",
-]
 
 
 [dependencies]
-namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client"]}
+namada = {path = "../shared", features = ["ferveo-tpke", "masp-tx-gen", "multicore", "http-client", "tendermint-rpc"]}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "masp-tx-gen"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true

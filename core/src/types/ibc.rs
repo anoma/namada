@@ -2,8 +2,19 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
+use data_encoding::HEXUPPER;
+use thiserror::Error;
+
+use crate::ibc::applications::transfer::{Memo, PrefixedDenom, TracePath};
+use crate::ibc::core::events::{
+    Error as IbcEventError, IbcEvent as RawIbcEvent,
+};
+use crate::tendermint::abci::Event as AbciEvent;
+use crate::types::masp::PaymentAddress;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
@@ -59,116 +70,93 @@ pub struct IbcShieldedTransfer {
     pub masp_tx: masp_primitives::transaction::Transaction,
 }
 
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-mod ibc_rs_conversion {
-    use std::collections::HashMap;
-    use std::str::FromStr;
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("IBC event error: {0}")]
+    IbcEvent(IbcEventError),
+    #[error("IBC transfer memo HEX decoding error: {0}")]
+    DecodingHex(data_encoding::DecodeError),
+    #[error("IBC transfer memo decoding error: {0}")]
+    DecodingShieldedTransfer(std::io::Error),
+}
 
-    use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
-    use data_encoding::HEXUPPER;
-    use thiserror::Error;
+/// Conversion functions result
+pub type Result<T> = std::result::Result<T, Error>;
 
-    use super::{IbcEvent, IbcShieldedTransfer, EVENT_TYPE_PACKET};
-    use crate::ibc::applications::transfer::{Memo, PrefixedDenom, TracePath};
-    use crate::ibc::core::events::{
-        Error as IbcEventError, IbcEvent as RawIbcEvent,
-    };
-    use crate::tendermint::abci::Event as AbciEvent;
-    use crate::types::masp::PaymentAddress;
+impl TryFrom<RawIbcEvent> for IbcEvent {
+    type Error = Error;
 
-    #[allow(missing_docs)]
-    #[derive(Error, Debug)]
-    pub enum Error {
-        #[error("IBC event error: {0}")]
-        IbcEvent(IbcEventError),
-        #[error("IBC transfer memo HEX decoding error: {0}")]
-        DecodingHex(data_encoding::DecodeError),
-        #[error("IBC transfer memo decoding error: {0}")]
-        DecodingShieldedTransfer(std::io::Error),
-    }
-
-    /// Conversion functions result
-    pub type Result<T> = std::result::Result<T, Error>;
-
-    impl TryFrom<RawIbcEvent> for IbcEvent {
-        type Error = Error;
-
-        fn try_from(e: RawIbcEvent) -> Result<Self> {
-            let event_type = e.event_type().to_string();
-            let abci_event = AbciEvent::try_from(e).map_err(Error::IbcEvent)?;
-            let attributes: HashMap<_, _> = abci_event
-                .attributes
-                .iter()
-                .map(|tag| (tag.key.to_string(), tag.value.to_string()))
-                .collect();
-            Ok(Self {
-                event_type,
-                attributes,
-            })
-        }
-    }
-
-    /// Returns the trace path and the token string if the denom is an IBC
-    /// denom.
-    pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
-        let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
-        if prefixed_denom.trace_path.is_empty() {
-            return None;
-        }
-        // The base token isn't decoded because it could be non Namada token
-        Some((
-            prefixed_denom.trace_path,
-            prefixed_denom.base_denom.to_string(),
-        ))
-    }
-
-    impl From<IbcShieldedTransfer> for Memo {
-        fn from(shielded: IbcShieldedTransfer) -> Self {
-            let bytes = shielded.serialize_to_vec();
-            HEXUPPER.encode(&bytes).into()
-        }
-    }
-
-    impl TryFrom<Memo> for IbcShieldedTransfer {
-        type Error = Error;
-
-        fn try_from(memo: Memo) -> Result<Self> {
-            let bytes = HEXUPPER
-                .decode(memo.as_ref().as_bytes())
-                .map_err(Error::DecodingHex)?;
-            Self::try_from_slice(&bytes)
-                .map_err(Error::DecodingShieldedTransfer)
-        }
-    }
-
-    /// Get the shielded transfer from the memo
-    pub fn get_shielded_transfer(
-        event: &IbcEvent,
-    ) -> Result<Option<IbcShieldedTransfer>> {
-        if event.event_type != EVENT_TYPE_PACKET {
-            // This event is not for receiving a token
-            return Ok(None);
-        }
-        let is_success =
-            event.attributes.get("success") == Some(&"true".to_string());
-        let receiver = event.attributes.get("receiver");
-        let is_shielded = if let Some(receiver) = receiver {
-            PaymentAddress::from_str(receiver).is_ok()
-        } else {
-            false
-        };
-        if !is_success || !is_shielded {
-            return Ok(None);
-        }
-
-        event
+    fn try_from(e: RawIbcEvent) -> Result<Self> {
+        let event_type = e.event_type().to_string();
+        let abci_event = AbciEvent::try_from(e).map_err(Error::IbcEvent)?;
+        let attributes: HashMap<_, _> = abci_event
             .attributes
-            .get("memo")
-            .map(|memo| IbcShieldedTransfer::try_from(Memo::from(memo.clone())))
-            .transpose()
+            .iter()
+            .map(|tag| (tag.key.to_string(), tag.value.to_string()))
+            .collect();
+        Ok(Self {
+            event_type,
+            attributes,
+        })
     }
 }
 
-#[cfg(any(feature = "abciplus", feature = "abcipp"))]
-pub use ibc_rs_conversion::*;
+/// Returns the trace path and the token string if the denom is an IBC
+/// denom.
+pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
+    let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
+    if prefixed_denom.trace_path.is_empty() {
+        return None;
+    }
+    // The base token isn't decoded because it could be non Namada token
+    Some((
+        prefixed_denom.trace_path,
+        prefixed_denom.base_denom.to_string(),
+    ))
+}
+
+impl From<IbcShieldedTransfer> for Memo {
+    fn from(shielded: IbcShieldedTransfer) -> Self {
+        let bytes = shielded.serialize_to_vec();
+        HEXUPPER.encode(&bytes).into()
+    }
+}
+
+impl TryFrom<Memo> for IbcShieldedTransfer {
+    type Error = Error;
+
+    fn try_from(memo: Memo) -> Result<Self> {
+        let bytes = HEXUPPER
+            .decode(memo.as_ref().as_bytes())
+            .map_err(Error::DecodingHex)?;
+        Self::try_from_slice(&bytes).map_err(Error::DecodingShieldedTransfer)
+    }
+}
+
+/// Get the shielded transfer from the memo
+pub fn get_shielded_transfer(
+    event: &IbcEvent,
+) -> Result<Option<IbcShieldedTransfer>> {
+    if event.event_type != EVENT_TYPE_PACKET {
+        // This event is not for receiving a token
+        return Ok(None);
+    }
+    let is_success =
+        event.attributes.get("success") == Some(&"true".to_string());
+    let receiver = event.attributes.get("receiver");
+    let is_shielded = if let Some(receiver) = receiver {
+        PaymentAddress::from_str(receiver).is_ok()
+    } else {
+        false
+    };
+    if !is_success || !is_shielded {
+        return Ok(None);
+    }
+
+    event
+        .attributes
+        .get("memo")
+        .map(|memo| IbcShieldedTransfer::try_from(Memo::from(memo.clone())))
+        .transpose()
+}

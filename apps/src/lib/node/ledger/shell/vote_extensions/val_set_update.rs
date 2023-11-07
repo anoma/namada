@@ -9,8 +9,6 @@ use namada::ledger::storage::{DBIter, DB};
 use namada::types::storage::Epoch;
 use namada::types::token;
 use namada::types::vote_extensions::validator_set_update;
-#[cfg(feature = "abcipp")]
-use namada::types::voting_power::FractionalVotingPower;
 
 use super::*;
 use crate::node::ledger::shell::Shell;
@@ -202,29 +200,10 @@ where
         &self,
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
-        #[cfg(not(feature = "abcipp"))]
         #[allow(clippy::question_mark)]
         if self.wl_storage.storage.last_block.is_none() {
             return None;
         }
-
-        #[cfg(feature = "abcipp")]
-        let vexts_epoch = self
-            .wl_storage
-            .pos_queries()
-            .get_epoch(self.wl_storage.storage.get_last_block_height())
-            .expect(
-                "The epoch of the last block height should always be known",
-            );
-
-        #[cfg(feature = "abcipp")]
-        let total_voting_power = u64::from(
-            self.wl_storage
-                .pos_queries()
-                .get_total_voting_power(Some(vexts_epoch)),
-        );
-        #[cfg(feature = "abcipp")]
-        let mut voting_power = FractionalVotingPower::default();
 
         let mut voting_powers = None;
         let mut signatures = HashMap::new();
@@ -240,20 +219,6 @@ where
 
             let validator_addr = vote_extension.data.validator_addr;
             let signing_epoch = vote_extension.data.signing_epoch;
-
-            // update voting power
-            #[cfg(feature = "abcipp")]
-            {
-                let validator_voting_power = u64::from(_validator_voting_power);
-                voting_power += FractionalVotingPower::new(
-                    validator_voting_power,
-                    total_voting_power,
-                )
-                .expect(
-                    "The voting power we obtain from storage should always be \
-                     valid",
-                );
-            }
 
             // register the signature of `validator_addr`
             let addr = validator_addr.clone();
@@ -278,22 +243,6 @@ where
             }
         }
 
-        #[cfg(feature = "abcipp")]
-        if voting_power <= FractionalVotingPower::TWO_THIRDS {
-            tracing::error!(
-                "Tendermint has decided on a block including validator set \
-                 update vote extensions reflecting <= 2/3 of the total stake"
-            );
-            return None;
-        }
-
-        #[cfg(feature = "abcipp")]
-        let voting_powers = voting_powers.expect(
-            "We have enough voting power, so at least one validator set \
-             update vote extension must have been validated.",
-        );
-
-        #[cfg(not(feature = "abcipp"))]
         let voting_powers = voting_powers.unwrap_or_default();
 
         Some(validator_set_update::VextDigest {
@@ -305,9 +254,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    #[cfg(feature = "abcipp")]
-    #[cfg(feature = "abcipp")]
-    use borsh::BorshSerialize;
     use namada::core::ledger::storage_api::collections::lazy_map::{
         NestedSubKey, SubKey,
     };
@@ -317,31 +263,11 @@ mod test_vote_extensions {
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake, Epoch,
     };
-    #[cfg(feature = "abcipp")]
-    use namada::proto::{SignableEthMessage, Signed};
     use namada::tendermint_proto::v0_37::abci::VoteInfo;
-    #[cfg(feature = "abcipp")]
-    use namada::types::eth_abi::Encode;
-    #[cfg(feature = "abcipp")]
-    use namada::types::ethereum_events::Uint;
-    #[cfg(feature = "abcipp")]
-    use namada::types::keccak::keccak_hash;
-    #[cfg(feature = "abcipp")]
-    use namada::types::keccak::KeccakHash;
     use namada::types::key::RefTo;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::bridge_pool_roots;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::ethereum_events;
     use namada::types::vote_extensions::validator_set_update;
-    #[cfg(feature = "abcipp")]
-    use namada::types::vote_extensions::VoteExtension;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tendermint_proto::abci::response_verify_vote_extension::VerifyStatus;
-    #[cfg(feature = "abcipp")]
-    use crate::facade::tower_abci::request;
     use crate::node::ledger::shell::test_utils::{self, get_pkh_from_address};
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
     use crate::wallet;
@@ -381,60 +307,10 @@ mod test_vote_extensions {
             }
             .sign(eth_bridge_key),
         );
-        #[cfg(feature = "abcipp")]
-        {
-            let protocol_key =
-                shell.mode.get_protocol_key().expect("Test failed");
-            let ethereum_events = ethereum_events::Vext::empty(
-                shell.wl_storage.pos_queries().get_current_decision_height(),
-                validator_addr.clone(),
-            )
-            .sign(protocol_key);
-            let bp_root = {
-                let to_sign = keccak_hash(
-                    [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat(),
-                );
-                let sig = Signed::<_, SignableEthMessage>::new(
-                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                    to_sign,
-                )
-                .sig;
-                bridge_pool_roots::Vext {
-                    block_height: shell
-                        .wl_storage
-                        .storage
-                        .get_last_block_height(),
-                    validator_addr,
-                    sig,
-                }
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            };
-            let req = request::VerifyVoteExtension {
-                vote_extension: VoteExtension {
-                    ethereum_events: Some(ethereum_events),
-                    bridge_pool_root: Some(bp_root),
-                    validator_set_update,
-                }
-                .serialize_to_vec(),
-                ..Default::default()
-            };
-
-            assert_eq!(
-                shell.verify_vote_extension(req).status,
-                i32::from(VerifyStatus::Reject)
-            );
-        }
-        #[cfg(not(feature = "abcipp"))]
-        {
-            assert!(!shell.validate_valset_upd_vext(
-                validator_set_update.unwrap(),
-                signing_epoch,
-            ))
-        }
+        assert!(!shell.validate_valset_upd_vext(
+            validator_set_update.unwrap(),
+            signing_epoch,
+        ))
     }
 
     /// Test that validator set update vote extensions signed by
@@ -469,51 +345,6 @@ mod test_vote_extensions {
             }
             .sign(&eth_bridge_key),
         );
-        #[cfg(feature = "abcipp")]
-        {
-            let ethereum_events = ethereum_events::Vext::empty(
-                shell.wl_storage.pos_queries().get_current_decision_height(),
-                validator_addr.clone(),
-            )
-            .sign(&_protocol_key);
-            let bp_root = {
-                let to_sign = keccak_hash(
-                    [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat(),
-                );
-                let sig = Signed::<_, SignableEthMessage>::new(
-                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                    to_sign,
-                )
-                .sig;
-                bridge_pool_roots::Vext {
-                    block_height: shell
-                        .wl_storage
-                        .storage
-                        .get_last_block_height(),
-                    validator_addr,
-                    sig,
-                }
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            };
-            let req = request::VerifyVoteExtension {
-                vote_extension: VoteExtension {
-                    ethereum_events: Some(ethereum_events),
-                    bridge_pool_root: Some(bp_root),
-                    validator_set_update,
-                }
-                .serialize_to_vec(),
-                ..Default::default()
-            };
-            assert_eq!(
-                shell.verify_vote_extension(req).status,
-                i32::from(VerifyStatus::Reject)
-            );
-        }
-        #[cfg(not(feature = "abcipp"))]
         assert!(!shell.validate_valset_upd_vext(
             validator_set_update.unwrap(),
             signing_epoch,
@@ -675,67 +506,10 @@ mod test_vote_extensions {
             ext.sig = test_utils::invalidate_signature(ext.sig);
             Some(ext)
         };
-        #[cfg(feature = "abcipp")]
-        {
-            let protocol_key =
-                shell.mode.get_protocol_key().expect("Test failed");
-            let ethereum_events = ethereum_events::Vext::empty(
-                shell.wl_storage.pos_queries().get_current_decision_height(),
-                validator_addr.clone(),
-            )
-            .sign(protocol_key);
-            let bp_root = {
-                let to_sign = keccak_hash(
-                    [
-                        KeccakHash([0; 32]).encode().into_inner(),
-                        Uint::from(0).encode().into_inner(),
-                    ]
-                    .concat(),
-                );
-                let sig = Signed::<_, SignableEthMessage>::new(
-                    shell.mode.get_eth_bridge_keypair().expect("Test failed"),
-                    to_sign,
-                )
-                .sig;
-                bridge_pool_roots::Vext {
-                    block_height: shell
-                        .wl_storage
-                        .storage
-                        .get_last_block_height(),
-                    validator_addr,
-                    sig,
-                }
-                .sign(shell.mode.get_protocol_key().expect("Test failed"))
-            };
-            let req = request::VerifyVoteExtension {
-                vote_extension: VoteExtension {
-                    ethereum_events: Some(ethereum_events),
-                    bridge_pool_root: Some(bp_root),
-                    validator_set_update: validator_set_update.clone(),
-                }
-                .serialize_to_vec(),
-                ..Default::default()
-            };
-            assert_eq!(
-                shell.verify_vote_extension(req).status,
-                i32::from(VerifyStatus::Reject)
-            );
-        }
         assert!(!shell.validate_valset_upd_vext(
             validator_set_update.unwrap(),
             signing_epoch,
         ));
-    }
-
-    /// Test if we reject a vote extension that did not include a validator
-    /// set update at a required height.
-    #[test]
-    #[cfg(feature = "abcipp")]
-    fn test_reject_vext_if_no_valset_upd() {
-        // current decision height = 2 -> must send valset upd
-        let (shell, _recv, _, _) = test_utils::setup_at_height(1);
-        let req = request::VerifyVoteExtension::default();
-        assert!(!shell.verify_valset_update(&req, None));
     }
 
     /// Test if a [`validator_set_update::Vext`] is signed with a secp key
