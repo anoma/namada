@@ -45,8 +45,9 @@ use crate::ibc::core::ics24_host::path::{
 };
 use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
 use crate::ibc::core::ContextError;
-use crate::ibc::Signer;
+use crate::ibc::{Height, Signer};
 use crate::ledger::ibc::storage;
+use crate::ledger::storage_api::token::read_denom;
 use crate::types::address::{Address, InternalAddress};
 use crate::types::token;
 use crate::types::uint::Uint;
@@ -96,22 +97,20 @@ where
         };
 
         // Convert IBC amount to Namada amount for the token
-        let denom = self
-            .ctx
-            .borrow()
-            .read_token_denom(&token)?
+        let denom = read_denom(&*self.ctx.borrow(), &token)
+            .map_err(ContextError::from)?
             .unwrap_or(token::Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
         let amount =
             token::Amount::from_uint(uint_amount, denom).map_err(|e| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
+                TokenTransferError::ContextError(
                     ChannelError::Other {
                         description: format!(
-                            "The IBC amount is invalid: Coin {}, Error {}",
-                            coin, e
+                            "The IBC amount is invalid: Coin {coin}, Error {e}",
                         ),
-                    },
-                ))
+                    }
+                    .into(),
+                )
             })?;
         let amount = token::DenominatedAmount { amount, denom };
 
@@ -375,7 +374,9 @@ where
         &self,
         channel_end_path: &ChannelEndPath,
     ) -> Result<ChannelEnd, ContextError> {
-        self.ctx.borrow().channel_end(channel_end_path)
+        self.ctx
+            .borrow()
+            .channel_end(&channel_end_path.0, &channel_end_path.1)
     }
 
     fn connection_end(
@@ -396,14 +397,22 @@ where
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        self.ctx.borrow().consensus_state(client_cons_state_path)
+        let height = Height::new(
+            client_cons_state_path.epoch,
+            client_cons_state_path.height,
+        )?;
+        self.ctx
+            .borrow()
+            .consensus_state(&client_cons_state_path.client_id, height)
     }
 
     fn get_next_sequence_send(
         &self,
         seq_send_path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        self.ctx.borrow().get_next_sequence_send(seq_send_path)
+        self.ctx
+            .borrow()
+            .get_next_sequence_send(&seq_send_path.0, &seq_send_path.1)
     }
 }
 
@@ -483,16 +492,7 @@ where
         self.ctx
             .borrow_mut()
             .transfer_token(from, to, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Sending a coin failed: from {}, to {}, amount {}",
-                            from, to, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 
     fn mint_coins_execute(
@@ -506,16 +506,7 @@ where
         self.ctx
             .borrow_mut()
             .mint_token(account, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Minting a coin failed: account {}, amount {}",
-                            account, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 
     fn burn_coins_execute(
@@ -529,16 +520,7 @@ where
         self.ctx
             .borrow_mut()
             .burn_token(account, &ibc_token, amount)
-            .map_err(|_| {
-                TokenTransferError::ContextError(ContextError::ChannelError(
-                    ChannelError::Other {
-                        description: format!(
-                            "Burning a coin failed: account {}, amount {}",
-                            account, amount,
-                        ),
-                    },
-                ))
-            })
+            .map_err(|e| ContextError::from(e).into())
     }
 }
 
@@ -551,9 +533,11 @@ where
         seq_send_path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        self.ctx
-            .borrow_mut()
-            .store_next_sequence_send(seq_send_path, seq)
+        self.ctx.borrow_mut().store_next_sequence_send(
+            &seq_send_path.0,
+            &seq_send_path.1,
+            seq,
+        )
     }
 
     fn store_packet_commitment(
@@ -561,9 +545,12 @@ where
         commitment_path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        self.ctx
-            .borrow_mut()
-            .store_packet_commitment(commitment_path, commitment)
+        self.ctx.borrow_mut().store_packet_commitment(
+            &commitment_path.port_id,
+            &commitment_path.channel_id,
+            commitment_path.sequence,
+            commitment,
+        )
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) {
