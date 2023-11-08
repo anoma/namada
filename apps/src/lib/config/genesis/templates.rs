@@ -242,6 +242,9 @@ pub struct Parameters<T: TemplateValidation> {
     Eq,
 )]
 pub struct ChainParams<T: TemplateValidation> {
+    /// Max payload size, in bytes, for a tx decided through
+    /// the consensus protocol.
+    pub max_tx_bytes: u32,
     /// Name of the native token - this must one of the tokens from
     /// `tokens.toml` file
     pub native_token: Alias,
@@ -296,6 +299,7 @@ impl ChainParams<Unvalidated> {
         tokens: &Tokens,
     ) -> eyre::Result<ChainParams<Validated>> {
         let ChainParams {
+            max_tx_bytes,
             native_token,
             min_num_of_blocks,
             max_expected_time_per_block,
@@ -342,6 +346,7 @@ impl ChainParams<Unvalidated> {
         }
 
         Ok(ChainParams {
+            max_tx_bytes,
             native_token,
             min_num_of_blocks,
             max_expected_time_per_block,

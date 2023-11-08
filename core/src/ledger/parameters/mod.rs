@@ -35,6 +35,8 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
     BorshSchema,
 )]
 pub struct Parameters {
+    /// Max payload size, in bytes, for a mempool tx.
+    pub max_tx_bytes: u32,
     /// Epoch duration (read only)
     pub epoch_duration: EpochDuration,
     /// Maximum expected time per block (read only)
@@ -117,6 +119,7 @@ impl Parameters {
         S: StorageRead + StorageWrite,
     {
         let Self {
+            max_tx_bytes,
             epoch_duration,
             max_expected_time_per_block,
             max_proposal_bytes,
@@ -134,6 +137,10 @@ impl Parameters {
             fee_unshielding_gas_limit,
             fee_unshielding_descriptions_limit,
         } = self;
+
+        // write max tx bytes parameter
+        let max_tx_bytes_key = storage::get_max_tx_bytes_key();
+        storage.write(&max_tx_bytes_key, max_tx_bytes)?;
 
         // write max proposal bytes parameter
         let max_proposal_bytes_key = storage::get_max_proposal_bytes_key();
@@ -542,7 +549,15 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read max tx bytes
+    let max_tx_bytes_key = storage::get_max_tx_bytes_key();
+    let value = storage.read(&max_tx_bytes_key)?;
+    let max_tx_bytes = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     Ok(Parameters {
+        max_tx_bytes,
         epoch_duration,
         max_expected_time_per_block,
         max_proposal_bytes,
