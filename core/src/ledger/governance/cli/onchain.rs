@@ -330,8 +330,6 @@ pub enum ProposalVote {
     Nay,
     /// Represent an abstain proposal vote
     Abstain,
-    /// Represent an invalid proposal vote
-    Invalid,
 }
 
 impl TryFrom<String> for ProposalVote {
