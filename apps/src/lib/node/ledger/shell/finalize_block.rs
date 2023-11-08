@@ -830,22 +830,23 @@ where
         pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
         for funding in pgf_fundings {
-            if credit_tokens(
+            if storage_api::token::transfer(
                 &mut self.wl_storage,
                 &staking_token,
+                &pgf_address,
                 &funding.detail.target,
                 funding.detail.amount,
             )
             .is_ok()
             {
                 tracing::info!(
-                    "Minted {} tokens for {} project.",
+                    "Paying {} tokens for {} project.",
                     funding.detail.amount.to_string_native(),
                     &funding.detail.target,
                 );
             } else {
                 tracing::warn!(
-                    "Failed Minting {} tokens for {} project.",
+                    "Failed to pay {} tokens for {} project.",
                     funding.detail.amount.to_string_native(),
                     &funding.detail.target,
                 );
