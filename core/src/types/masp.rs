@@ -52,6 +52,8 @@ impl ExtendedViewingKey {
 }
 
 impl string_encoding::Format for ExtendedViewingKey {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = MASP_EXT_FULL_VIEWING_KEY_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -68,6 +70,8 @@ impl string_encoding::Format for ExtendedViewingKey {
 impl_display_and_from_str_via_format!(ExtendedViewingKey);
 
 impl string_encoding::Format for PaymentAddress {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = MASP_PAYMENT_ADDRESS_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {
@@ -230,6 +234,8 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
 pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 
 impl string_encoding::Format for ExtendedSpendingKey {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = MASP_EXT_SPENDING_KEY_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {

@@ -497,6 +497,8 @@ impl Address {
 }
 
 impl string_encoding::Format for Address {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::ADDRESS_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {

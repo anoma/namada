@@ -66,6 +66,11 @@ pub trait Format: Sized {
     /// Human-readable part
     const HRP: &'static str;
 
+    /// Encoded bytes representation of `Self`.
+    type EncodedBytes<'a>: AsRef<[u8]>
+    where
+        Self: 'a;
+
     /// Encode `Self` to a string
     fn encode(&self) -> String {
         let base32 = self.to_bytes().to_base32();
@@ -100,7 +105,7 @@ pub trait Format: Sized {
     }
 
     /// Encode `Self` to bytes
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> Self::EncodedBytes<'_>;
 
     /// Try to decode `Self` from bytes
     fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>;

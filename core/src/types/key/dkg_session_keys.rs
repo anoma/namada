@@ -139,6 +139,8 @@ impl BorshSchema for DkgPublicKey {
 }
 
 impl string_encoding::Format for DkgPublicKey {
+    type EncodedBytes<'a> = Vec<u8>;
+
     const HRP: &'static str = string_encoding::DKG_PK_HRP;
 
     fn to_bytes(&self) -> Vec<u8> {
