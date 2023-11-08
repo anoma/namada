@@ -31,8 +31,6 @@ pub const ADDRESS_HRP: &str = "atest";
 pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "xfvktest";
 /// MASP payment address (not pinned) human-readable part
 pub const MASP_PAYMENT_ADDRESS_HRP: &str = "patest";
-/// MASP pinned payment address human-readable part
-pub const MASP_PINNED_PAYMENT_ADDRESS_HRP: &str = "ppatest";
 /// MASP extended spending key human-readable part
 pub const MASP_EXT_SPENDING_KEY_HRP: &str = "xsktest";
 /// `common::PublicKey` human-readable part
