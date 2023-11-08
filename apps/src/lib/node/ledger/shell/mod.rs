@@ -1075,7 +1075,10 @@ where
         const VALID_MSG: &str = "Mempool validation passed";
         const INVALID_MSG: &str = "Mempool validation failed";
 
-        // Tx size check
+        // check tx bytes
+        //
+        // NB: always keep this as the first tx check,
+        // as it is a pretty cheap one
         if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
@@ -2953,5 +2956,58 @@ mod shell_tests {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, ErrorCodes::FeeError.into());
+    }
+
+    /// Test max tx bytes parameter in CheckTx
+    #[test]
+    fn test_max_tx_bytes_check_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let max_tx_bytes: u32 = {
+            let key = parameters::storage::get_max_tx_bytes_key();
+            shell
+                .wl_storage
+                .read(&key)
+                .expect("Failed to read from storage")
+                .expect("Max tx bytes should have been written to storage")
+        };
+
+        let new_tx = |size: u32| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: 100.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    GAS_LIMIT_MULTIPLIER.into(),
+                    None,
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            wrapper.set_data(Data::new(vec![0; size as usize]));
+            wrapper.add_section(Section::Signature(Signature::new(
+                wrapper.sechashes(),
+                [(0, keypair)].into_iter().collect(),
+                None,
+            )));
+            wrapper
+        };
+
+        // test a small tx
+        let result = shell.mempool_validate(
+            new_tx(50).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert!(result.code != ErrorCodes::TooLarge.into());
+
+        // max tx bytes + 1, on the other hand, is not
+        let result = shell.mempool_validate(
+            new_tx(max_tx_bytes + 1).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, ErrorCodes::TooLarge.into());
     }
 }

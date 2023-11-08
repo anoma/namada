@@ -268,6 +268,9 @@ where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // check tx bytes
+        //
+        // NB: always keep this as the first tx check,
+        // as it is a pretty cheap one
         if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
@@ -2048,6 +2051,71 @@ mod test_process_proposal {
                     "Wrapper txs not allowed at the current block height"
                 ),
             );
+        }
+    }
+
+    /// Test max tx bytes parameter in ProcessProposal
+    #[test]
+    fn test_max_tx_bytes_process_proposal() {
+        use namada::ledger::parameters::storage::get_max_tx_bytes_key;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+
+        let max_tx_bytes: u32 = {
+            let key = get_max_tx_bytes_key();
+            shell
+                .wl_storage
+                .read(&key)
+                .expect("Failed to read from storage")
+                .expect("Max tx bytes should have been written to storage")
+        };
+
+        let new_tx = |size: u32| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: 100.into(),
+                        token: shell.wl_storage.storage.native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    GAS_LIMIT_MULTIPLIER.into(),
+                    None,
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned()));
+            wrapper.set_data(Data::new(vec![0; size as usize]));
+            wrapper.add_section(Section::Signature(Signature::new(
+                wrapper.sechashes(),
+                [(0, keypair)].into_iter().collect(),
+                None,
+            )));
+            wrapper
+        };
+
+        let request = ProcessProposal {
+            txs: vec![new_tx(max_tx_bytes + 1).to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::TooLarge)
+                );
+            }
+        }
+
+        let request = ProcessProposal {
+            txs: vec![new_tx(0).to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert!(
+                    response[0].result.code != u32::from(ErrorCodes::TooLarge)
+                );
+            }
         }
     }
 }
