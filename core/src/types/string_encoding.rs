@@ -23,21 +23,20 @@ pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 //
 // Invariant: HRPs must be unique !!!
 //
-// TODO: remove "test" suffix for live network
 /// `Address` human-readable part
-pub const ADDRESS_HRP: &str = "atest";
+pub const ADDRESS_HRP: &str = "tnam";
 /// MASP extended viewing key human-readable part
-pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "xfvktest";
+pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "zvknam";
 /// MASP payment address (not pinned) human-readable part
-pub const MASP_PAYMENT_ADDRESS_HRP: &str = "patest";
+pub const MASP_PAYMENT_ADDRESS_HRP: &str = "znam";
 /// MASP extended spending key human-readable part
-pub const MASP_EXT_SPENDING_KEY_HRP: &str = "xsktest";
+pub const MASP_EXT_SPENDING_KEY_HRP: &str = "zsknam";
 /// `common::PublicKey` human-readable part
-pub const COMMON_PK_HRP: &str = "pktest";
+pub const COMMON_PK_HRP: &str = "tpknam";
 /// `DkgPublicKey` human-readable part
-pub const DKG_PK_HRP: &str = "dpktest";
+pub const DKG_PK_HRP: &str = "dpknam";
 /// `common::Signature` human-readable part
-pub const COMMON_SIG_HRP: &str = "sigtest";
+pub const COMMON_SIG_HRP: &str = "signam";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
