@@ -11,7 +11,7 @@ use namada::types::time::DateTimeUtc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::fs::{self, File, OpenOptions};
+use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
@@ -252,28 +252,6 @@ fn validator_key_to_json(
 }
 
 /// Initialize validator private key for Tendermint
-pub async fn write_validator_key_async(
-    home_dir: impl AsRef<Path>,
-    consensus_key: &common::SecretKey,
-) {
-    let path = validator_key(home_dir);
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    fs::create_dir_all(wallet_dir)
-        .await
-        .expect("Couldn't create private validator key directory");
-    let mut file = ensure_empty_async(&path)
-        .await
-        .expect("Couldn't create private validator key file");
-    let key = validator_key_to_json(consensus_key).unwrap();
-    let data = serde_json::to_vec_pretty(&key)
-        .expect("Couldn't encode private validator key file");
-    file.write_all(&data[..])
-        .await
-        .expect("Couldn't write private validator key file");
-}
-
-/// Initialize validator private key for Tendermint
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     consensus_key: &common::SecretKey,
@@ -443,15 +421,6 @@ async fn write_tm_genesis(
     file.write_all(&data[..])
         .await
         .expect("Couldn't write the CometBFT genesis file");
-}
-
-async fn ensure_empty_async(path: &PathBuf) -> std::io::Result<File> {
-    OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(path)
-        .await
 }
 
 fn ensure_empty(path: &PathBuf) -> std::io::Result<std::fs::File> {
