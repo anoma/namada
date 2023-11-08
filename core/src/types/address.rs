@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 use crate::ibc::Signer;
 use crate::impl_display_and_from_str_via_format;
 use crate::types::ethereum_events::EthAddress;
+use crate::types::ibc::IbcTokenHash;
 use crate::types::key::PublicKeyHash;
 use crate::types::token::Denomination;
 use crate::types::{key, string_encoding};
@@ -294,9 +295,16 @@ impl Address {
             },
             Some((PREFIX_IBC, raw)) => match string {
                 internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
-                _ if raw.len() == HASH_HEX_LEN => Ok(Address::Internal(
-                    InternalAddress::IbcToken(raw.to_string()),
-                )),
+                _ if raw.len() == HASH_HEX_LEN => {
+                    Ok(Address::Internal(InternalAddress::IbcToken(
+                        raw.parse::<IbcTokenHash>().map_err(|_| {
+                            DecodeError::InvalidInnerEncoding(
+                                ErrorKind::InvalidData,
+                                "Failed to parse IBC token hash".to_string(),
+                            )
+                        })?,
+                    )))
+                }
                 _ => Err(DecodeError::InvalidInnerEncoding(
                     ErrorKind::InvalidData,
                     "Invalid IBC internal address".to_string(),
@@ -531,7 +539,7 @@ pub enum InternalAddress {
     /// Inter-blockchain communication
     Ibc,
     /// IBC-related token
-    IbcToken(String),
+    IbcToken(IbcTokenHash),
     /// Governance address
     Governance,
     /// Bridge to Ethereum
@@ -886,8 +894,13 @@ pub mod testing {
                 &nam()
             );
             hasher.update(&s);
-            let hash =
-                format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN);
+            let hash = hasher.finalize();
+            let hash = IbcTokenHash({
+                let input: &[u8; SHA_HASH_LEN] = hash.as_ref();
+                let mut output = [0; HASH_LEN];
+                output.copy_from_slice(&input[..HASH_LEN]);
+                output
+            });
             InternalAddress::IbcToken(hash)
         })
     }
