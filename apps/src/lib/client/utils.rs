@@ -291,13 +291,14 @@ pub async fn join_network(
         );
         let tm_home_dir = chain_dir.join(config::COMETBFT_DIR);
         // Write consensus key to tendermint home
-        tendermint_node::write_validator_key(&tm_home_dir, &consensus_key);
+        tendermint_node::write_validator_key(&tm_home_dir, &consensus_key)
+            .unwrap();
 
         // Write tendermint node key
         write_tendermint_node_key(&tm_home_dir, tendermint_node_key);
 
         // Pre-initialize tendermint validator state
-        tendermint_node::write_validator_state(&tm_home_dir);
+        tendermint_node::write_validator_state(&tm_home_dir).unwrap();
     } else {
         println!(
             "No validator keys are being used. Make sure you didn't forget to \

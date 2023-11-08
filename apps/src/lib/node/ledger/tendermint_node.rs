@@ -46,6 +46,12 @@ pub enum Error {
     RollBack(String),
     #[error("Failed to convert to String: {0:?}")]
     TendermintPath(std::ffi::OsString),
+    #[error("Couldn't write {0}")]
+    CantWrite(String),
+    #[error("Couldn't create {0}")]
+    CantCreate(String),
+    #[error("Couldn't encode {0}")]
+    CantEncode(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -92,7 +98,7 @@ pub async fn run(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    write_tm_genesis(&home_dir, chain_id, genesis_time).await;
+    write_tm_genesis(&home_dir, chain_id, genesis_time).await?;
 
     update_tendermint_config(&home_dir, config.cometbft).await?;
 
@@ -255,35 +261,34 @@ fn validator_key_to_json(
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     consensus_key: &common::SecretKey,
-) {
+) -> Result<()> {
     let path = validator_key(home_dir);
     // Make sure the dir exists
     let wallet_dir = path.parent().unwrap();
     std::fs::create_dir_all(wallet_dir)
-        .expect("Couldn't create private validator key directory");
-    let file = ensure_empty(&path)
-        .expect("Couldn't create private validator key file");
+        .map_err(|_| Error::CantCreate(KEY_DIR))?;
+    let file = ensure_empty(&path).map_err(|_| Error::CantCreate(KEY_FILE))?;
     let key = validator_key_to_json(consensus_key).unwrap();
     serde_json::to_writer_pretty(file, &key)
-        .expect("Couldn't write private validator key file");
+        .map_err(|_| Error::CantWrite(KEY_FILE))
 }
 
 /// Initialize validator private state for Tendermint
-pub fn write_validator_state(home_dir: impl AsRef<Path>) {
+pub fn write_validator_state(home_dir: impl AsRef<Path>) -> Result<()> {
     let path = validator_state(home_dir);
     // Make sure the dir exists
     let wallet_dir = path.parent().unwrap();
     std::fs::create_dir_all(wallet_dir)
-        .expect("Couldn't create private validator state directory");
-    let file = ensure_empty(&path)
-        .expect("Couldn't create private validator state file");
+        .map_err(|_| Error::CantCreate(STATE_DIR))?;
+    let file =
+        ensure_empty(&path).map_err(|_| Error::CantCreate(STATE_FILE))?;
     let state = json!({
        "height": "0",
        "round": 0,
        "step": 0
     });
     serde_json::to_writer_pretty(file, &state)
-        .expect("Couldn't write private validator state file");
+        .map_err(|_| Error::CantWrite(STATE_FILE))
 }
 
 /// Length of a Tendermint Node ID in bytes
@@ -370,7 +375,7 @@ async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
-) {
+) -> Result<()> {
     let path = genesis(home_dir);
     let mut file = File::open(&path).await.unwrap_or_else(|err| {
         panic!(
@@ -417,10 +422,14 @@ async fn write_tm_genesis(
             )
         });
     let data = serde_json::to_vec_pretty(&genesis)
-        .expect("Couldn't encode the CometBFT genesis file");
-    file.write_all(&data[..])
-        .await
-        .expect("Couldn't write the CometBFT genesis file");
+        .map_err(|_| Error::CantEncode(GENESIS_FILE))?;
+    file.write_all(&data[..]).await.map_err(|err| {
+        Error::CantWrite(format!(
+            "{} to {}. Caused by {err}",
+            GENESIS_FILE,
+            path.to_string_lossy()
+        ))
+    })
 }
 
 fn ensure_empty(path: &PathBuf) -> std::io::Result<std::fs::File> {
@@ -450,3 +459,13 @@ fn configuration(home_dir: impl AsRef<Path>) -> PathBuf {
 fn genesis(home_dir: impl AsRef<Path>) -> PathBuf {
     home_dir.as_ref().join("config").join("genesis.json")
 }
+
+// Constant strings to avoid repeating our magic words
+
+const KEY_FILE: &str = "private validator key file";
+const KEY_DIR: &str = "private validator key directory";
+
+const STATE_FILE: &str = "private validator state file";
+const STATE_DIR: &str = "private validator state directory";
+
+const GENESIS_FILE: &str = "CometBFT genesis file";
