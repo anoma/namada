@@ -2089,6 +2089,7 @@ mod test_utils {
             .new_epoch(BlockHeight(1));
         // initialize parameter storage
         let params = Parameters {
+            max_tx_bytes: 1024 * 1024,
             epoch_duration: EpochDuration {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(3600),
