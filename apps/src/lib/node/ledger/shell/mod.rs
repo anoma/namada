@@ -154,6 +154,7 @@ pub enum ErrorCodes {
     TxGasLimit = 11,
     FeeError = 12,
     InvalidVoteExtension = 13,
+    TooLarge = 14,
 }
 
 impl ErrorCodes {
@@ -167,7 +168,8 @@ impl ErrorCodes {
             Ok | WasmRuntimeError => true,
             InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
             | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension => false,
+            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
+            | TooLarge => false,
         }
     }
 }
