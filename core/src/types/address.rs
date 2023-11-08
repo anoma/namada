@@ -6,7 +6,6 @@ mod raw;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::io::ErrorKind;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -27,7 +26,11 @@ use crate::types::{key, string_encoding};
 pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 
 /// The length of [`Address`] encoded with Bech32m.
-pub const ADDRESS_LEN: usize = 79 + string_encoding::hrp_len::<Address>();
+// NOTE: This must be kept in sync with the bech32 HRP.
+// Uppercase prefixes might result in a different length,
+// so tread carefully when changing this value.
+pub const ADDRESS_LEN: usize =
+    string_encoding::hrp_len::<Address>() + 1 + HASH_HEX_LEN;
 
 /// Length of a hash of an address as a hexadecimal string
 pub(crate) const HASH_HEX_LEN: usize = 40;
@@ -46,9 +49,6 @@ pub(crate) const HASH_LEN: usize = 20;
 /// ```
 pub const SHA_HASH_LEN: usize = 32;
 
-/// An address string before bech32m encoding must be this size.
-pub const FIXED_LEN_STRING_BYTES: usize = 45;
-
 /// Internal IBC address
 pub const IBC: Address = Address::Internal(InternalAddress::Ibc);
 /// Internal ledger parameters address
@@ -61,48 +61,11 @@ pub const POS_SLASH_POOL: Address =
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
 
-/// Raw strings used to produce internal addresses. All the strings must begin
-/// with `PREFIX_INTERNAL` and be `FIXED_LEN_STRING_BYTES` characters long.
-#[rustfmt::skip]
-mod internal {
-    pub const POS: &str = 
-        "ano::Proof of Stake                          ";
-    pub const POS_SLASH_POOL: &str =
-        "ano::Proof of Stake Slash Pool               ";
-    pub const PARAMETERS: &str =
-        "ano::Protocol Parameters                     ";
-    pub const GOVERNANCE: &str =
-        "ano::Governance                              ";
-    pub const IBC: &str =
-        "ibc::Inter-Blockchain Communication          ";
-    pub const ETH_BRIDGE: &str =
-        "ano::ETH Bridge Address                      ";
-    pub const ETH_BRIDGE_POOL: &str =
-        "ano::ETH Bridge Pool Address                 ";
-    pub const MULTITOKEN: &str =
-        "ano::Multitoken                              ";
-    pub const PGF: &str =
-        "ano::Pgf                                     ";
-}
-
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;
 
 /// Result of decoding address from string
 pub type Result<T> = std::result::Result<T, DecodeError>;
-
-/// Fixed-length address strings prefix for established addresses.
-const PREFIX_ESTABLISHED: &str = "est";
-/// Fixed-length address strings prefix for implicit addresses.
-const PREFIX_IMPLICIT: &str = "imp";
-/// Fixed-length address strings prefix for internal addresses.
-const PREFIX_INTERNAL: &str = "ano";
-/// Fixed-length address strings prefix for IBC addresses.
-const PREFIX_IBC: &str = "ibc";
-/// Fixed-length address strings prefix for Ethereum addresses.
-const PREFIX_ETH: &str = "eth";
-/// Fixed-length address strings prefix for Non-Usable-Token addresses.
-const PREFIX_NUT: &str = "nut";
 
 /// An account's address
 #[derive(
@@ -293,189 +256,6 @@ impl Address {
         }
     }
 
-    /// Convert an address to a fixed length 7-bit ascii string bytes
-    pub fn to_fixed_len_string(&self) -> Vec<u8> {
-        let mut string = match self {
-            Address::Established(EstablishedAddress { hash }) => {
-                // The bech32m's data is a hex of the first 40 chars of the hash
-                let hash_hex = HEXUPPER.encode(hash);
-                debug_assert_eq!(hash_hex.len(), HASH_HEX_LEN);
-                format!("{}::{}", PREFIX_ESTABLISHED, hash_hex)
-            }
-            Address::Implicit(ImplicitAddress(pkh)) => {
-                format!("{}::{}", PREFIX_IMPLICIT, pkh)
-            }
-            Address::Internal(internal) => {
-                let string = match internal {
-                    InternalAddress::PoS => internal::POS.to_string(),
-                    InternalAddress::PosSlashPool => {
-                        internal::POS_SLASH_POOL.to_string()
-                    }
-                    InternalAddress::Parameters => {
-                        internal::PARAMETERS.to_string()
-                    }
-                    InternalAddress::Governance => {
-                        internal::GOVERNANCE.to_string()
-                    }
-                    InternalAddress::Ibc => internal::IBC.to_string(),
-                    InternalAddress::IbcToken(hash) => {
-                        format!("{}::{}", PREFIX_IBC, hash)
-                    }
-                    InternalAddress::EthBridge => {
-                        internal::ETH_BRIDGE.to_string()
-                    }
-                    InternalAddress::EthBridgePool => {
-                        internal::ETH_BRIDGE_POOL.to_string()
-                    }
-                    InternalAddress::Erc20(eth_addr) => {
-                        let eth_addr =
-                            eth_addr.to_canonical().replace("0x", "");
-                        format!("{}::{}", PREFIX_ETH, eth_addr)
-                    }
-                    InternalAddress::Nut(eth_addr) => {
-                        let eth_addr =
-                            eth_addr.to_canonical().replace("0x", "");
-                        format!("{PREFIX_NUT}::{eth_addr}")
-                    }
-                    InternalAddress::Multitoken => {
-                        internal::MULTITOKEN.to_string()
-                    }
-                    InternalAddress::Pgf => internal::PGF.to_string(),
-                };
-                debug_assert_eq!(string.len(), FIXED_LEN_STRING_BYTES);
-                string
-            }
-        }
-        .into_bytes();
-        string.resize(FIXED_LEN_STRING_BYTES, b' ');
-        string
-    }
-
-    /// Try to parse an address from fixed-length utf-8 encoded address string.
-    fn try_from_fixed_len_string(buf: &mut &[u8]) -> Result<Self> {
-        let string = std::str::from_utf8(buf).map_err(|err| {
-            DecodeError::InvalidInnerEncoding(
-                ErrorKind::InvalidData,
-                err.to_string(),
-            )
-        })?;
-        if string.len() != FIXED_LEN_STRING_BYTES {
-            return Err(DecodeError::InvalidInnerEncoding(
-                ErrorKind::InvalidData,
-                "Invalid length".to_string(),
-            ));
-        }
-        match string.split_once("::") {
-            Some((PREFIX_ESTABLISHED, hash)) => {
-                if hash.len() == HASH_HEX_LEN {
-                    let raw =
-                        HEXUPPER.decode(hash.as_bytes()).map_err(|e| {
-                            DecodeError::InvalidInnerEncoding(
-                                ErrorKind::InvalidInput,
-                                e.to_string(),
-                            )
-                        })?;
-                    if raw.len() != HASH_LEN {
-                        return Err(DecodeError::InvalidInnerEncoding(
-                            ErrorKind::InvalidData,
-                            "Established address hash must be 40 characters \
-                             long"
-                                .to_string(),
-                        ));
-                    }
-                    let mut hash: [u8; HASH_LEN] = Default::default();
-                    hash.copy_from_slice(&raw);
-                    Ok(Address::Established(EstablishedAddress { hash }))
-                } else {
-                    Err(DecodeError::InvalidInnerEncoding(
-                        ErrorKind::InvalidData,
-                        "Established address hash must be 40 characters long"
-                            .to_string(),
-                    ))
-                }
-            }
-            Some((PREFIX_IMPLICIT, pkh)) => {
-                let pkh = PublicKeyHash::from_str(pkh).map_err(|err| {
-                    DecodeError::InvalidInnerEncoding(
-                        ErrorKind::InvalidData,
-                        err.to_string(),
-                    )
-                })?;
-                Ok(Address::Implicit(ImplicitAddress(pkh)))
-            }
-            Some((PREFIX_INTERNAL, _)) => match string {
-                internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
-                internal::POS_SLASH_POOL => {
-                    Ok(Address::Internal(InternalAddress::PosSlashPool))
-                }
-                internal::PARAMETERS => {
-                    Ok(Address::Internal(InternalAddress::Parameters))
-                }
-                internal::GOVERNANCE => {
-                    Ok(Address::Internal(InternalAddress::Governance))
-                }
-                internal::ETH_BRIDGE => {
-                    Ok(Address::Internal(InternalAddress::EthBridge))
-                }
-                internal::ETH_BRIDGE_POOL => {
-                    Ok(Address::Internal(InternalAddress::EthBridgePool))
-                }
-                internal::MULTITOKEN => {
-                    Ok(Address::Internal(InternalAddress::Multitoken))
-                }
-                internal::PGF => Ok(Address::Internal(InternalAddress::Pgf)),
-                _ => Err(DecodeError::InvalidInnerEncoding(
-                    ErrorKind::InvalidData,
-                    "Invalid internal address".to_string(),
-                )),
-            },
-            Some((PREFIX_IBC, raw)) => match string {
-                internal::IBC => Ok(Address::Internal(InternalAddress::Ibc)),
-                _ if raw.len() == HASH_HEX_LEN => {
-                    Ok(Address::Internal(InternalAddress::IbcToken(
-                        raw.parse::<IbcTokenHash>().map_err(|_| {
-                            DecodeError::InvalidInnerEncoding(
-                                ErrorKind::InvalidData,
-                                "Failed to parse IBC token hash".to_string(),
-                            )
-                        })?,
-                    )))
-                }
-                _ => Err(DecodeError::InvalidInnerEncoding(
-                    ErrorKind::InvalidData,
-                    "Invalid IBC internal address".to_string(),
-                )),
-            },
-            Some((prefix @ (PREFIX_ETH | PREFIX_NUT), raw)) => match string {
-                _ if raw.len() == HASH_HEX_LEN => {
-                    match EthAddress::from_str(&format!("0x{}", raw)) {
-                        Ok(eth_addr) => Ok(match prefix {
-                            PREFIX_ETH => Address::Internal(
-                                InternalAddress::Erc20(eth_addr),
-                            ),
-                            PREFIX_NUT => Address::Internal(
-                                InternalAddress::Nut(eth_addr),
-                            ),
-                            _ => unreachable!(),
-                        }),
-                        Err(e) => Err(DecodeError::InvalidInnerEncoding(
-                            ErrorKind::InvalidData,
-                            e.to_string(),
-                        )),
-                    }
-                }
-                _ => Err(DecodeError::InvalidInnerEncoding(
-                    ErrorKind::InvalidData,
-                    "Invalid ERC20 internal address".to_string(),
-                )),
-            },
-            _ => Err(DecodeError::InvalidInnerEncoding(
-                ErrorKind::InvalidData,
-                "Invalid address prefix".to_string(),
-            )),
-        }
-    }
-
     fn pretty_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_pretty_string())
     }
@@ -484,10 +264,10 @@ impl Address {
     pub fn to_pretty_string(&self) -> String {
         match self {
             Address::Established(_) => {
-                format!("Established: {}", self.encode(),)
+                format!("Established: {}", self.encode())
             }
             Address::Implicit(_) => {
-                format!("Implicit: {}", self.encode(),)
+                format!("Implicit: {}", self.encode())
             }
             Address::Internal(kind) => {
                 format!("Internal {}: {}", kind, self.encode())
@@ -497,16 +277,29 @@ impl Address {
 }
 
 impl string_encoding::Format for Address {
-    type EncodedBytes<'a> = Vec<u8>;
+    type EncodedBytes<'a> = [u8; raw::ADDR_ENCODING_LEN];
 
     const HRP: &'static str = string_encoding::ADDRESS_HRP;
 
-    fn to_bytes(&self) -> Vec<u8> {
-        Self::to_fixed_len_string(self)
+    fn to_bytes(&self) -> [u8; raw::ADDR_ENCODING_LEN] {
+        let raw_addr: raw::Address<'_, _> = self.into();
+        raw_addr.to_bytes()
     }
 
     fn decode_bytes(bytes: &[u8]) -> Result<Self> {
-        Self::try_from_fixed_len_string(&mut &bytes[..])
+        let unvalidated_raw_addr = raw::Address::try_from_slice(bytes)
+            .ok_or_else(|| {
+                DecodeError::InvalidInnerEncoding(
+                    "Invalid raw address length".to_string(),
+                )
+            })?;
+        let validated_raw_addr =
+            unvalidated_raw_addr.validate().ok_or_else(|| {
+                DecodeError::InvalidInnerEncoding(
+                    "Invalid address discriminant and data pair".to_string(),
+                )
+            })?;
+        Ok(validated_raw_addr.into())
     }
 }
 
@@ -542,7 +335,7 @@ impl Debug for Address {
     }
 }
 
-/// for IBC signer
+// compute an Address from an IBC signer
 impl TryFrom<Signer> for Address {
     type Error = DecodeError;
 
@@ -554,7 +347,7 @@ impl TryFrom<Signer> for Address {
             match crate::types::masp::PaymentAddress::from_str(signer.as_ref())
             {
                 Ok(_) => Ok(masp()),
-                Err(_) => Err(DecodeError::InvalidInnerEncodingStr(format!(
+                Err(_) => Err(DecodeError::InvalidInnerEncoding(format!(
                     "Invalid address for IBC transfer: {signer}"
                 ))),
             },

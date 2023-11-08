@@ -8,7 +8,6 @@
 //! below and use it to `impl string_encoding::Format for YourType`.
 
 use std::fmt::Display;
-use std::io::ErrorKind;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -51,10 +50,8 @@ pub enum DecodeError {
     UnexpectedBech32Hrp(String, String),
     #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
     UnexpectedBech32Variant(bech32::Variant),
-    #[error("Invalid address encoding: {0}, {1}")]
-    InvalidInnerEncoding(ErrorKind, String),
-    #[error("Invalid address encoding")]
-    InvalidInnerEncodingStr(String),
+    #[error("Invalid address encoding: {0}")]
+    InvalidInnerEncoding(String),
     #[error("Invalid bytes: {0}")]
     InvalidBytes(std::io::Error),
     #[error("Unexpected discriminant byte: {0}")]

@@ -11,7 +11,7 @@ use num_enum::TryFromPrimitive;
 use super::HASH_LEN;
 
 /// Number of bytes required to encode a raw address.
-const ADDR_ENCODING_LEN: usize = 1 + HASH_LEN;
+pub const ADDR_ENCODING_LEN: usize = 1 + HASH_LEN;
 
 /// Default data stored by raw addresses.
 const ADDR_DEFAULT_DATA: [u8; HASH_LEN] = [0; HASH_LEN];

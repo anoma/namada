@@ -1,7 +1,6 @@
 //! MASP types
 
 use std::fmt::Display;
-use std::io::ErrorKind;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -85,13 +84,9 @@ impl string_encoding::Format for PaymentAddress {
         bytes: &[u8],
     ) -> Result<Self, string_encoding::DecodeError> {
         if bytes.len() != PAYMENT_ADDRESS_SIZE {
-            return Err(DecodeError::InvalidInnerEncoding(
-                ErrorKind::InvalidData,
-                format!(
-                    "expected {PAYMENT_ADDRESS_SIZE} bytes for the payment \
-                     address"
-                ),
-            ));
+            return Err(DecodeError::InvalidInnerEncoding(format!(
+                "expected {PAYMENT_ADDRESS_SIZE} bytes for the payment address"
+            )));
         }
         let pinned = match bytes[0] {
             0 => false,
@@ -107,7 +102,6 @@ impl string_encoding::Format for PaymentAddress {
             })
             .ok_or_else(|| {
                 DecodeError::InvalidInnerEncoding(
-                    ErrorKind::InvalidData,
                     "invalid payment address provided".to_string(),
                 )
             })?;
@@ -250,7 +244,7 @@ impl string_encoding::Format for ExtendedSpendingKey {
         bytes: &[u8],
     ) -> Result<Self, string_encoding::DecodeError> {
         masp_primitives::zip32::ExtendedSpendingKey::read(&mut &bytes[..])
-            .map_err(|op| DecodeError::InvalidInnerEncodingStr(op.to_string()))
+            .map_err(|op| DecodeError::InvalidInnerEncoding(op.to_string()))
             .map(Self)
     }
 }
