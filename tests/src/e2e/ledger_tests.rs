@@ -2095,7 +2095,7 @@ fn proposal_submission() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
-        "passed with 120900.000000 yay votes and 0.000000 nay votes (0.%)",
+        "passed with 120000.000000 yay votes and 900.000000 nay votes (0.%)",
     )?;
     client.assert_success();
 
