@@ -41,7 +41,7 @@ use namada::ledger::storage::ConversionState;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
 use namada::types::address::{masp, Address, InternalAddress};
 use namada::types::hash::Hash;
-use namada::types::ibc::is_ibc_denom;
+use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::types::io::Io;
 use namada::types::key::*;
 use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
@@ -635,7 +635,8 @@ async fn lookup_token_alias<'a>(
     owner: &Address,
 ) -> String {
     if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
-        let ibc_denom_key = ibc_denom_key(owner.to_string(), trace_hash);
+        let ibc_denom_key =
+            ibc_denom_key(owner.to_string(), trace_hash.to_string());
         match query_storage_value::<_, String>(context.client(), &ibc_denom_key)
             .await
         {
@@ -687,6 +688,9 @@ async fn query_tokens<'a>(
                 if let Some((_, hash)) = is_ibc_denom_key(&key) {
                     let ibc_denom_alias =
                         get_ibc_denom_alias(context, ibc_denom).await;
+                    let hash: IbcTokenHash = hash.parse().expect(
+                        "Parsing an IBC token hash from storage shouldn't fail",
+                    );
                     let ibc_token =
                         Address::Internal(InternalAddress::IbcToken(hash));
                     tokens.insert(ibc_denom_alias, ibc_token);

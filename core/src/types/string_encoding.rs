@@ -8,7 +8,6 @@
 //! below and use it to `impl string_encoding::Format for YourType`.
 
 use std::fmt::Display;
-use std::io::ErrorKind;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -24,23 +23,20 @@ pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 //
 // Invariant: HRPs must be unique !!!
 //
-// TODO: remove "test" suffix for live network
 /// `Address` human-readable part
-pub const ADDRESS_HRP: &str = "atest";
+pub const ADDRESS_HRP: &str = "tnam";
 /// MASP extended viewing key human-readable part
-pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "xfvktest";
+pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "zvknam";
 /// MASP payment address (not pinned) human-readable part
-pub const MASP_PAYMENT_ADDRESS_HRP: &str = "patest";
-/// MASP pinned payment address human-readable part
-pub const MASP_PINNED_PAYMENT_ADDRESS_HRP: &str = "ppatest";
+pub const MASP_PAYMENT_ADDRESS_HRP: &str = "znam";
 /// MASP extended spending key human-readable part
-pub const MASP_EXT_SPENDING_KEY_HRP: &str = "xsktest";
+pub const MASP_EXT_SPENDING_KEY_HRP: &str = "zsknam";
 /// `common::PublicKey` human-readable part
-pub const COMMON_PK_HRP: &str = "pktest";
+pub const COMMON_PK_HRP: &str = "tpknam";
 /// `DkgPublicKey` human-readable part
-pub const DKG_PK_HRP: &str = "dpktest";
+pub const DKG_PK_HRP: &str = "dpknam";
 /// `common::Signature` human-readable part
-pub const COMMON_SIG_HRP: &str = "sigtest";
+pub const COMMON_SIG_HRP: &str = "signam";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -53,18 +49,23 @@ pub enum DecodeError {
     UnexpectedBech32Hrp(String, String),
     #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
     UnexpectedBech32Variant(bech32::Variant),
-    #[error("Invalid address encoding: {0}, {1}")]
-    InvalidInnerEncoding(ErrorKind, String),
-    #[error("Invalid address encoding")]
-    InvalidInnerEncodingStr(String),
+    #[error("Invalid address encoding: {0}")]
+    InvalidInnerEncoding(String),
     #[error("Invalid bytes: {0}")]
     InvalidBytes(std::io::Error),
+    #[error("Unexpected discriminant byte: {0}")]
+    UnexpectedDiscriminant(u8),
 }
 
 /// Format to string with bech32m
 pub trait Format: Sized {
     /// Human-readable part
     const HRP: &'static str;
+
+    /// Encoded bytes representation of `Self`.
+    type EncodedBytes<'a>: AsRef<[u8]>
+    where
+        Self: 'a;
 
     /// Encode `Self` to a string
     fn encode(&self) -> String {
@@ -100,7 +101,7 @@ pub trait Format: Sized {
     }
 
     /// Encode `Self` to bytes
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> Self::EncodedBytes<'_>;
 
     /// Try to decode `Self` from bytes
     fn decode_bytes(bytes: &[u8]) -> Result<Self, DecodeError>;

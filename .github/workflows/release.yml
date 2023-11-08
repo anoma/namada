@@ -48,8 +48,9 @@ jobs:
         if: "${{ github.event.inputs.tag != '' }}"
         run: git checkout ${{ github.event.inputs.tag }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: heliaxdev/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3

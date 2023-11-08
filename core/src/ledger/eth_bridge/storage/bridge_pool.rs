@@ -453,7 +453,7 @@ mod test_bridge_pool_tree {
 
     /// An established user address for testing & development
     fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw")
+        Address::decode("tnam1qyctxtpnkhwaygye0sftkq28zedf774xc5a2m7st")
             .expect("The token address decoding shouldn't fail")
     }
 

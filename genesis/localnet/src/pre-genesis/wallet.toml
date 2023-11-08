@@ -25,13 +25,13 @@ validator-0-balance-key = "ED25519_PK_PREFIXpktest1qzp22w6trhmxmp2dx5h883c2l684z
 [derivation_paths]
 
 [addresses]
-albert-key = "atest1d9khqw36x56rgvphx5erjwp48y6y2s6y89qnwdzygce5xsfkx9rrsd35xerrjdp3gsunz33n3zytee"
-bertha-key = "atest1d9khqw36xvm5zwpjxqm5zwz9x56rydp5gscnwsf4geznjdpegvmrwv29xcmnxvp4x5u5vdjp4wcjdf"
-christel-key = "atest1d9khqw36gccrsv348qurzvpcx3p52ve3xu6rys3kxc6yxsjrgymyg32xggmnxvj9g5erzv2rn6pwv6"
-daewon = "atest1d9khqw36xuc5gsfegsen2sfsx4q5yvz9xq6yv3psgcunj334g9prvdzzxucnyv2zxqm5xve44x97gg"
-ester = "atest1d9khqw36xumnzd3cxccyx33k8ymyy3f5x3z5zd3jx5crsdfcgezyyv6rg3z5vw2xxcenqdpez4uxkf"
-faucet-key = "atest1d9khqw368ycns3jp8q6nx329g5myg3zyggu523f589zyzs6x8pq5g3zzx9pr2d3h8qmrjdjyvvty45"
-validator-0-balance-key = "atest1d9khqw36geqnxw29x9q5xvj98qmnj3fjgscygs6pg4p52s6z89qnzd3exgmnsv34gfqnj33elp2296"
+albert-key = "tnam1qp2yqaffsk2wekd8fheu5c0cv3heg8v37vmdd45u"
+bertha-key = "tnam1qqm6sgr63e2zgngh5hlff8r8rennq4vldgdyqdaa"
+christel-key = "tnam1qrcgykypppxwx96zkejvhjnda7mn9m3prsz78pkf"
+daewon = "tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn"
+ester = "tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q"
+faucet-key = "tnam1qzgcl2znamndmku7ujw6e79dmvd4v7rfd5c89dfz"
+validator-0-balance-key = "tnam1qrarncdv96reutgdetkwewdpdyncykaflyzz36vh"
 
 [pkhs]
 37A8207A8E54244D17A5FE949C671E6730559F6A = "bertha-key"

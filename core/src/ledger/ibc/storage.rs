@@ -15,7 +15,8 @@ use crate::ibc::core::ics24_host::path::{
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use crate::types::address::{Address, InternalAddress, HASH_HEX_LEN};
+use crate::types::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
+use crate::types::ibc::IbcTokenHash;
 use crate::types::storage::{self, DbKeySeg, Key, KeySeg};
 
 const CLIENTS_COUNTER: &str = "clients/counter";
@@ -396,15 +397,29 @@ pub fn ibc_denom_key(
 }
 
 /// Hash the denom
+#[inline]
 pub fn calc_hash(denom: impl AsRef<str>) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(denom.as_ref());
-    format!("{:.width$x}", hasher.finalize(), width = HASH_HEX_LEN)
+    calc_ibc_token_hash(denom).to_string()
+}
+
+/// Hash the denom
+pub fn calc_ibc_token_hash(denom: impl AsRef<str>) -> IbcTokenHash {
+    let hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(denom.as_ref());
+        hasher.finalize()
+    };
+
+    let input: &[u8; SHA_HASH_LEN] = hash.as_ref();
+    let mut output = [0; HASH_LEN];
+
+    output.copy_from_slice(&input[..HASH_LEN]);
+    IbcTokenHash(output)
 }
 
 /// Obtain the IbcToken with the hash from the given denom
 pub fn ibc_token(denom: impl AsRef<str>) -> Address {
-    let hash = calc_hash(&denom);
+    let hash = calc_ibc_token_hash(&denom);
     Address::Internal(InternalAddress::IbcToken(hash))
 }
 

@@ -193,7 +193,7 @@ mod tests {
     use crate::vm::WasmCacheRwAccess;
 
     const ARBITRARY_OWNER_A_ADDRESS: &str =
-        "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
+        "tnam1qqwuj7aart6ackjfkk7486jwm2ufr4t7cq4535u4";
     const ARBITRARY_OWNER_A_INITIAL_BALANCE: u64 = 100;
     const ESCROW_AMOUNT: u64 = 100;
     const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;

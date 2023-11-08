@@ -213,8 +213,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: heliaxdev/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
@@ -308,8 +309,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: heliaxdev/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
@@ -391,8 +393,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: heliaxdev/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
@@ -495,8 +498,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Protoc
-        uses: arduino/setup-protoc@v1
+        uses: heliaxdev/setup-protoc@v2
         with:
+          version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3

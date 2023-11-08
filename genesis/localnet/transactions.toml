@@ -7,48 +7,48 @@
 
 [[validator_account]]
 alias = "validator-0"
-dkg_key = "dpktest1vqqqqqqndwmp3cvzfuepzvdh3fmt4dvjwd4vx6ffxk6t4vm6waysng2q8zh3yu8hdnxhwnwq22p8fwaqlyzcggef6k6qv3h3qtyy8c8c686w50v7d0z49ufd6zje46ujzc4ew5z7sdh45d94cvywy2v40yz9jlckh8cksr"
+dkg_key = "dpknam1vqqqqqqndwmp3cvzfuepzvdh3fmt4dvjwd4vx6ffxk6t4vm6waysng2q8zh3yu8hdnxhwnwq22p8fwaqlyzcggef6k6qv3h3qtyy8c8c686w50v7d0z49ufd6zje46ujzc4ew5z7sdh45d94cvywy2v40yz9jlck3p6lxe"
 vp = "vp_validator"
 commission_rate = "0.05"
 max_commission_rate_change = "0.01"
 net_address = "127.0.0.1:27656"
 
 [validator_account.account_key]
-pk = "pktest1qpqznlesv6fcgsz9x4rsn7l4dsnp7h5sswvs9atw0zgq3uwp0jll2r42szz"
-authorization = "sigtest1qrcy6a095uj6n8ryc9fkfw3hn2jn285g82hdratzrvmg22xp5qdmyr7e9q97t77v4zr8a73x4c3k53pcec3mp4ugt5jqd2w0fvd7nhcp0ajsk4"
+pk = "tpknam1qpqznlesv6fcgsz9x4rsn7l4dsnp7h5sswvs9atw0zgq3uwp0jll2fh8yx5"
+authorization = "signam1qrcy6a095uj6n8ryc9fkfw3hn2jn285g82hdratzrvmg22xp5qdmyr7e9q97t77v4zr8a73x4c3k53pcec3mp4ugt5jqd2w0fvd7nhcpw8587v"
 
 [validator_account.consensus_key]
-pk = "pktest1qpk2a5m26cgnrp32l2c2hss03draxwnctu92llhlr6kjesn2kt892k2kklp"
-authorization = "sigtest1qzajuey408zf66wgw8x3awd5jx9x249csx63n80clehj238qqpsf9cdr630edqjr8fw95vywlngy368r087sge2xy89qpcsrxvwtm3gr0h6g79"
+pk = "tpknam1qpk2a5m26cgnrp32l2c2hss03draxwnctu92llhlr6kjesn2kt892ugmzmh"
+authorization = "signam1qzajuey408zf66wgw8x3awd5jx9x249csx63n80clehj238qqpsf9cdr630edqjr8fw95vywlngy368r087sge2xy89qpcsrxvwtm3grwdulku"
 
 [validator_account.protocol_key]
-pk = "pktest1qpfv9pj4zmelcg98rtw8wezztzdgpuczuxjmx946klkxajmvvcxjz3vsv63"
-authorization = "sigtest1qz0aerskgtzwmgxwgml72zyz4974njfz6s9dl7r399d0v64pzsmctkwe8f28dwyef52hklj6r2fqmeypncvv3qg2x4hg4u3g23kw23qt73uzmy"
+pk = "tpknam1qpfv9pj4zmelcg98rtw8wezztzdgpuczuxjmx946klkxajmvvcxjzmwac78"
+authorization = "signam1qz0aerskgtzwmgxwgml72zyz4974njfz6s9dl7r399d0v64pzsmctkwe8f28dwyef52hklj6r2fqmeypncvv3qg2x4hg4u3g23kw23qtlt64na"
 
 [validator_account.tendermint_node_key]
-pk = "pktest1qp7shxxfdkp8ft8xfkgf2vqy7u6effdp82w0cq6aq8575txul33t63dyd68"
-authorization = "sigtest1qq87l6zjuswmrfeysxp8j0tu5zlklnswzaqgcuyaq23p49hhvupa57r3rwrh3txfuvq8lh5e7wu7d90js8cn7a7dygs7v5yx2a9ljtqxwl0chr"
+pk = "tpknam1qp7shxxfdkp8ft8xfkgf2vqy7u6effdp82w0cq6aq8575txul33t6m0fe73"
+authorization = "signam1qq87l6zjuswmrfeysxp8j0tu5zlklnswzaqgcuyaq23p49hhvupa57r3rwrh3txfuvq8lh5e7wu7d90js8cn7a7dygs7v5yx2a9ljtqx09f0l6"
 
 [validator_account.eth_hot_key]
-pk = "pktest1qypdzza7uqtklzzs50hhy07h5ru9p0v8y5666wwulqnd3mdpuj0tcxsgck694"
-authorization = "sigtest1q9qtzvwlqhnft5jgeyms2w757dlly8rjg4g89593ayhan0fx7uvjzvm7r7ltgsly9tp6783pqpl6ezxty240udrrknxmunymz6lm523qqqwx72ra"
+pk = "tpknam1qypdzza7uqtklzzs50hhy07h5ru9p0v8y5666wwulqnd3mdpuj0tcxstywa2d"
+authorization = "signam1q9qtzvwlqhnft5jgeyms2w757dlly8rjg4g89593ayhan0fx7uvjzvm7r7ltgsly9tp6783pqpl6ezxty240udrrknxmunymz6lm523qqqlu57sc"
 
 [validator_account.eth_cold_key]
-pk = "pktest1qypzca0n6l890jc83nk5lljuzps04xmfccz3f87xc6ez40t2wvql48s52cx8r"
-authorization = "sigtest1q8qmjstc2jtt3dwueepv0njk9te5qpj6z9yj6w0duhagswz80vyws3ywdsy9n49qnjecvnpxwlna3578vn423tgd4rrtss06ejgkj7c5qyv22nm6"
+pk = "tpknam1qypzca0n6l890jc83nk5lljuzps04xmfccz3f87xc6ez40t2wvql48shkqpgm"
+authorization = "signam1q8qmjstc2jtt3dwueepv0njk9te5qpj6z9yj6w0duhagswz80vyws3ywdsy9n49qnjecvnpxwlna3578vn423tgd4rrtss06ejgkj7c5qyasq8gl"
 
 [[transfer]]
 token = "nam"
-source = "pktest1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agcthpup"
+source = "tpknam1qzp22w6trhmxmp2dx5h883c2l684z0e20a9egusmxaat62wvaa4agjf64ch"
 target = "validator-0"
 amount = "200000"
-signature = "sigtest1qz8ch7n6jp7g7hvnzkhmprhqc5umd0gatarlttm7gpcdx6g8hmgqffdq67fn6vzcflmym5xej3m5jmfw7nap00s4nlx2zxrlwz0wlfgts9kera"
+signature = "signam1qz8ch7n6jp7g7hvnzkhmprhqc5umd0gatarlttm7gpcdx6g8hmgqffdq67fn6vzcflmym5xej3m5jmfw7nap00s4nlx2zxrlwz0wlfgt3lswty"
 
 [[bond]]
 source = "validator-0"
 validator = "validator-0"
 amount = "100000"
-signature = "sigtest1qpss2x7vewnr2sr2wxj0ftldcmvv7v7t7qsr26k2l2hx4gls7y9sksrcq0m9vv2ymdqqxgmmw0dmuwazflxuqt4v2p2wng4endtcfcc0v6f6tj"
+signature = "signam1qpss2x7vewnr2sr2wxj0ftldcmvv7v7t7qsr26k2l2hx4gls7y9sksrcq0m9vv2ymdqqxgmmw0dmuwazflxuqt4v2p2wng4endtcfcc0dq0drt"
 
 # 2.
 
@@ -57,8 +57,8 @@ alias = "albert"
 vp = "vp_user"
 
 [established_account.public_key]
-pk = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
-authorization = "sigtest1qzq6dwf2a9dq4hp3nmxfgckh55mulzryxsfkqhr9uvfvmtr9wt38lyyvzvfqryxnat2a4ry6hygv957z683dyngu03gse2uvl5ldfccypktkp6"
+pk = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
+authorization = "signam1qzq6dwf2a9dq4hp3nmxfgckh55mulzryxsfkqhr9uvfvmtr9wt38lyyvzvfqryxnat2a4ry6hygv957z683dyngu03gse2uvl5ldfccyqvdpfr"
 
 [established_account.storage]
 
@@ -67,8 +67,8 @@ alias = "bertha"
 vp = "vp_user"
 
 [established_account.public_key]
-pk = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
-authorization = "sigtest1qzt58nd7k2mj647x8x4ydhsjkut7dmsl7yjlnrnwu9kzjdch3cljv6dq05mx2kvwn80kjezh7lz26adc5ksvyn3knufymtkhlmnhg3c8zka3y4"
+pk = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
+authorization = "signam1qzt58nd7k2mj647x8x4ydhsjkut7dmsl7yjlnrnwu9kzjdch3cljv6dq05mx2kvwn80kjezh7lz26adc5ksvyn3knufymtkhlmnhg3c8rvmxvv"
 
 [established_account.storage]
 
@@ -77,104 +77,104 @@ alias = "christel"
 vp = "vp_user"
 
 [established_account.public_key]
-pk = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
-authorization = "sigtest1qrf2l6a5u4ywskryhdueudnm50j3kqhujas3mmktenqm89fmlskjnyeskr2tr7js5swmtqqtenkj6ap9xpelx2w40fjjczc4w9xtdggqjtszy4"
+pk = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
+authorization = "signam1qrf2l6a5u4ywskryhdueudnm50j3kqhujas3mmktenqm89fmlskjnyeskr2tr7js5swmtqqtenkj6ap9xpelx2w40fjjczc4w9xtdggqn3k4vv"
 
 [established_account.storage]
 
 [[transfer]]
 token = "nam"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qrxfthuz5yzapdt82d8nc656ffrzkxnkfg6fw8w7e6045vcpn8kpr4c536ug4fs2ddz5823dfd3w4qnhcl40qmtasfccaa99a0hvjcqvyy2l02"
+signature = "signam1qrxfthuz5yzapdt82d8nc656ffrzkxnkfg6fw8w7e6045vcpn8kpr4c536ug4fs2ddz5823dfd3w4qnhcl40qmtasfccaa99a0hvjcqv97vg8n"
 
 [[transfer]]
 token = "btc"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qq826qel8zn5p4dfx25ma45uxeskx0yjlsaxp38uyvehvds6t93c8wkhaydunm4nzz9750dwhkjst00mfrwmu066y3rj6gtk5wjskxq9zvk7ed"
+signature = "signam1qq826qel8zn5p4dfx25ma45uxeskx0yjlsaxp38uyvehvds6t93c8wkhaydunm4nzz9750dwhkjst00mfrwmu066y3rj6gtk5wjskxq9rksf35"
 
 [[transfer]]
 token = "eth"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qzghddk0u6kpqaxhskrj8ah69d3hce95wndgvlpuyvuw0h0fnyrnp026ltvtfmfhpzywkf88yyhv80hzkus57s9nn6vn3ljvmkkf7zgq2nzn40"
+signature = "signam1qzghddk0u6kpqaxhskrj8ah69d3hce95wndgvlpuyvuw0h0fnyrnp026ltvtfmfhpzywkf88yyhv80hzkus57s9nn6vn3ljvmkkf7zgqtfyyak"
 
 [[transfer]]
 token = "dot"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qqlu8kajh0up5zhewd2h44fhq7zdaapqt9xaj8xp7jmdqpv4dl9d5tesw3wyr9su962rvpkf02x27579vqjk4f4advx7t9ejz74cjrc25puna6"
+signature = "signam1qqlu8kajh0up5zhewd2h44fhq7zdaapqt9xaj8xp7jmdqpv4dl9d5tesw3wyr9su962rvpkf02x27579vqjk4f4advx7t9ejz74cjrc24m6y4r"
 
 [[transfer]]
 token = "schnitzel"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qpukdd6f7pvtgau9v58xxwrnmv5pjra6527aggce9j8cu6fnekzag2cmmf4w0x0cn76gpth2vw6zcsnw37xjuz96hflqfnk5sznxe6cfd5mjnv"
+signature = "signam1qpukdd6f7pvtgau9v58xxwrnmv5pjra6527aggce9j8cu6fnekzag2cmmf4w0x0cn76gpth2vw6zcsnw37xjuz96hflqfnk5sznxe6cfvwa9m4"
 
 [[transfer]]
 token = "apfel"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qprnsyhlruvw4a6jjs98xdd04gxdsgycywzt79gyyak68gn4f50ppdvdm0q6ns44cheu7s43kal0qsldml8s0zexqk3s9zmglu4l6fszwcqswy"
+signature = "signam1qprnsyhlruvw4a6jjs98xdd04gxdsgycywzt79gyyak68gn4f50ppdvdm0q6ns44cheu7s43kal0qsldml8s0zexqk3s9zmglu4l6fsz0zx8xa"
 
 [[transfer]]
 token = "kartoffel"
-source = "pktest1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63wnnul44"
+source = "tpknam1qz0aphcsrw37j8fy742cjwhphu9jwx7esd3ad4xxtxrkwv07ff63we33t3r"
 target = "albert"
 amount = "1000000"
-signature = "sigtest1qpg4y6ltax3qfclguym2kpa0ezlkf4hz4u3h8fc2ndmuzm4zfe26ygq9u6nhjjvj93n5v296x4arkvjk22ygee2fx054ce7ap6gvynq2j2k0vf"
+signature = "signam1qpg4y6ltax3qfclguym2kpa0ezlkf4hz4u3h8fc2ndmuzm4zfe26ygq9u6nhjjvj93n5v296x4arkvjk22ygee2fx054ce7ap6gvynq2nsscys"
 
 [[transfer]]
 token = "nam"
-source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
 target = "bertha"
 amount = "1000000"
-signature = "sigtest1qpe3ms76cxvqsa58624ked5ndjr3jr3u7lf9ypalxdh29gajwmsxtzjxzswk0xmza90u47tgksr0d7enpd730ps7fq5u76l7ekxeyvgfnl0qxj"
+signature = "signam1qpe3ms76cxvqsa58624ked5ndjr3jr3u7lf9ypalxdh29gajwmsxtzjxzswk0xmza90u47tgksr0d7enpd730ps7fq5u76l7ekxeyvgfj9fhwt"
 
 [[transfer]]
 token = "btc"
-source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
 target = "bertha"
 amount = "1000000"
-signature = "sigtest1qqq4yc6s3h4ysezcmgsdgyfsqu8mmrwwc8a358sm864zehx74ums8fmgmkyyr3wz9qqrc5fagwrw0a4mgqkkleumc0u6ynshj5ns0tcdrygupg"
+signature = "signam1qqq4yc6s3h4ysezcmgsdgyfsqu8mmrwwc8a358sm864zehx74ums8fmgmkyyr3wz9qqrc5fagwrw0a4mgqkkleumc0u6ynshj5ns0tcdz7wtf3"
 
 [[transfer]]
 token = "eth"
-source = "pktest1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3ndsl9tn4a"
+source = "tpknam1qpyfnrl6qdqvguah9kknvp9t6ajcrec7fge56pcgaa655zkua3nds48x83t"
 target = "bertha"
 amount = "1000000"
-signature = "sigtest1qzyqkdxt3cxf0huv0hzskqmuthw38s3kj2sx50znzc68gzx64hrd3hkyx0g27pruwa9fv42suw3k8gkfaelcp4ymnvfw7ltx0mz2z9qr2lwwcs"
+signature = "signam1qzyqkdxt3cxf0huv0hzskqmuthw38s3kj2sx50znzc68gzx64hrd3hkyx0g27pruwa9fv42suw3k8gkfaelcp4ymnvfw7ltx0mz2z9qrt9gesf"
 
 [[transfer]]
 token = "nam"
-source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
 target = "christel"
 amount = "1000000"
-signature = "sigtest1qran2jh0dwuwchh45snhk3p9uyxqym57eg527pcjeekwhvpr5j0fy6dte7x3v2dwwc6vqmv49drpvmk6uhzlt2p8rqx0th3h7smf8rqrcpfxc7"
+signature = "signam1qran2jh0dwuwchh45snhk3p9uyxqym57eg527pcjeekwhvpr5j0fy6dte7x3v2dwwc6vqmv49drpvmk6uhzlt2p8rqx0th3h7smf8rqrem03s8"
 
 [[transfer]]
 token = "btc"
-source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
 target = "christel"
 amount = "1000000"
-signature = "sigtest1qrxp6p56qtvsyp7jfs4jru3mkfv6l4t7hpguur72579pqjaexdry9turgmzwzj6qmua3s2y2a4krtuxwaag66j4dpz44aaqksy30tfcxmnhw2k"
+signature = "signam1qrxp6p56qtvsyp7jfs4jru3mkfv6l4t7hpguur72579pqjaexdry9turgmzwzj6qmua3s2y2a4krtuxwaag66j4dpz44aaqksy30tfcx6f3ez0"
 
 [[transfer]]
 token = "eth"
-source = "pktest1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzy242c2"
+source = "tpknam1qp6uy52q0fldjxupznuskm69fkuswx3fq3vw9kekzp4enkh5h7pmzwgc7uu"
 target = "christel"
 amount = "1000000"
-signature = "sigtest1qrtrec6mps9p7zhmm7sywxwc7zdm32umt0zdwpuflrkh6952rx74amnsf9hn0yughs4e6czgpdmwsmujvkr4ptk2x24vtc8phz0s2asvtyy9pf"
+signature = "signam1qrtrec6mps9p7zhmm7sywxwc7zdm32umt0zdwpuflrkh6952rx74amnsf9hn0yughs4e6czgpdmwsmujvkr4ptk2x24vtc8phz0s2asv27zjfs"
 
 [[bond]]
 source = "albert"
 validator = "validator-0"
 amount = "20000"
-signature = "sigtest1qpx0kc8rl966vnnswfwhcwxh5vv69p7lev2apc2yephag978gqg5903kuw6dugg9c6pg5jdw048umk72ntympphz0dka74aspldslaqr3q7eqr"
+signature = "signam1qpx0kc8rl966vnnswfwhcwxh5vv69p7lev2apc2yephag978gqg5903kuw6dugg9c6pg5jdw048umk72ntympphz0dka74aspldslaqrs6cwg6"
