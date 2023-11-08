@@ -1072,7 +1072,10 @@ where
         const VALID_MSG: &str = "Mempool validation passed";
         const INVALID_MSG: &str = "Mempool validation failed";
 
-        // Tx size check
+        // check tx bytes
+        //
+        // NB: always keep this as the first tx check,
+        // as it is a pretty cheap one
         if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
@@ -2899,5 +2902,42 @@ mod shell_tests {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+    }
+
+    /// Test max tx bytes parameter in CheckTx
+    #[test]
+    fn test_max_tx_bytes_check_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let max_tx_bytes: u32 = {
+            let key = parameters::storage::get_max_tx_bytes_key();
+            shell
+                .wl_storage
+                .read(&key)
+                .expect("Failed to read from storage")
+                .expect("Max tx bytes should have been written to storage")
+        };
+        let new_tx = |size: u32| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut tx = Tx::new(shell.chain_id.clone(), None);
+            tx.add_code("wasm_code".as_bytes().to_owned())
+                .add_data(vec![0; size as usize])
+                .sign_wrapper(keypair);
+            tx
+        };
+
+        // test a small tx
+        let result = shell.mempool_validate(
+            new_tx(50).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert!(result.code != u32::from(ErrorCodes::TooLarge));
+
+        // max tx bytes + 1, on the other hand, is not
+        let result = shell.mempool_validate(
+            new_tx(max_tx_bytes + 1).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, u32::from(ErrorCodes::TooLarge));
     }
 }

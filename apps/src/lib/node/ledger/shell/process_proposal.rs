@@ -459,6 +459,9 @@ where
         CA: 'static + WasmCacheAccess + Sync,
     {
         // check tx bytes
+        //
+        // NB: always keep this as the first tx check,
+        // as it is a pretty cheap one
         if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
@@ -2758,6 +2761,55 @@ mod test_process_proposal {
                     "Wrapper txs not allowed at the current block height"
                 ),
             );
+        }
+    }
+
+    /// Test max tx bytes parameter in ProcessProposal
+    #[test]
+    fn test_max_tx_bytes_process_proposal() {
+        use namada::ledger::parameters::storage::get_max_tx_bytes_key;
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+
+        let max_tx_bytes: u32 = {
+            let key = get_max_tx_bytes_key();
+            shell
+                .wl_storage
+                .read(&key)
+                .expect("Failed to read from storage")
+                .expect("Max tx bytes should have been written to storage")
+        };
+        let new_tx = |size: u32| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut tx = Tx::new(shell.chain_id.clone(), None);
+            tx.add_code("wasm_code".as_bytes().to_owned())
+                .add_data(vec![0; size as usize])
+                .sign_wrapper(keypair);
+            tx
+        };
+
+        let request = ProcessProposal {
+            txs: vec![new_tx(max_tx_bytes).to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(
+                    response[0].result.code,
+                    u32::from(ErrorCodes::TooLarge)
+                );
+            }
+        }
+
+        let request = ProcessProposal {
+            txs: vec![new_tx(0).to_bytes()],
+        };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert!(
+                    response[0].result.code != u32::from(ErrorCodes::TooLarge)
+                );
+            }
         }
     }
 }
