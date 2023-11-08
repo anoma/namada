@@ -59,6 +59,8 @@ pub enum DecodeError {
     InvalidInnerEncodingStr(String),
     #[error("Invalid bytes: {0}")]
     InvalidBytes(std::io::Error),
+    #[error("Unexpected discriminant byte: {0}")]
+    UnexpectedDiscriminant(u8),
 }
 
 /// Format to string with bech32m
