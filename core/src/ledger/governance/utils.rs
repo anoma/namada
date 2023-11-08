@@ -234,16 +234,20 @@ impl TallyVote {
         }
     }
 
-    /// Check if two votes are equal
-    pub fn is_same_side(&self, other: &TallyVote) -> bool {
+    /// Check if two votes are equal, returns an error if the variants of the
+    /// two instances are different
+    pub fn is_same_side(
+        &self,
+        other: &TallyVote,
+    ) -> Result<bool, &'static str> {
         match (self, other) {
             (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
-                vote.is_same_side(other_vote)
+                Ok(vote.is_same_side(other_vote))
             }
             (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
-                vote.is_same_side(other_vote)
+                Ok(vote.is_same_side(other_vote))
             }
-            _ => false,
+            _ => Err("Cannot compare different variants of governance votes"),
         }
     }
 }
@@ -292,7 +296,28 @@ pub fn compute_proposal_result(
         for (validator, voting_power) in delegations {
             let validator_vote = votes.validators_vote.get(&validator);
             if let Some(validator_vote) = validator_vote {
-                if !validator_vote.is_same_side(delegator_vote) {
+                let validator_vote_is_same_side =
+                    match validator_vote.is_same_side(delegator_vote) {
+                        Ok(result) => result,
+                        Err(_) => {
+                            // Unexpected path, all the votes should be
+                            // validated by the VP and only online votes should
+                            // be allowed in storage
+                            tracing::warn!(
+                                "Found unexpected offline vote type: forcing \
+                                 the proposal to fail."
+                            );
+                            // Force failure of the proposal
+                            return ProposalResult {
+                                result: TallyResult::Rejected,
+                                total_voting_power: VotePower::default(),
+                                total_yay_power: VotePower::default(),
+                                total_nay_power: VotePower::default(),
+                                total_abstain_power: VotePower::default(),
+                            };
+                        }
+                    };
+                if !validator_vote_is_same_side {
                     if delegator_vote.is_yay() {
                         yay_voting_power += voting_power;
                         if validator_vote.is_nay() {
