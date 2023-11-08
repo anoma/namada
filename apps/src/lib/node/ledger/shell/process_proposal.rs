@@ -1177,7 +1177,7 @@ mod test_process_proposal {
     /// if the bridge is not active.
     #[test]
     fn check_rejected_bp_roots_bridge_inactive() {
-        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(3);
+        let (mut shell, _a, _b, _c) = test_utils::setup_at_height(1);
         shell.wl_storage.storage.block.height =
             shell.wl_storage.storage.get_last_block_height();
         shell.commit();

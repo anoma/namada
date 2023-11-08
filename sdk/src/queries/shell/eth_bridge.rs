@@ -295,7 +295,7 @@ where
     let merkle_tree = ctx
         .wl_storage
         .storage
-        .get_merkle_tree(height)
+        .get_merkle_tree(height, Some(StoreType::BridgePool))
         .expect("We should always be able to read the database");
     let stores = merkle_tree.stores();
     let store = match stores.store(&StoreType::BridgePool) {
@@ -365,7 +365,7 @@ where
         let tree = ctx
             .wl_storage
             .storage
-            .get_merkle_tree(height)
+            .get_merkle_tree(height, Some(StoreType::BridgePool))
             .into_storage_result()?;
         // from the hashes of the transfers, get the actual values.
         let mut missing_hashes = vec![];
@@ -920,6 +920,7 @@ mod test_ethbridge_router {
         };
 
         // write a transfer into the bridge pool
+        client.wl_storage.storage.block.height = 1.into();
         client
             .wl_storage
             .write_bytes(
@@ -1041,6 +1042,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1062,7 +1064,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root.clone(), BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root.clone(), written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1251,6 +1253,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1272,7 +1275,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root, written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 
@@ -1424,6 +1427,7 @@ mod test_ethbridge_router {
             signatures: Default::default(),
             data: (transfer.keccak256(), 0.into()),
         };
+        let written_height = client.wl_storage.storage.block.height;
 
         // commit the changes and increase block height
         client.wl_storage.commit_block().expect("Test failed");
@@ -1445,7 +1449,7 @@ mod test_ethbridge_router {
             .wl_storage
             .write_bytes(
                 &get_signed_root_key(),
-                (signed_root, BlockHeight::from(0)).serialize_to_vec(),
+                (signed_root, written_height).serialize_to_vec(),
             )
             .expect("Test failed");
 
