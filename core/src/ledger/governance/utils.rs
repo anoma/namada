@@ -226,6 +226,14 @@ impl TallyVote {
         }
     }
 
+    /// Check if a vote is abstain
+    pub fn is_abstain(&self) -> bool {
+        match self {
+            TallyVote::OnChain(vote) => vote.is_abstain(),
+            TallyVote::Offline(vote) => vote.is_abstain(),
+        }
+    }
+
     /// Check if two votes are equal
     pub fn is_same_side(&self, other: &TallyVote) -> bool {
         match (self, other) {
@@ -270,7 +278,7 @@ pub fn compute_proposal_result(
                 yay_voting_power += vote_power;
             } else if vote.is_nay() {
                 nay_voting_power += vote_power;
-            } else {
+            } else if vote.is_abstain() {
                 abstain_voting_power += vote_power;
             }
         }
@@ -289,21 +297,21 @@ pub fn compute_proposal_result(
                         yay_voting_power += voting_power;
                         if validator_vote.is_nay() {
                             nay_voting_power -= voting_power;
-                        } else {
+                        } else if validator_vote.is_abstain() {
                             abstain_voting_power -= voting_power;
                         }
                     } else if delegator_vote.is_nay() {
                         nay_voting_power += voting_power;
                         if validator_vote.is_yay() {
                             yay_voting_power -= voting_power;
-                        } else {
+                        } else if validator_vote.is_abstain() {
                             abstain_voting_power -= voting_power;
                         }
-                    } else {
+                    } else if delegator_vote.is_abstain() {
                         abstain_voting_power += voting_power;
                         if validator_vote.is_yay() {
                             yay_voting_power -= voting_power;
-                        } else {
+                        } else if validator_vote.is_nay() {
                             nay_voting_power -= voting_power;
                         }
                     }
@@ -312,7 +320,7 @@ pub fn compute_proposal_result(
                 yay_voting_power += voting_power;
             } else if delegator_vote.is_nay() {
                 nay_voting_power += voting_power;
-            } else {
+            } else if delegator_vote.is_abstain() {
                 abstain_voting_power += voting_power;
             }
         }

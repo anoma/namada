@@ -246,6 +246,11 @@ impl OfflineVote {
         self.vote.is_nay()
     }
 
+    /// Check if the vote is abstain
+    pub fn is_abstain(&self) -> bool {
+        self.vote.is_abstain()
+    }
+
     /// Check if two votes are equal
     pub fn is_same_side(&self, other: &Self) -> bool {
         self.vote.is_same_side(&other.vote)

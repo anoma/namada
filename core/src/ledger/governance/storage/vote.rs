@@ -57,6 +57,11 @@ impl StorageProposalVote {
         matches!(self, StorageProposalVote::Nay)
     }
 
+    /// Check if a vote is abstain
+    pub fn is_abstain(&self) -> bool {
+        matches!(self, StorageProposalVote::Abstain)
+    }
+
     /// Check if two votes are equal
     pub fn is_same_side(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)
