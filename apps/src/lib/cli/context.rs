@@ -82,7 +82,7 @@ pub struct ChainContext {
     pub wallet: Wallet<CliWalletUtils>,
     /// The ledger configuration for a specific chain ID
     pub config: Config,
-    /// The context fr shielded operations
+    /// The context for shielded operations
     pub shielded: ShieldedContext<FsShieldedUtils>,
     /// Native token's address
     pub native_token: Address,

@@ -22,6 +22,7 @@ use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
 use tokio::task;
 use tower::ServiceBuilder;
+use tower_abci::request;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
@@ -742,6 +743,57 @@ async fn maybe_start_ethereum_oracle(
             handle: spawn_dummy_task(()),
         },
     }
+}
+
+/// This function runs `Shell::init_chain` on the provided genesis files.
+/// This is to check that all the transactions included therein run
+/// successfully on chain initialization.
+pub fn test_genesis_files(
+    config: config::Ledger,
+    genesis: config::genesis::chain::Finalized,
+    wasm_dir: PathBuf,
+) {
+    use namada::ledger::storage::mockdb::MockDB;
+    use namada::ledger::storage::Sha256Hasher;
+
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+
+    // Channels for validators to send protocol txs to be broadcast to the
+    // broadcaster service
+    let (broadcast_sender, _broadcaster_receiver) = mpsc::unbounded_channel();
+
+    // Start dummy broadcaster
+    let _broadcaster = spawn_dummy_task(());
+
+    // craft a request to initailize the chain
+    let init = request::InitChain {
+        time: Some(Timestamp {
+            seconds: 0,
+            nanos: 0,
+        }),
+        chain_id: config.chain_id.to_string(),
+        initial_height: 0,
+        ..Default::default()
+    };
+
+    // start an instance of the ledger
+    let mut shell = Shell::<MockDB, Sha256Hasher>::new(
+        config,
+        wasm_dir,
+        broadcast_sender,
+        None,
+        None,
+        50 * 1024 * 1024,
+        50 * 1024 * 1024,
+    );
+    let mut initializer = shell::InitChainValidation::new(&mut shell, true);
+    initializer.run(
+        init,
+        genesis,
+        #[cfg(any(test, feature = "testing"))]
+        1,
+    );
+    initializer.report();
 }
 
 /// Spawn a dummy asynchronous task into the runtime,

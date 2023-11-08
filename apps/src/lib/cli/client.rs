@@ -7,6 +7,7 @@ use crate::cli::api::{CliApi, CliClient};
 use crate::cli::args::CliToSdk;
 use crate::cli::cmds::*;
 use crate::client::{rpc, tx, utils};
+use crate::node::ledger;
 
 impl CliApi {
     pub async fn handle_client_command<C, IO: Io>(
@@ -543,6 +544,39 @@ impl CliApi {
                 Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
                     args,
                 )) => utils::validate_genesis_templates(global_args, args),
+                Utils::TestGenesis(TestGenesis(args)) => {
+                    use std::str::FromStr;
+
+                    use crate::config::genesis;
+                    use crate::facade::tendermint::Timeout;
+
+                    let templates =
+                        genesis::templates::load_and_validate(&args.path)
+                            .unwrap();
+                    let genesis = genesis::chain::finalize(
+                        templates,
+                        FromStr::from_str("namada-dryrun").unwrap(),
+                        Default::default(),
+                        Timeout::from_str("30s").unwrap(),
+                    );
+                    let chain_id = &genesis.metadata.chain_id;
+                    let test_dir = tempfile::tempdir().unwrap();
+                    let config = crate::config::Config::load(
+                        test_dir.path(),
+                        chain_id,
+                        None,
+                    );
+                    genesis
+                        .write_toml_files(
+                            &test_dir.path().join(chain_id.to_string()),
+                        )
+                        .unwrap();
+                    ledger::test_genesis_files(
+                        config.ledger,
+                        genesis,
+                        args.wasm_dir,
+                    );
+                }
                 Utils::SignGenesisTx(SignGenesisTx(args)) => {
                     utils::sign_genesis_tx(global_args, args)
                 }

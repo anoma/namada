@@ -1963,6 +1963,7 @@ pub mod cmds {
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
+        TestGenesis(TestGenesis),
         SignGenesisTx(SignGenesisTx),
     }
 
@@ -1989,6 +1990,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 let genesis_tx =
                     SubCmd::parse(matches).map(Self::SignGenesisTx);
+                let test_genesis =
+                    SubCmd::parse(matches).map(Self::TestGenesis);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
@@ -1998,6 +2001,7 @@ pub mod cmds {
                     .or(default_base_dir)
                     .or(epoch_sleep)
                     .or(validate_genesis_templates)
+                    .or(test_genesis)
                     .or(genesis_tx)
             })
         }
@@ -2014,6 +2018,7 @@ pub mod cmds {
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
+                .subcommand(TestGenesis::def())
                 .subcommand(SignGenesisTx::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
@@ -2138,6 +2143,28 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Validate genesis templates.")
                 .add_args::<args::ValidateGenesisTemplates>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TestGenesis(pub args::TestGenesis);
+
+    impl SubCmd for TestGenesis {
+        const CMD: &'static str = "test-genesis";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::TestGenesis::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Dry run genesis files and get a report on problems that \
+                     may be found.",
+                )
+                .add_args::<args::TestGenesis>()
         }
     }
 
@@ -6183,6 +6210,32 @@ pub mod args {
                 PATH.def()
                     .help("Path to the directory with the template files."),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TestGenesis {
+        /// Templates dir
+        pub path: PathBuf,
+        pub wasm_dir: PathBuf,
+    }
+
+    impl Args for TestGenesis {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+            let wasm_dir = WASM_DIR.parse(matches).unwrap_or_default();
+            Self { path, wasm_dir }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                PATH.def()
+                    .help("Path to the directory with the template files."),
+            )
+            .arg(WASM_DIR.def().help(
+                "Can optionally provide a wasm directory as part of verifying \
+                 genesis template files",
+            ))
         }
     }
 

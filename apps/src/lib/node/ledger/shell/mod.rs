@@ -9,6 +9,7 @@ pub mod block_alloc;
 mod finalize_block;
 mod governance;
 mod init_chain;
+pub use init_chain::InitChainValidation;
 pub mod prepare_proposal;
 pub mod process_proposal;
 pub(super) mod queries;
@@ -377,7 +378,7 @@ where
     byzantine_validators: Vec<Evidence>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
-    base_dir: PathBuf,
+    pub(crate) base_dir: PathBuf,
     /// Path to the WASM directory for files used in the genesis block.
     pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
