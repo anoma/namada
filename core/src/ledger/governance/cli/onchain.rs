@@ -313,7 +313,7 @@ pub struct PgfFundingTarget {
     pub address: Address,
 }
 
-/// Rappresent an proposal vote
+/// Represent an proposal vote
 #[derive(
     Debug,
     Clone,
@@ -324,11 +324,13 @@ pub struct PgfFundingTarget {
     PartialEq,
 )]
 pub enum ProposalVote {
-    /// Rappresent an yay proposal vote
+    /// Represent an yay proposal vote
     Yay,
-    /// Rappresent an nay proposal vote
+    /// Represent an nay proposal vote
     Nay,
-    /// Rappresent an invalid proposal vote
+    /// Represent an abstain proposal vote
+    Abstain,
+    /// Represent an invalid proposal vote
     Invalid,
 }
 
@@ -339,14 +341,25 @@ impl TryFrom<String> for ProposalVote {
         match value.trim().to_lowercase().as_str() {
             "yay" => Ok(ProposalVote::Yay),
             "nay" => Ok(ProposalVote::Nay),
+            "abstain" => Ok(ProposalVote::Abstain),
             _ => Err("invalid vote".to_string()),
         }
     }
 }
 
 impl ProposalVote {
-    /// Check if the proposal type is yay
+    /// Check if the vote type is yay
     pub fn is_yay(&self) -> bool {
         matches!(self, ProposalVote::Yay)
+    }
+
+    /// Check if the vote type is nay
+    pub fn is_nay(&self) -> bool {
+        matches!(self, ProposalVote::Nay)
+    }
+
+    /// Check if two votes are equal
+    pub fn is_same_side(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }

@@ -42,12 +42,24 @@ pub enum StorageProposalVote {
     Yay(VoteType),
     /// No
     Nay,
+    /// Abstain
+    Abstain,
 }
 
 impl StorageProposalVote {
     /// Check if a vote is yay
     pub fn is_yay(&self) -> bool {
         matches!(self, StorageProposalVote::Yay(_))
+    }
+
+    /// Check if a vote is nay
+    pub fn is_nay(&self) -> bool {
+        matches!(self, StorageProposalVote::Nay)
+    }
+
+    /// Check if two votes are equal
+    pub fn is_same_side(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 
     /// Check if vote is of type default
@@ -64,6 +76,7 @@ impl StorageProposalVote {
         match self {
             StorageProposalVote::Yay(vote_type) => proposal_type.eq(vote_type),
             StorageProposalVote::Nay => true,
+            StorageProposalVote::Abstain => true,
         }
     }
 
@@ -106,6 +119,7 @@ impl Display for StorageProposalVote {
             },
 
             StorageProposalVote::Nay => write!(f, "nay"),
+            StorageProposalVote::Abstain => write!(f, "abstain"),
         }
     }
 }

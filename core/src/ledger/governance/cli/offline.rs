@@ -241,6 +241,16 @@ impl OfflineVote {
         self.vote.is_yay()
     }
 
+    /// Check if the vote is nay
+    pub fn is_nay(&self) -> bool {
+        self.vote.is_nay()
+    }
+
+    /// Check if two votes are equal
+    pub fn is_same_side(&self, other: &Self) -> bool {
+        self.vote.is_same_side(&other.vote)
+    }
+
     /// compute the hash of a proposal
     pub fn compute_hash(&self) -> Hash {
         let proposal_hash_data = self.proposal_hash.serialize_to_vec();

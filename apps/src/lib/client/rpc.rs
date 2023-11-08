@@ -1226,7 +1226,7 @@ pub async fn query_proposal_result<'a>(
         let proposal_result = compute_proposal_result(
             proposal_votes,
             total_voting_power,
-            TallyType::TwoThird,
+            TallyType::TwoThirds,
         );
 
         display_line!(

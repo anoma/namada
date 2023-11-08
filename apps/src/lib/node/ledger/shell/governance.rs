@@ -147,8 +147,7 @@ where
             }
             TallyResult::Rejected => {
                 if let ProposalType::PGFPayment(_) = proposal_type {
-                    let two_third_nay = proposal_result.two_third_nay();
-                    if two_third_nay {
+                    if proposal_result.two_thirds_nay_over_two_thirds_total() {
                         pgf::remove_steward(
                             &mut shell.wl_storage,
                             &proposal_author,
@@ -156,7 +155,9 @@ where
 
                         tracing::info!(
                             "Governance proposal {} was rejected with 2/3 of \
-                             nay votes. Removing {} from stewards set.",
+                             nay votes over 2/3 of the total voting power. If \
+                             {} is a steward, it's being removed from the \
+                             stewards set.",
                             id,
                             proposal_author
                         );
