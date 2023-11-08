@@ -105,22 +105,25 @@ mod dev {
 
     /// An established user address for testing & development
     pub fn albert_address() -> Address {
-        Address::decode("atest1v4ehgw368ycryv2z8qcnxv3cxgmrgvjpxs6yg333gym5vv2zxepnj334g4rryvj9xucrgve4x3xvr4").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1qxgzrwqn9qny9fzd7xnlrdkf7hhj9ecyx5mv3sgw")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {
-        Address::decode("atest1v4ehgw36xvcyyvejgvenxs34g3zygv3jxqunjd6rxyeyys3sxy6rwvfkx4qnj33hg9qnvse4lsfctw").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1qyctxtpnkhwaygye0sftkq28zedf774xc5a2m7st")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// An established user address for testing & development
     pub fn christel_address() -> Address {
-        Address::decode("atest1v4ehgw36x3qng3jzggu5yvpsxgcngv2xgguy2dpkgvu5x33kx3pr2w2zgep5xwfkxscrxs2pj8075p").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1q99ylwumqqs5r7uwgmyu7e94n07vjeqr4g970na0")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// An implicit user address for testing & development
     pub fn daewon_address() -> Address {
-        // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
+        // "tnam1qq83g60hemh00tza9naxmrhg7stz7neqhytnj6l0"
         (&daewon_keypair().ref_to()).into()
     }
 
@@ -131,7 +134,8 @@ mod dev {
 
     /// An established validator address for testing & development
     pub fn validator_address() -> Address {
-        Address::decode("atest1v4ehgw36ggcnsdee8qerswph8y6ry3p5xgunvve3xaqngd3kxc6nqwz9gseyydzzg5unys3ht2n48q").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1qxcc0xpgs72z6s5kx9ayvejs3mftf05jkutgz2cc")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// N.B. this is the corresponding value from

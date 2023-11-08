@@ -91,7 +91,7 @@ paths:
                     "method": "abci_query",
                     "params":
                       {
-                        "path": "value/#atest1v4ehgw36g4pyg3j9x3qnjd3cxgmyz3fk8qcrys3hxdp5xwfnx3zyxsj9xgunxsfjg5u5xvzyzrrqtn/public_key",
+                        "path": "value/#tnam1q84ale9fdqn2u6qzku7vjdxuhc5n5t5up55q6fjk/public_key",
                         "prove": true,
                       },
                   }

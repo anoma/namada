@@ -526,42 +526,50 @@ impl InternalAddress {
 
 /// Temporary helper for testing
 pub fn nam() -> Address {
-    Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn btc() -> Address {
-    Address::decode("atest1v4ehgw36xdzryve5gsc52veeg5cnsv2yx5eygvp38qcrvd29xy6rys6p8yc5xvp4xfpy2v694wgwcp").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1qy7jxng788scr4fdqxqxtc2ze2guq5478cml9cd9")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn eth() -> Address {
-    Address::decode("atest1v4ehgw36xqmr2d3nx3ryvd2xxgmrq33j8qcns33sxezrgv6zxdzrydjrxveygd2yxumrsdpsf9jc2p").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1qyr9vd8ltunq72qc7pk58v7jdsedt4mggqqpxs03")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn dot() -> Address {
-    Address::decode("atest1v4ehgw36gg6nvs2zgfpyxsfjgc65yv6pxy6nwwfsxgungdzrggeyzv35gveyxsjyxymyz335hur2jn").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1qx6k4wau5t6m8g2hjq55fje2ynpvh5t27s8p3p0l")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn schnitzel() -> Address {
-    Address::decode("atest1v4ehgw36xue5xvf5xvuyzvpjx5un2v3k8qeyvd3cxdqns32p89rrxd6xx9zngvpegccnzs699rdnnt").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1q9euzsu2qfv4y6p0dqaga20n0u0yp8c3ec006yg2")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn apfel() -> Address {
-    Address::decode("atest1v4ehgw36gfryydj9g3p5zv3kg9znyd358ycnzsfcggc5gvecgc6ygs2rxv6ry3zpg4zrwdfeumqcz9").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1qxlmdmw2y6hzvjg34zca8r6d4s6zmtkhty8myzu4")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn kartoffel() -> Address {
-    Address::decode("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Temporary helper for testing
 pub fn masp() -> Address {
-    Address::decode("atest1v4ehgw36xaryysfsx5unvve4g5my2vjz89p52sjxxgenzd348yuyyv3hg3pnjs35g5unvde4ca36y5").expect("The token address decoding shouldn't fail")
+    Address::decode("tnam1q9lm5pvkxhnw9wwwhu33vkvtylwfkn5kw53xwud8")
+        .expect("The token address decoding shouldn't fail")
 }
 
 /// Sentinel secret key to indicate a MASP source
@@ -629,9 +637,10 @@ pub mod tests {
 
     #[test]
     fn test_address_serde_serialize() {
-        let original_address = Address::decode("atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp").unwrap();
-        let expect =
-            "\"atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp\"";
+        let original_address =
+            Address::decode("tnam1q8j5s6xp55p05yznwnftkv3kr9gjtsw3nq7x6tw5")
+                .unwrap();
+        let expect = "\"tnam1q8j5s6xp55p05yznwnftkv3kr9gjtsw3nq7x6tw5\"";
         let decoded_address: Address =
             serde_json::from_str(expect).expect("could not read JSON");
         assert_eq!(original_address, decoded_address);
@@ -719,22 +728,26 @@ pub mod testing {
 
     /// A sampled established address for tests
     pub fn established_address_1() -> Address {
-        Address::decode("atest1v4ehgw36g56ngwpk8ppnzsf4xqeyvsf3xq6nxde5gseyys3nxgenvvfex5cnyd2rx9zrzwfctgx7sp").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1q8j5s6xp55p05yznwnftkv3kr9gjtsw3nq7x6tw5")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// A sampled established address for tests
     pub fn established_address_2() -> Address {
-        Address::decode("atest1v4ehgw36xezyzv33x56rws6zxccnwwzzgycy23p3ggur2d3ex56yxdejxerrysejx3rrxdfs44s9wu").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1q9k6y928edsh3wsw6xu9d92vwfhjcf8n2qn3g5y8")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// A sampled established address for tests
     pub fn established_address_3() -> Address {
-        Address::decode("atest1v4ehgw36xcerywfsgsu5vsfeg3zy2v3egcenx32pggcrswzxg4zns3p5xv6rsvf4gvenqwpkdnnqsy").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1q93zjrvl48w798ena2cg3lhg6s6gzhpssc766yvs")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// A sampled established address for tests
     pub fn established_address_4() -> Address {
-        Address::decode("atest1v4ehgw36gscrw333g3z5zvjzg4rrq3psxu6rqd2xxqc5gs35gerrs3pjgfprvdejxqunxs29t6p5s9").expect("The token address decoding shouldn't fail")
+        Address::decode("tnam1q8g8780290hs6p6qtuqaknlc62akwgyn4cj48tkq")
+            .expect("The token address decoding shouldn't fail")
     }
 
     /// Generate an arbitrary [`Address`] (established or implicit).

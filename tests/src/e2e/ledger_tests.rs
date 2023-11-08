@@ -531,7 +531,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             "init-account",
             "--public-keys",
             // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
-            "pktest1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzpklrjh",
+            "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
             "--threshold",
             "1",
             "--code-path",

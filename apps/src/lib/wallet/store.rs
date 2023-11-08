@@ -73,8 +73,9 @@ mod test_wallet {
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Ed25519);
         store.add_validator_data(
-            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-            validator_keys
+            Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+                .unwrap(),
+            validator_keys,
         );
         let data = store.encode();
         let _ = Store::decode(data).expect("Test failed");
@@ -86,8 +87,9 @@ mod test_wallet {
         let validator_keys =
             gen_validator_keys(None, None, SchemeType::Secp256k1);
         store.add_validator_data(
-            Address::decode("atest1v4ehgw36x3prswzxggunzv6pxqmnvdj9xvcyzvpsggeyvs3cg9qnywf589qnwvfsg5erg3fkl09rg5").unwrap(),
-            validator_keys
+            Address::decode("tnam1q99c37u38grkdcc2qze0hz4zjjd8zr3yucd3mzgz")
+                .unwrap(),
+            validator_keys,
         );
         let data = store.encode();
         let _ = Store::decode(data).expect("Test failed");

@@ -379,8 +379,11 @@ pub mod eth_events {
                 raw.transfers,
                 vec![ethereum_structs::ChainTransfer {
                     amount: 100u64.into(),
-                    from: ethabi::Address::from_str("0x5FbDB2315678afecb367f032d93F642f64180aa3").unwrap(),
-                    to: "atest1v4ehgw36xuunwd6989prwdfkxqmnvsfjxs6nvv6xxucrs3f3xcmns3fcxdzrvvz9xverzvzr56le8f".into(),
+                    from: ethabi::Address::from_str(
+                        "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+                    )
+                    .unwrap(),
+                    to: "tnam1q9uh06dh2crk5fzk8acgu9ncaq7kpceppsspuya2".into(),
                 }]
             )
         }
@@ -423,8 +426,10 @@ pub mod eth_events {
         #[test]
         fn test_decoding_roundtrips() {
             let erc = EthAddress([1; 20]);
-            let address = Address::from_str("atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90")
-                .expect("Test failed");
+            let address = Address::from_str(
+                "tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr",
+            )
+            .expect("Test failed");
             let amount = Amount::from(42u64);
             let confs = 50u32;
             let uint = Uint::from(42u64);
@@ -468,8 +473,7 @@ pub mod eth_events {
         #[test]
         fn test_complex_round_trips() {
             let address: String =
-                "atest1v4ehgw36gep5ysecxq6nyv3jg3zygv3e89qn2vp48pryxsf4xpznvve5gvmy23fs89pryvf5a6ht90"
-                    .into();
+                "tnam1q87teqzjytwa9xd9qk8u558xxnrwuzdjzs7zvhzr".into();
             let nam_transfers = TransferToChainFilter {
                 transfers: vec![
                     ethereum_structs::ChainTransfer {

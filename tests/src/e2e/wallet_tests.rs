@@ -159,7 +159,7 @@ fn wallet_address_cmds() -> Result<()> {
     let test = setup::single_node_net()?;
     let gen_address_alias = "test_address_1";
     let add_address_alias = "test_address_2";
-    let add_address = "atest1v4ehgw36gs6yydf4xq6ngdpex5c5yw2zxgunqvfjgvurxv6ygsmr2dfcxfznxde4xuurw334uclqv3";
+    let add_address = "tnam1q82t25z5f9gmnv5sztyr8ht9tqhrw4u875qjhy56";
 
     // 1. address gen
     let mut cmd = run!(
