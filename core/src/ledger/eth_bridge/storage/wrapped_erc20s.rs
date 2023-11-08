@@ -127,7 +127,7 @@ mod test {
     const MULTITOKEN_ADDRESS: Address =
         Address::Internal(InternalAddress::Multitoken);
     const ARBITRARY_OWNER_ADDRESS: &str =
-        "atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4";
+        "tnam1qqwuj7aart6ackjfkk7486jwm2ufr4t7cq4535u4";
 
     fn dai_erc20_token() -> Address {
         Address::Internal(InternalAddress::Erc20(DAI_ERC20_ETH_ADDRESS))
@@ -162,9 +162,11 @@ mod test {
             &Address::from_str(ARBITRARY_OWNER_ADDRESS).unwrap(),
         );
         assert_eq!(
-                "#atest1v9hx7w36f46kcarfw3hkketwyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq4w0mck/#atest1v46xsw36xe3rzde4xsmngefc8ycrjdrrxs6xgcfe8p3rjdf5v4jkgetpvv6rjdfjxuckgvrxqhdj5x/balance/#atest1d9khqw36x9zyxwfhgfpygv2pgc65gse4gy6rjs34gfzr2v69gy6y23zpggurjv2yx5m52sesu6r4y4",
-                key.to_string()
-            )
+            "#tnam1pyqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqej6juv/#\
+             tnam1pd43w4r5azgff3zd4x9e2nhdatzf2fcapusvp8s9/balance/#\
+             tnam1qqwuj7aart6ackjfkk7486jwm2ufr4t7cq4535u4",
+            key.to_string()
+        )
     }
 
     #[test]
@@ -190,9 +192,10 @@ mod test {
         let token = token(&DAI_ERC20_ETH_ADDRESS);
         let key = minted_balance_key(&token);
         assert_eq!(
-                "#atest1v9hx7w36f46kcarfw3hkketwyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpq4w0mck/#atest1v46xsw36xe3rzde4xsmngefc8ycrjdrrxs6xgcfe8p3rjdf5v4jkgetpvv6rjdfjxuckgvrxqhdj5x/balance/minted",
-                key.to_string(),
-            )
+            "#tnam1pyqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqej6juv/#\
+             tnam1pd43w4r5azgff3zd4x9e2nhdatzf2fcapusvp8s9/balance/minted",
+            key.to_string(),
+        )
     }
 
     #[test]

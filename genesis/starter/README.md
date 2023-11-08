@@ -27,14 +27,14 @@ This will print your public key:
 
 ```shell
 Successfully added a key and an address with alias: "my-key".
-Public key: pktest1qz5ywdn47sdm8s7rkzjl5dud0k9c9ndd5agn4gu0u0ryrmtmyuxmk948q0p
+Public key: tpknam1qz5ywdn47sdm8s7rkzjl5dud0k9c9ndd5agn4gu0u0ryrmtmyuxmk0h25th
 ```
 
 The public key can then be given some tokens in the [balances.toml file](balances.toml) with e.g.:
 
 ```toml
 [token.NAM]
-pktest1qz5ywdn47sdm8s7rkzjl5dud0k9c9ndd5agn4gu0u0ryrmtmyuxmk948q0p = 1_337_707.50
+tpknam1qz5ywdn47sdm8s7rkzjl5dud0k9c9ndd5agn4gu0u0ryrmtmyuxmk0h25th = 1_337_707.50
 ```
 
 ## Validator accounts
