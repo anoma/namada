@@ -87,6 +87,7 @@ mod tests {
             max_commission_rate_change: max_change,
             eth_hot_key,
             eth_cold_key,
+            metadata: Default::default(),
         }];
 
         let pos_params =

@@ -50,6 +50,10 @@ const VALIDATOR_TOTAL_REDELEGATED_UNBONDED_KEY: &str =
     "total_redelegated_unbonded";
 const DELEGATOR_REDELEGATED_BONDS_KEY: &str = "delegator_redelegated_bonds";
 const DELEGATOR_REDELEGATED_UNBONDS_KEY: &str = "delegator_redelegated_unbonds";
+const VALIDATOR_EMAIL_KEY: &str = "email";
+const VALIDATOR_DESCRIPTION_KEY: &str = "description";
+const VALIDATOR_WEBSITE_KEY: &str = "website";
+const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -750,4 +754,32 @@ pub fn consensus_keys_key() -> Key {
 /// Is storage key for consensus keys set?
 pub fn is_consensus_keys_key(key: &Key) -> bool {
     matches!(&key.segments[..], [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)] if addr == &ADDRESS && key == CONSENSUS_KEYS)
+}
+
+/// Storage key for a validator's email
+pub fn validator_email_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_EMAIL_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's description
+pub fn validator_description_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_DESCRIPTION_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's website
+pub fn validator_website_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_WEBSITE_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's discord handle
+pub fn validator_discord_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_DISCORD_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
 }

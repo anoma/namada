@@ -15,6 +15,7 @@ use namada::types::storage::KeySeg;
 use namada::types::time::{DateTimeUtc, TimeZone, Utc};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
+use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::proof_of_stake::PosParams;
 
 use super::*;
@@ -416,6 +417,10 @@ where
                         dkg_key,
                         commission_rate,
                         max_commission_rate_change,
+                        email,
+                        description,
+                        website,
+                        discord_handle,
                         net_address: _,
                         account_key,
                         consensus_key,
@@ -468,6 +473,12 @@ where
                         current_epoch,
                         commission_rate: *commission_rate,
                         max_commission_rate_change: *max_commission_rate_change,
+                        metadata: ValidatorMetaData {
+                            email: email.clone(),
+                            description: description.clone(),
+                            website: website.clone(),
+                            discord_handle: discord_handle.clone(),
+                        },
                         offset_opt: Some(0),
                     },
                 ) {

@@ -321,6 +321,9 @@ pub enum TxError {
          still subject to possible slashing"
     )]
     IncomingRedelIsStillSlashable(Address, Address),
+    /// An empty string was provided as a new email
+    #[error("An empty string cannot be provided as a new email")]
+    InvalidEmail,
     /// Other Errors that may show up when using the interface
     #[error("{0}")]
     Other(String),

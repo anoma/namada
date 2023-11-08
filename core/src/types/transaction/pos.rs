@@ -43,6 +43,14 @@ pub struct InitValidator {
     /// The maximum change allowed per epoch to the commission rate. This is
     /// immutable once set here.
     pub max_commission_rate_change: Dec,
+    /// The validator email
+    pub email: String,
+    /// The validator description
+    pub description: Option<String>,
+    /// The validator website
+    pub website: Option<String>,
+    /// The validator's discord handle
+    pub discord_handle: Option<String>,
     /// The VP code for validator account
     pub validator_vp_code_hash: Hash,
 }
@@ -137,4 +145,32 @@ pub struct CommissionChange {
     pub validator: Address,
     /// The new commission rate
     pub new_rate: Dec,
+}
+
+/// A change to the validator metadata.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Hash,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
+pub struct MetaDataChange {
+    /// Validator address
+    pub validator: Address,
+    /// Validator's email
+    pub email: Option<String>,
+    /// Validator description
+    pub description: Option<String>,
+    /// Validator website
+    pub website: Option<String>,
+    /// Validator's discord handle
+    pub discord_handle: Option<String>,
+    /// Validator's commission rate
+    pub commission_rate: Option<Dec>,
 }
