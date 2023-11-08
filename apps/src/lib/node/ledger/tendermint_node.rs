@@ -262,33 +262,50 @@ pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     consensus_key: &common::SecretKey,
 ) -> Result<()> {
-    let path = validator_key(home_dir);
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    std::fs::create_dir_all(wallet_dir)
-        .map_err(|_| Error::CantCreate(KEY_DIR))?;
-    let file = ensure_empty(&path).map_err(|_| Error::CantCreate(KEY_FILE))?;
     let key = validator_key_to_json(consensus_key).unwrap();
-    serde_json::to_writer_pretty(file, &key)
-        .map_err(|_| Error::CantWrite(KEY_FILE))
+    write_validator(validator_key(home_dir), KEY_DIR, KEY_FILE, key)
 }
 
 /// Initialize validator private state for Tendermint
 pub fn write_validator_state(home_dir: impl AsRef<Path>) -> Result<()> {
-    let path = validator_state(home_dir);
-    // Make sure the dir exists
-    let wallet_dir = path.parent().unwrap();
-    std::fs::create_dir_all(wallet_dir)
-        .map_err(|_| Error::CantCreate(STATE_DIR))?;
-    let file =
-        ensure_empty(&path).map_err(|_| Error::CantCreate(STATE_FILE))?;
     let state = json!({
        "height": "0",
        "round": 0,
        "step": 0
     });
-    serde_json::to_writer_pretty(file, &state)
-        .map_err(|_| Error::CantWrite(STATE_FILE))
+    write_validator(validator_state(home_dir), STATE_DIR, STATE_FILE, state)
+}
+
+/// Abstract over the initialization of validator data for Tendermint
+fn write_validator(
+    path: PathBuf,
+    err_dir: &'static str,
+    err_file: &'static str,
+    data: serde_json::Value,
+) -> Result<()> {
+    let parent_dir = path.parent().unwrap();
+    // Make sure the dir exists
+    std::fs::create_dir_all(parent_dir).map_err(|err| {
+        Error::CantCreate(format!(
+            "{} at {}. Caused by {err}",
+            err_dir,
+            parent_dir.to_string_lossy()
+        ))
+    })?;
+    let file = ensure_empty(&path).map_err(|err| {
+        Error::CantCreate(format!(
+            "{} at {}. Caused by {err}",
+            err_dir,
+            path.to_string_lossy()
+        ))
+    })?;
+    serde_json::to_writer_pretty(file, &data).map_err(|err| {
+        Error::CantWrite(format!(
+            "{} to {}. Caused by {err}",
+            err_file,
+            path.to_string_lossy()
+        ))
+    })
 }
 
 /// Length of a Tendermint Node ID in bytes
