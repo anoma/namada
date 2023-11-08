@@ -696,7 +696,8 @@ fn change_validator_metadata(c: &mut Criterion) {
         commission_rate: None,
     };
 
-    let signed_tx = generate_tx(
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
         TX_CHANGE_VALIDATOR_METADATA_WASM,
         metadata_change,
         None,
