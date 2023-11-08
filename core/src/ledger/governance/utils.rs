@@ -109,7 +109,7 @@ impl TallyResult {
     ) -> Self {
         let passed = match tally_type {
             TallyType::TwoThirds => {
-                yay_voting_power >= total_voting_power / 3 * 2
+                yay_voting_power >= total_voting_power * 2 / 3
             }
             TallyType::OneHalfOverOneThird => {
                 let at_least_one_third_voted =
@@ -180,10 +180,10 @@ impl ProposalResult {
         let at_least_two_thirds_voted = self.total_yay_power
             + self.total_nay_power
             + self.total_abstain_power
-            >= self.total_voting_power / 3 * 2;
+            >= self.total_voting_power * 2 / 3;
 
         let at_least_two_thirds_nay = self.total_nay_power
-            >= (self.total_nay_power + self.total_yay_power) / 3 * 2;
+            >= (self.total_nay_power + self.total_yay_power) * 2 / 3;
 
         at_least_two_thirds_voted && at_least_two_thirds_nay
     }
