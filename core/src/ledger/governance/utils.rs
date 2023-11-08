@@ -276,12 +276,12 @@ pub fn compute_proposal_result(
         }
     }
 
-    for (delegator, degalations) in votes.delegator_voting_power {
+    for (delegator, delegations) in votes.delegator_voting_power {
         let delegator_vote = match votes.delegators_vote.get(&delegator) {
             Some(vote) => vote,
             None => continue,
         };
-        for (validator, voting_power) in degalations {
+        for (validator, voting_power) in delegations {
             let validator_vote = votes.validators_vote.get(&validator);
             if let Some(validator_vote) = validator_vote {
                 if !validator_vote.is_same_side(delegator_vote) {
