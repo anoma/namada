@@ -538,7 +538,7 @@ async fn run_abci(
         .mempool(
             ServiceBuilder::new()
                 .load_shed()
-                .buffer(1024)
+                .buffer(5000) // matching default Comet's mempool.size
                 .service(mempool),
         )
         .info(
