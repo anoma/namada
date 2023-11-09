@@ -4423,14 +4423,17 @@ where
     )?;
 
     if reward_tokens_remaining > token::Amount::zero() {
-        let amount =
-            token::Amount::from_uint(reward_tokens_remaining, 0).unwrap();
         tracing::info!(
             "Minting tokens remaining from PoS rewards distribution into the \
              Governance account. Amount: {}.",
-            amount.to_string_native()
+            reward_tokens_remaining.to_string_native()
         );
-        token::credit_tokens(storage, staking_token, &address::GOV, amount)?;
+        token::credit_tokens(
+            storage,
+            staking_token,
+            &address::GOV,
+            reward_tokens_remaining,
+        )?;
     }
 
     // Clear validator rewards accumulators
@@ -5743,10 +5746,17 @@ pub fn claim_reward_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let rewards_products = validator_rewards_products_handle(validator);
+    tracing::debug!("Claiming rewards in epoch {current_epoch}");
 
+    let rewards_products = validator_rewards_products_handle(validator);
     let source = source.cloned().unwrap_or_else(|| validator.clone());
-    // let params = read_pos_params(storage)?;
+    tracing::debug!("Source {} --> Validator {}", source, validator);
+
+    if current_epoch == Epoch::default() {
+        // Nothing to claim in the first epoch
+        return Ok(token::Amount::zero());
+    }
+
     let last_claim_epoch =
         get_last_reward_claim_epoch(storage, &source, validator)?;
     if let Some(last_epoch) = last_claim_epoch {
@@ -5756,19 +5766,10 @@ where
         }
     }
 
-    // let bonds = bond_handle(&source, validator);
-
-    // TODO: decide if this way or the typical F1 method is better (tho F1 would
-    // require a bit fancier impl for not much gained prob)
-    // TODO: different approach to avoid the nested repeated loops over bonds
-    // for each epoch that we iterate
     let mut reward_tokens = token::Amount::zero();
+
     // Want to claim from `last_claim_epoch` to `current_epoch.prev()` since
     // rewards are computed at the end of an epoch
-    if current_epoch == Epoch::default() {
-        // Nothing to claim in the first epoch
-        return Ok(token::Amount::zero());
-    }
     let (claim_start, claim_end) = (
         last_claim_epoch.unwrap_or_default(),
         // Safe because of the check above
@@ -5791,8 +5792,10 @@ where
         reward_tokens += reward;
     }
 
+    // Add reward tokens tallied during previous withdrawals
     reward_tokens += take_rewards_from_counter(storage, &source, validator)?;
 
+    // Update the last claim epoch in storage
     write_last_reward_claim_epoch(storage, &source, validator, current_epoch)?;
 
     // Transfer the bonded tokens from PoS to the source
@@ -5802,7 +5805,8 @@ where
     Ok(reward_tokens)
 }
 
-fn get_last_reward_claim_epoch<S>(
+/// Get the last epoch in which rewards were claimed from storage, if any
+pub fn get_last_reward_claim_epoch<S>(
     storage: &S,
     delegator: &Address,
     validator: &Address,
