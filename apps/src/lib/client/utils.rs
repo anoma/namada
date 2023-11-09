@@ -232,16 +232,12 @@ pub async fn join_network(
         .map(|(alias, _wallet)| alias.clone());
     let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
         |(_alias, wallet)| {
-            let tendermint_node_key: common::SecretKey = wallet
-                .tendermint_node_key
-                .try_to_sk()
-                .unwrap_or_else(|_err| {
-                    eprintln!(
-                        "Tendermint node key must be common (need to change?)"
-                    );
-                    safe_exit(1)
-                });
-            (tendermint_node_key, wallet.consensus_key.clone())
+            let validator_account_pk: common::PublicKey =
+                wallet.account_key.ref_to();
+            let tendermint_node_key: common::SecretKey =
+                wallet.tendermint_node_key.clone();
+            let consensus_key: common::SecretKey = wallet.consensus_key.clone();
+            (validator_account_pk, tendermint_node_key, consensus_key)
         },
     );
     let node_mode = if validator_alias.is_some() {
@@ -254,7 +250,7 @@ pub async fn join_network(
     let config = genesis.derive_config(
         &chain_dir,
         node_mode,
-        validator_alias,
+        validator_keys.as_ref().map(|(pk, _, _)| pk),
         allow_duplicate_ip,
     );
 
@@ -273,7 +269,7 @@ pub async fn join_network(
     crate::wallet::save(&wallet).unwrap();
 
     // Setup the node for a genesis validator, if used
-    if let Some((tendermint_node_key, consensus_key)) = validator_keys {
+    if let Some((_, tendermint_node_key, consensus_key)) = validator_keys {
         println!(
             "Setting up validator keys in CometBFT. Consensus key: {}.",
             consensus_key.to_public()
@@ -596,14 +592,12 @@ pub fn default_base_dir(
 pub fn init_genesis_validator(
     global_args: args::Global,
     args::InitGenesisValidator {
-        source,
         alias,
         commission_rate,
         max_commission_rate_change,
         net_address,
         unsafe_dont_encrypt,
         key_scheme,
-        transfer_from_source_amount,
         self_bond_amount,
         email,
         description,
@@ -611,20 +605,6 @@ pub fn init_genesis_validator(
         discord_handle,
     }: args::InitGenesisValidator,
 ) {
-    let (mut source_wallet, wallet_file) =
-        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
-
-    let source_key = source_wallet
-        .find_secret_key(&source, None)
-        .unwrap_or_else(|err| {
-            eprintln!(
-                "Couldn't find key for source \"{source}\" in the pre-genesis \
-                 wallet {}. Failed with {err}.",
-                wallet_file.to_string_lossy()
-            );
-            safe_exit(1)
-        });
-
     // Validate the commission rate data
     if commission_rate > Dec::one() {
         eprintln!("The validator commission rate must not exceed 1.0 or 100%");
@@ -664,19 +644,15 @@ pub fn init_genesis_validator(
 
     let transactions = genesis::transactions::init_validator(
         genesis::transactions::GenesisValidatorData {
-            source_key,
-            alias: alias::Alias::from(alias),
             commission_rate,
             max_commission_rate_change,
             net_address,
-            transfer_from_source_amount,
             self_bond_amount,
             email,
             description,
             website,
             discord_handle,
         },
-        &mut source_wallet,
         &validator_wallet,
     );
 

@@ -42,7 +42,7 @@ pub struct ValidatorWallet {
     pub tendermint_node_key: common::SecretKey,
 }
 
-// Validator pre-genesis wallet store includes all the required keys for
+/// Validator pre-genesis wallet store includes all the required keys for
 /// genesis setup.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ValidatorStore {

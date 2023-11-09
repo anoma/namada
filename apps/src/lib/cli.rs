@@ -2999,7 +2999,6 @@ pub mod args {
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
         arg_opt("public-key");
-    pub const RAW_SOURCE: Arg<String> = arg("source");
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
@@ -3025,8 +3024,6 @@ pub mod args {
     pub const TM_ADDRESS: Arg<String> = arg("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
-    pub const TRANSFER_FROM_SOURCE_AMOUNT: Arg<token::DenominatedAmount> =
-        arg("transfer-from-source-amount");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
@@ -6512,14 +6509,12 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct InitGenesisValidator {
-        pub source: String,
         pub alias: String,
         pub commission_rate: Dec,
         pub max_commission_rate_change: Dec,
         pub net_address: SocketAddr,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
-        pub transfer_from_source_amount: token::DenominatedAmount,
         pub self_bond_amount: token::DenominatedAmount,
         pub email: String,
         pub description: Option<String>,
@@ -6529,7 +6524,6 @@ pub mod args {
 
     impl Args for InitGenesisValidator {
         fn parse(matches: &ArgMatches) -> Self {
-            let source = RAW_SOURCE.parse(matches);
             let alias = ALIAS.parse(matches);
             let commission_rate = COMMISSION_RATE.parse(matches);
             let max_commission_rate_change =
@@ -6537,12 +6531,6 @@ pub mod args {
             let net_address = NET_ADDRESS.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let key_scheme = SCHEME.parse(matches);
-            // The denomination validation is handled by validating genesis
-            // files later.
-            // At this stage, we treat amounts as opaque and pass them on
-            // verbatim.
-            let transfer_from_source_amount =
-                TRANSFER_FROM_SOURCE_AMOUNT.parse(matches);
             // this must be an amount of native tokens
             let self_bond_amount = SELF_BOND_AMOUNT.parse(matches);
             let email = EMAIL.parse(matches);
@@ -6550,14 +6538,12 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             Self {
-                source,
                 alias,
                 net_address,
                 unsafe_dont_encrypt,
                 key_scheme,
                 commission_rate,
                 max_commission_rate_change,
-                transfer_from_source_amount,
                 self_bond_amount,
                 email,
                 description,
@@ -6567,64 +6553,49 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(RAW_SOURCE.def().help(
-                "The source key for native token transfer from the \
-                 `balances.toml` genesis template.",
-            ))
-            .arg(ALIAS.def().help("The validator address alias."))
-            .arg(NET_ADDRESS.def().help(
-                "Static {host:port} of your validator node's P2P address. \
-                 Namada uses port `26656` for P2P connections by default, but \
-                 you can configure a different value.",
-            ))
-            .arg(COMMISSION_RATE.def().help(
-                "The commission rate charged by the validator for delegation \
-                 rewards. This is a required parameter.",
-            ))
-            .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
-                "The maximum change per epoch in the commission rate charged \
-                 by the validator for delegation rewards. This is a required \
-                 parameter.",
-            ))
-            .arg(UNSAFE_DONT_ENCRYPT.def().help(
-                "UNSAFE: Do not encrypt the generated keypairs. Do not use \
-                 this for keys used in a live network.",
-            ))
-            .arg(SCHEME.def().help(
-                "The key scheme/type used for the validator keys. Currently \
-                 supports ed25519 and secp256k1.",
-            ))
-            .arg(TRANSFER_FROM_SOURCE_AMOUNT.def().help(
-                "The amount of native token to transfer into the validator \
-                 account from the `--source`. To self-bond some tokens to the \
-                 validator at genesis, specify `--self-bond-amount`.",
-            ))
-            .arg(
-                SELF_BOND_AMOUNT
-                    .def()
-                    .help(
-                        "The amount of native token to self-bond in PoS. \
-                         Because this amount will be bonded from the \
-                         validator's account, it must be lower or equal to \
-                         the amount specified in \
-                         `--transfer-from-source-amount`.",
-                    )
-                    .requires(TRANSFER_FROM_SOURCE_AMOUNT.name),
-            )
-            .arg(EMAIL.def().help(
-                "The email address of the validator. This is a required \
-                 parameter.",
-            ))
-            .arg(DESCRIPTION_OPT.def().help(
-                "The validator's description. This is an optional parameter.",
-            ))
-            .arg(WEBSITE_OPT.def().help(
-                "The validator's website. This is an optional parameter.",
-            ))
-            .arg(DISCORD_OPT.def().help(
-                "The validator's discord handle. This is an optional \
-                 parameter.",
-            ))
+            app.arg(ALIAS.def().help("The validator address alias."))
+                .arg(NET_ADDRESS.def().help(
+                    "Static {host:port} of your validator node's P2P address. \
+                     Namada uses port `26656` for P2P connections by default, \
+                     but you can configure a different value.",
+                ))
+                .arg(COMMISSION_RATE.def().help(
+                    "The commission rate charged by the validator for \
+                     delegation rewards. This is a required parameter.",
+                ))
+                .arg(MAX_COMMISSION_RATE_CHANGE.def().help(
+                    "The maximum change per epoch in the commission rate \
+                     charged by the validator for delegation rewards. This is \
+                     a required parameter.",
+                ))
+                .arg(UNSAFE_DONT_ENCRYPT.def().help(
+                    "UNSAFE: Do not encrypt the generated keypairs. Do not \
+                     use this for keys used in a live network.",
+                ))
+                .arg(SCHEME.def().help(
+                    "The key scheme/type used for the validator keys. \
+                     Currently supports ed25519 and secp256k1.",
+                ))
+                .arg(
+                    SELF_BOND_AMOUNT.def().help(
+                        "The amount of native token to self-bond in PoS.",
+                    ),
+                )
+                .arg(EMAIL.def().help(
+                    "The email address of the validator. This is a required \
+                     parameter.",
+                ))
+                .arg(DESCRIPTION_OPT.def().help(
+                    "The validator's description. This is an optional \
+                     parameter.",
+                ))
+                .arg(WEBSITE_OPT.def().help(
+                    "The validator's website. This is an optional parameter.",
+                ))
+                .arg(DISCORD_OPT.def().help(
+                    "The validator's discord handle. This is an optional \
+                     parameter.",
+                ))
         }
     }
 

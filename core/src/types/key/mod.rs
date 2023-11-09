@@ -371,6 +371,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     PartialOrd,
     Ord,
     Hash,
+    Default,
 )]
 pub struct PublicKeyHash(pub(crate) [u8; address::HASH_LEN]);
 

@@ -374,6 +374,20 @@ pub struct EstablishedAddress {
     hash: [u8; HASH_LEN],
 }
 
+impl From<[u8; HASH_LEN]> for EstablishedAddress {
+    fn from(hash: [u8; HASH_LEN]) -> Self {
+        Self { hash }
+    }
+}
+
+impl From<[u8; SHA_HASH_LEN]> for EstablishedAddress {
+    fn from(input_hash: [u8; SHA_HASH_LEN]) -> Self {
+        let mut hash = [0; HASH_LEN];
+        hash.copy_from_slice(&input_hash[..HASH_LEN]);
+        Self { hash }
+    }
+}
+
 /// A generator of established addresses
 #[derive(
     Debug,
@@ -420,6 +434,7 @@ impl EstablishedAddressGen {
 #[derive(
     Debug,
     Clone,
+    Default,
     BorshSerialize,
     BorshDeserialize,
     BorshSchema,

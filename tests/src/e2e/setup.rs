@@ -23,15 +23,15 @@ use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
 use namada_apps::config::genesis::toml_utils::read_toml;
-use namada_apps::config::genesis::{chain, templates};
+use namada_apps::config::genesis::{templates, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
+use namada_core::types::address::Address;
 use namada_core::types::key::{RefTo, SchemeType};
 use namada_core::types::string_encoding::StringEncoded;
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
-use namada_vp_prelude::HashSet;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 use rand::Rng;
@@ -169,7 +169,7 @@ where
             .expect("NAM balances should exist in pre-genesis wallet already")
             .0
             .insert(
-                StringEncoded::new(sk.ref_to()),
+                GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
                 token::DenominatedAmount {
                     amount: token::Amount::from_uint(
                         3000000,
@@ -251,10 +251,10 @@ fn remove_self_bonds(genesis: &mut templates::All<templates::Unvalidated>) {
         bonds
             .into_iter()
             .filter(|bond| {
-                if let genesis::transactions::AliasOrPk::Alias(alias) =
+                if let genesis::GenesisAddress::EstablishedAddress(address) =
                     &bond.data.source
                 {
-                    *alias != bond.data.validator
+                    Address::Established(address.clone()) != bond.data.validator
                 } else {
                     true
                 }
@@ -400,27 +400,23 @@ pub fn network(
         archive_dir,
     );
 
-    let genesis_new = chain::Finalized::read_toml_files(
-        &genesis_dir.join(net.chain_id.as_str()),
-    )
-    .unwrap();
-    let validator_aliases = genesis_new
+    let validator_aliases = templates
         .transactions
         .validator_account
         .as_ref()
         .map(|txs| {
-            txs.iter().fold(HashSet::new(), |mut acc, finalized| {
-                acc.insert(finalized.tx.alias.to_string());
-                acc
-            })
+            Either::Right(
+                // hacky way to get all the validator indexes :-)
+                (0..txs.len()).map(|index| format!("validator-{index}")),
+            )
         })
-        .unwrap_or_default();
+        .unwrap_or(Either::Left([].into_iter()));
 
     // Setup a dir for every validator and non-validator using their
     // pre-genesis wallets
-    for alias in &validator_aliases {
+    for alias in validator_aliases {
         let validator_base_dir =
-            test_dir.path().join(utils::NET_ACCOUNTS_DIR).join(alias);
+            test_dir.path().join(utils::NET_ACCOUNTS_DIR).join(&alias);
 
         // Copy the main wallet from templates dir into validator's base dir.
         {
@@ -440,7 +436,7 @@ pub fn network(
         }
         println!("{} {}.", "Joining network with ".yellow(), alias);
         let validator_base_dir =
-            test_dir.path().join(utils::NET_ACCOUNTS_DIR).join(alias);
+            test_dir.path().join(utils::NET_ACCOUNTS_DIR).join(&alias);
         let mut join_network = run_cmd(
             Bin::Client,
             [
@@ -449,7 +445,7 @@ pub fn network(
                 "--chain-id",
                 net.chain_id.as_str(),
                 "--genesis-validator",
-                alias,
+                &alias,
                 "--dont-prefetch-wasm",
             ],
             Some(5),
