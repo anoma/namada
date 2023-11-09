@@ -1010,6 +1010,18 @@ impl Redelegate {
     }
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for Redelegate<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        Redelegate {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
 /// Reveal public key
 #[derive(Clone, Debug)]
 pub struct RevealPk<C: NamadaTypes = SdkTypes> {
