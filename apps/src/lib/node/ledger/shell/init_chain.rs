@@ -996,7 +996,7 @@ impl<T> Policy<T> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "integration")))]
 mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
