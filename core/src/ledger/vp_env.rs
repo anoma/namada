@@ -143,9 +143,6 @@ where
             })
     }
 
-    /// Verify a MASP transaction
-    fn verify_masp(&self, tx: Vec<u8>) -> Result<bool, storage_api::Error>;
-
     /// Charge the provided gas for the current vp
     fn charge_gas(&self, used_gas: u64) -> Result<(), storage_api::Error>;
 

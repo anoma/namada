@@ -535,10 +535,6 @@ where
         }
     }
 
-    fn verify_masp(&self, _tx: Vec<u8>) -> Result<bool, storage_api::Error> {
-        unimplemented!("no masp native vp")
-    }
-
     fn charge_gas(&self, _used_gas: u64) -> Result<(), storage_api::Error> {
         unimplemented!("Native vps don't consume whitelisted gas")
     }
