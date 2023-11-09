@@ -5,10 +5,13 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada::ledger::parameters::EpochDuration;
-use namada::types::address::{Address, EstablishedAddressGen, MASP};
+use namada::types::address::{
+    Address, EstablishedAddress, EstablishedAddressGen,
+};
 use namada::types::chain::{ChainId, ChainIdPrefix};
 use namada::types::dec::Dec;
 use namada::types::hash::Hash;
+use namada::types::key::{common, RefTo};
 use namada::types::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::types::token::Amount;
 use namada_sdk::wallet::store::AddressVpType;
@@ -29,9 +32,33 @@ use crate::wasm_loader;
 
 pub const METADATA_FILE_NAME: &str = "chain.toml";
 
-// Rng source used for generating genesis addresses. Because the process has to
-// be deterministic, change of this value is a breaking change for genesis.
-const ADDRESS_RNG_SOURCE: &[u8] = &[];
+/// Derive established addresses from seed data.
+pub trait DeriveEstablishedAddress {
+    /// Arbitrary data to hash the seed data with.
+    const SALT: &'static str;
+
+    /// Derive an established address.
+    fn derive_established_address(&self) -> EstablishedAddress
+    where
+        Self: BorshSerialize,
+    {
+        let mut hasher = Sha256::new();
+        hasher.update(Self::SALT.as_bytes());
+        hasher.update(self.serialize_to_vec());
+        let digest = hasher.finalize();
+        let digest_ref: &[u8; 32] = digest.as_ref();
+        EstablishedAddress::from(*digest_ref)
+    }
+
+    /// Derive an address.
+    #[inline]
+    fn derive_address(&self) -> Address
+    where
+        Self: BorshSerialize,
+    {
+        Address::Established(self.derive_established_address())
+    }
+}
 
 impl Finalized {
     /// Write all genesis and the chain metadata TOML files to the given
@@ -111,31 +138,14 @@ impl Finalized {
                 config.address.clone(),
             );
         }
-        if let Some(txs) = &self.transactions.validator_account {
-            for tx in txs {
-                wallet.insert_address(
-                    tx.tx.alias.normalize(),
-                    tx.address.clone(),
-                    false,
-                );
-            }
-        }
-        if let Some(txs) = &self.transactions.established_account {
-            for tx in txs {
-                wallet.insert_address(
-                    tx.tx.alias.normalize(),
-                    tx.address.clone(),
-                    false,
-                );
-            }
-        }
         if let Some(pre_genesis_wallet) = pre_genesis_wallet {
             wallet.extend(pre_genesis_wallet);
         }
         if let Some((alias, validator_wallet)) = validator {
+            let account_pk = validator_wallet.account_key.ref_to();
             let address = self
                 .transactions
-                .find_validator(&alias)
+                .find_validator(&account_pk)
                 .map(|tx| tx.address.clone())
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
@@ -152,10 +162,12 @@ impl Finalized {
         &self,
         base_dir: &Path,
         node_mode: TendermintMode,
-        validator_alias: Option<Alias>,
+        validator_account_pk: Option<&common::PublicKey>,
         allow_duplicate_ip: bool,
     ) -> Config {
-        if node_mode != TendermintMode::Validator && validator_alias.is_some() {
+        if node_mode != TendermintMode::Validator
+            && validator_account_pk.is_some()
+        {
             println!(
                 "Warning: Validator alias used to derive config, but node \
                  mode is not validator, it is {node_mode:?}!"
@@ -166,15 +178,17 @@ impl Finalized {
 
         // Derive persistent peers from genesis
         let persistent_peers = self.derive_persistent_peers();
-        // If `validator_wallet` is given, find its net_address
+        // If `validator_account_pk` is given, find its net_address
         let validator_net_and_tm_address =
-            if let Some(alias) = validator_alias.as_ref() {
-                self.transactions.find_validator(alias).map(|validator_tx| {
-                    (
-                        validator_tx.tx.net_address,
-                        validator_tx.derive_tendermint_address(),
-                    )
-                })
+            if let Some(account_pk) = validator_account_pk {
+                self.transactions.find_validator(account_pk).map(
+                    |validator_tx| {
+                        (
+                            validator_tx.tx.net_address,
+                            validator_tx.derive_tendermint_address(),
+                        )
+                    },
+                )
             } else {
                 None
             };
@@ -413,31 +427,6 @@ impl Finalized {
     pub fn get_token_address(&self, alias: &Alias) -> Option<&Address> {
         self.tokens.token.get(alias).map(|token| &token.address)
     }
-
-    pub fn get_user_address(&self, alias: &Alias) -> Option<Address> {
-        if alias.to_string() == *"masp" {
-            return Some(MASP);
-        }
-        let established = self.transactions.established_account.as_ref()?;
-        let validators = self.transactions.validator_account.as_ref()?;
-        established
-            .iter()
-            .find_map(|tx| {
-                (&tx.tx.alias == alias).then_some(tx.address.clone())
-            })
-            .or_else(|| {
-                validators.iter().find_map(|tx| {
-                    (&tx.tx.alias == alias).then_some(tx.address.clone())
-                })
-            })
-    }
-
-    pub fn get_validator_address(&self, alias: &Alias) -> Option<&Address> {
-        let validators = self.transactions.validator_account.as_ref()?;
-        validators
-            .iter()
-            .find_map(|tx| (&tx.tx.alias == alias).then_some(&tx.address))
-    }
 }
 
 /// Create the [`Finalized`] chain configuration. Derives the chain ID from the
@@ -467,7 +456,7 @@ pub fn finalize(
         },
     };
     let genesis_bytes = genesis_to_gen_address.serialize_to_vec();
-    let mut addr_gen = established_address_gen(&genesis_bytes);
+    let addr_gen = established_address_gen(&genesis_bytes);
 
     // Generate addresses
     let templates::All {
@@ -477,11 +466,9 @@ pub fn finalize(
         parameters,
         transactions,
     } = genesis_to_gen_address.templates;
-    let tokens = FinalizedTokens::finalize_from(tokens, &mut addr_gen);
-    let transactions =
-        FinalizedTransactions::finalize_from(transactions, &mut addr_gen);
-    let parameters =
-        FinalizedParameters::finalize_from(&transactions, parameters);
+    let tokens = FinalizedTokens::finalize_from(tokens);
+    let transactions = FinalizedTransactions::finalize_from(transactions);
+    let parameters = FinalizedParameters::finalize_from(parameters);
 
     // Store the last state of the address generator in the metadata
     let mut metadata = genesis_to_gen_address.metadata;
@@ -530,20 +517,6 @@ pub fn finalize(
     }
 }
 
-/// Use bytes as a deterministic seed for address generator.
-fn established_address_gen(bytes: &[u8]) -> EstablishedAddressGen {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    // hex of the first 40 chars of the hash
-    let hash = format!("{:.width$X}", hasher.finalize(), width = 40);
-    EstablishedAddressGen::new(hash)
-}
-
-/// Deterministically generate an [`Address`].
-fn gen_address(gen: &mut EstablishedAddressGen) -> Address {
-    gen.generate_address(ADDRESS_RNG_SOURCE)
-}
-
 /// Chain genesis config to be finalized. This struct is used to derive the
 /// chain ID to construct a [`Finalized`] chain genesis config.
 #[derive(
@@ -562,6 +535,15 @@ pub type ToFinalize = Chain<ChainIdPrefix>;
 
 /// Chain genesis config.
 pub type Finalized = Chain<ChainId>;
+
+/// Use bytes as a deterministic seed for address generator.
+fn established_address_gen(bytes: &[u8]) -> EstablishedAddressGen {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    // hex of the first 40 chars of the hash
+    let hash = format!("{:.width$X}", hasher.finalize(), width = 40);
+    EstablishedAddressGen::new(hash)
+}
 
 /// Chain genesis config with generic chain ID.
 #[derive(
@@ -599,15 +581,14 @@ pub struct FinalizedTokens {
 }
 
 impl FinalizedTokens {
-    fn finalize_from(
-        tokens: templates::Tokens,
-        addr_gen: &mut EstablishedAddressGen,
-    ) -> FinalizedTokens {
+    fn finalize_from(tokens: templates::Tokens) -> FinalizedTokens {
         let templates::Tokens { token } = tokens;
         let token = token
             .into_iter()
             .map(|(key, config)| {
-                let address = gen_address(addr_gen);
+                let address = Address::Established(
+                    (&key, &config).derive_established_address(),
+                );
                 (key, FinalizedTokenConfig { address, config })
             })
             .collect();
@@ -631,6 +612,10 @@ pub struct FinalizedTokenConfig {
     pub config: templates::TokenConfig,
 }
 
+impl DeriveEstablishedAddress for (&Alias, &templates::TokenConfig) {
+    const SALT: &'static str = "token-config";
+}
+
 #[derive(
     Clone,
     Debug,
@@ -645,52 +630,55 @@ pub struct FinalizedTokenConfig {
 pub struct FinalizedTransactions {
     pub established_account: Option<Vec<FinalizedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<FinalizedValidatorAccountTx>>,
-    pub transfer: Option<Vec<transactions::TransferTx<Validated>>>,
     pub bond: Option<Vec<transactions::BondTx<Validated>>>,
 }
 
 impl FinalizedTransactions {
     fn finalize_from(
         transactions: transactions::Transactions<Validated>,
-        addr_gen: &mut EstablishedAddressGen,
     ) -> FinalizedTransactions {
         let transactions::Transactions {
             established_account,
             validator_account,
-            transfer,
             bond,
         } = transactions;
         let established_account = established_account.map(|txs| {
             txs.into_iter()
-                .map(|tx| {
-                    let address = gen_address(addr_gen);
-                    FinalizedEstablishedAccountTx { address, tx }
+                .map(|tx| FinalizedEstablishedAccountTx {
+                    address: transactions::UnsignedEstablishedAccountTx::from(
+                        &tx,
+                    )
+                    .derive_address(),
+                    tx,
                 })
                 .collect()
         });
         let validator_account = validator_account.map(|txs| {
             txs.into_iter()
-                .map(|tx| {
-                    let address = gen_address(addr_gen);
-                    FinalizedValidatorAccountTx { address, tx }
+                .map(|tx| FinalizedValidatorAccountTx {
+                    address: transactions::UnsignedValidatorAccountTx::from(
+                        &tx,
+                    )
+                    .derive_address(),
+                    tx,
                 })
                 .collect()
         });
         FinalizedTransactions {
             established_account,
             validator_account,
-            transfer,
             bond,
         }
     }
 
     fn find_validator(
         &self,
-        alias: &Alias,
+        validator_account_pk: &common::PublicKey,
     ) -> Option<&FinalizedValidatorAccountTx> {
-        self.validator_account
-            .as_ref()
-            .and_then(|txs| txs.iter().find(|tx| &tx.tx.alias == alias))
+        let validator_accounts = self.validator_account.as_ref()?;
+        validator_accounts
+            .iter()
+            .find(|tx| &tx.tx.account_key.pk.raw == validator_account_pk)
     }
 }
 
@@ -705,7 +693,7 @@ impl FinalizedTransactions {
     Eq,
 )]
 pub struct FinalizedParameters {
-    pub parameters: templates::ChainParams<templates::Validated>,
+    pub parameters: templates::ChainParams<Validated>,
     pub pos_params: templates::PosParams,
     pub gov_params: templates::GovernanceParams,
     pub pgf_params: namada::core::ledger::pgf::parameters::PgfParameters,
@@ -714,7 +702,6 @@ pub struct FinalizedParameters {
 
 impl FinalizedParameters {
     fn finalize_from(
-        txs: &FinalizedTransactions,
         templates::Parameters {
             parameters,
             pos_params,
@@ -724,32 +711,11 @@ impl FinalizedParameters {
         }: templates::Parameters<Validated>,
     ) -> Self {
         use namada::core::ledger::pgf::parameters::PgfParameters;
-        let mut finalized_pgf_params = PgfParameters {
-            stewards: Default::default(),
+        let finalized_pgf_params = PgfParameters {
+            stewards: pgf_params.stewards,
             pgf_inflation_rate: pgf_params.pgf_inflation_rate,
             stewards_inflation_rate: pgf_params.stewards_inflation_rate,
         };
-        finalized_pgf_params.stewards = pgf_params
-            .stewards
-            .into_iter()
-            .map(|alias| {
-                let maybe_estbd = txs
-                    .established_account
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .find(|tx| tx.tx.alias == alias)
-                    .map(|tx| tx.address.clone());
-                let maybe_validator = txs
-                    .validator_account
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .find(|tx| tx.tx.alias == alias)
-                    .map(|tx| tx.address.clone());
-                maybe_estbd.or(maybe_validator).unwrap()
-            })
-            .collect();
         Self {
             parameters,
             pos_params,

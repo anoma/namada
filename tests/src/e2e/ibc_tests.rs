@@ -262,13 +262,14 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
     .map_err(|_| eyre!("Could not read genesis files from test b"))?;
     // chain b's validator needs to listen on a different port than chain a's
     // validator
+    let validator_pk = get_validator_pk(&test_b, &Who::Validator(0)).unwrap();
     let validator_tx = genesis_b
         .transactions
         .validator_account
         .as_mut()
         .unwrap()
         .iter_mut()
-        .find(|val| val.tx.alias.to_string() == *"validator-0")
+        .find(|val| val.tx.account_key.pk.raw == validator_pk)
         .unwrap();
     let new_port =
         validator_tx.tx.net_address.port() + setup::ANOTHER_CHAIN_PORT_OFFSET;

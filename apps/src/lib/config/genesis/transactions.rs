@@ -1,13 +1,12 @@
 //! Genesis transactions
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fmt::{Debug, Display, Formatter};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use namada::core::types::storage;
+use namada::core::types::address::Address;
 use namada::core::types::string_encoding::StringEncoded;
 use namada::proto::{
     standalone_signature, verify_standalone_sig, SerializeWithBorsh,
@@ -17,28 +16,25 @@ use namada::types::key::{common, RefTo, VerifySigError};
 use namada::types::time::{DateTimeUtc, MIN_UTC};
 use namada::types::token;
 use namada::types::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
-use namada_sdk::wallet::{FindKeyError, Wallet};
+use namada_sdk::wallet::Wallet;
 use serde::{Deserialize, Serialize};
 
-use super::templates::{
-    DenominatedBalances, Parameters, TokenBalances, ValidityPredicates,
-};
+use super::templates::{DenominatedBalances, Parameters, ValidityPredicates};
+use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
-    TemplateValidation, Tokens, Unvalidated, Validated,
+    TemplateValidation, Unvalidated, Validated,
 };
-use crate::config::genesis::HexString;
-use crate::wallet::{Alias, CliWalletUtils};
+use crate::config::genesis::GenesisAddress;
+use crate::wallet::CliWalletUtils;
 
 pub const PRE_GENESIS_TX_TIMESTAMP: DateTimeUtc = MIN_UTC;
 
 pub struct GenesisValidatorData {
-    pub source_key: common::SecretKey,
-    pub alias: Alias,
     pub commission_rate: Dec,
     pub max_commission_rate_change: Dec,
     pub net_address: SocketAddr,
-    pub transfer_from_source_amount: token::DenominatedAmount,
     pub self_bond_amount: token::DenominatedAmount,
     pub email: String,
     pub description: Option<String>,
@@ -56,7 +52,6 @@ pub fn sign_txs(
     let UnsignedTransactions {
         established_account,
         validator_account,
-        transfer,
         bond,
     } = txs;
 
@@ -69,13 +64,11 @@ pub fn sign_txs(
 
     if let Some(bonds) = bond.as_ref() {
         for bond in bonds {
-            if let AliasOrPk::Alias(source) = &bond.source {
-                if source == &bond.validator {
-                    panic!(
-                        "Validator self-bonds must be signed with a validator \
-                         wallet."
-                    )
-                }
+            if bond.source.address() == bond.validator {
+                panic!(
+                    "Validator self-bonds must be signed with a validator \
+                     wallet."
+                )
             }
         }
     }
@@ -87,11 +80,6 @@ pub fn sign_txs(
             .collect()
     });
     let validator_account = None;
-    let transfer = transfer.map(|tx| {
-        tx.into_iter()
-            .map(|tx| sign_transfer_tx(tx, wallet))
-            .collect()
-    });
     let bond = bond.map(|tx| {
         tx.into_iter()
             .map(|tx| sign_delegation_bond_tx(tx, wallet, &established_account))
@@ -101,7 +89,6 @@ pub fn sign_txs(
     Transactions {
         established_account,
         validator_account,
-        transfer,
         bond,
     }
 }
@@ -116,23 +103,18 @@ pub fn parse_unsigned(
 /// Create signed [`Transactions`] for a genesis validator.
 pub fn init_validator(
     GenesisValidatorData {
-        source_key,
-        alias,
         commission_rate,
         max_commission_rate_change,
         net_address,
-        transfer_from_source_amount,
         self_bond_amount,
         email,
         description,
         website,
         discord_handle,
     }: GenesisValidatorData,
-    source_wallet: &mut Wallet<CliWalletUtils>,
     validator_wallet: &ValidatorWallet,
 ) -> Transactions<Unvalidated> {
     let unsigned_validator_account_tx = UnsignedValidatorAccountTx {
-        alias: alias.clone(),
         account_key: StringEncoded::new(validator_wallet.account_key.ref_to()),
         consensus_key: StringEncoded::new(
             validator_wallet.consensus_key.ref_to(),
@@ -162,31 +144,23 @@ pub fn init_validator(
         discord_handle,
         net_address,
     };
+    let unsigned_validator_addr =
+        unsigned_validator_account_tx.derive_address();
+    let unsigned_validator_established_addr =
+        unsigned_validator_account_tx.derive_established_address();
     let validator_account = Some(vec![sign_validator_account_tx(
         unsigned_validator_account_tx,
         validator_wallet,
     )]);
 
-    let transfer = if transfer_from_source_amount.amount.is_zero() {
-        None
-    } else {
-        let unsigned_transfer_tx = TransferTx {
-            // Only native token can be staked
-            token: Alias::from("NAM"),
-            source: StringEncoded::new(source_key.ref_to()),
-            target: alias.clone(),
-            amount: transfer_from_source_amount,
-        };
-        let transfer_tx = sign_transfer_tx(unsigned_transfer_tx, source_wallet);
-        Some(vec![transfer_tx])
-    };
-
     let bond = if self_bond_amount.amount.is_zero() {
         None
     } else {
         let unsigned_bond_tx = BondTx {
-            source: AliasOrPk::Alias(alias.clone()),
-            validator: alias,
+            source: GenesisAddress::EstablishedAddress(
+                unsigned_validator_established_addr,
+            ),
+            validator: unsigned_validator_addr,
             amount: self_bond_amount,
         };
         let bond_tx = sign_self_bond_tx(unsigned_bond_tx, validator_wallet);
@@ -195,7 +169,6 @@ pub fn init_validator(
 
     Transactions {
         validator_account,
-        transfer,
         bond,
         ..Default::default()
     }
@@ -215,18 +188,11 @@ pub fn sign_established_account_tx(
             authorization: sig,
         }
     });
-    let UnsignedEstablishedAccountTx {
-        alias,
-        vp,
-        public_key: _,
-        storage,
-    } = unsigned_tx;
+    let UnsignedEstablishedAccountTx { vp, public_key: _ } = unsigned_tx;
 
     SignedEstablishedAccountTx {
-        alias,
         vp,
         public_key: key,
-        storage,
     }
 }
 
@@ -249,7 +215,6 @@ pub fn sign_validator_account_tx(
         sign_tx(&unsigned_tx, &validator_wallet.tendermint_node_key);
 
     let ValidatorAccountTx {
-        alias,
         account_key,
         consensus_key,
         protocol_key,
@@ -294,7 +259,6 @@ pub fn sign_validator_account_tx(
     };
 
     SignedValidatorAccountTx {
-        alias,
         account_key,
         consensus_key,
         protocol_key,
@@ -312,20 +276,10 @@ pub fn sign_validator_account_tx(
     }
 }
 
-pub fn sign_transfer_tx(
-    unsigned_tx: TransferTx<Unvalidated>,
-    source_wallet: &mut Wallet<CliWalletUtils>,
-) -> SignedTransferTx {
-    let source_key = source_wallet
-        .find_key_by_pk(&unsigned_tx.source, None)
-        .expect("Key for source must be present to sign with it.");
-    unsigned_tx.sign(&source_key)
-}
-
 pub fn sign_self_bond_tx(
     unsigned_tx: BondTx<Unvalidated>,
     validator_wallet: &ValidatorWallet,
-) -> SignedBondTx {
+) -> SignedBondTx<Unvalidated> {
     unsigned_tx.sign(&validator_wallet.account_key)
 }
 
@@ -333,76 +287,9 @@ pub fn sign_delegation_bond_tx(
     unsigned_tx: BondTx<Unvalidated>,
     wallet: &mut Wallet<CliWalletUtils>,
     established_accounts: &Option<Vec<EstablishedAccountTx<SignedPk>>>,
-) -> SignedBondTx {
-    let alias = &unsigned_tx.source;
-    // Try to look-up the source from wallet first - if it's an alias of an
-    // implicit account that should give us the right key
-    let found_key = match alias {
-        AliasOrPk::Alias(alias) => {
-            wallet.find_secret_key(&alias.normalize(), None)
-        }
-        AliasOrPk::PublicKey(pk) => wallet.find_key_by_pk(pk, None),
-    };
-    let source_key = match found_key {
-        Ok(key) => key,
-        Err(FindKeyError::KeyNotFound) => {
-            // If it's not in the wallet, it must be an established account
-            // so we need to look-up its public key first
-            let pk = established_accounts
-                .as_ref()
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Signing a bond failed. Cannot find \"{alias}\" in \
-                         the wallet and there are no established accounts."
-                    );
-                })
-                .iter()
-                .find_map(|account| match alias {
-                    AliasOrPk::Alias(alias) => {
-                        // delegation from established account
-                        if &account.alias == alias {
-                            Some(
-                                &account
-                                    .public_key
-                                    .as_ref()
-                                    .unwrap_or_else(|| {
-                                        panic!(
-                                            "Signing a bond failed. The \
-                                             established account \"{alias}\" \
-                                             has no public key. Add a public \
-                                             to be able to sign bonds."
-                                        );
-                                    })
-                                    .pk
-                                    .raw,
-                            )
-                        } else {
-                            None
-                        }
-                    }
-                    AliasOrPk::PublicKey(pk) => {
-                        // delegation from an implicit account
-                        Some(&pk.raw)
-                    }
-                })
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Signing a bond failed. Cannot find \"{alias}\" in \
-                         the wallet or in the established accounts."
-                    );
-                });
-            wallet.find_key_by_pk(pk, None).unwrap_or_else(|err| {
-                panic!(
-                    "Signing a bond failed. Cannot find key for established \
-                     account \"{alias}\" in the wallet. Failed with {err}."
-                );
-            })
-        }
-        Err(err) => panic!(
-            "Signing a bond failed. Failed to read the key for \"{alias}\" \
-             from wallet with {err}."
-        ),
-    };
+) -> SignedBondTx<Unvalidated> {
+    let source_key =
+        look_up_sk_from(&unsigned_tx.source, wallet, established_accounts);
     unsigned_tx.sign(&source_key)
 }
 
@@ -429,7 +316,6 @@ pub fn sign_tx<T: BorshSerialize>(
 pub struct Transactions<T: TemplateValidation> {
     pub established_account: Option<Vec<SignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<SignedValidatorAccountTx>>,
-    pub transfer: Option<Vec<T::TransferTx>>,
     pub bond: Option<Vec<T::BondTx>>,
 }
 
@@ -456,16 +342,6 @@ impl<T: TemplateValidation> Transactions<T> {
                 txs
             })
             .or(other.validator_account);
-        self.transfer = self
-            .transfer
-            .take()
-            .map(|mut txs| {
-                if let Some(new_txs) = other.transfer.as_mut() {
-                    txs.append(new_txs);
-                }
-                txs
-            })
-            .or(other.transfer);
         self.bond = self
             .bond
             .take()
@@ -484,7 +360,6 @@ impl<T: TemplateValidation> Default for Transactions<T> {
         Self {
             established_account: None,
             validator_account: None,
-            transfer: None,
             bond: None,
         }
     }
@@ -509,14 +384,14 @@ impl Transactions<Validated> {
         self.bond
             .as_ref()
             .map(|txs| {
-                let mut stakes: BTreeMap<&Alias, token::Amount> =
+                let mut stakes: BTreeMap<&Address, token::Amount> =
                     BTreeMap::new();
                 for tx in txs {
                     let entry = stakes.entry(&tx.validator).or_default();
                     *entry += tx.amount.amount;
                 }
 
-                stakes.into_iter().any(|(_validator, stake)| {
+                stakes.into_values().any(|stake| {
                     let tendermint_voting_power =
                         namada::ledger::pos::into_tm_voting_power(
                             votes_per_token,
@@ -536,7 +411,6 @@ impl Transactions<Validated> {
 pub struct UnsignedTransactions {
     pub established_account: Option<Vec<UnsignedEstablishedAccountTx>>,
     pub validator_account: Option<Vec<UnsignedValidatorAccountTx>>,
-    pub transfer: Option<Vec<TransferTx<Unvalidated>>>,
     pub bond: Option<Vec<BondTx<Unvalidated>>>,
 }
 
@@ -556,7 +430,6 @@ pub type SignedValidatorAccountTx = ValidatorAccountTx<SignedPk>;
     Eq,
 )]
 pub struct ValidatorAccountTx<PK> {
-    pub alias: Alias,
     pub vp: String,
     /// Commission rate charged on rewards for delegators (bounded inside
     /// 0-1)
@@ -579,6 +452,10 @@ pub struct ValidatorAccountTx<PK> {
     pub eth_cold_key: PK,
 }
 
+impl DeriveEstablishedAddress for UnsignedValidatorAccountTx {
+    const SALT: &'static str = "validator-account-tx";
+}
+
 pub type UnsignedEstablishedAccountTx =
     EstablishedAccountTx<StringEncoded<common::PublicKey>>;
 
@@ -595,129 +472,21 @@ pub type SignedEstablishedAccountTx = EstablishedAccountTx<SignedPk>;
     Eq,
 )]
 pub struct EstablishedAccountTx<PK> {
-    pub alias: Alias,
     pub vp: String,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
     pub public_key: Option<PK>,
-    #[serde(default)]
-    /// Initial storage key values
-    pub storage: HashMap<storage::Key, HexString>,
 }
 
-pub type SignedTransferTx = Signed<TransferTx<Unvalidated>>;
-
-impl SignedTransferTx {
-    /// Verify the signature of `TransferTx`. This should not depend
-    /// on whether the contained amount is denominated or not.
-    ///
-    /// Since we denominate amounts as part of validation, we can
-    /// only verify signatures on [`SignedTransferTx`]
-    /// types.
-    pub fn verify_sig(&self) -> Result<(), VerifySigError> {
-        let Self { data, signature } = self;
-        verify_standalone_sig::<_, SerializeWithBorsh>(
-            &data.data_to_sign(),
-            &data.source.raw,
-            signature,
-        )
-    }
+impl DeriveEstablishedAddress for UnsignedEstablishedAccountTx {
+    const SALT: &'static str = "established-account-tx";
 }
 
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    Serialize,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialEq,
-    Eq,
-)]
-pub struct TransferTx<T: TemplateValidation> {
-    pub token: Alias,
-    pub source: StringEncoded<common::PublicKey>,
-    pub target: Alias,
-    pub amount: T::Amount,
-}
+pub type SignedBondTx<T> = Signed<BondTx<T>>;
 
-impl TransferTx<Unvalidated> {
-    /// Add the correct denomination to the contained amount
-    pub fn denominate(
-        self,
-        tokens: &Tokens,
-    ) -> eyre::Result<TransferTx<Validated>> {
-        let TransferTx {
-            token,
-            source,
-            target,
-            amount,
-        } = self;
-        let denom =
-            if let Some(super::templates::TokenConfig { denom, .. }) =
-                tokens.token.get(&token)
-            {
-                *denom
-            } else {
-                eprintln!(
-                    "Genesis files contained transfer of token {}, which is \
-                     not in the `tokens.toml` file",
-                    token
-                );
-                return Err(eyre::eyre!(
-                    "Genesis files contained transfer of token {}, which is \
-                     not in the `tokens.toml` file",
-                    token
-                ));
-            };
-        let amount = amount.increase_precision(denom).map_err(|e| {
-            eprintln!(
-                "A bond amount in the transactions.toml file was incorrectly \
-                 formatted:\n{}",
-                e
-            );
-            e
-        })?;
-
-        Ok(TransferTx {
-            token,
-            source,
-            target,
-            amount,
-        })
-    }
-
-    /// The signable data. This does not include the phantom data.
-    fn data_to_sign(&self) -> Vec<u8> {
-        [
-            self.token.serialize_to_vec(),
-            self.source.serialize_to_vec(),
-            self.target.serialize_to_vec(),
-            self.amount.serialize_to_vec(),
-        ]
-        .concat()
-    }
-
-    /// Sign the transfer.
-    ///
-    /// Since we denominate amounts as part of validation, we can
-    /// only verify signatures on [`SignedTransferTx`]
-    /// types. Thus we only allow signing of [`TransferTx<Unvalidated>`]
-    /// types.
-    pub fn sign(self, key: &common::SecretKey) -> SignedTransferTx {
-        let sig = standalone_signature::<_, SerializeWithBorsh>(
-            key,
-            &self.data_to_sign(),
-        );
-        SignedTransferTx {
-            data: self,
-            signature: StringEncoded { raw: sig },
-        }
-    }
-}
-
-pub type SignedBondTx = Signed<BondTx<Unvalidated>>;
-
-impl SignedBondTx {
+impl<T> SignedBondTx<T>
+where
+    T: BorshSerialize + TemplateValidation,
+{
     /// Verify the signature of `BondTx`. This should not depend
     /// on whether the contained amount is denominated or not.
     ///
@@ -748,9 +517,24 @@ impl SignedBondTx {
     Eq,
 )]
 pub struct BondTx<T: TemplateValidation> {
-    pub source: AliasOrPk,
-    pub validator: Alias,
+    pub source: GenesisAddress,
+    pub validator: Address,
     pub amount: T::Amount,
+}
+
+impl<T> BondTx<T>
+where
+    T: TemplateValidation + BorshSerialize,
+{
+    /// The signable data. This does not include the phantom data.
+    fn data_to_sign(&self) -> Vec<u8> {
+        [
+            self.source.serialize_to_vec(),
+            self.validator.serialize_to_vec(),
+            self.amount.serialize_to_vec(),
+        ]
+        .concat()
+    }
 }
 
 impl BondTx<Unvalidated> {
@@ -778,23 +562,13 @@ impl BondTx<Unvalidated> {
         })
     }
 
-    /// The signable data. This does not include the phantom data.
-    fn data_to_sign(&self) -> Vec<u8> {
-        [
-            self.source.serialize_to_vec(),
-            self.validator.serialize_to_vec(),
-            self.amount.serialize_to_vec(),
-        ]
-        .concat()
-    }
-
     /// Sign the transfer.
     ///
     /// Since we denominate amounts as part of validation, we can
     /// only verify signatures on [`SignedBondTx`]
     /// types. Thus we only allow signing of [`BondTx<Unvalidated>`]
     /// types.
-    pub fn sign(self, key: &common::SecretKey) -> SignedBondTx {
+    pub fn sign(self, key: &common::SecretKey) -> SignedBondTx<Unvalidated> {
         let sig = standalone_signature::<_, SerializeWithBorsh>(
             key,
             &self.data_to_sign(),
@@ -802,74 +576,6 @@ impl BondTx<Unvalidated> {
         SignedBondTx {
             data: self,
             signature: StringEncoded { raw: sig },
-        }
-    }
-}
-
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
-pub enum AliasOrPk {
-    /// `alias = "value"` in toml (encoded via `AliasSerHelper`)
-    Alias(Alias),
-    /// `public_key = "value"` in toml (encoded via `PkSerHelper`)
-    PublicKey(StringEncoded<common::PublicKey>),
-}
-
-impl Serialize for AliasOrPk {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            AliasOrPk::Alias(alias) => Serialize::serialize(alias, serializer),
-            AliasOrPk::PublicKey(pk) => Serialize::serialize(pk, serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for AliasOrPk {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct FieldVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
-            type Value = AliasOrPk;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str(
-                    "a bech32m encoded `common::PublicKey` or an alias",
-                )
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                // Try to deserialize a PK first
-                let maybe_pk =
-                    StringEncoded::<common::PublicKey>::from_str(value);
-                match maybe_pk {
-                    Ok(pk) => Ok(AliasOrPk::PublicKey(pk)),
-                    Err(_) => {
-                        // If that doesn't work, use it as an alias
-                        let alias = Alias::from_str(value)
-                            .map_err(serde::de::Error::custom)?;
-                        Ok(AliasOrPk::Alias(alias))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize_str(FieldVisitor)
-    }
-}
-
-impl Display for AliasOrPk {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AliasOrPk::Alias(alias) => write!(f, "{}", alias),
-            AliasOrPk::PublicKey(pk) => write!(f, "{}", pk),
         }
     }
 }
@@ -909,21 +615,19 @@ pub fn validate(
     transactions: Transactions<Unvalidated>,
     vps: Option<&ValidityPredicates>,
     balances: Option<&DenominatedBalances>,
-    tokens: &Tokens,
     parameters: Option<&Parameters<Validated>>,
 ) -> Option<Transactions<Validated>> {
     let mut is_valid = true;
 
-    let mut all_used_aliases: BTreeSet<Alias> = BTreeSet::default();
-    let mut established_accounts: BTreeMap<Alias, Option<common::PublicKey>> =
+    let mut all_used_addresses: BTreeSet<Address> = BTreeSet::default();
+    let mut established_accounts: BTreeMap<Address, Option<common::PublicKey>> =
         BTreeMap::default();
-    let mut validator_accounts: BTreeMap<Alias, common::PublicKey> =
+    let mut validator_accounts: BTreeMap<Address, common::PublicKey> =
         BTreeMap::default();
 
     let Transactions {
         ref established_account,
         ref validator_account,
-        ref transfer,
         bond,
     } = transactions;
 
@@ -932,7 +636,7 @@ pub fn validate(
             if !validate_established_account(
                 tx,
                 vps,
-                &mut all_used_aliases,
+                &mut all_used_addresses,
                 &mut established_accounts,
             ) {
                 is_valid = false;
@@ -945,7 +649,7 @@ pub fn validate(
             if !validate_validator_account(
                 tx,
                 vps,
-                &mut all_used_aliases,
+                &mut all_used_addresses,
                 &mut validator_accounts,
             ) {
                 is_valid = false;
@@ -964,38 +668,13 @@ pub fn validate(
                         (
                             token.clone(),
                             TokenBalancesForValidation {
-                                // Add an accumulator for tokens transferred to
-                                // aliases
-                                aliases: BTreeMap::new(),
-                                pks: token_balances.clone(),
+                                amounts: token_balances.0.clone(),
                             },
                         )
                     })
                     .collect()
             })
             .unwrap_or_default();
-
-    let validated_txs = if let Some(txs) = transfer {
-        let validated_txs: Vec<_> = txs
-            .iter()
-            .filter_map(|tx| {
-                validate_transfer(
-                    tx,
-                    &mut token_balances,
-                    &all_used_aliases,
-                    tokens,
-                )
-            })
-            .collect();
-        if validated_txs.len() != txs.len() {
-            is_valid = false;
-            None
-        } else {
-            Some(validated_txs)
-        }
-    } else {
-        None
-    };
 
     let validated_bonds = if let Some(txs) = bond {
         if !txs.is_empty() {
@@ -1038,34 +717,69 @@ pub fn validate(
     };
 
     is_valid.then_some(Transactions {
-        established_account: transactions.established_account,
-        validator_account: transactions.validator_account,
-        transfer: validated_txs,
+        established_account: transactions.established_account.map(
+            |established_accounts| {
+                established_accounts
+                    .into_iter()
+                    .map(|acct| EstablishedAccountTx {
+                        vp: acct.vp,
+                        public_key: acct.public_key,
+                    })
+                    .collect()
+            },
+        ),
+        validator_account: transactions.validator_account.map(
+            |validator_accounts| {
+                validator_accounts
+                    .into_iter()
+                    .map(|acct| ValidatorAccountTx {
+                        vp: acct.vp,
+                        commission_rate: acct.commission_rate,
+                        max_commission_rate_change: acct
+                            .max_commission_rate_change,
+                        email: acct.email,
+                        description: acct.description,
+                        website: acct.website,
+                        discord_handle: acct.discord_handle,
+                        net_address: acct.net_address,
+                        account_key: acct.account_key,
+                        consensus_key: acct.consensus_key,
+                        protocol_key: acct.protocol_key,
+                        tendermint_node_key: acct.tendermint_node_key,
+                        eth_hot_key: acct.eth_hot_key,
+                        eth_cold_key: acct.eth_cold_key,
+                    })
+                    .collect()
+            },
+        ),
         bond: validated_bonds,
     })
 }
 
 fn validate_bond(
-    tx: SignedBondTx,
+    tx: SignedBondTx<Unvalidated>,
     balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
-    established_accounts: &BTreeMap<Alias, Option<common::PublicKey>>,
-    validator_accounts: &BTreeMap<Alias, common::PublicKey>,
+    established_accounts: &BTreeMap<Address, Option<common::PublicKey>>,
+    validator_accounts: &BTreeMap<Address, common::PublicKey>,
     parameters: &Parameters<Validated>,
 ) -> Option<BondTx<Validated>> {
     // Check signature
     let mut is_valid = {
         let source = &tx.data.source;
         if let Some(source_pk) = match source {
-            AliasOrPk::Alias(alias) => {
+            GenesisAddress::EstablishedAddress(address) => {
                 // Try to find the source's PK in either established_accounts or
                 // validator_accounts
+                let established_addr = Address::Established(address.clone());
                 established_accounts
-                    .get(alias)
+                    .get(&established_addr)
                     .cloned()
                     .flatten()
-                    .or_else(|| validator_accounts.get(alias).cloned())
+                    .or_else(|| {
+                        validator_accounts.get(&established_addr).cloned()
+                    })
             }
-            AliasOrPk::PublicKey(pk) => Some(pk.raw.clone()),
+            GenesisAddress::PublicKey(pk) => Some(pk.raw.clone()),
         } {
             if tx.verify_sig(&source_pk).is_err() {
                 eprintln!("Invalid bond tx signature.",);
@@ -1104,10 +818,7 @@ fn validate_bond(
     let native_token = &parameters.parameters.native_token;
     match balances.get_mut(native_token) {
         Some(balances) => {
-            let balance = match source {
-                AliasOrPk::Alias(source) => balances.aliases.get_mut(source),
-                AliasOrPk::PublicKey(source) => balances.pks.0.get_mut(source),
-            };
+            let balance = balances.amounts.get_mut(source);
             match balance {
                 Some(balance) => {
                     if *balance < *amount {
@@ -1121,14 +832,7 @@ fn validate_bond(
                     } else {
                         // Deduct the amount from source
                         if amount == balance {
-                            match source {
-                                AliasOrPk::Alias(source) => {
-                                    balances.aliases.remove(source);
-                                }
-                                AliasOrPk::PublicKey(source) => {
-                                    balances.pks.0.remove(source);
-                                }
-                            }
+                            balances.amounts.remove(source);
                         } else {
                             balance.amount -= amount.amount;
                         }
@@ -1157,34 +861,33 @@ fn validate_bond(
 
 #[derive(Clone, Debug)]
 pub struct TokenBalancesForValidation {
-    /// Accumulator for tokens transferred to aliases
-    pub aliases: BTreeMap<Alias, token::DenominatedAmount>,
-    /// Token balances from the balances file, associated with PKs
-    pub pks: TokenBalances,
+    /// Accumulator for tokens transferred to accounts
+    pub amounts: BTreeMap<GenesisAddress, DenominatedAmount>,
 }
 
 pub fn validate_established_account(
     tx: &SignedEstablishedAccountTx,
     vps: Option<&ValidityPredicates>,
-    all_used_aliases: &mut BTreeSet<Alias>,
-    established_accounts: &mut BTreeMap<Alias, Option<common::PublicKey>>,
+    all_used_addresses: &mut BTreeSet<Address>,
+    established_accounts: &mut BTreeMap<Address, Option<common::PublicKey>>,
 ) -> bool {
     let mut is_valid = true;
 
+    let established_address = EstablishedAccountTx::from(tx).derive_address();
     established_accounts.insert(
-        tx.alias.clone(),
+        established_address.clone(),
         tx.public_key.as_ref().map(|signed| signed.pk.raw.clone()),
     );
 
-    // Check that alias is unique
-    if all_used_aliases.contains(&tx.alias) {
+    // Check that the established address is unique
+    if all_used_addresses.contains(&established_address) {
         eprintln!(
-            "A duplicate alias \"{}\" found in a `established_account` tx.",
-            tx.alias
+            "A duplicate address \"{}\" found in a `established_account` tx.",
+            established_address
         );
         is_valid = false;
     } else {
-        all_used_aliases.insert(tx.alias.clone());
+        all_used_addresses.insert(established_address);
     }
 
     // Check the VP exists
@@ -1221,22 +924,24 @@ fn validate_established_account_sig(
 pub fn validate_validator_account(
     tx: &ValidatorAccountTx<SignedPk>,
     vps: Option<&ValidityPredicates>,
-    all_used_aliases: &mut BTreeSet<Alias>,
-    validator_accounts: &mut BTreeMap<Alias, common::PublicKey>,
+    all_used_addresses: &mut BTreeSet<Address>,
+    validator_accounts: &mut BTreeMap<Address, common::PublicKey>,
 ) -> bool {
     let mut is_valid = true;
 
-    validator_accounts.insert(tx.alias.clone(), tx.account_key.pk.raw.clone());
+    let established_address = ValidatorAccountTx::from(tx).derive_address();
+    validator_accounts
+        .insert(established_address.clone(), tx.account_key.pk.raw.clone());
 
-    // Check that alias is unique
-    if all_used_aliases.contains(&tx.alias) {
+    // Check that address is unique
+    if all_used_addresses.contains(&established_address) {
         eprintln!(
-            "A duplicate alias \"{}\" found in a `validator_account` tx.",
-            tx.alias
+            "A duplicate address \"{}\" found in a `validator_account` tx.",
+            established_address
         );
         is_valid = false;
     } else {
-        all_used_aliases.insert(tx.alias.clone());
+        all_used_addresses.insert(established_address.clone());
     }
 
     // Check the VP exists
@@ -1261,8 +966,8 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `account_key` authorization for `validator_account` tx \
-             with alias \"{}\".",
-            tx.alias
+             with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
@@ -1273,8 +978,8 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `consensus_key` authorization for `validator_account` tx \
-             with alias \"{}\".",
-            tx.alias
+             with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
@@ -1285,8 +990,8 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `protocol_key` authorization for `validator_account` tx \
-             with alias \"{}\".",
-            tx.alias
+             with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
@@ -1297,8 +1002,8 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `tendermint_node_key` authorization for \
-             `validator_account` tx with alias \"{}\".",
-            tx.alias
+             `validator_account` tx with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
@@ -1310,8 +1015,8 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `eth_hot_key` authorization for `validator_account` tx \
-             with alias \"{}\".",
-            tx.alias
+             with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
@@ -1323,97 +1028,13 @@ pub fn validate_validator_account(
     ) {
         eprintln!(
             "Invalid `eth_cold_key` authorization for `validator_account` tx \
-             with alias \"{}\".",
-            tx.alias
+             with address \"{}\".",
+            established_address
         );
         is_valid = false;
     }
 
     is_valid
-}
-
-/// Updates the token balances with all the valid transfers applied
-pub fn validate_transfer(
-    tx: &SignedTransferTx,
-    balances: &mut BTreeMap<Alias, TokenBalancesForValidation>,
-    all_used_aliases: &BTreeSet<Alias>,
-    tokens: &Tokens,
-) -> Option<TransferTx<Validated>> {
-    let mut is_valid = true;
-    // Check signature
-    if tx.verify_sig().is_err() {
-        eprintln!("Invalid transfer tx signature.",);
-        is_valid = false;
-    }
-
-    let unsigned: TransferTx<Unvalidated> = tx.into();
-    let validated = unsigned.denominate(tokens).ok()?;
-    let TransferTx {
-        token,
-        source,
-        target,
-        amount,
-        ..
-    } = &validated;
-
-    // Check that the target exists
-    if !all_used_aliases.contains(target) {
-        eprintln!(
-            "Invalid transfer tx. The target alias \"{target}\" no matching \
-             account found."
-        );
-        is_valid = false;
-    }
-
-    // Check token balance of the source and update token balances of the source
-    // and target
-    match balances.get_mut(token) {
-        Some(balances) => match balances.pks.0.get_mut(source) {
-            Some(balance) => {
-                if balance.amount < amount.amount {
-                    eprintln!(
-                        "Invalid transfer tx. Source {source} doesn't have \
-                         enough balance of token \"{token}\" to transfer {}. \
-                         Got {}.",
-                        amount, balance,
-                    );
-                    is_valid = false;
-                } else {
-                    // Deduct the amount from source
-                    if amount.amount == balance.amount {
-                        balances.pks.0.remove(source);
-                    } else {
-                        balance.amount -= amount.amount;
-                    }
-
-                    // Add the amount to target
-                    let target_balance = balances
-                        .aliases
-                        .entry(target.clone())
-                        .or_insert_with(|| DenominatedAmount {
-                            amount: token::Amount::zero(),
-                            denom: amount.denom,
-                        });
-                    target_balance.amount += amount.amount;
-                }
-            }
-            None => {
-                eprintln!(
-                    "Invalid transfer tx. Source {source} has no balance of \
-                     token \"{token}\"."
-                );
-                is_valid = false;
-            }
-        },
-        None => {
-            eprintln!(
-                "Invalid transfer tx. Token \"{token}\" not found in balances."
-            );
-            is_valid = false;
-        }
-    }
-
-    is_valid.then_some(validated)
 }
 
 fn validate_signature<T: BorshSerialize + Debug>(
@@ -1434,17 +1055,10 @@ fn validate_signature<T: BorshSerialize + Debug>(
 
 impl From<&SignedEstablishedAccountTx> for UnsignedEstablishedAccountTx {
     fn from(tx: &SignedEstablishedAccountTx) -> Self {
-        let SignedEstablishedAccountTx {
-            alias,
-            vp,
-            public_key,
-            storage,
-        } = tx;
+        let SignedEstablishedAccountTx { vp, public_key } = tx;
         Self {
-            alias: alias.clone(),
             vp: vp.clone(),
             public_key: public_key.as_ref().map(|signed| signed.pk.clone()),
-            storage: storage.clone(),
         }
     }
 }
@@ -1452,7 +1066,6 @@ impl From<&SignedEstablishedAccountTx> for UnsignedEstablishedAccountTx {
 impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
     fn from(tx: &SignedValidatorAccountTx) -> Self {
         let SignedValidatorAccountTx {
-            alias,
             vp,
             commission_rate,
             max_commission_rate_change,
@@ -1467,10 +1080,10 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
             tendermint_node_key,
             eth_hot_key,
             eth_cold_key,
+            ..
         } = tx;
 
         Self {
-            alias: alias.clone(),
             vp: vp.clone(),
             commission_rate: *commission_rate,
             max_commission_rate_change: *max_commission_rate_change,
@@ -1489,16 +1102,78 @@ impl From<&SignedValidatorAccountTx> for UnsignedValidatorAccountTx {
     }
 }
 
-impl From<&SignedTransferTx> for TransferTx<Unvalidated> {
-    fn from(tx: &SignedTransferTx) -> Self {
-        let SignedTransferTx { data, signature: _ } = tx;
+impl From<&SignedBondTx<Unvalidated>> for BondTx<Unvalidated> {
+    fn from(tx: &SignedBondTx<Unvalidated>) -> Self {
+        let SignedBondTx { data, .. } = tx;
         data.clone()
     }
 }
 
-impl From<&SignedBondTx> for BondTx<Unvalidated> {
-    fn from(tx: &SignedBondTx) -> Self {
-        let SignedBondTx { data, signature: _ } = tx;
-        data.clone()
+/// Attempt to look-up a secret key.
+fn look_up_sk_from(
+    source: &GenesisAddress,
+    wallet: &mut Wallet<CliWalletUtils>,
+    established_accounts: &Option<Vec<EstablishedAccountTx<SignedPk>>>,
+) -> common::SecretKey {
+    // Try to look-up the source from wallet first
+    match source {
+        GenesisAddress::EstablishedAddress(_) => None,
+        GenesisAddress::PublicKey(pk) => wallet.find_key_by_pk(pk, None).ok(),
     }
+    .unwrap_or_else(|| {
+        // If it's not in the wallet, it must be an established account
+        // so we need to look-up its public key first
+        let pk = established_accounts
+            .as_ref()
+            .unwrap_or_else(|| {
+                panic!(
+                    "Signing failed. Cannot find \"{source}\" in the wallet \
+                     and there are no established accounts."
+                );
+            })
+            .iter()
+            .find_map(|account| match source {
+                GenesisAddress::EstablishedAddress(address) => {
+                    // delegation from established account
+                    if &EstablishedAccountTx::from(account)
+                        .derive_established_address()
+                        == address
+                    {
+                        Some(
+                            &account
+                                .public_key
+                                .as_ref()
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "Signing failed. The established \
+                                         account \"{source}\" has no public \
+                                         key. Add a public to be able to sign \
+                                         bonds."
+                                    );
+                                })
+                                .pk
+                                .raw,
+                        )
+                    } else {
+                        None
+                    }
+                }
+                GenesisAddress::PublicKey(pk) => {
+                    // delegation from an implicit account
+                    Some(&pk.raw)
+                }
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "Signing failed. Cannot find \"{source}\" in the wallet \
+                     or in the established accounts."
+                );
+            });
+        wallet.find_key_by_pk(pk, None).unwrap_or_else(|err| {
+            panic!(
+                "Signing failed. Cannot find key for established account \
+                 \"{source}\" in the wallet. Failed with {err}."
+            );
+        })
+    })
 }

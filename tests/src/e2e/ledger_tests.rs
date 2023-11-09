@@ -30,7 +30,6 @@ use namada_core::ledger::governance::cli::onchain::{
 };
 use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::masp::fs::FsShieldedUtils;
-use namada_sdk::wallet::alias::Alias;
 use namada_test_utils::TestWasms;
 use namada_vp_prelude::BTreeSet;
 use serde_json::json;
@@ -38,8 +37,8 @@ use setup::constants::*;
 use setup::Test;
 
 use super::helpers::{
-    epochs_per_year_from_min_duration, get_height, wait_for_block_height,
-    wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, get_established_addr_from_pregenesis,
+    get_height, wait_for_block_height, wait_for_wasm_pre_compile,
 };
 use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
 use crate::e2e::helpers::{
@@ -921,15 +920,13 @@ fn pos_bonds() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let mut bonds = genesis.transactions.bond.unwrap();
+                // NB: the last bond should be from `validator-1`.
+                // we will filter it out from the list of bonds
+                bonds.pop();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+            });
             genesis
         },
         None,
@@ -2116,7 +2113,12 @@ fn pgf_governance_proposal() -> Result<()> {
             genesis.parameters.parameters.min_num_of_blocks = 4;
             genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pgf_params.stewards =
-                BTreeSet::from_iter(Alias::from_str("albert"));
+                BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                    "albert-key",
+                    base_dir,
+                    &genesis,
+                )
+                .unwrap()]);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         },
         None,
@@ -3170,15 +3172,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 base_dir,
                 default_port_offset,
             );
-            let bonds = genesis.transactions.bond.unwrap();
-            genesis.transactions.bond = Some(
+            genesis.transactions.bond = Some({
+                let mut bonds = genesis.transactions.bond.unwrap();
+                // NB: the last bond should be from `validator-1`.
+                // we will filter it out from the list of bonds
+                bonds.pop();
                 bonds
-                    .into_iter()
-                    .filter(|bond| {
-                        (&bond.data.validator).as_ref() != "validator-1"
-                    })
-                    .collect(),
-            );
+            });
             genesis
         },
         None,
