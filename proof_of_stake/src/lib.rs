@@ -3051,121 +3051,21 @@ pub fn bond_amount<S>(
 where
     S: StorageRead,
 {
-    // TODO: our method of applying slashes is not correct! This needs review
-
     let params = read_pos_params(storage)?;
+    // Outer key is the start epoch used to calculate slashes. The inner
+    // keys are discarded after applying slashes.
+    let mut amounts: BTreeMap<Epoch, token::Amount> = BTreeMap::default();
 
-    // TODO: apply rewards
-    let slashes = find_validator_slashes(storage, &bond_id.validator)?;
-    // dbg!(&slashes);
-    // let slash_rates =
-    //     slashes
-    //         .iter()
-    //         .fold(BTreeMap::<Epoch, Dec>::new(), |mut map, slash| {
-    //             let tot_rate = map.entry(slash.epoch).or_default();
-    //             *tot_rate = cmp::min(Dec::one(), *tot_rate + slash.rate);
-    //             map
-    //         });
-    // dbg!(&slash_rates);
-
-    // Accumulate incoming redelegations slashes from source validator, if any.
-    // This ensures that if there're slashes on both src validator and dest
-    // validator, they're combined correctly.
-    let mut redelegation_slashes = BTreeMap::<Epoch, token::Amount>::new();
-    for res in delegator_redelegated_bonds_handle(&bond_id.source)
-        .at(&bond_id.validator)
-        .iter(storage)?
-    {
-        let (
-            NestedSubKey::Data {
-                key: redelegation_end,
-                nested_sub_key:
-                    NestedSubKey::Data {
-                        key: src_validator,
-                        nested_sub_key: SubKey::Data(start),
-                    },
-            },
-            delta,
-        ) = res?;
-
-        let list_slashes = validator_slashes_handle(&src_validator)
-            .iter(storage)?
-            .map(Result::unwrap)
-            .filter(|slash| {
-                let slash_processing_epoch =
-                    slash.epoch + params.slash_processing_epoch_offset();
-                start <= slash.epoch
-                    && redelegation_end > slash.epoch
-                    && slash_processing_epoch
-                        > redelegation_end - params.pipeline_len
-            })
-            .collect::<Vec<_>>();
-
-        let slashed_delta = apply_list_slashes(&params, &list_slashes, delta);
-
-        // let mut slashed_delta = delta;
-        // let slashes = find_slashes_in_range(
-        //     storage,
-        //     start,
-        //     Some(redelegation_end),
-        //     &src_validator,
-        // )?;
-        // for (slash_epoch, rate) in slashes {
-        //     let slash_processing_epoch =
-        //         slash_epoch + params.slash_processing_epoch_offset();
-        //     // If the slash was processed after redelegation was submitted
-        //     // it has to be slashed now
-        //     if slash_processing_epoch > redelegation_end -
-        // params.pipeline_len {         let slashed =
-        // slashed_delta.mul_ceil(rate);         slashed_delta -=
-        // slashed;     }
-        // }
-        *redelegation_slashes.entry(redelegation_end).or_default() +=
-            delta - slashed_delta;
-    }
-    // dbg!(&redelegation_slashes);
-
+    // Bonds
     let bonds =
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
-    let mut total_active = token::Amount::zero();
     for next in bonds.iter(storage)? {
-        let (bond_epoch, delta) = dbg!(next?);
-        if bond_epoch > epoch {
-            continue;
+        let (start, delta) = next?;
+        if start <= epoch {
+            let amount = amounts.entry(start).or_default();
+            *amount += delta;
         }
-
-        let list_slashes = slashes
-            .iter()
-            .filter(|slash| bond_epoch <= slash.epoch)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        let mut slashed_delta =
-            apply_list_slashes(&params, &list_slashes, delta);
-
-        // Deduct redelegation src validator slash, if any
-        if let Some(&redelegation_slash) = redelegation_slashes.get(&bond_epoch)
-        {
-            slashed_delta -= redelegation_slash;
-        }
-
-        // let list_slashes = slashes
-        //     .iter()
-        //     .map(Result::unwrap)
-        //     .filter(|slash| bond_epoch <= slash.epoch)
-        //     .collect::<Vec<_>>();
-
-        // for (&slash_epoch, &rate) in &slash_rates {
-        //     if slash_epoch < bond_epoch {
-        //         continue;
-        //     }
-        //     // TODO: think about truncation
-        //     let current_slash = slashed_delta.mul_ceil(rate);
-        //     slashed_delta -= current_slash;
-        // }
-        total_active += slashed_delta;
     }
-    // dbg!(&total_active);
 
     // Add unbonds that are still contributing to stake
     let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
@@ -3177,31 +3077,16 @@ where
             },
             delta,
         ) = next?;
+        // This is the first epoch in which the unbond stops contributing to
+        // voting power
         let end = withdrawable_epoch - params.withdrawable_epoch_offset()
             + params.pipeline_len;
 
         if start <= epoch && end > epoch {
-            let list_slashes = slashes
-                .iter()
-                .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                .cloned()
-                .collect::<Vec<_>>();
-
-            let slashed_delta =
-                apply_list_slashes(&params, &list_slashes, delta);
-
-            // let mut slashed_delta = delta;
-            // for (&slash_epoch, &rate) in &slash_rates {
-            //     if start <= slash_epoch && end > slash_epoch {
-            //         // TODO: think about truncation
-            //         let current_slash = slashed_delta.mul_ceil(rate);
-            //         slashed_delta -= current_slash;
-            //     }
-            // }
-            total_active += slashed_delta;
+            let amount = amounts.entry(start).or_default();
+            *amount += delta;
         }
     }
-    // dbg!(&total_active);
 
     if bond_id.validator != bond_id.source {
         // Add outgoing redelegations that are still contributing to the source
@@ -3228,27 +3113,10 @@ where
                 && start <= epoch
                 && end > epoch
             {
-                let list_slashes = slashes
-                    .iter()
-                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let slashed_delta =
-                    apply_list_slashes(&params, &list_slashes, delta);
-
-                // let mut slashed_delta = delta;
-                // for (&slash_epoch, &rate) in &slash_rates {
-                //     if start <= slash_epoch && end > slash_epoch {
-                //         // TODO: think about truncation
-                //         let current_slash = delta.mul_ceil(rate);
-                //         slashed_delta -= current_slash;
-                //     }
-                // }
-                total_active += slashed_delta;
+                let amount = amounts.entry(start).or_default();
+                *amount += delta;
             }
         }
-        // dbg!(&total_active);
 
         // Add outgoing redelegation unbonds that are still contributing to
         // the source validator's stake
@@ -3263,7 +3131,7 @@ where
                             key: redelegation_epoch,
                             nested_sub_key:
                                 NestedSubKey::Data {
-                                    key: withdraw_epoch,
+                                    key: _withdraw_epoch,
                                     nested_sub_key:
                                         NestedSubKey::Data {
                                             key: src_validator,
@@ -3274,39 +3142,41 @@ where
                 },
                 delta,
             ) = res?;
-            let end = withdraw_epoch - params.withdrawable_epoch_offset()
-                + params.pipeline_len;
             if src_validator == bond_id.validator
                 // If the unbonded bond was redelegated after this epoch ...
                 && redelegation_epoch > epoch
-                // ... the start was before or at this epoch ...
+                // ... the start was before or at this epoch
                 && start <= epoch
-                // ... and the end after this epoch
-                && end > epoch
             {
-                let list_slashes = slashes
-                    .iter()
-                    .filter(|slash| start <= slash.epoch && end > slash.epoch)
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                let slashed_delta =
-                    apply_list_slashes(&params, &list_slashes, delta);
-
-                // let mut slashed_delta = delta;
-                // for (&slash_epoch, &rate) in &slash_rates {
-                //     if start <= slash_epoch && end > slash_epoch {
-                //         let current_slash = delta.mul_ceil(rate);
-                //         slashed_delta -= current_slash;
-                //     }
-                // }
-                total_active += slashed_delta;
+                let amount = amounts.entry(start).or_default();
+                *amount += delta;
             }
         }
     }
-    // dbg!(&total_active);
 
-    Ok(total_active)
+    if !amounts.is_empty() {
+        let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+
+        // Apply slashes
+        for (&start, amount) in amounts.iter_mut() {
+            let list_slashes = slashes
+                .iter()
+                .filter(|slash| {
+                    let processing_epoch =
+                        slash.epoch + params.slash_processing_epoch_offset();
+                    // Only use slashes that were processed before or at the
+                    // epoch associated with the bond amount. This assumes
+                    // that slashes are applied before inflation.
+                    processing_epoch <= epoch && start <= slash.epoch
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            *amount = apply_list_slashes(&params, &list_slashes, *amount);
+        }
+    }
+
+    Ok(amounts.values().cloned().sum())
 }
 
 /// Get bond amounts within the `claim_start..=claim_end` epoch range for
@@ -3344,111 +3214,6 @@ where
                 let amount =
                     amounts.entry(ep).or_default().entry(start).or_default();
                 *amount += delta;
-            }
-        }
-    }
-
-    // Add unbonds that are still contributing to stake
-    let unbonds = unbond_handle(&bond_id.source, &bond_id.validator);
-    for next in unbonds.iter(storage)? {
-        let (
-            NestedSubKey::Data {
-                key: start,
-                nested_sub_key: SubKey::Data(withdrawable_epoch),
-            },
-            delta,
-        ) = next?;
-        // This is the first epoch in which the unbond stops contributing to
-        // voting power
-        let end = withdrawable_epoch - params.withdrawable_epoch_offset()
-            + params.pipeline_len;
-
-        if start <= claim_start && end > claim_start {
-            for ep in Epoch::iter_bounds_inclusive(claim_start, end.prev()) {
-                let amount =
-                    amounts.entry(ep).or_default().entry(start).or_default();
-                *amount += delta;
-            }
-        }
-    }
-
-    if bond_id.validator != bond_id.source {
-        // Add outgoing redelegations that are still contributing to the source
-        // validator's stake
-        let redelegated_bonds =
-            delegator_redelegated_bonds_handle(&bond_id.source);
-        for res in redelegated_bonds.iter(storage)? {
-            let (
-                NestedSubKey::Data {
-                    key: _dest_validator,
-                    nested_sub_key:
-                        NestedSubKey::Data {
-                            key: end,
-                            nested_sub_key:
-                                NestedSubKey::Data {
-                                    key: src_validator,
-                                    nested_sub_key: SubKey::Data(start),
-                                },
-                        },
-                },
-                delta,
-            ) = res?;
-            if src_validator == bond_id.validator
-                && start <= claim_start
-                && end > claim_start
-            {
-                for ep in Epoch::iter_bounds_inclusive(claim_start, end.prev())
-                {
-                    let amount = amounts
-                        .entry(ep)
-                        .or_default()
-                        .entry(start)
-                        .or_default();
-                    *amount += delta;
-                }
-            }
-        }
-
-        // Add outgoing redelegation unbonds that are still contributing to
-        // the source validator's stake
-        let redelegated_unbonds =
-            delegator_redelegated_unbonds_handle(&bond_id.source);
-        for res in redelegated_unbonds.iter(storage)? {
-            let (
-                NestedSubKey::Data {
-                    key: _dest_validator,
-                    nested_sub_key:
-                        NestedSubKey::Data {
-                            key: redelegation_epoch,
-                            nested_sub_key:
-                                NestedSubKey::Data {
-                                    key: _withdraw_epoch,
-                                    nested_sub_key:
-                                        NestedSubKey::Data {
-                                            key: src_validator,
-                                            nested_sub_key: SubKey::Data(start),
-                                        },
-                                },
-                        },
-                },
-                delta,
-            ) = res?;
-            if src_validator == bond_id.validator
-                // If the unbonded bond was redelegated after this epoch ...
-                && redelegation_epoch > claim_start
-                // ... the start was before or at this epoch
-                && start <= claim_start
-            {
-                for ep in
-                    Epoch::iter_bounds_inclusive(start, redelegation_epoch)
-                {
-                    let amount = amounts
-                        .entry(ep)
-                        .or_default()
-                        .entry(start)
-                        .or_default();
-                    *amount += delta;
-                }
             }
         }
     }
