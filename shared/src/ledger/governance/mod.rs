@@ -669,13 +669,15 @@ where
         epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
-        _delegation_address: &Address,
+        delegation_address: &Address,
     ) -> Result<bool> {
-        Ok(pos::namada_proof_of_stake::is_delegator(
-            &self.ctx.pre(),
-            address,
-            Some(epoch),
-        )? && verifiers.contains(address))
+        Ok(address != delegation_address
+            && verifiers.contains(address)
+            && pos::namada_proof_of_stake::is_delegator(
+                &self.ctx.pre(),
+                address,
+                Some(epoch),
+            )?)
     }
 }
 
