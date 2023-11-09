@@ -105,7 +105,7 @@ impl Checksums {
 
 fn wasm_url(wasm_name: &str) -> String {
     let prefix_url = std::env::var(ENV_VAR_WASM_SERVER)
-        .unwrap_or_else(|_| format!("{DEFAULT_WASM_SERVER}"));
+        .unwrap_or_else(|_| DEFAULT_WASM_SERVER.to_string());
     format!("{}/{}", prefix_url, wasm_name)
 }
 
