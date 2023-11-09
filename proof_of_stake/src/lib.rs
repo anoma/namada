@@ -1675,17 +1675,19 @@ pub fn unbond_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    tracing::debug!(
-        "Unbonding token amount {} at epoch {}",
-        amount.to_string_native(),
-        current_epoch
-    );
     if amount.is_zero() {
         return Ok(ResultSlashing::default());
     }
 
     let params = read_pos_params(storage)?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
+    let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
+    tracing::debug!(
+        "Unbonding token amount {} at epoch {}, withdrawable at epoch {}",
+        amount.to_string_native(),
+        current_epoch,
+        withdrawable_epoch
+    );
 
     // Make sure source is not some other validator
     if let Some(source) = source {
@@ -1727,7 +1729,6 @@ where
     }
 
     let unbonds = unbond_handle(source, validator);
-    let withdrawable_epoch = current_epoch + params.withdrawable_epoch_offset();
 
     let redelegated_bonds =
         delegator_redelegated_bonds_handle(source).at(validator);
@@ -2023,6 +2024,35 @@ where
                 redelegated_deltas.to_string_native()
             );
         }
+    }
+
+    // Tally rewards (only call if this is not the first epoch)
+    if current_epoch > Epoch::default() {
+        let mut rewards = token::Amount::zero();
+
+        let last_claim_epoch =
+            get_last_reward_claim_epoch(storage, source, validator)?
+                .unwrap_or_default();
+        let rewards_products = validator_rewards_products_handle(validator);
+
+        for (start_epoch, slashed_amount) in &result_slashing.epoch_map {
+            // Stop collecting rewards at the moment the unbond is initiated
+            // (right now)
+            for ep in
+                Epoch::iter_bounds_inclusive(*start_epoch, current_epoch.prev())
+            {
+                // Consider the last epoch when rewards were claimed
+                if ep < last_claim_epoch {
+                    continue;
+                }
+                let rp =
+                    rewards_products.get(storage, &ep)?.unwrap_or_default();
+                rewards += rp * (*slashed_amount);
+            }
+        }
+
+        // Update the rewards from the current unbonds first
+        add_rewards_to_counter(storage, source, validator, rewards)?;
     }
 
     Ok(result_slashing)
@@ -2815,7 +2845,6 @@ where
         (Epoch, Epoch),
         (token::Amount, EagerRedelegatedBondsMap),
     > = BTreeMap::new();
-    let mut rewards = token::Amount::zero();
 
     for unbond in unbond_handle.iter(storage)? {
         let (
@@ -2831,6 +2860,7 @@ where
             "Unbond delta ({start_epoch}..{withdraw_epoch}), amount {}",
             amount.to_string_native()
         );
+        // Consider only unbonds that are eligible to be withdrawn
         if withdraw_epoch > current_epoch {
             tracing::debug!(
                 "Not yet withdrawable until epoch {withdraw_epoch}"
@@ -2856,16 +2886,11 @@ where
                 .or_insert(amount);
         }
 
-        rewards += amount;
-
         unbonds_and_redelegated_unbonds.insert(
             (start_epoch, withdraw_epoch),
             (amount, eager_redelegated_unbonds),
         );
     }
-
-    // Update the rewards from the current unbonds first
-    add_rewards_to_counter(storage, source, validator, rewards)?;
 
     let slashes = find_validator_slashes(storage, validator)?;
 
@@ -3315,7 +3340,7 @@ where
         if start <= claim_start {
             // A bond that wasn't unbonded is added to all epochs up to
             // `claim_end`
-            for ep in Epoch::iter_bounds_inclusive(start, claim_end) {
+            for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
                 let amount =
                     amounts.entry(ep).or_default().entry(start).or_default();
                 *amount += delta;
@@ -3333,11 +3358,13 @@ where
             },
             delta,
         ) = next?;
+        // This is the first epoch in which the unbond stops contributing to
+        // voting power
         let end = withdrawable_epoch - params.withdrawable_epoch_offset()
             + params.pipeline_len;
 
         if start <= claim_start && end > claim_start {
-            for ep in Epoch::iter_bounds_inclusive(start, end) {
+            for ep in Epoch::iter_bounds_inclusive(claim_start, end.prev()) {
                 let amount =
                     amounts.entry(ep).or_default().entry(start).or_default();
                 *amount += delta;
@@ -3370,7 +3397,8 @@ where
                 && start <= claim_start
                 && end > claim_start
             {
-                for ep in Epoch::iter_bounds_inclusive(start, end) {
+                for ep in Epoch::iter_bounds_inclusive(claim_start, end.prev())
+                {
                     let amount = amounts
                         .entry(ep)
                         .or_default()
