@@ -1,4 +1,4 @@
-use crate::facade::tower_abci::{Request, Response};
+use crate::facade::tendermint::v0_37::abci::{Request, Response};
 
 pub mod shim {
     use std::convert::TryFrom;
@@ -7,13 +7,13 @@ pub mod shim {
 
     use super::{Request as Req, Response as Resp};
     use crate::facade::tendermint_proto::v0_37::abci::{
-        RequestApplySnapshotChunk, RequestCheckTx, RequestCommit, RequestEcho,
-        RequestFlush, RequestInfo, RequestInitChain, RequestListSnapshots,
-        RequestLoadSnapshotChunk, RequestOfferSnapshot, RequestPrepareProposal,
-        RequestProcessProposal, RequestQuery, ResponseApplySnapshotChunk,
-        ResponseCheckTx, ResponseCommit, ResponseEcho, ResponseEndBlock,
-        ResponseFlush, ResponseInfo, ResponseInitChain, ResponseListSnapshots,
-        ResponseLoadSnapshotChunk, ResponseOfferSnapshot, ResponseQuery,
+        RequestApplySnapshotChunk, RequestCheckTx, RequestEcho, RequestInfo,
+        RequestInitChain, RequestLoadSnapshotChunk, RequestOfferSnapshot,
+        RequestPrepareProposal, RequestProcessProposal, RequestQuery,
+        ResponseApplySnapshotChunk, ResponseCheckTx, ResponseCommit,
+        ResponseEcho, ResponseEndBlock, ResponseInfo, ResponseInitChain,
+        ResponseListSnapshots, ResponseLoadSnapshotChunk,
+        ResponseOfferSnapshot, ResponsePrepareProposal, ResponseQuery,
         VoteInfo,
     };
     use crate::node::ledger::shell;
@@ -56,11 +56,11 @@ pub mod shim {
         #[allow(dead_code)]
         RevertProposal(request::RevertProposal),
         FinalizeBlock(request::FinalizeBlock),
-        Commit(RequestCommit),
-        Flush(RequestFlush),
+        Commit,
+        Flush,
         Echo(RequestEcho),
         CheckTx(RequestCheckTx),
-        ListSnapshots(RequestListSnapshots),
+        ListSnapshots,
         OfferSnapshot(RequestOfferSnapshot),
         LoadSnapshotChunk(RequestLoadSnapshotChunk),
         ApplySnapshotChunk(RequestApplySnapshotChunk),
@@ -72,23 +72,25 @@ pub mod shim {
 
         fn try_from(req: Req) -> Result<Request, Error> {
             match req {
-                Req::InitChain(inner) => Ok(Request::InitChain(inner)),
-                Req::Info(inner) => Ok(Request::Info(inner)),
-                Req::Query(inner) => Ok(Request::Query(inner)),
-                Req::Commit(inner) => Ok(Request::Commit(inner)),
-                Req::Flush(inner) => Ok(Request::Flush(inner)),
-                Req::Echo(inner) => Ok(Request::Echo(inner)),
-                Req::CheckTx(inner) => Ok(Request::CheckTx(inner)),
-                Req::ListSnapshots(inner) => Ok(Request::ListSnapshots(inner)),
-                Req::OfferSnapshot(inner) => Ok(Request::OfferSnapshot(inner)),
+                Req::InitChain(inner) => Ok(Request::InitChain(inner.into())),
+                Req::Info(inner) => Ok(Request::Info(inner.into())),
+                Req::Query(inner) => Ok(Request::Query(inner.into())),
+                Req::Commit => Ok(Request::Commit),
+                Req::Flush => Ok(Request::Flush),
+                Req::Echo(inner) => Ok(Request::Echo(inner.into())),
+                Req::CheckTx(inner) => Ok(Request::CheckTx(inner.into())),
+                Req::ListSnapshots => Ok(Request::ListSnapshots),
+                Req::OfferSnapshot(inner) => {
+                    Ok(Request::OfferSnapshot(inner.into()))
+                }
                 Req::LoadSnapshotChunk(inner) => {
-                    Ok(Request::LoadSnapshotChunk(inner))
+                    Ok(Request::LoadSnapshotChunk(inner.into()))
                 }
                 Req::ApplySnapshotChunk(inner) => {
-                    Ok(Request::ApplySnapshotChunk(inner))
+                    Ok(Request::ApplySnapshotChunk(inner.into()))
                 }
                 Req::PrepareProposal(inner) => {
-                    Ok(Request::PrepareProposal(inner))
+                    Ok(Request::PrepareProposal(inner.into()))
                 }
                 _ => Err(Error::ConvertReq(req)),
             }
@@ -110,7 +112,7 @@ pub mod shim {
         FinalizeBlock(response::FinalizeBlock),
         EndBlock(ResponseEndBlock),
         Commit(ResponseCommit),
-        Flush(ResponseFlush),
+        Flush,
         Echo(ResponseEcho),
         CheckTx(ResponseCheckTx),
         ListSnapshots(ResponseListSnapshots),
@@ -125,28 +127,40 @@ pub mod shim {
 
         fn try_from(resp: Response) -> Result<Resp, Error> {
             match resp {
-                Response::InitChain(inner) => Ok(Resp::InitChain(inner)),
-                Response::Info(inner) => Ok(Resp::Info(inner)),
-                Response::Query(inner) => Ok(Resp::Query(inner)),
-                Response::Commit(inner) => Ok(Resp::Commit(inner)),
-                Response::Flush(inner) => Ok(Resp::Flush(inner)),
-                Response::Echo(inner) => Ok(Resp::Echo(inner)),
-                Response::CheckTx(inner) => Ok(Resp::CheckTx(inner)),
+                Response::InitChain(inner) => {
+                    Ok(Resp::InitChain(inner.try_into().unwrap()))
+                }
+                Response::Info(inner) => {
+                    Ok(Resp::Info(inner.try_into().unwrap()))
+                }
+                Response::Query(inner) => {
+                    Ok(Resp::Query(inner.try_into().unwrap()))
+                }
+                Response::Commit(inner) => {
+                    Ok(Resp::Commit(inner.try_into().unwrap()))
+                }
+                Response::Flush => Ok(Resp::Flush),
+                Response::Echo(inner) => {
+                    Ok(Resp::Echo(inner.try_into().unwrap()))
+                }
+                Response::CheckTx(inner) => {
+                    Ok(Resp::CheckTx(inner.try_into().unwrap()))
+                }
                 Response::ListSnapshots(inner) => {
-                    Ok(Resp::ListSnapshots(inner))
+                    Ok(Resp::ListSnapshots(inner.try_into().unwrap()))
                 }
                 Response::OfferSnapshot(inner) => {
-                    Ok(Resp::OfferSnapshot(inner))
+                    Ok(Resp::OfferSnapshot(inner.try_into().unwrap()))
                 }
                 Response::LoadSnapshotChunk(inner) => {
-                    Ok(Resp::LoadSnapshotChunk(inner))
+                    Ok(Resp::LoadSnapshotChunk(inner.try_into().unwrap()))
                 }
                 Response::ApplySnapshotChunk(inner) => {
-                    Ok(Resp::ApplySnapshotChunk(inner))
+                    Ok(Resp::ApplySnapshotChunk(inner.try_into().unwrap()))
                 }
-                Response::PrepareProposal(inner) => {
-                    Ok(Resp::PrepareProposal(inner.into()))
-                }
+                Response::PrepareProposal(inner) => Ok(Resp::PrepareProposal(
+                    ResponsePrepareProposal::from(inner).try_into().unwrap(),
+                )),
                 _ => Err(Error::ConvertResp(resp)),
             }
         }

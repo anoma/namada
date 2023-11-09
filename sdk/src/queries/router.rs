@@ -1002,6 +1002,7 @@ mod test_rpc {
 #[cfg(test)]
 mod test {
     use namada_core::ledger::storage_api;
+    use namada_core::tendermint::block;
     use namada_core::types::storage::Epoch;
     use namada_core::types::token;
     use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -1018,7 +1019,9 @@ mod test {
         // Test request with an invalid path
         let request = RequestQuery {
             path: "/invalid".to_owned(),
-            ..RequestQuery::default()
+            data: Default::default(),
+            height: block::Height::from(0_u32),
+            prove: Default::default(),
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,

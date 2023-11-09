@@ -65,6 +65,7 @@ use namada::types::{address, token};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
+use namada_sdk::tendermint::AppHash;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
@@ -73,12 +74,13 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint::v0_37::abci::{request, response};
+use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_proto::v0_37::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
+    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
 };
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
-use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
@@ -182,6 +184,12 @@ impl From<ErrorCodes> for u32 {
 impl From<ErrorCodes> for String {
     fn from(code: ErrorCodes) -> String {
         u32::from(code).to_string()
+    }
+}
+
+impl From<ErrorCodes> for crate::facade::tendermint::abci::Code {
+    fn from(value: ErrorCodes) -> Self {
+        Self::from(u32::from(value))
     }
 }
 
@@ -568,7 +576,10 @@ where
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&mut self) -> response::Info {
-        let mut response = response::Info::default();
+        let mut response = response::Info {
+            last_block_height: tendermint::block::Height::from(0_u32),
+            ..Default::default()
+        };
         let result = self.wl_storage.storage.get_state();
 
         match result {
@@ -578,7 +589,9 @@ where
                     root,
                     height
                 );
-                response.last_block_app_hash = root.0.to_vec().into();
+                response.last_block_app_hash =
+                    AppHash::try_from(root.0.to_vec())
+                        .expect("expected a valid app hash");
                 response.last_block_height =
                     height.try_into().expect("Invalid block height");
             }
@@ -800,7 +813,10 @@ where
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
-        let mut response = response::Commit::default();
+        let mut response = response::Commit {
+            retain_height: tendermint::block::Height::from(0_u32),
+            ..Default::default()
+        };
         // commit block's data from write log and store the in DB
         self.wl_storage.commit_block().unwrap_or_else(|e| {
             tracing::error!(
@@ -1306,7 +1322,7 @@ where
             }
         }
 
-        if response.code == u32::from(ErrorCodes::Ok) {
+        if response.code == ErrorCodes::Ok.into() {
             response.log = VALID_MSG.into();
         }
         response
@@ -1426,15 +1442,18 @@ where
         result.map_err(Error::TxApply)
     }
 
-    fn get_abci_validator_updates(
+    fn get_abci_validator_updates<F, V>(
         &self,
         is_genesis: bool,
-    ) -> storage_api::Result<
-        Vec<namada::tendermint_proto::v0_37::abci::ValidatorUpdate>,
-    > {
+        // Generic over the validator conversion from our type to tendermint's,
+        // because we're using domain types in InitChain, but FinalizeBlock is
+        // shimmed with a different old type. The joy...
+        mut validator_conv: F,
+    ) -> storage_api::Result<Vec<V>>
+    where
+        F: FnMut(common::PublicKey, i64) -> V,
+    {
         use namada::ledger::pos::namada_proof_of_stake;
-
-        use crate::facade::tendermint_proto::v0_37::crypto::PublicKey as TendermintPublicKey;
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
@@ -1471,11 +1490,7 @@ where
                         (consensus_key, power)
                     }
                 };
-                let pub_key = TendermintPublicKey {
-                    sum: Some(key_to_tendermint(&consensus_key).unwrap()),
-                };
-                let pub_key = Some(pub_key);
-                ValidatorUpdate { pub_key, power }
+                validator_conv(consensus_key, power)
             },
         )
     }
@@ -1513,10 +1528,10 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
+    use crate::facade::tendermint;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
-        Misbehavior, RequestInitChain, RequestPrepareProposal,
-        RequestProcessProposal,
+        Misbehavior, RequestPrepareProposal, RequestProcessProposal,
     };
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -1705,7 +1720,7 @@ mod test_utils {
         /// Forward a InitChain request and expect a success
         pub fn init_chain(
             &mut self,
-            req: RequestInitChain,
+            req: request::InitChain,
             num_validators: u64,
         ) {
             self.shell
@@ -1874,17 +1889,40 @@ mod test_utils {
                 _ = eth_oracle.take();
             }
         }
-        test.init_chain(
-            RequestInitChain {
-                time: Some(Timestamp {
-                    seconds: 0,
-                    nanos: 0,
-                }),
-                chain_id: ChainId::default().to_string(),
-                ..Default::default()
+        let req = request::InitChain {
+            time: Timestamp {
+                seconds: 0,
+                nanos: 0,
+            }
+            .try_into()
+            .unwrap(),
+            chain_id: ChainId::default().to_string(),
+            consensus_params: tendermint::consensus::params::Params {
+                block: tendermint::block::Size {
+                    max_bytes: 0,
+                    max_gas: 0,
+                    time_iota_ms: 0,
+                },
+                evidence: tendermint::evidence::Params {
+                    max_age_num_blocks: 0,
+                    max_age_duration: tendermint::evidence::Duration(
+                        core::time::Duration::MAX,
+                    ),
+                    max_bytes: 0,
+                },
+                validator: tendermint::consensus::params::ValidatorParams {
+                    pub_key_types: vec![],
+                },
+                version: None,
+                abci: tendermint::consensus::params::AbciParams {
+                    vote_extensions_enable_height: None,
+                },
             },
-            num_validators,
-        );
+            validators: vec![],
+            app_state_bytes: vec![].into(),
+            initial_height: 0_u32.into(),
+        };
+        test.init_chain(req, num_validators);
         test.wl_storage.commit_block().expect("Test failed");
         (test, receiver, eth_sender, control_receiver)
     }
@@ -2323,7 +2361,7 @@ mod shell_tests {
         for (tx_bytes, err_msg) in txs_to_validate {
             let rsp = shell.mempool_validate(&tx_bytes, Default::default());
             assert!(
-                rsp.code == u32::from(ErrorCodes::InvalidVoteExtension),
+                rsp.code == ErrorCodes::InvalidVoteExtension.into(),
                 "{err_msg}"
             );
         }
@@ -2358,7 +2396,7 @@ mod shell_tests {
             .sign(&protocol_key, shell.chain_id.clone())
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
-        assert_eq!(rsp.code, 0);
+        assert_eq!(rsp.code, 0.into());
     }
 
     /// Test if Ethereum events validation fails, if the underlying
@@ -2405,7 +2443,7 @@ mod shell_tests {
         }
         .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
-        assert_eq!(rsp.code, u32::from(ErrorCodes::InvalidVoteExtension));
+        assert_eq!(rsp.code, ErrorCodes::InvalidVoteExtension.into());
     }
 
     /// Mempool validation must reject unsigned wrappers
@@ -2436,12 +2474,12 @@ mod shell_tests {
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
         result = shell.mempool_validate(
             unsigned_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
     }
 
     /// Mempool validation must reject wrappers with an invalid signature
@@ -2483,12 +2521,12 @@ mod shell_tests {
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
         result = shell.mempool_validate(
             invalid_wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidSig));
+        assert_eq!(result.code, ErrorCodes::InvalidSig.into());
     }
 
     /// Mempool validation must reject non-wrapper txs
@@ -2503,7 +2541,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidTx),);
+        assert_eq!(result.code, ErrorCodes::InvalidTx.into());
         assert_eq!(
             result.log,
             "Mempool validation failed: Raw transactions cannot be accepted \
@@ -2557,7 +2595,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2571,7 +2609,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2598,7 +2636,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2612,7 +2650,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::RecheckTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::ReplayTx));
+        assert_eq!(result.code, ErrorCodes::ReplayTx.into());
         assert_eq!(
             result.log,
             format!(
@@ -2640,7 +2678,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::InvalidChainId));
+        assert_eq!(result.code, ErrorCodes::InvalidChainId.into());
         assert_eq!(
             result.log,
             format!(
@@ -2668,7 +2706,7 @@ mod shell_tests {
             tx.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::ExpiredTx));
+        assert_eq!(result.code, ErrorCodes::ExpiredTx.into());
     }
 
     /// Check that a tx requiring more gas than the block limit gets rejected
@@ -2705,7 +2743,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::AllocationError));
+        assert_eq!(result.code, ErrorCodes::AllocationError.into());
     }
 
     // Check that a tx requiring more gas than its limit gets rejected
@@ -2738,7 +2776,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::TxGasLimit));
+        assert_eq!(result.code, ErrorCodes::TxGasLimit.into());
     }
 
     // Check that a wrapper using a non-whitelisted token for fee payment is
@@ -2773,7 +2811,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(result.code, ErrorCodes::FeeError.into());
     }
 
     // Check that a wrapper setting a fee amount lower than the minimum required
@@ -2808,7 +2846,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(result.code, ErrorCodes::FeeError.into());
     }
 
     // Check that a wrapper transactions whose fees cannot be paid is rejected
@@ -2842,7 +2880,7 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(result.code, ErrorCodes::FeeError.into());
     }
 
     // Check that a fee overflow in the wrapper transaction is rejected
@@ -2876,6 +2914,6 @@ mod shell_tests {
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
-        assert_eq!(result.code, u32::from(ErrorCodes::FeeError));
+        assert_eq!(result.code, ErrorCodes::FeeError.into());
     }
 }

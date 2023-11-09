@@ -26,8 +26,8 @@ use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, TransferTx, ValidatorAccountTx,
 };
+use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint_proto::google::protobuf;
-use crate::facade::tower_abci::{request, response};
 use crate::wasm_loader;
 
 impl<D, H> Shell<D, H>
@@ -85,7 +85,7 @@ where
             self.wl_storage.storage.native_token = native_token;
         }
 
-        let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
+        let ts: protobuf::Timestamp = init.time.into();
         let initial_height = init
             .initial_height
             .try_into()
@@ -173,7 +173,13 @@ where
 
         // Set the initial validator set
         response.validators = self
-            .get_abci_validator_updates(true)
+            .get_abci_validator_updates(true, |pk, power| {
+                let pub_key: crate::facade::tendermint::PublicKey = pk.into();
+                let power =
+                    crate::facade::tendermint::vote::Power::try_from(power)
+                        .unwrap();
+                validator::Update { pub_key, power }
+            })
             .expect("Must be able to set genesis validator set");
         debug_assert!(!response.validators.is_empty());
         Ok(response)

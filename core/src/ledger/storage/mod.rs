@@ -621,7 +621,8 @@ where
         key: &Key,
         height: BlockHeight,
     ) -> Result<(Option<Vec<u8>>, u64)> {
-        if height >= self.get_last_block_height() {
+        // `0` means last committed height
+        if height == BlockHeight(0) || height >= self.get_last_block_height() {
             self.read(key)
         } else {
             match self.db.read_subspace_val_with_height(

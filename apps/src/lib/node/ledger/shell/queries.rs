@@ -26,36 +26,21 @@ where
             storage_read_past_height_limit: self.storage_read_past_height_limit,
         };
 
-        // Convert request to domain-type
-        let request = match namada::ledger::queries::RequestQuery::try_from_tm(
-            &self.wl_storage,
-            query,
-        ) {
-            Ok(request) => request,
-            Err(err) => {
-                return response::Query {
-                    code: 1,
-                    info: format!("Unexpected query: {}", err),
-                    ..Default::default()
-                };
-            }
-        };
-
         // Invoke the root RPC handler - returns borsh-encoded data on success
-        let result = if request.path == "/shell/dry_run_tx" {
-            dry_run_tx(ctx, &request)
+        let result = if query.path == "/shell/dry_run_tx" {
+            dry_run_tx(ctx, &query)
         } else {
-            namada::ledger::queries::handle_path(ctx, &request)
+            namada::ledger::queries::handle_path(ctx, &query)
         };
         match result {
             Ok(ResponseQuery { data, info, proof }) => response::Query {
                 value: data.into(),
                 info,
-                proof_ops: proof.map(Into::into),
+                proof: proof.map(Into::into),
                 ..Default::default()
             },
             Err(err) => response::Query {
-                code: 1,
+                code: 1.into(),
                 info: format!("RPC error: {}", err),
                 ..Default::default()
             },

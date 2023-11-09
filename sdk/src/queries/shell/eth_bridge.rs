@@ -333,7 +333,7 @@ where
         transfers: transfer_hashes,
         relayer,
         with_appendix,
-    }) = BorshDeserialize::try_from_slice(request.data.as_slice())
+    }) = BorshDeserialize::try_from_slice(&request.data)
     {
         // get the latest signed merkle root of the Ethereum bridge pool
         let (signed_root, height) = ctx

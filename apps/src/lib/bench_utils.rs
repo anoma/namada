@@ -181,7 +181,9 @@ impl Default for BenchShell {
                     }),
                     chain_id: ChainId::default().to_string(),
                     ..Default::default()
-                },
+                }
+                .try_into()
+                .unwrap(),
                 2,
             )
             .unwrap();
@@ -650,9 +652,9 @@ impl Client for BenchShell {
         let height = height.unwrap_or_default();
 
         let request = RequestQuery {
-            data,
+            data: data.into(),
             path,
-            height,
+            height: height.try_into().unwrap(),
             prove,
         };
 

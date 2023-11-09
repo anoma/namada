@@ -124,7 +124,7 @@ slip10_ed25519 = "0.1.3"
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint = "0.34.0"
+tendermint = {version = "0.34.0", features = ["secp256k1"]}
 tendermint-config = "0.34.0"
 tendermint-light-client = "0.34.0"
 tendermint-proto = "0.34.0"
@@ -140,7 +140,7 @@ tonic = "0.8.3"
 tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "9636f0f2000ebb7da1c51e85cce2b10b2fed4f1d"}
+tower-abci = "0.11.1"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"

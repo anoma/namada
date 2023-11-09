@@ -233,9 +233,9 @@ mod test {
             // Handle a path by invoking the `RPC.handle` directly with the
             // borrowed storage
             let request = RequestQuery {
-                data,
+                data: data.into(),
                 path,
-                height,
+                height: height.try_into().unwrap(),
                 prove,
             };
             let ctx = RequestCtx {

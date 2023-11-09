@@ -30,8 +30,9 @@ use self::shims::abcipp_shim::AbciService;
 use crate::cli::args;
 use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::{ethereum_bridge, TendermintMode};
+use crate::facade::tendermint::v0_37::abci::response;
 use crate::facade::tendermint_proto::v0_37::abci::CheckTxType;
-use crate::facade::tower_abci::{response, split, Server};
+use crate::facade::tower_abci::{split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::ethereum_oracle as oracle;
 use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
@@ -96,14 +97,18 @@ impl Shell {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
-                    init,
+                    init.try_into().unwrap(),
                     #[cfg(any(test, feature = "testing"))]
                     1,
                 )
-                .map(Response::InitChain)
+                .map(|resp| Response::InitChain(resp.try_into().unwrap()))
             }
-            Request::Info(_) => Ok(Response::Info(self.last_state())),
-            Request::Query(query) => Ok(Response::Query(self.query(query))),
+            Request::Info(_) => {
+                Ok(Response::Info(self.last_state().try_into().unwrap()))
+            }
+            Request::Query(query) => Ok(Response::Query(
+                self.query(query.try_into().unwrap()).into(),
+            )),
             Request::PrepareProposal(block) => {
                 tracing::debug!("Request PrepareProposal");
                 Ok(Response::PrepareProposal(self.prepare_proposal(block)))
@@ -123,14 +128,17 @@ impl Shell {
                 self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
-            Request::Commit(_) => {
+            Request::Commit => {
                 tracing::debug!("Request Commit");
-                Ok(Response::Commit(self.commit()))
+                Ok(Response::Commit(self.commit().into()))
             }
-            Request::Flush(_) => Ok(Response::Flush(Default::default())),
-            Request::Echo(msg) => Ok(Response::Echo(response::Echo {
-                message: msg.message,
-            })),
+            Request::Flush => Ok(Response::Flush),
+            Request::Echo(msg) => Ok(Response::Echo(
+                response::Echo {
+                    message: msg.message,
+                }
+                .into(),
+            )),
             Request::CheckTx(tx) => {
                 let r#type = match CheckTxType::try_from(tx.r#type)
                     .expect("received unexpected CheckTxType from ABCI")
@@ -138,9 +146,11 @@ impl Shell {
                     CheckTxType::New => MempoolTxType::NewTransaction,
                     CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
                 };
-                Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
+                Ok(Response::CheckTx(
+                    self.mempool_validate(&tx.tx, r#type).into(),
+                ))
             }
-            Request::ListSnapshots(_) => {
+            Request::ListSnapshots => {
                 Ok(Response::ListSnapshots(Default::default()))
             }
             Request::OfferSnapshot(_) => {
@@ -542,7 +552,7 @@ async fn run_abci(
         .unwrap();
     tokio::select! {
         // Run the server with the ABCI service
-        status = server.listen(proxy_app_address) => {
+        status = server.listen_tcp(proxy_app_address) => {
             status.map_err(|err| Error::TowerServer(err.to_string()))
         },
         resp_sender = abort_recv => {

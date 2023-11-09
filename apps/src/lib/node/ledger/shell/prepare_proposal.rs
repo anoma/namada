@@ -420,7 +420,7 @@ mod test_prepare_proposal {
             )
             .to_bytes();
         let rsp = shell.mempool_validate(&tx, Default::default());
-        assert!(rsp.code != 0, "{}", rsp.log);
+        assert!(rsp.code != 0.into(), "{}", rsp.log);
     }
 
     const GAS_LIMIT_MULTIPLIER: u64 = 300_000;

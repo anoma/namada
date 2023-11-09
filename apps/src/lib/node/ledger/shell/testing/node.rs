@@ -582,9 +582,9 @@ impl<'a> Client for &'a MockNode {
         // Handle a path by invoking the `RPC.handle` directly with the
         // borrowed storage
         let request = RequestQuery {
-            data,
+            data: data.into(),
             path,
-            height,
+            height: height.try_into().unwrap(),
             prove,
         };
         let borrowed = self.shell.lock().unwrap();

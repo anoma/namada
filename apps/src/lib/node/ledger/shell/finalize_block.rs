@@ -543,7 +543,17 @@ where
     fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
         response.validator_updates = self
-            .get_abci_validator_updates(false)
+            .get_abci_validator_updates(false, |pk, power| {
+                let pub_key =
+                    crate::facade::tendermint_proto::v0_37::crypto::PublicKey {
+                        sum: Some(key_to_tendermint(&pk).unwrap()),
+                    };
+                let pub_key = Some(pub_key);
+                namada::tendermint_proto::v0_37::abci::ValidatorUpdate {
+                    pub_key,
+                    power,
+                }
+            })
             .expect("Must be able to update validator set");
     }
 
