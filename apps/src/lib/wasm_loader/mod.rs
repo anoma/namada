@@ -34,7 +34,7 @@ pub enum Error {
 pub struct Checksums(pub HashMap<String, String>);
 
 /// Github URL prefix of released Namada network configs
-pub const ENV_VAR_WASM_SERVER: &str = "NAMADA_NETWORK_CONFIGS_SERVER";
+pub const ENV_VAR_WASM_SERVER: &str = "NAMADA_NETWORK_WASM_SERVER";
 const DEFAULT_WASM_SERVER: &str = "https://artifacts.heliax.click/namada-wasm";
 
 impl Checksums {
@@ -103,9 +103,10 @@ impl Checksums {
     }
 }
 
-fn wasm_url_prefix(wasm_name: &str) -> String {
-    std::env::var(ENV_VAR_WASM_SERVER)
-        .unwrap_or_else(|_| format!("{DEFAULT_WASM_SERVER}/{wasm_name}"))
+fn wasm_url(wasm_name: &str) -> String {
+    let prefix_url = std::env::var(ENV_VAR_WASM_SERVER)
+        .unwrap_or_else(|_| DEFAULT_WASM_SERVER.to_string());
+    format!("{}/{}", prefix_url, wasm_name)
 }
 
 /// Download all the pre-built wasms, or if they're already downloaded, verify
@@ -142,7 +143,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                         &full_name
                     );
 
-                    let url = wasm_url_prefix(&full_name);
+                    let url = wasm_url(&full_name);
                     match download_wasm(url).await {
                         Ok(bytes) => {
                             if let Err(e) =
@@ -164,7 +165,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the doesn't file exist, download it.
                 Err(err) => match err.kind() {
                     std::io::ErrorKind::NotFound => {
-                        let url = wasm_url_prefix(&full_name);
+                        let url = wasm_url(&full_name);
                         match download_wasm(url).await {
                             Ok(bytes) => {
                                 if let Err(e) =
