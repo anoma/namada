@@ -800,17 +800,7 @@ where
         let pgf_pd_rate =
             pgf_parameters.pgf_inflation_rate / Dec::from(epochs_per_year);
         let pgf_inflation = Dec::from(total_tokens) * pgf_pd_rate;
-
-        let stewards = pgf::get_stewards(&self.wl_storage)?;
-        let pgf_stewards_pd_rate =
-            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
-        let pgf_steward_inflation =
-            Dec::from(total_tokens) * pgf_stewards_pd_rate;
-        let total_pgf_stewards_inflation =
-            pgf_steward_inflation * Dec::from(stewards.len());
-
-        let pgf_inflation_amount =
-            token::Amount::from(pgf_inflation + total_pgf_stewards_inflation);
+        let pgf_inflation_amount = token::Amount::from(pgf_inflation);
 
         credit_tokens(
             &mut self.wl_storage,
@@ -854,6 +844,12 @@ where
         }
 
         // Pgf steward inflation
+        let stewards = pgf::get_stewards(&self.wl_storage)?;
+        let pgf_stewards_pd_rate =
+            pgf_parameters.stewards_inflation_rate / Dec::from(epochs_per_year);
+        let pgf_steward_inflation =
+            Dec::from(total_tokens) * pgf_stewards_pd_rate;
+
         for steward in stewards {
             for (address, percentage) in steward.reward_distribution {
                 let pgf_steward_reward = pgf_steward_inflation
