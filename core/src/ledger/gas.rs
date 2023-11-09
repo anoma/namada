@@ -38,6 +38,8 @@ pub const VERIFY_TX_SIG_GAS_COST: u64 = 10;
 pub const VM_MEMORY_ACCESS_GAS_PER_BYTE: u64 = 1;
 /// The cost for requesting one more page in wasm (64KB)
 pub const WASM_MEMORY_PAGE_GAS_COST: u32 = 100;
+/// The cost to execute a masp tx verification
+pub const MASP_VERIFY_SHIELDED_TX: u64 = 62_381_957;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
