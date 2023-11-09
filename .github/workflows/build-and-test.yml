@@ -43,7 +43,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
 
     steps:
       - name: Checkout repo
@@ -102,7 +102,7 @@ jobs:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
 
     steps:
       - name: Checkout repo
@@ -165,7 +165,7 @@ jobs:
         os: [ubuntu-20.04]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
 
     steps:
       - name: Download wasm artifacts
@@ -188,14 +188,14 @@ jobs:
   unit-and-integration-tests:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 50
+    timeout-minutes: 30
     needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
         make:
           - name: ABCI
 
@@ -284,14 +284,14 @@ jobs:
   run-benchmarks:
     runs-on: 
       group: gians-runners
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: [build-wasm]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
         make:
           - name: ABCI
 
@@ -375,7 +375,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-20.04]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
         make:
           - name: ABCI Release build
 
@@ -475,7 +475,7 @@ jobs:
       matrix:
         os: [ubuntu-20.04]
         nightly_version: [nightly-2023-06-01]
-        mold_version: [2.1.0]
+        mold_version: [2.3.2]
         comet_bft: [0.37.2]
         hermes: [1.6.0-namada-beta1]
         make:
