@@ -22,20 +22,23 @@ use namada::ibc::core::ics24_host::identifier::{
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
 use namada::ledger::native_vp::ibc::Ibc;
+use namada::ledger::native_vp::masp::MaspVp;
 use namada::ledger::native_vp::multitoken::MultitokenVp;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::ledger::storage_api::StorageRead;
 use namada::proof_of_stake;
 use namada::proto::{Code, Section};
 use namada::types::address::InternalAddress;
+use namada::types::masp::{TransferSource, TransferTarget};
 use namada::types::storage::{Epoch, TxIndex};
 use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, generate_ibc_transfer_tx, generate_ibc_tx,
-    generate_tx, BenchShell, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM,
-    TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
+    generate_tx, BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS,
+    ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS, TX_IBC_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_TRANSFER_WASM, TX_VOTE_PROPOSAL_WASM,
 };
 use namada_apps::wallet::defaults;
 
@@ -438,11 +441,104 @@ fn vp_multitoken(c: &mut Criterion) {
     }
 }
 
+fn masp(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vp_masp");
+
+    let amount = Amount::native_whole(500);
+
+    for bench_name in ["shielding", "unshielding", "shielded"] {
+        group.bench_function(bench_name, |b| {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+
+            let albert_spending_key = shielded_ctx
+                .wallet
+                .find_spending_key(ALBERT_SPENDING_KEY, None)
+                .unwrap()
+                .to_owned();
+            let albert_payment_addr = shielded_ctx
+                .wallet
+                .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+                .unwrap()
+                .to_owned();
+            let bertha_payment_addr = shielded_ctx
+                .wallet
+                .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
+                .unwrap()
+                .to_owned();
+
+            // Shield some tokens for Albert
+            let shield_tx = shielded_ctx.generate_masp_tx(
+                amount,
+                TransferSource::Address(defaults::albert_address()),
+                TransferTarget::PaymentAddress(albert_payment_addr),
+            );
+            shielded_ctx.shell.execute_tx(&shield_tx);
+            shielded_ctx.shell.wl_storage.commit_tx();
+            shielded_ctx.shell.commit();
+
+            let signed_tx = match bench_name {
+                "shielding" => shielded_ctx.generate_masp_tx(
+                    amount,
+                    TransferSource::Address(defaults::albert_address()),
+                    TransferTarget::PaymentAddress(albert_payment_addr),
+                ),
+                "unshielding" => shielded_ctx.generate_masp_tx(
+                    amount,
+                    TransferSource::ExtendedSpendingKey(albert_spending_key),
+                    TransferTarget::Address(defaults::albert_address()),
+                ),
+                "shielded" => shielded_ctx.generate_masp_tx(
+                    amount,
+                    TransferSource::ExtendedSpendingKey(albert_spending_key),
+                    TransferTarget::PaymentAddress(bertha_payment_addr),
+                ),
+                _ => panic!("Unexpected bench test"),
+            };
+            shielded_ctx.shell.execute_tx(&signed_tx);
+            let (verifiers, keys_changed) = shielded_ctx
+                .shell
+                .wl_storage
+                .write_log
+                .verifiers_and_changed_keys(&BTreeSet::default());
+
+            let masp = MaspVp {
+                ctx: Ctx::new(
+                    &Address::Internal(InternalAddress::Masp),
+                    &shielded_ctx.shell.wl_storage.storage,
+                    &shielded_ctx.shell.wl_storage.write_log,
+                    &signed_tx,
+                    &TxIndex(0),
+                    VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                    ),
+                    &keys_changed,
+                    &verifiers,
+                    shielded_ctx.shell.vp_wasm_cache.clone(),
+                ),
+            };
+
+            b.iter(|| {
+                assert!(
+                    masp.validate_tx(
+                        &signed_tx,
+                        masp.ctx.keys_changed,
+                        masp.ctx.verifiers,
+                    )
+                    .unwrap()
+                );
+            })
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     native_vps,
     governance,
     // slash_fund,
     ibc,
-    vp_multitoken
+    vp_multitoken,
+    masp
 );
 criterion_main!(native_vps);
