@@ -862,6 +862,7 @@ impl<'a> Display for LedgerProposalVote<'a> {
             },
 
             StorageProposalVote::Nay => write!(f, "nay"),
+            StorageProposalVote::Abstain => write!(f, "abstain"),
         }
     }
 }
