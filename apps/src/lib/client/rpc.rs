@@ -1553,6 +1553,14 @@ pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
     )
 }
 
+pub async fn query_consensus_keys<C: namada::ledger::queries::Client + Sync>(
+    client: &C,
+) -> BTreeSet<common::PublicKey> {
+    unwrap_client_response::<C, BTreeSet<common::PublicKey>>(
+        RPC.vp().pos().consensus_key_set(client).await,
+    )
+}
+
 pub async fn query_pgf_stewards<C: namada::ledger::queries::Client + Sync>(
     client: &C,
 ) -> Vec<StewardDetail> {

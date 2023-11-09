@@ -48,12 +48,12 @@ use crate::masp::make_asset_type;
 use crate::proto::{MaspBuilder, Section, Tx};
 use crate::rpc::{query_wasm_code_hash, validate_amount};
 use crate::tx::{
-    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_METADATA_WASM,
-    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM,
-    TX_REACTIVATE_VALIDATOR_WASM, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_BOND_WASM, TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
+    TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL, TX_INIT_VALIDATOR_WASM, TX_REACTIVATE_VALIDATOR_WASM,
+    TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -985,6 +985,8 @@ pub async fn to_ledger_vector<'a>(
     let withdraw_hash = query_wasm_code_hash(context, TX_WITHDRAW_WASM).await?;
     let change_commission_hash =
         query_wasm_code_hash(context, TX_CHANGE_COMMISSION_WASM).await?;
+    let change_consensus_key_hash =
+        query_wasm_code_hash(context, TX_CHANGE_CONSENSUS_KEY_WASM).await?;
     let change_metadata_hash =
         query_wasm_code_hash(context, TX_CHANGE_METADATA_WASM).await?;
     let user_hash = query_wasm_code_hash(context, VP_USER_WASM).await?;
@@ -1602,6 +1604,33 @@ pub async fn to_ledger_vector<'a>(
 
         tv.output.extend(other_items.clone());
         tv.output_expert.extend(other_items);
+    } else if code_hash == change_consensus_key_hash {
+        let consensus_key_change = pos::ConsensusKeyChange::try_from_slice(
+            &tx.data()
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+        )
+        .map_err(|err| {
+            Error::from(EncodingError::Conversion(err.to_string()))
+        })?;
+
+        tv.name = "Change_Consensus_Key_0".to_string();
+
+        tv.output.extend(vec![
+            format!("Type : Change consensus key"),
+            format!(
+                "New consensus key : {}",
+                consensus_key_change.consensus_key
+            ),
+            format!("Validator : {}", consensus_key_change.validator),
+        ]);
+
+        tv.output_expert.extend(vec![
+            format!(
+                "New consensus key : {}",
+                consensus_key_change.consensus_key
+            ),
+            format!("Validator : {}", consensus_key_change.validator),
+        ]);
     } else if code_hash == unjail_validator_hash {
         let address = Address::try_from_slice(
             &tx.data()

@@ -233,6 +233,7 @@ pub mod cmds {
                 .subcommand(Redelegate::def().display_order(2))
                 .subcommand(ClaimRewards::def().display_order(2))
                 .subcommand(TxCommissionRateChange::def().display_order(2))
+                .subcommand(TxChangeConsensusKey::def().display_order(2))
                 .subcommand(TxMetadataChange::def().display_order(2))
                 // Ethereum bridge transactions
                 .subcommand(AddToEthBridgePool::def().display_order(3))
@@ -294,6 +295,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, TxResignSteward);
             let tx_commission_rate_change =
                 Self::parse_with_ctx(matches, TxCommissionRateChange);
+            let tx_change_consensus_key =
+                Self::parse_with_ctx(matches, TxChangeConsensusKey);
             let tx_change_metadata =
                 Self::parse_with_ctx(matches, TxMetadataChange);
             let bond = Self::parse_with_ctx(matches, Bond);
@@ -345,6 +348,7 @@ pub mod cmds {
                 .or(tx_vote_proposal)
                 .or(tx_init_validator)
                 .or(tx_commission_rate_change)
+                .or(tx_change_consensus_key)
                 .or(tx_change_metadata)
                 .or(tx_unjail_validator)
                 .or(tx_deactivate_validator)
@@ -424,6 +428,7 @@ pub mod cmds {
         TxInitAccount(TxInitAccount),
         TxInitValidator(TxInitValidator),
         TxCommissionRateChange(TxCommissionRateChange),
+        TxChangeConsensusKey(TxChangeConsensusKey),
         TxMetadataChange(TxMetadataChange),
         TxUnjailValidator(TxUnjailValidator),
         TxDeactivateValidator(TxDeactivateValidator),
@@ -2024,6 +2029,30 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct TxChangeConsensusKey(
+        pub args::ConsensusKeyChange<args::CliTypes>,
+    );
+
+    impl SubCmd for TxChangeConsensusKey {
+        const CMD: &'static str = "change-consensus-key";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxChangeConsensusKey(args::ConsensusKeyChange::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Change consensus key.")
+                .add_args::<args::ConsensusKeyChange<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct TxVoteProposal(pub args::VoteProposal<args::CliTypes>);
 
     impl SubCmd for TxVoteProposal {
@@ -2816,6 +2845,8 @@ pub mod args {
     pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
     pub const TX_CHANGE_COMMISSION_WASM: &str =
         "tx_change_validator_commission.wasm";
+    pub const TX_CHANGE_CONSENSUS_KEY_WASM: &str =
+        "tx_change_consensus_key.wasm";
     pub const TX_CHANGE_METADATA_WASM: &str =
         "tx_change_validator_metadata.wasm";
     pub const TX_DEACTIVATE_VALIDATOR_WASM: &str =
@@ -5151,6 +5182,47 @@ pub mod args {
                         .def()
                         .help("The desired new commission rate."),
                 )
+        }
+    }
+
+    impl CliToSdk<ConsensusKeyChange<SdkTypes>> for ConsensusKeyChange<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> ConsensusKeyChange<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            ConsensusKeyChange::<SdkTypes> {
+                tx,
+                validator: chain_ctx.get(&self.validator),
+                consensus_key: self
+                    .consensus_key
+                    .map(|x| chain_ctx.get_cached(&x)),
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for ConsensusKeyChange<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let validator = VALIDATOR.parse(matches);
+            let consensus_key = VALIDATOR_CONSENSUS_KEY.parse(matches);
+            let tx_code_path = PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM);
+            Self {
+                tx,
+                validator,
+                consensus_key,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(VALIDATOR.def().help(
+                    "The validator's address whose consensus key to change.",
+                ))
+                .arg(VALIDATOR_CONSENSUS_KEY.def().help(
+                    "The desired new consensus key. A new one will be \
+                     generated if none given. Note this key must be ed25519.",
+                ))
         }
     }
 

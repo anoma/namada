@@ -39,15 +39,16 @@ use namada::types::transaction::governance::{
     InitProposalData, VoteProposalData,
 };
 use namada::types::transaction::pos::{
-    Bond, CommissionChange, Redelegation, Withdraw,
+    Bond, CommissionChange, ConsensusKeyChange, Redelegation, Withdraw,
 };
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
-    TX_CHANGE_VALIDATOR_COMMISSION_WASM, TX_CHANGE_VALIDATOR_METADATA_WASM,
-    TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
-    TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM,
-    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
+    TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_VALIDATOR_COMMISSION_WASM,
+    TX_CHANGE_VALIDATOR_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
+    TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK_WASM, TX_UNBOND_WASM,
     TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM,
     VP_VALIDATOR_WASM,
@@ -675,6 +676,35 @@ fn change_validator_commission(c: &mut Criterion) {
     });
 }
 
+fn change_consensus_key(c: &mut Criterion) {
+    let mut csprng = rand::rngs::OsRng {};
+    let consensus_key: common::PublicKey =
+        secp256k1::SigScheme::generate(&mut csprng)
+            .try_to_sk::<common::SecretKey>()
+            .unwrap()
+            .to_public();
+
+    let shell = BenchShell::default();
+    let signed_tx = shell.generate_tx(
+        TX_CHANGE_CONSENSUS_KEY_WASM,
+        ConsensusKeyChange {
+            validator: defaults::validator_address(),
+            consensus_key,
+        },
+        None,
+        None,
+        Some(&defaults::validator_keypair()),
+    );
+
+    c.bench_function("change_consensus_key", |b| {
+        b.iter_batched_ref(
+            BenchShell::default,
+            |shell| shell.execute_tx(&signed_tx),
+            criterion::BatchSize::LargeInput,
+        )
+    });
+}
+
 fn change_validator_metadata(c: &mut Criterion) {
     // Choose just one piece of data arbitrarily to change
     let metadata_change = MetaDataChange {
@@ -1061,6 +1091,7 @@ criterion_group!(
     deactivate_validator,
     reactivate_validator,
     change_validator_metadata,
-    claim_rewards
+    claim_rewards,
+    change_consensus_key
 );
 criterion_main!(whitelisted_txs);

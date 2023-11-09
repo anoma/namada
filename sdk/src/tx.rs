@@ -107,6 +107,8 @@ pub const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 /// Change commission WASM path
 pub const TX_CHANGE_COMMISSION_WASM: &str =
     "tx_change_validator_commission.wasm";
+/// Change consensus key WASM path
+pub const TX_CHANGE_CONSENSUS_KEY_WASM: &str = "tx_change_consensus_key.wasm";
 /// Change validator metadata WASM path
 pub const TX_CHANGE_METADATA_WASM: &str = "tx_change_validator_metadata.wasm";
 /// Resign steward WASM path

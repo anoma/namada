@@ -2,6 +2,8 @@
 pub mod tx_bond;
 #[cfg(feature = "tx_bridge_pool")]
 pub mod tx_bridge_pool;
+#[cfg(feature = "tx_change_consensus_key")]
+pub mod tx_change_consensus_key;
 #[cfg(feature = "tx_change_validator_commission")]
 pub mod tx_change_validator_commission;
 #[cfg(feature = "tx_change_validator_metadata")]

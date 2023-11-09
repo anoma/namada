@@ -25,7 +25,7 @@ use namada_core::types::address::{Address, EstablishedAddressGen};
 use namada_core::types::dec::Dec;
 use namada_core::types::key::common::{PublicKey, SecretKey};
 use namada_core::types::key::testing::{
-    arb_common_keypair, common_sk_from_simple_seed,
+    arb_common_keypair, common_sk_from_simple_seed, gen_keypair,
 };
 use namada_core::types::key::RefTo;
 use namada_core::types::storage::{BlockHeight, Epoch, Key};
@@ -51,7 +51,7 @@ use crate::types::{
 };
 use crate::{
     apply_list_slashes, become_validator, below_capacity_validator_set_handle,
-    bond_handle, bond_tokens, bonds_and_unbonds,
+    bond_handle, bond_tokens, bonds_and_unbonds, change_consensus_key,
     compute_amount_after_slashing_unbond,
     compute_amount_after_slashing_withdraw, compute_bond_at_epoch,
     compute_modified_redelegation, compute_new_redelegated_unbonds,
@@ -59,8 +59,9 @@ use crate::{
     consensus_validator_set_handle, copy_validator_sets_and_positions,
     delegator_redelegated_bonds_handle, delegator_redelegated_unbonds_handle,
     find_bonds_to_remove, find_validator_by_raw_hash,
-    fold_and_slash_redelegated_bonds, get_num_consensus_validators,
-    insert_validator_into_validator_set, is_validator, process_slashes,
+    fold_and_slash_redelegated_bonds, get_consensus_key_set,
+    get_num_consensus_validators, insert_validator_into_validator_set,
+    is_validator, process_slashes,
     read_below_capacity_validator_set_addresses_with_stake,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
@@ -289,6 +290,22 @@ proptest! {
 
     ) {
         test_update_rewards_products_aux(genesis_validators)
+    }
+}
+
+proptest! {
+    // Generate arb valid input for `test_consensus_key_change`
+    #![proptest_config(Config {
+        cases: 1,
+        .. Config::default()
+    })]
+    #[test]
+    fn test_consensus_key_change(
+
+    genesis_validators in arb_genesis_validators(1..2, None),
+
+    ) {
+        test_consensus_key_change_aux(genesis_validators)
     }
 }
 
@@ -6559,4 +6576,135 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     let diff = val_stake - self_bond_amount - del_bond_amount;
     assert!(diff <= 2.into());
+}
+
+fn test_consensus_key_change_aux(validators: Vec<GenesisValidator>) {
+    assert_eq!(validators.len(), 1);
+
+    let params = OwnedPosParams {
+        unbonding_len: 4,
+        ..Default::default()
+    };
+    let validator = validators[0].address.clone();
+
+    println!("\nTest inputs: {params:?}, genesis validators: {validators:#?}");
+    let mut storage = TestWlStorage::default();
+
+    // Genesis
+    let mut current_epoch = storage.storage.block.epoch;
+    let params = test_init_genesis(
+        &mut storage,
+        params,
+        validators.into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    // Check that there is one consensus key in the network
+    let consensus_keys = get_consensus_key_set(&storage).unwrap();
+    assert_eq!(consensus_keys.len(), 1);
+    let ck = consensus_keys.first().cloned().unwrap();
+    let og_ck = validator_consensus_key_handle(&validator)
+        .get(&storage, current_epoch, &params)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ck, og_ck);
+
+    // Attempt to change to a new secp256k1 consensus key (disallowed)
+    let secp_ck = gen_keypair::<key::secp256k1::SigScheme>();
+    let secp_ck = key::common::SecretKey::Secp256k1(secp_ck).ref_to();
+    let res =
+        change_consensus_key(&mut storage, &validator, &secp_ck, current_epoch);
+    assert!(res.is_err());
+
+    // Change consensus keys
+    let ck_2 = common_sk_from_simple_seed(1).ref_to();
+    change_consensus_key(&mut storage, &validator, &ck_2, current_epoch)
+        .unwrap();
+
+    // Check that there is a new consensus key
+    let consensus_keys = get_consensus_key_set(&storage).unwrap();
+    assert_eq!(consensus_keys.len(), 2);
+
+    for epoch in current_epoch.iter_range(params.pipeline_len) {
+        let ck = validator_consensus_key_handle(&validator)
+            .get(&storage, epoch, &params)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ck, og_ck);
+    }
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let ck = validator_consensus_key_handle(&validator)
+        .get(&storage, pipeline_epoch, &params)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ck, ck_2);
+
+    // Advance to the pipeline epoch
+    loop {
+        current_epoch = advance_epoch(&mut storage, &params);
+        if current_epoch == pipeline_epoch {
+            break;
+        }
+    }
+
+    // Check the consensus keys again
+    let consensus_keys = get_consensus_key_set(&storage).unwrap();
+    assert_eq!(consensus_keys.len(), 2);
+
+    for epoch in current_epoch.iter_range(params.pipeline_len + 1) {
+        let ck = validator_consensus_key_handle(&validator)
+            .get(&storage, epoch, &params)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ck, ck_2);
+    }
+
+    // Now change the consensus key again and bond in the same epoch
+    let ck_3 = common_sk_from_simple_seed(3).ref_to();
+    change_consensus_key(&mut storage, &validator, &ck_3, current_epoch)
+        .unwrap();
+
+    let staking_token = storage.storage.native_token.clone();
+    let amount_del = token::Amount::native_whole(5);
+    credit_tokens(&mut storage, &staking_token, &validator, amount_del)
+        .unwrap();
+    bond_tokens(
+        &mut storage,
+        None,
+        &validator,
+        token::Amount::native_whole(1),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Check consensus keys again
+    let consensus_keys = get_consensus_key_set(&storage).unwrap();
+    assert_eq!(consensus_keys.len(), 3);
+
+    for epoch in current_epoch.iter_range(params.pipeline_len) {
+        let ck = validator_consensus_key_handle(&validator)
+            .get(&storage, epoch, &params)
+            .unwrap()
+            .unwrap();
+        assert_eq!(ck, ck_2);
+    }
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let ck = validator_consensus_key_handle(&validator)
+        .get(&storage, pipeline_epoch, &params)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ck, ck_3);
+
+    // Advance to the pipeline epoch to ensure that the validator set updates to
+    // tendermint will work
+    loop {
+        current_epoch = advance_epoch(&mut storage, &params);
+        if current_epoch == pipeline_epoch {
+            break;
+        }
+    }
+    assert_eq!(current_epoch.0, 2 * params.pipeline_len);
 }
