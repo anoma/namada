@@ -1007,6 +1007,8 @@ fn shielded_transfer(
         BTC,
         "--amount",
         &amount,
+        "--gas-limit",
+        "30000",
         "--port-id",
         port_id_b.as_ref(),
         "--channel-id",
