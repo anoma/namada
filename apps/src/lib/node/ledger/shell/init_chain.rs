@@ -348,11 +348,6 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) {
-        let vp_code = self.lookup_vp("vp_masp", genesis, vp_cache);
-        let code_hash = CodeHash::sha256(&vp_code);
-        self.wl_storage
-            .write_bytes(&Key::validity_predicate(&address::MASP), code_hash)
-            .unwrap();
         if let Some(txs) = genesis.transactions.established_account.as_ref() {
             for FinalizedEstablishedAccountTx {
                 address,
