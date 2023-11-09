@@ -277,17 +277,14 @@ pub async fn aux_signing_data<'a>(
             Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
             1u8,
         ),
-        Some(owner @ Address::Internal(internal)) => {
-            match internal {
-                // TODO use sentinel?
-                InternalAddress::Masp => (None, 0u8),
-                _ => {
-                    return Err(Error::from(TxError::InvalidAccount(
-                        owner.encode(),
-                    )));
-                }
+        Some(owner @ Address::Internal(internal)) => match internal {
+            InternalAddress::Masp => (None, 0u8),
+            _ => {
+                return Err(Error::from(TxError::InvalidAccount(
+                    owner.encode(),
+                )));
             }
-        }
+        },
         None => (None, 0u8),
     };
 
