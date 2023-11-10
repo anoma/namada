@@ -3,7 +3,6 @@
 pub mod ics23_specs;
 mod masp_conversions;
 pub mod merkle_tree;
-#[cfg(any(test, feature = "testing"))]
 pub mod mockdb;
 pub mod traits;
 pub mod types;
