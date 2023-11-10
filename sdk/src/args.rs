@@ -723,7 +723,7 @@ impl TxInitAccount {
     }
 }
 
-/// Transaction to initialize a new account
+/// Transaction to initialize a new validator account
 #[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
@@ -752,6 +752,18 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxInitValidator <C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxInitValidator {
+            tx: func(self.tx),
+            ..self
+        }
+    }
 }
 
 /// Transaction to update a VP arguments
