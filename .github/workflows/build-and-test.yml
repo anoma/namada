@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         wasm_cache_version: ["v2"]
         mold_version: [2.3.2]
 
@@ -99,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
@@ -162,7 +162,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         wasm_cache_version: ["v2"]
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
         make:
@@ -212,6 +212,8 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
@@ -289,7 +291,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
         make:
@@ -308,6 +310,8 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
@@ -374,7 +378,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         mold_version: [2.3.2]
         make:
           - name: ABCI Release build
@@ -392,6 +396,8 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
@@ -473,7 +479,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         nightly_version: [nightly-2023-06-01]
         mold_version: [2.3.2]
         comet_bft: [0.37.2]
@@ -497,6 +503,8 @@ jobs:
         # See comment in build-and-test.yml
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
