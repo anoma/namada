@@ -614,8 +614,8 @@ where
         }
     }
 
-    /// Returns a value from the specified subspace at the given height and the
-    /// gas cost
+    /// Returns a value from the specified subspace at the given height or the
+    /// last committed height when 0 and the gas cost.
     pub fn read_with_height(
         &self,
         key: &Key,
