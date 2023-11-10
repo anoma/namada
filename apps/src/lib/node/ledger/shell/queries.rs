@@ -70,11 +70,11 @@ mod test_queries {
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
+    use namada::tendermint::abci::types::VoteInfo;
     use namada::types::storage::Epoch;
     use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
 
     use super::*;
-    use crate::facade::tendermint_proto::v0_37::abci::VoteInfo;
     use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::test_utils::get_pkh_from_address;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -149,18 +149,14 @@ mod test_queries {
                         Epoch::default(),
                     );
                     let votes = vec![VoteInfo {
-                        validator: Some(
-                            namada::tendermint_proto::v0_37::abci::Validator {
-                                address: pkh1.clone().into(),
-                                power: u128::try_from(val1.bonded_stake)
-                                    .expect("Test failed")
-                                    as i64,
-                            },
-                        ),
-                        signed_last_block: true,
+                        validator: namada::tendermint::abci::types::Validator {
+                            address: pkh1.clone().into(),
+                            power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                        },
+                        sig_info: namada::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
                     }];
                     let req = FinalizeBlock {
-                        proposer_address: pkh1,
+                        proposer_address: pkh1.to_vec(),
                         votes,
                         ..Default::default()
                     };

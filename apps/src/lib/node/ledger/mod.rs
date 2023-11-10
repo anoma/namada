@@ -17,6 +17,7 @@ use futures::future::TryFutureExt;
 use namada::core::ledger::governance::storage::keys as governance_storage;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::types::storage::Key;
+use namada_sdk::tendermint::abci::request::CheckTxKind;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
@@ -31,7 +32,6 @@ use crate::cli::args;
 use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
 use crate::config::{ethereum_bridge, TendermintMode};
 use crate::facade::tendermint::v0_37::abci::response;
-use crate::facade::tendermint_proto::v0_37::abci::CheckTxType;
 use crate::facade::tower_abci::{split, Server};
 use crate::node::ledger::broadcaster::Broadcaster;
 use crate::node::ledger::ethereum_oracle as oracle;
@@ -97,28 +97,30 @@ impl Shell {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
-                    init.try_into().unwrap(),
+                    init,
                     #[cfg(any(test, feature = "testing"))]
                     1,
                 )
-                .map(|resp| Response::InitChain(resp.try_into().unwrap()))
+                .map(Response::InitChain)
             }
-            Request::Info(_) => {
-                Ok(Response::Info(self.last_state().try_into().unwrap()))
-            }
-            Request::Query(query) => Ok(Response::Query(
-                self.query(query.try_into().unwrap()).into(),
-            )),
+            Request::Info(_) => Ok(Response::Info(self.last_state())),
+            Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
                 tracing::debug!("Request PrepareProposal");
-                Ok(Response::PrepareProposal(self.prepare_proposal(block)))
+                // TODO: use TM domain type in the handler
+                Ok(Response::PrepareProposal(
+                    self.prepare_proposal(block.into()),
+                ))
             }
             Request::VerifyHeader(_req) => {
                 Ok(Response::VerifyHeader(self.verify_header(_req)))
             }
             Request::ProcessProposal(block) => {
                 tracing::debug!("Request ProcessProposal");
-                Ok(Response::ProcessProposal(self.process_proposal(block)))
+                // TODO: use TM domain type in the handler
+                let (response, _tx_results) =
+                    self.process_proposal(block.into());
+                Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
@@ -130,25 +132,19 @@ impl Shell {
             }
             Request::Commit => {
                 tracing::debug!("Request Commit");
-                Ok(Response::Commit(self.commit().into()))
+                Ok(Response::Commit(self.commit()))
             }
             Request::Flush => Ok(Response::Flush),
-            Request::Echo(msg) => Ok(Response::Echo(
-                response::Echo {
-                    message: msg.message,
-                }
-                .into(),
-            )),
+            Request::Echo(msg) => Ok(Response::Echo(response::Echo {
+                message: msg.message,
+            })),
             Request::CheckTx(tx) => {
-                let r#type = match CheckTxType::try_from(tx.r#type)
-                    .expect("received unexpected CheckTxType from ABCI")
-                {
-                    CheckTxType::New => MempoolTxType::NewTransaction,
-                    CheckTxType::Recheck => MempoolTxType::RecheckTransaction,
+                let mempool_tx_type = match tx.kind {
+                    CheckTxKind::New => MempoolTxType::NewTransaction,
+                    CheckTxKind::Recheck => MempoolTxType::RecheckTransaction,
                 };
-                Ok(Response::CheckTx(
-                    self.mempool_validate(&tx.tx, r#type).into(),
-                ))
+                let r#type = mempool_tx_type;
+                Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots => {
                 Ok(Response::ListSnapshots(Default::default()))

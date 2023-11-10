@@ -26,7 +26,7 @@ use namada::proof_of_stake::{
     validator_consensus_key_handle,
 };
 use namada::tendermint::abci::response::Info;
-use namada::tendermint_proto::v0_37::abci::VoteInfo;
+use namada::tendermint::abci::types::VoteInfo;
 use namada::tendermint_rpc::SimpleRequest;
 use namada::types::control_flow::time::Duration;
 use namada::types::ethereum_events::EthereumEvent;
@@ -39,7 +39,6 @@ use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use tokio::sync::mpsc;
 
-use crate::facade::tendermint_proto::v0_37::abci::response_process_proposal::ProposalStatus;
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
@@ -379,11 +378,14 @@ impl MockNode {
         let hash_string = tm_consensus_key_raw_hash(&ck);
         let pkh1 = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
         let votes = vec![VoteInfo {
-            validator: Some(namada::tendermint_proto::v0_37::abci::Validator {
-                address: pkh1.clone().into(),
-                power: u128::try_from(val1.bonded_stake).unwrap() as i64,
-            }),
-            signed_last_block: true,
+            validator: tendermint::abci::types::Validator {
+                address: pkh1.clone().try_into().unwrap(),
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as u64)
+                    .try_into()
+                    .unwrap(),
+            },
+            sig_info: tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
 
         (pkh1, votes)
@@ -463,10 +465,9 @@ impl MockNode {
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
-        let result = locked.process_proposal(req);
+        let (result, tx_results) = locked.process_proposal(req);
 
-        let mut errors: Vec<_> = result
-            .tx_results
+        let mut errors: Vec<_> = tx_results
             .iter()
             .map(|e| {
                 if e.code == 0 {
@@ -476,7 +477,7 @@ impl MockNode {
                 }
             })
             .collect();
-        if result.status != i32::from(ProposalStatus::Accept) {
+        if result != tendermint::abci::response::ProcessProposal::Accept {
             self.results.lock().unwrap().append(&mut errors);
             return;
         }
@@ -492,7 +493,7 @@ impl MockNode {
             byzantine_validators: vec![],
             txs: txs
                 .into_iter()
-                .zip(result.tx_results.into_iter())
+                .zip(tx_results.into_iter())
                 .map(|(tx, result)| ProcessedTx {
                     tx: tx.into(),
                     result,

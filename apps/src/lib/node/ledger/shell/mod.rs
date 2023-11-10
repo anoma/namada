@@ -74,12 +74,10 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config;
 use crate::config::{genesis, TendermintMode};
+use crate::facade::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::facade::tendermint_proto::v0_37::abci::{
-    Misbehavior as Evidence, MisbehaviorType as EvidenceType,
-};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -378,7 +376,7 @@ where
     pub wl_storage: WlStorage<D, H>,
     /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
     /// this field. They will be slashed when we finalize the block.
-    byzantine_validators: Vec<Evidence>,
+    byzantine_validators: Vec<Misbehavior>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
     base_dir: PathBuf,
@@ -702,40 +700,20 @@ where
                     );
                     continue;
                 }
-                let slash_type = match EvidenceType::try_from(evidence.r#type) {
-                    Ok(r#type) => match r#type {
-                        EvidenceType::DuplicateVote => {
-                            pos::types::SlashType::DuplicateVote
-                        }
-                        EvidenceType::LightClientAttack => {
-                            pos::types::SlashType::LightClientAttack
-                        }
-                        EvidenceType::Unknown => {
-                            tracing::error!(
-                                "Unknown evidence: {:#?}",
-                                evidence
-                            );
-                            continue;
-                        }
-                    },
-                    Err(_) => {
-                        tracing::error!(
-                            "Unexpected evidence type {}",
-                            evidence.r#type
-                        );
+                let slash_type = match evidence.kind {
+                    MisbehaviorKind::DuplicateVote => {
+                        pos::types::SlashType::DuplicateVote
+                    }
+                    MisbehaviorKind::LightClientAttack => {
+                        pos::types::SlashType::LightClientAttack
+                    }
+                    MisbehaviorKind::Unknown => {
+                        tracing::error!("Unknown evidence: {:#?}", evidence);
                         continue;
                     }
                 };
-                let validator_raw_hash = match evidence.validator {
-                    Some(validator) => tm_raw_hash_to_string(validator.address),
-                    None => {
-                        tracing::error!(
-                            "Evidence without a validator {:#?}",
-                            evidence
-                        );
-                        continue;
-                    }
-                };
+                let validator_raw_hash =
+                    tm_raw_hash_to_string(evidence.validator.address);
                 let validator =
                     match proof_of_stake::find_validator_by_raw_hash(
                         &self.wl_storage,
@@ -1513,7 +1491,7 @@ mod test_utils {
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
-    use namada::tendermint_proto::v0_37::abci::VoteInfo;
+    use namada::tendermint::abci::types::VoteInfo;
     use namada::types::address;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1529,9 +1507,10 @@ mod test_utils {
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
     use crate::facade::tendermint;
+    use crate::facade::tendermint::abci::types::Misbehavior;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
-        Misbehavior, RequestPrepareProposal, RequestProcessProposal,
+        RequestPrepareProposal, RequestProcessProposal,
     };
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
@@ -1734,26 +1713,26 @@ mod test_utils {
             &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
-            let resp = self.shell.process_proposal(RequestProcessProposal {
-                txs: req
-                    .txs
-                    .clone()
-                    .into_iter()
-                    .map(prost::bytes::Bytes::from)
-                    .collect(),
-                proposer_address: HEXUPPER
-                    .decode(
-                        crate::wallet::defaults::validator_keypair()
-                            .to_public()
-                            .tm_raw_hash()
-                            .as_bytes(),
-                    )
-                    .unwrap()
-                    .into(),
-                ..Default::default()
-            });
-            let results = resp
-                .tx_results
+            let (resp, tx_results) =
+                self.shell.process_proposal(RequestProcessProposal {
+                    txs: req
+                        .txs
+                        .clone()
+                        .into_iter()
+                        .map(prost::bytes::Bytes::from)
+                        .collect(),
+                    proposer_address: HEXUPPER
+                        .decode(
+                            crate::wallet::defaults::validator_keypair()
+                                .to_public()
+                                .tm_raw_hash()
+                                .as_bytes(),
+                        )
+                        .unwrap()
+                        .into(),
+                    ..Default::default()
+                });
+            let results = tx_results
                 .into_iter()
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
@@ -1761,7 +1740,7 @@ mod test_utils {
                     tx: tx_bytes.into(),
                 })
                 .collect();
-            if resp.status != 1 {
+            if resp != tendermint::abci::response::ProcessProposal::Accept {
                 Err(TestError::RejectProposal(results))
             } else {
                 Ok(results)
@@ -2169,7 +2148,7 @@ mod test_utils {
         params: &PosParams,
         address: Address,
         epoch: Epoch,
-    ) -> Vec<u8>
+    ) -> [u8; 20]
     where
         S: StorageRead,
     {
@@ -2178,7 +2157,8 @@ mod test_utils {
             .unwrap()
             .unwrap();
         let hash_string = tm_consensus_key_raw_hash(&ck);
-        HEXUPPER.decode(hash_string.as_bytes()).unwrap()
+        let decoded = HEXUPPER.decode(hash_string.as_bytes()).unwrap();
+        TryFrom::try_from(decoded).unwrap()
     }
 
     pub(super) fn next_block_for_inflation(

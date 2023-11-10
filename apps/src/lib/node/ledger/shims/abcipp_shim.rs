@@ -21,11 +21,9 @@ use crate::config;
 use crate::config::{Action, ActionAtHeight};
 use crate::facade::tendermint::v0_37::abci::response::DeliverTx;
 use crate::facade::tendermint::v0_37::abci::{
-    Request as Req, Response as Resp,
+    request, Request as Req, Response as Resp,
 };
-use crate::facade::tendermint_proto::v0_37::abci::{
-    RequestBeginBlock, ResponseDeliverTx,
-};
+use crate::facade::tendermint_proto::v0_37::abci::ResponseDeliverTx;
 use crate::facade::tower_abci::BoxError;
 use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 
@@ -35,7 +33,7 @@ use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 #[derive(Debug)]
 pub struct AbcippShim {
     service: Shell,
-    begin_block_request: Option<RequestBeginBlock>,
+    begin_block_request: Option<request::BeginBlock>,
     delivered_txs: Vec<TxBytes>,
     shell_recv: std::sync::mpsc::Receiver<(
         Req,
@@ -101,25 +99,24 @@ impl AbcippShim {
             let resp = match req {
                 Req::ProcessProposal(proposal) => self
                     .service
-                    .call(Request::ProcessProposal(proposal.into()))
+                    .call(Request::ProcessProposal(proposal))
                     .map_err(Error::from)
-                    .and_then(|res| match res {
-                        Response::ProcessProposal(resp) => {
-                            Ok(Resp::ProcessProposal(crate::facade::tendermint_proto::v0_37::abci::ResponseProcessProposal::from(&resp).try_into().unwrap()))
-                        }
-                        _ => unreachable!(),
-                    }),
+                    .and_then(|resp| resp.try_into()),
                 Req::BeginBlock(block) => {
                     // we save this data to be forwarded to finalize later
-                    self.begin_block_request = Some(block.into());
+                    self.begin_block_request = Some(block);
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 Req::DeliverTx(tx) => {
                     let mut deliver: DeliverTx = Default::default();
                     // Attach events to this transaction if possible
-                    if let Ok(tx) = Tx::try_from(&tx.tx[..]) {
-                        let resp: ResponseDeliverTx = tx.into();
-                        deliver.events = resp.events.into_iter().map(|v| TryFrom::try_from(v).unwrap()).collect();
+                    if Tx::try_from(&tx.tx[..]).is_ok() {
+                        let resp = ResponseDeliverTx::default();
+                        deliver.events = resp
+                            .events
+                            .into_iter()
+                            .map(|v| TryFrom::try_from(v).unwrap())
+                            .collect();
                     }
                     self.delivered_txs.push(tx.tx);
                     Ok(Resp::DeliverTx(deliver))
@@ -127,19 +124,14 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
-                    let block_time = self.service.get_block_timestamp(
-                        begin_block_request
-                            .header
-                            .as_ref()
-                            .and_then(|header| header.time.to_owned()),
-                    );
+                    let block_time = begin_block_request
+                        .header
+                        .time
+                        .try_into()
+                        .expect("valid RFC3339 block time");
 
                     let tm_raw_hash_string = tm_raw_hash_to_string(
-                        &begin_block_request
-                            .header
-                            .as_ref()
-                            .expect("Missing block header")
-                            .proposer_address,
+                        begin_block_request.header.proposer_address,
                     );
                     let block_proposer = find_validator_by_raw_hash(
                         &self.service.wl_storage,

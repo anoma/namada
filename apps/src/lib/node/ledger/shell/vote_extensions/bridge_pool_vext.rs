@@ -212,7 +212,7 @@ mod test_bp_vote_extensions {
         Epoch,
     };
     use namada::proto::{SignableEthMessage, Signed};
-    use namada::tendermint_proto::v0_37::abci::VoteInfo;
+    use namada::tendermint::abci::types::VoteInfo;
     use namada::types::ethereum_events::Uint;
     use namada::types::keccak::{keccak_hash, KeccakHash};
     use namada::types::key::*;
@@ -282,15 +282,14 @@ mod test_bp_vote_extensions {
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
-            validator: Some(namada::tendermint_proto::v0_37::abci::Validator {
-                address: pkh1.clone().into(),
-                power: u128::try_from(val1.bonded_stake).expect("Test failed")
-                    as i64,
-            }),
-            signed_last_block: true,
+            validator: crate::facade::tendermint::abci::types::Validator {
+                address: pkh1,
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+            },
+            sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
         let req = FinalizeBlock {
-            proposer_address: pkh1,
+            proposer_address: pkh1.to_vec(),
             votes,
             ..Default::default()
         };

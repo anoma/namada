@@ -22,7 +22,6 @@ use thiserror::Error;
 use super::generated::types;
 use crate::ledger::gas::{GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS_COST};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::tendermint_proto::v0_37::abci::ResponseDeliverTx;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
@@ -1603,11 +1602,5 @@ impl Tx {
             self.add_section(Section::Signature(section));
         }
         self
-    }
-}
-
-impl From<Tx> for ResponseDeliverTx {
-    fn from(_tx: Tx) -> ResponseDeliverTx {
-        Default::default()
     }
 }

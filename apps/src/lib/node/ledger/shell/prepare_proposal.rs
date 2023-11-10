@@ -572,9 +572,7 @@ mod test_prepare_proposal {
     /// behaves as expected, considering <= 2/3 voting power.
     #[test]
     fn test_prepare_proposal_vext_insufficient_voting_power() {
-        use crate::facade::tendermint_proto::v0_37::abci::{
-            Validator, VoteInfo,
-        };
+        use namada::tendermint::abci::types::{Validator, VoteInfo};
 
         const FIRST_HEIGHT: BlockHeight = BlockHeight(1);
         const LAST_HEIGHT: BlockHeight = BlockHeight(FIRST_HEIGHT.0 + 11);
@@ -653,26 +651,22 @@ mod test_prepare_proposal {
 
         let votes = vec![
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh1.clone().into(),
-                    power: u128::try_from(val1.bonded_stake)
-                        .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                validator: Validator {
+                    address: pkh1,
+                    power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                },
+                sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
-                validator: Some(Validator {
-                    address: pkh2.into(),
-                    power: u128::try_from(val2.bonded_stake)
-                        .expect("Test failed")
-                        as i64,
-                }),
-                signed_last_block: true,
+                validator: Validator {
+                    address: pkh2,
+                    power: (u128::try_from(val2.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                },
+                sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
         ];
         let req = FinalizeBlock {
-            proposer_address: pkh1,
+            proposer_address: pkh1.to_vec(),
             votes,
             ..Default::default()
         };
