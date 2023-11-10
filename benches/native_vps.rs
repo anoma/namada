@@ -307,7 +307,7 @@ fn ibc(c: &mut Criterion) {
     // here we only benchmark a few of those Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
+            ClientType::new("01-tendermint").unwrap(),
             1,
         )
         .unwrap(),

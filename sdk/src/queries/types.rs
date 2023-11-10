@@ -6,7 +6,7 @@ use namada_core::types::storage::BlockHeight;
 use thiserror::Error;
 
 use crate::events::log::EventLog;
-use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint::merkle::proof::ProofOps;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]
@@ -113,7 +113,7 @@ pub struct ResponseQuery<T> {
     /// Non-deterministic log of the request execution
     pub info: String,
     /// Optional proof - used for storage value reads which request `prove`
-    pub proof: Option<Proof>,
+    pub proof: Option<ProofOps>,
 }
 
 /// [`ResponseQuery`] with borsh-encoded `data` field
@@ -127,12 +127,12 @@ impl RequestQuery {
     /// spec. A negative block height will cause an error.
     pub fn try_from_tm<D, H>(
         storage: &WlStorage<D, H>,
-        crate::tendermint_proto::abci::RequestQuery {
+        crate::tendermint_proto::v0_37::abci::RequestQuery {
             data,
             path,
             height,
             prove,
-        }: crate::tendermint_proto::abci::RequestQuery,
+        }: crate::tendermint_proto::v0_37::abci::RequestQuery,
     ) -> Result<Self, String>
     where
         D: DB + for<'iter> DBIter<'iter>,
@@ -148,7 +148,7 @@ impl RequestQuery {
             })?),
         };
         Ok(Self {
-            data,
+            data: data.to_vec(),
             path,
             height,
             prove,

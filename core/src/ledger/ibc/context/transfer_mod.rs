@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use super::common::IbcCommonContext;
-use crate::ibc::applications::transfer::coin::PrefixedCoin;
+use super::token_transfer::TokenTransferContext;
 use crate::ibc::applications::transfer::context::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
@@ -15,42 +15,20 @@ use crate::ibc::applications::transfer::context::{
     on_chan_open_init_execute, on_chan_open_init_validate,
     on_chan_open_try_execute, on_chan_open_try_validate,
     on_recv_packet_execute, on_timeout_packet_execute,
-    on_timeout_packet_validate, TokenTransferExecutionContext,
-    TokenTransferValidationContext,
+    on_timeout_packet_validate,
 };
-use crate::ibc::applications::transfer::denom::PrefixedDenom;
 use crate::ibc::applications::transfer::error::TokenTransferError;
 use crate::ibc::applications::transfer::MODULE_ID_STR;
-use crate::ibc::core::events::IbcEvent;
-use crate::ibc::core::ics02_client::client_state::ClientState;
-use crate::ibc::core::ics02_client::consensus_state::ConsensusState;
-use crate::ibc::core::ics03_connection::connection::ConnectionEnd;
-use crate::ibc::core::ics04_channel::channel::{
-    ChannelEnd, Counterparty, Order,
-};
-use crate::ibc::core::ics04_channel::commitment::PacketCommitment;
-use crate::ibc::core::ics04_channel::context::{
-    SendPacketExecutionContext, SendPacketValidationContext,
-};
+use crate::ibc::core::ics04_channel::acknowledgement::Acknowledgement;
+use crate::ibc::core::ics04_channel::channel::{Counterparty, Order};
 use crate::ibc::core::ics04_channel::error::{ChannelError, PacketError};
-use crate::ibc::core::ics04_channel::packet::{
-    Acknowledgement, Packet, Sequence,
-};
+use crate::ibc::core::ics04_channel::packet::Packet;
 use crate::ibc::core::ics04_channel::Version;
 use crate::ibc::core::ics24_host::identifier::{
-    ChannelId, ClientId, ConnectionId, PortId,
-};
-use crate::ibc::core::ics24_host::path::{
-    ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
+    ChannelId, ConnectionId, PortId,
 };
 use crate::ibc::core::router::{Module, ModuleExtras, ModuleId};
-use crate::ibc::core::ContextError;
-use crate::ibc::{Height, Signer};
-use crate::ledger::ibc::storage;
-use crate::ledger::storage_api::token::read_denom;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::token;
-use crate::types::uint::Uint;
+use crate::ibc::Signer;
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -68,7 +46,7 @@ where
     C: IbcCommonContext,
 {
     /// IBC actions
-    pub ctx: Rc<RefCell<C>>,
+    pub ctx: TokenTransferContext<C>,
 }
 
 impl<C> TransferModule<C>
@@ -77,44 +55,14 @@ where
 {
     /// Make a new module
     pub fn new(ctx: Rc<RefCell<C>>) -> Self {
-        Self { ctx }
+        Self {
+            ctx: TokenTransferContext::new(ctx),
+        }
     }
 
     /// Get the module ID
     pub fn module_id(&self) -> ModuleId {
         ModuleId::new(MODULE_ID_STR.to_string())
-    }
-
-    /// Get the token address and the amount from PrefixedCoin. If the base
-    /// denom is not an address, it returns `IbcToken`
-    fn get_token_amount(
-        &self,
-        coin: &PrefixedCoin,
-    ) -> Result<(Address, token::DenominatedAmount), TokenTransferError> {
-        let token = match Address::decode(coin.denom.base_denom.as_str()) {
-            Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
-            _ => storage::ibc_token(coin.denom.to_string()),
-        };
-
-        // Convert IBC amount to Namada amount for the token
-        let denom = read_denom(&*self.ctx.borrow(), &token)
-            .map_err(ContextError::from)?
-            .unwrap_or(token::Denomination(0));
-        let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
-        let amount =
-            token::Amount::from_uint(uint_amount, denom).map_err(|e| {
-                TokenTransferError::ContextError(
-                    ChannelError::Other {
-                        description: format!(
-                            "The IBC amount is invalid: Coin {coin}, Error {e}",
-                        ),
-                    }
-                    .into(),
-                )
-            })?;
-        let amount = token::DenominatedAmount { amount, denom };
-
-        Ok((token, amount))
     }
 }
 
@@ -146,7 +94,7 @@ where
         version: &Version,
     ) -> Result<Version, ChannelError> {
         on_chan_open_init_validate(
-            self,
+            &self.ctx,
             order,
             connection_hops,
             port_id,
@@ -169,7 +117,7 @@ where
         version: &Version,
     ) -> Result<(ModuleExtras, Version), ChannelError> {
         on_chan_open_init_execute(
-            self,
+            &mut self.ctx,
             order,
             connection_hops,
             port_id,
@@ -191,7 +139,7 @@ where
         counterparty_version: &Version,
     ) -> Result<Version, ChannelError> {
         on_chan_open_try_validate(
-            self,
+            &self.ctx,
             order,
             connection_hops,
             port_id,
@@ -214,7 +162,7 @@ where
         counterparty_version: &Version,
     ) -> Result<(ModuleExtras, Version), ChannelError> {
         on_chan_open_try_execute(
-            self,
+            &mut self.ctx,
             order,
             connection_hops,
             port_id,
@@ -232,7 +180,7 @@ where
         counterparty_version: &Version,
     ) -> Result<(), ChannelError> {
         on_chan_open_ack_validate(
-            self,
+            &self.ctx,
             port_id,
             channel_id,
             counterparty_version,
@@ -247,7 +195,7 @@ where
         counterparty_version: &Version,
     ) -> Result<ModuleExtras, ChannelError> {
         on_chan_open_ack_execute(
-            self,
+            &mut self.ctx,
             port_id,
             channel_id,
             counterparty_version,
@@ -260,7 +208,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<(), ChannelError> {
-        on_chan_open_confirm_validate(self, port_id, channel_id)
+        on_chan_open_confirm_validate(&self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -269,7 +217,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_open_confirm_execute(self, port_id, channel_id)
+        on_chan_open_confirm_execute(&mut self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -278,7 +226,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<(), ChannelError> {
-        on_chan_close_init_validate(self, port_id, channel_id)
+        on_chan_close_init_validate(&self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -287,7 +235,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_close_init_execute(self, port_id, channel_id)
+        on_chan_close_init_execute(&mut self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -296,7 +244,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<(), ChannelError> {
-        on_chan_close_confirm_validate(self, port_id, channel_id)
+        on_chan_close_confirm_validate(&self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -305,7 +253,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<ModuleExtras, ChannelError> {
-        on_chan_close_confirm_execute(self, port_id, channel_id)
+        on_chan_close_confirm_execute(&mut self.ctx, port_id, channel_id)
             .map_err(into_channel_error)
     }
 
@@ -314,7 +262,7 @@ where
         packet: &Packet,
         _relayer: &Signer,
     ) -> (ModuleExtras, Acknowledgement) {
-        on_recv_packet_execute(self, packet)
+        on_recv_packet_execute(&mut self.ctx, packet)
     }
 
     fn on_acknowledgement_packet_validate(
@@ -324,7 +272,7 @@ where
         relayer: &Signer,
     ) -> Result<(), PacketError> {
         on_acknowledgement_packet_validate(
-            self,
+            &self.ctx,
             packet,
             acknowledgement,
             relayer,
@@ -339,7 +287,7 @@ where
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
         let (extras, result) = on_acknowledgement_packet_execute(
-            self,
+            &mut self.ctx,
             packet,
             acknowledgement,
             relayer,
@@ -352,7 +300,7 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> Result<(), PacketError> {
-        on_timeout_packet_validate(self, packet, relayer)
+        on_timeout_packet_validate(&self.ctx, packet, relayer)
             .map_err(into_packet_error)
     }
 
@@ -361,208 +309,9 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) = on_timeout_packet_execute(self, packet, relayer);
+        let (extras, result) =
+            on_timeout_packet_execute(&mut self.ctx, packet, relayer);
         (extras, result.map_err(into_packet_error))
-    }
-}
-
-impl<C> SendPacketValidationContext for TransferModule<C>
-where
-    C: IbcCommonContext,
-{
-    fn channel_end(
-        &self,
-        channel_end_path: &ChannelEndPath,
-    ) -> Result<ChannelEnd, ContextError> {
-        self.ctx
-            .borrow()
-            .channel_end(&channel_end_path.0, &channel_end_path.1)
-    }
-
-    fn connection_end(
-        &self,
-        connection_id: &ConnectionId,
-    ) -> Result<ConnectionEnd, ContextError> {
-        self.ctx.borrow().connection_end(connection_id)
-    }
-
-    fn client_state(
-        &self,
-        client_id: &ClientId,
-    ) -> Result<Box<dyn ClientState>, ContextError> {
-        self.ctx.borrow().client_state(client_id)
-    }
-
-    fn client_consensus_state(
-        &self,
-        client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        let height = Height::new(
-            client_cons_state_path.epoch,
-            client_cons_state_path.height,
-        )?;
-        self.ctx
-            .borrow()
-            .consensus_state(&client_cons_state_path.client_id, height)
-    }
-
-    fn get_next_sequence_send(
-        &self,
-        seq_send_path: &SeqSendPath,
-    ) -> Result<Sequence, ContextError> {
-        self.ctx
-            .borrow()
-            .get_next_sequence_send(&seq_send_path.0, &seq_send_path.1)
-    }
-}
-
-impl<C> TokenTransferValidationContext for TransferModule<C>
-where
-    C: IbcCommonContext,
-{
-    type AccountId = Address;
-
-    fn get_port(&self) -> Result<PortId, TokenTransferError> {
-        Ok(PortId::transfer())
-    }
-
-    fn get_escrow_account(
-        &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
-    ) -> Result<Self::AccountId, TokenTransferError> {
-        Ok(Address::Internal(InternalAddress::Ibc))
-    }
-
-    fn can_send_coins(&self) -> Result<(), TokenTransferError> {
-        Ok(())
-    }
-
-    fn can_receive_coins(&self) -> Result<(), TokenTransferError> {
-        Ok(())
-    }
-
-    fn send_coins_validate(
-        &self,
-        _from: &Self::AccountId,
-        _to: &Self::AccountId,
-        _coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
-        Ok(())
-    }
-
-    fn mint_coins_validate(
-        &self,
-        _account: &Self::AccountId,
-        _coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
-        Ok(())
-    }
-
-    fn burn_coins_validate(
-        &self,
-        _account: &Self::AccountId,
-        _coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        // validated by IBC token VP
-        Ok(())
-    }
-
-    fn denom_hash_string(&self, denom: &PrefixedDenom) -> Option<String> {
-        Some(storage::calc_hash(denom.to_string()))
-    }
-}
-
-impl<C> TokenTransferExecutionContext for TransferModule<C>
-where
-    C: IbcCommonContext,
-{
-    fn send_coins_execute(
-        &mut self,
-        from: &Self::AccountId,
-        to: &Self::AccountId,
-        coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        // Assumes that the coin denom is prefixed with "port-id/channel-id" or
-        // has no prefix
-        let (ibc_token, amount) = self.get_token_amount(coin)?;
-
-        self.ctx
-            .borrow_mut()
-            .transfer_token(from, to, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
-    }
-
-    fn mint_coins_execute(
-        &mut self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        // The trace path of the denom is already updated if receiving the token
-        let (ibc_token, amount) = self.get_token_amount(coin)?;
-
-        self.ctx
-            .borrow_mut()
-            .mint_token(account, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
-    }
-
-    fn burn_coins_execute(
-        &mut self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        let (ibc_token, amount) = self.get_token_amount(coin)?;
-
-        // The burn is "unminting" from the minted balance
-        self.ctx
-            .borrow_mut()
-            .burn_token(account, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
-    }
-}
-
-impl<C> SendPacketExecutionContext for TransferModule<C>
-where
-    C: IbcCommonContext,
-{
-    fn store_next_sequence_send(
-        &mut self,
-        seq_send_path: &SeqSendPath,
-        seq: Sequence,
-    ) -> Result<(), ContextError> {
-        self.ctx.borrow_mut().store_next_sequence_send(
-            &seq_send_path.0,
-            &seq_send_path.1,
-            seq,
-        )
-    }
-
-    fn store_packet_commitment(
-        &mut self,
-        commitment_path: &CommitmentPath,
-        commitment: PacketCommitment,
-    ) -> Result<(), ContextError> {
-        self.ctx.borrow_mut().store_packet_commitment(
-            &commitment_path.port_id,
-            &commitment_path.channel_id,
-            commitment_path.sequence,
-            commitment,
-        )
-    }
-
-    fn emit_ibc_event(&mut self, event: IbcEvent) {
-        let event = event.try_into().expect("IBC event conversion failed");
-        self.ctx
-            .borrow_mut()
-            .emit_ibc_event(event)
-            .expect("Emitting an IBC event failed")
-    }
-
-    fn log_message(&mut self, message: String) {
-        self.ctx.borrow_mut().log_string(message)
     }
 }
 
@@ -582,7 +331,8 @@ fn into_packet_error(error: TokenTransferError) -> PacketError {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use super::*;
-    use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
+    use crate::ibc::applications::transfer::ack_success_b64;
+    use crate::ibc::core::ics04_channel::acknowledgement::AcknowledgementStatus;
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]
@@ -729,8 +479,10 @@ pub mod testing {
             _packet: &Packet,
             _relayer: &Signer,
         ) -> (ModuleExtras, Acknowledgement) {
-            let transfer_ack = TokenTransferAcknowledgement::success();
-            (ModuleExtras::empty(), transfer_ack.into())
+            (
+                ModuleExtras::empty(),
+                AcknowledgementStatus::success(ack_success_b64()).into(),
+            )
         }
 
         fn on_acknowledgement_packet_validate(

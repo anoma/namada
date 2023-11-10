@@ -65,7 +65,7 @@ impl Broadcaster {
         }
         loop {
             if let Some(msg) = self.receiver.recv().await {
-                let _ = self.client.broadcast_tx_sync(msg.into()).await;
+                let _ = self.client.broadcast_tx_sync(msg).await;
             }
         }
     }

@@ -364,6 +364,9 @@ And this is correct
     }
 "#;
 
+// TODO: Replaced `block_sync` and `blocksync`
+// with `fast_sync` and `fastsync`
+// due to https://github.com/informalsystems/tendermint-rs/issues/1368
 pub const DEFAULT_COMETBFT_CONFIG: &str = r#"
 
 # This is a TOML config file.
@@ -391,7 +394,7 @@ moniker = "technodrome"
 #
 # Deprecated: this key will be removed and BlockSync will be enabled
 # unconditionally in the next major release.
-block_sync = true
+fast_sync = true
 
 # Database backend: goleveldb | cleveldb | boltdb | rocksdb | badgerdb
 # * goleveldb (github.com/syndtr/goleveldb - most popular implementation)
@@ -732,7 +735,7 @@ chunk_fetchers = "4"
 #######################################################
 ###       Block Sync Configuration Options          ###
 #######################################################
-[blocksync]
+[fastsync]
 
 # Block Sync version to use:
 #

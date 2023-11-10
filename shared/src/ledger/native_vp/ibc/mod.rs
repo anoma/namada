@@ -22,6 +22,7 @@ use namada_core::types::storage::Key;
 use namada_proof_of_stake::read_pos_params;
 use thiserror::Error;
 
+use crate::ibc::core::ics24_host::identifier::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{calc_hash, is_ibc_denom_key, is_ibc_key};
 use crate::ledger::native_vp::{self, Ctx, NativeVp, VpEnv};
 use crate::ledger::parameters::read_epoch_duration_parameter;
@@ -106,7 +107,7 @@ where
 
         let mut actions = IbcActions::new(ctx.clone());
         let module = TransferModule::new(ctx.clone());
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
         // Charge gas for the expensive execution
         self.ctx
             .charge_gas(IBC_ACTION_EXECUTE_GAS)
@@ -152,7 +153,7 @@ where
         actions.set_validation_params(self.validation_params()?);
 
         let module = TransferModule::new(ctx);
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
         // Charge gas for the expensive validation
         self.ctx
             .charge_gas(IBC_ACTION_VALIDATE_GAS)
@@ -162,6 +163,7 @@ where
 
     /// Retrieve the validation params
     pub fn validation_params(&self) -> VpResult<ValidationParams> {
+        use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs = ledger_storage::ics23_specs::ibc_proof_specs::<H>();
         let pos_params =
@@ -172,7 +174,8 @@ where
         let unbonding_period_secs =
             pipeline_len * epoch_duration.min_duration.0;
         Ok(ValidationParams {
-            chain_id: chain_id.into(),
+            chain_id: IbcChainId::from_str(&chain_id)
+                .map_err(|e| Error::IbcAction(ActionError::ChainId(e)))?,
             proof_specs: proof_specs.into(),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
             upgrade_path: Vec::new(),
@@ -330,7 +333,6 @@ mod tests {
     };
     use crate::core::types::address::{nam, InternalAddress};
     use crate::core::types::storage::Epoch;
-    use crate::ibc::applications::transfer::acknowledgement::TokenTransferAcknowledgement;
     use crate::ibc::applications::transfer::coin::PrefixedCoin;
     use crate::ibc::applications::transfer::denom::TracePrefix;
     use crate::ibc::applications::transfer::events::{
@@ -338,11 +340,10 @@ mod tests {
     };
     use crate::ibc::applications::transfer::msgs::transfer::MsgTransfer;
     use crate::ibc::applications::transfer::packet::PacketData;
-    use crate::ibc::applications::transfer::VERSION;
+    use crate::ibc::applications::transfer::{ack_success_b64, VERSION};
     use crate::ibc::core::events::{
         IbcEvent as RawIbcEvent, MessageEvent, ModuleEvent,
     };
-    use crate::ibc::core::ics02_client::client_state::ClientState;
     use crate::ibc::core::ics02_client::events::{CreateClient, UpdateClient};
     use crate::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
     use crate::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
@@ -360,6 +361,9 @@ mod tests {
     use crate::ibc::core::ics03_connection::version::{
         get_compatible_versions, Version as ConnVersion,
     };
+    use crate::ibc::core::ics04_channel::acknowledgement::{
+        Acknowledgement, AcknowledgementStatus,
+    };
     use crate::ibc::core::ics04_channel::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
@@ -375,9 +379,7 @@ mod tests {
         MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
         MsgTimeoutOnClose,
     };
-    use crate::ibc::core::ics04_channel::packet::{
-        Acknowledgement, Packet, Sequence,
-    };
+    use crate::ibc::core::ics04_channel::packet::{Packet, Sequence};
     use crate::ibc::core::ics04_channel::timeout::TimeoutHeight;
     use crate::ibc::core::ics04_channel::Version as ChanVersion;
     use crate::ibc::core::ics23_commitment::commitment::{
@@ -500,10 +502,7 @@ mod tests {
             .0
             .unwrap()
             .time;
-        let bytes = TmTime::try_from(time)
-            .unwrap()
-            .encode_vec()
-            .expect("encoding failed");
+        let bytes = TmTime::try_from(time).unwrap().encode_vec();
         wl_storage
             .write_log
             .write(&client_update_time_key, bytes)
@@ -697,34 +696,6 @@ mod tests {
             .write(&consensus_key, bytes)
             .expect("write failed");
         keys_changed.insert(consensus_key);
-        // client update time
-        let client_update_time_key = client_update_timestamp_key(&client_id);
-        let time = wl_storage
-            .storage
-            .get_block_header(None)
-            .unwrap()
-            .0
-            .unwrap()
-            .time;
-        let bytes = TmTime::try_from(time)
-            .unwrap()
-            .encode_vec()
-            .expect("encoding failed");
-        wl_storage
-            .write_log
-            .write(&client_update_time_key, bytes)
-            .expect("write failed");
-        keys_changed.insert(client_update_time_key);
-        // client update height
-        let client_update_height_key = client_update_height_key(&client_id);
-        let host_height = wl_storage.storage.get_block_height().0;
-        let host_height =
-            Height::new(0, host_height.0).expect("invalid height");
-        wl_storage
-            .write_log
-            .write(&client_update_height_key, host_height.encode_vec())
-            .expect("write failed");
-        keys_changed.insert(client_update_height_key);
         // client counter
         let client_counter_key = client_counter_key();
         increment_counter(&mut wl_storage, &client_counter_key);
@@ -890,7 +861,7 @@ mod tests {
         };
         let msg = MsgUpdateClient {
             client_id: client_id.clone(),
-            header: header.into(),
+            client_message: header.into(),
             signer: "account0".to_string().into(),
         };
         // client state
@@ -919,10 +890,7 @@ mod tests {
             .0
             .unwrap()
             .time;
-        let bytes = TmTime::try_from(time)
-            .unwrap()
-            .encode_vec()
-            .expect("encoding failed");
+        let bytes = TmTime::try_from(time).unwrap().encode_vec();
         wl_storage
             .write_log
             .write(&client_update_time_key, bytes)
@@ -942,10 +910,10 @@ mod tests {
         let consensus_height = client_state.latest_height();
         let event = RawIbcEvent::UpdateClient(UpdateClient::new(
             client_id,
-            client_state.client_type(),
+            client_type(),
             consensus_height,
             vec![consensus_height],
-            header.into(),
+            Protobuf::<Any>::encode_vec(&header),
         ));
         let message_event = RawIbcEvent::Message(MessageEvent::Client);
         wl_storage
@@ -1241,6 +1209,7 @@ mod tests {
             proof_client: dummy_proof().into(),
             signer: "account0".to_string(),
             previous_connection_id: ConnectionId::default().to_string(),
+            host_consensus_state_proof: dummy_proof().into(),
         }
         .try_into()
         .expect("invalid message");
@@ -1381,6 +1350,7 @@ mod tests {
             consensus_height_of_a_on_b: client_state.latest_height(),
             version: ConnVersion::default(),
             signer: "account0".to_string().into(),
+            proof_consensus_state_of_a: None,
         };
         // event
         let event = RawIbcEvent::OpenAckConnection(ConnOpenAck::new(
@@ -1451,6 +1421,15 @@ mod tests {
             .expect("write failed");
         wl_storage.write_log.commit_tx();
         wl_storage.commit_block().expect("commit failed");
+        // for next block
+        wl_storage
+            .storage
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        wl_storage
+            .storage
+            .begin_block(BlockHash::default(), BlockHeight(2))
+            .unwrap();
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
@@ -2211,9 +2190,9 @@ mod tests {
             &packet.chan_id_on_b,
             msg.packet.seq_on_a,
         );
-        let transfer_ack = TokenTransferAcknowledgement::success();
-        let acknowledgement = Acknowledgement::from(transfer_ack);
-        let bytes = sha2::Sha256::digest(acknowledgement.as_ref()).to_vec();
+        let transfer_ack = AcknowledgementStatus::success(ack_success_b64());
+        let acknowledgement: Acknowledgement = transfer_ack.into();
+        let bytes = sha2::Sha256::digest(acknowledgement.as_bytes()).to_vec();
         wl_storage
             .write_log
             .write(&ack_key, bytes)
@@ -2391,7 +2370,7 @@ mod tests {
             .unwrap();
 
         // prepare data
-        let transfer_ack = TokenTransferAcknowledgement::success();
+        let transfer_ack = AcknowledgementStatus::success(ack_success_b64());
         let msg = MsgAcknowledgement {
             packet: packet.clone(),
             acknowledgement: transfer_ack.clone().into(),

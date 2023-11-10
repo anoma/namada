@@ -75,11 +75,11 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint_proto::abci::{
+use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+use crate::facade::tendermint_proto::v0_37::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
 };
-use crate::facade::tendermint_proto::crypto::public_key;
-use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::facade::tower_abci::{request, response};
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
@@ -601,7 +601,7 @@ where
                     root,
                     height
                 );
-                response.last_block_app_hash = root.0.to_vec();
+                response.last_block_app_hash = root.0.to_vec().into();
                 response.last_block_height =
                     height.try_into().expect("Invalid block height");
             }
@@ -712,8 +712,8 @@ where
                     );
                     continue;
                 }
-                let slash_type = match EvidenceType::from_i32(evidence.r#type) {
-                    Some(r#type) => match r#type {
+                let slash_type = match EvidenceType::try_from(evidence.r#type) {
+                    Ok(r#type) => match r#type {
                         EvidenceType::DuplicateVote => {
                             pos::types::SlashType::DuplicateVote
                         }
@@ -728,7 +728,7 @@ where
                             continue;
                         }
                     },
-                    None => {
+                    Err(_) => {
                         tracing::error!(
                             "Unexpected evidence type {}",
                             evidence.r#type
@@ -838,7 +838,7 @@ where
             root,
             self.wl_storage.storage.get_last_block_height(),
         );
-        response.data = root.0.to_vec();
+        response.data = root.0.to_vec().into();
 
         self.bump_last_processed_eth_block();
         self.broadcast_queued_txs();
@@ -1483,11 +1483,12 @@ where
     fn get_abci_validator_updates(
         &self,
         is_genesis: bool,
-    ) -> storage_api::Result<Vec<namada::tendermint_proto::abci::ValidatorUpdate>>
-    {
+    ) -> storage_api::Result<
+        Vec<namada::tendermint_proto::v0_37::abci::ValidatorUpdate>,
+    > {
         use namada::ledger::pos::namada_proof_of_stake;
 
-        use crate::facade::tendermint_proto::crypto::PublicKey as TendermintPublicKey;
+        use crate::facade::tendermint_proto::v0_37::crypto::PublicKey as TendermintPublicKey;
 
         let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
         let pos_params =
@@ -1551,7 +1552,7 @@ mod test_utils {
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::validator_consensus_key_handle;
     use namada::proto::{Code, Data};
-    use namada::tendermint_proto::abci::VoteInfo;
+    use namada::tendermint_proto::v0_37::abci::VoteInfo;
     use namada::types::address;
     use namada::types::chain::ChainId;
     use namada::types::ethereum_events::Uint;
@@ -1566,11 +1567,11 @@ mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint_proto::abci::{
+    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::facade::tendermint_proto::v0_37::abci::{
         Misbehavior, RequestInitChain, RequestPrepareProposal,
         RequestProcessProposal,
     };
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -1773,7 +1774,12 @@ mod test_utils {
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
             let resp = self.shell.process_proposal(RequestProcessProposal {
-                txs: req.txs.clone(),
+                txs: req
+                    .txs
+                    .clone()
+                    .into_iter()
+                    .map(prost::bytes::Bytes::from)
+                    .collect(),
                 proposer_address: HEXUPPER
                     .decode(
                         crate::wallet::defaults::validator_keypair()
@@ -1781,7 +1787,8 @@ mod test_utils {
                             .tm_raw_hash()
                             .as_bytes(),
                     )
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                 ..Default::default()
             });
             let results = resp
@@ -1790,7 +1797,7 @@ mod test_utils {
                 .zip(req.txs.into_iter())
                 .map(|(res, tx_bytes)| ProcessedTx {
                     result: res,
-                    tx: tx_bytes,
+                    tx: tx_bytes.into(),
                 })
                 .collect();
             if resp.status != 1 {
@@ -1824,7 +1831,8 @@ mod test_utils {
                         .tm_raw_hash()
                         .as_bytes(),
                 )
-                .unwrap();
+                .unwrap()
+                .into();
             self.shell.prepare_proposal(req)
         }
 

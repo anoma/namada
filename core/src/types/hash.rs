@@ -141,13 +141,6 @@ impl Hash {
 }
 
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
-impl From<Hash> for crate::tendermint::abci::transaction::Hash {
-    fn from(hash: Hash) -> Self {
-        Self::new(hash.0)
-    }
-}
-
-#[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
 impl From<Hash> for crate::tendermint::Hash {
     fn from(hash: Hash) -> Self {
         Self::Sha256(hash.0)

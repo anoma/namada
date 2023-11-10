@@ -25,7 +25,7 @@ use crate::ibc::core::ics04_channel::packet::Sequence;
 use crate::ibc::core::ics24_host::identifier::{ChannelId, ClientId, PortId};
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
-use crate::tendermint::merkle::proof::Proof;
+use crate::tendermint::merkle::proof::ProofOps;
 
 type Conversion = (
     Address,
@@ -313,7 +313,7 @@ where
     let proof = if request.prove {
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
-            let mut proof: crate::tendermint::merkle::proof::Proof = ctx
+            let mut proof = ctx
                 .wl_storage
                 .storage
                 .get_existence_proof(key, value, request.height)
@@ -321,7 +321,7 @@ where
             ops.append(&mut proof.ops);
         }
         // ops is not empty in this case
-        let proof = Proof { ops };
+        let proof = ProofOps { ops };
         Some(proof)
     } else {
         None

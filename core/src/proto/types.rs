@@ -29,7 +29,7 @@ use super::generated::types;
 use crate::ledger::gas::{self, GasMetering, VpGasMeter, VERIFY_TX_SIG_GAS};
 use crate::ledger::storage::{KeccakHasher, Sha256Hasher, StorageHasher};
 #[cfg(any(feature = "tendermint", feature = "tendermint-abcipp"))]
-use crate::tendermint_proto::abci::ResponseDeliverTx;
+use crate::tendermint_proto::v0_37::abci::ResponseDeliverTx;
 use crate::types::account::AccountPublicKeysMap;
 use crate::types::address::Address;
 use crate::types::chain::ChainId;
@@ -1853,7 +1853,7 @@ impl From<Tx> for ResponseDeliverTx {
     /// Annotate the Tx with meta-data based on its contents
     #[cfg(feature = "ferveo-tpke")]
     fn from(tx: Tx) -> ResponseDeliverTx {
-        use crate::tendermint_proto::abci::{Event, EventAttribute};
+        use crate::tendermint_proto::v0_37::abci::{Event, EventAttribute};
 
         // If data cannot be extracteed, then attach no events
         let tx_data = if let Some(data) = tx.data() {

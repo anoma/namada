@@ -24,7 +24,6 @@ use namada::ibc::clients::ics07_tendermint::client_state::{
 use namada::ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use namada::ibc::clients::ics07_tendermint::header::Header as IbcTmHeader;
 use namada::ibc::clients::ics07_tendermint::trust_threshold::TrustThreshold;
-use namada::ibc::core::ics02_client::client_state::ClientState;
 use namada::ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
 use namada::ibc::core::ics02_client::msgs::update_client::MsgUpdateClient;
 use namada::ibc::core::ics03_connection::connection::Counterparty as ConnCounterparty;
@@ -71,7 +70,7 @@ use namada_apps::config::genesis::{chain, templates};
 use namada_apps::config::utils::set_port;
 use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
-use namada_apps::facade::tendermint::merkle::proof::Proof as TmProof;
+use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -300,7 +299,7 @@ fn setup_two_single_node_nets() -> Result<(Test, Test)> {
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height = query_height(test_b)?;
     let client_state = make_client_state(test_b, height);
-    let height = client_state.latest_height();
+    let height = client_state.latest_height;
     let message = MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: make_consensus_state(test_b, height)?.into(),
@@ -310,7 +309,7 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
 
     let height = query_height(test_a)?;
     let client_state = make_client_state(test_a, height);
-    let height = client_state.latest_height();
+    let height = client_state.latest_height;
     let message = MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: make_consensus_state(test_a, height)?.into(),
@@ -397,7 +396,7 @@ fn update_client_with_height(
     };
     let client_state = TmClientState::try_from(cs)
         .expect("the state should be a TmClientState");
-    let trusted_height = client_state.latest_height();
+    let trusted_height = client_state.latest_height;
 
     update_client(
         src_test,
@@ -438,8 +437,8 @@ fn update_client(
     };
 
     let message = MsgUpdateClient {
-        header: header.into(),
         client_id: client_id.clone(),
+        client_message: header.into(),
         signer: signer(),
     };
     submit_ibc_tx(target_test, message, ALBERT, ALBERT_KEY, false)?;
@@ -519,7 +518,7 @@ fn connection_handshake(
     let conn_proof = get_connection_proof(test_b, &conn_id_b, height_b)?;
     let (client_state, client_state_proof, consensus_proof) =
         get_client_states(test_b, client_id_b, height_b)?;
-    let consensus_height_of_a_on_b = client_state.latest_height();
+    let consensus_height_of_a_on_b = client_state.latest_height;
     let msg = MsgConnectionOpenAck {
         conn_id_on_a: conn_id_a.clone(),
         conn_id_on_b: conn_id_b.clone(),
@@ -531,6 +530,7 @@ fn connection_handshake(
         consensus_height_of_a_on_b,
         version: ConnVersion::default(),
         signer: signer(),
+        proof_consensus_state_of_a: None,
     };
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
@@ -695,7 +695,7 @@ fn get_client_states(
         .expect("the state should be a TmClientState");
     let client_state_proof = convert_proof(tm_proof)?;
 
-    let height = client_state.latest_height();
+    let height = client_state.latest_height;
     let ibc_height = Height::new(0, height.revision_height()).unwrap();
     let key = consensus_state_key(client_id, ibc_height);
     let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
@@ -1534,7 +1534,7 @@ fn make_msg_conn_open_try(
 ) -> MsgConnectionOpenTry {
     use namada::ibc_proto::ibc::core::connection::v1::MsgConnectionOpenTry as RawMsgConnectionOpenTry;
 
-    let consensus_height = client_state.latest_height();
+    let consensus_height = client_state.latest_height;
     #[allow(deprecated)]
     RawMsgConnectionOpenTry {
         client_id: client_id.as_str().to_string(),
@@ -1549,6 +1549,7 @@ fn make_msg_conn_open_try(
         consensus_height: Some(consensus_height.into()),
         signer: "signer".to_string(),
         previous_connection_id: ConnectionId::default().to_string(),
+        host_consensus_state_proof: vec![],
     }
     .try_into()
     .expect("invalid message")

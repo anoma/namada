@@ -2026,7 +2026,7 @@ where
     let ctx = Rc::new(RefCell::new(env.ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone());
     let module = TransferModule::new(ctx);
-    actions.add_transfer_route(module.module_id(), module);
+    actions.add_transfer_module(module.module_id(), module);
     actions.execute(&tx_data)?;
 
     Ok(())
