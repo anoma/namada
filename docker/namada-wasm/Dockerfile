@@ -11,6 +11,7 @@ RUN rustup target add wasm32-unknown-unknown
 
 RUN apt-get update && apt-get install -y \
     protobuf-compiler \
+    libudev-dev \
     && apt-get clean
 
 # Download binaryen and extract wasm-opt

@@ -11,7 +11,6 @@ permissions:
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
-  CHAIN_BUCKET: anoma-iac-files-master
 
 jobs:
   with_py: # tasks that are using python scripts from anoma-ci-iac
@@ -21,23 +20,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         make:
           - name: Update wasm
             comment: pls update wasm
             command: update-wasm.py
             logs: 'false'
             timeout: 15
-          - name: Publish wasm
-            comment: pls publish wasm
-            command: publish-wasm.py
-            logs: 'false'
-            timeout: 15
-          - name: Spawn devnet
-            comment: pls spawn devnet
-            command: spawn-devnet.py
-            logs: 'false'
-            timeout: 25
 
     steps:
       - name: Configure AWS Credentials

@@ -47,6 +47,8 @@ jobs:
       - name: Switch to tag if specified
         if: "${{ github.event.inputs.tag != '' }}"
         run: git checkout ${{ github.event.inputs.tag }}
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
