@@ -1,6 +1,5 @@
 //! The ledger's protocol
 use std::collections::BTreeSet;
-use std::panic;
 
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
@@ -854,26 +853,13 @@ where
                                 // and `RefUnwindSafe` in
                                 // shared/src/ledger/pos/vp.rs)
                                 let keys_changed_ref = &keys_changed;
-                                let result =
-                                    match panic::catch_unwind(move || {
-                                        pos_ref
-                                            .validate_tx(
-                                                tx,
-                                                keys_changed_ref,
-                                                verifiers_addr_ref,
-                                            )
-                                            .map_err(Error::PosNativeVpError)
-                                    }) {
-                                        Ok(result) => result,
-                                        Err(err) => {
-                                            tracing::error!(
-                                                "PoS native VP failed with \
-                                                 {:#?}",
-                                                err
-                                            );
-                                            Err(Error::PosNativeVpRuntime)
-                                        }
-                                    };
+                                let result = pos_ref
+                                    .validate_tx(
+                                        tx,
+                                        keys_changed_ref,
+                                        verifiers_addr_ref,
+                                    )
+                                    .map_err(Error::PosNativeVpError);
                                 // Take the gas meter and sentinel
                                 // back
                                 // out of the context
