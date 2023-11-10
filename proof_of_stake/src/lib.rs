@@ -3209,10 +3209,11 @@ where
         bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
     for next in bonds.iter(storage)? {
         let (start, delta) = next?;
-        if start <= claim_start {
+
+        for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
             // A bond that wasn't unbonded is added to all epochs up to
             // `claim_end`
-            for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
+            if start <= ep {
                 let amount =
                     amounts.entry(ep).or_default().entry(start).or_default();
                 *amount += delta;
@@ -4141,7 +4142,7 @@ where
         // self-bonds, but it is then included in the rewards claimable by the
         // validator so they get it back.
         let product =
-            Dec::from(reward_tokens) / stake * (Dec::one() - commission_rate);
+            (Dec::one() - commission_rate) * Dec::from(reward_tokens) / stake;
 
         // Tally the commission tokens earned by the validator.
         // TODO: think abt Dec rounding and if `new_product` should be used
