@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         nightly_version: [nightly-2023-06-01]
         make:
           - name: Clippy
@@ -59,6 +59,8 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Install libudev
+        run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
         uses: heliaxdev/setup-protoc@v2
         with:
