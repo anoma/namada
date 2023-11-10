@@ -260,7 +260,8 @@ pub async fn build_reveal_pk<'a>(
     public_key: &common::PublicKey,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
     let signing_data =
-        signing::aux_signing_data(context, args, None, None).await?;
+        signing::aux_signing_data(context, args, None, Some(public_key.into()))
+            .await?;
 
     build(
         context,
