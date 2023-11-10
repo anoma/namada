@@ -952,7 +952,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
     // Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
+            ClientType::new("01-tendermint").unwrap(),
             1,
         )
         .unwrap(),
@@ -1033,7 +1033,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx);
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.validate(&tx_data).unwrap())
@@ -1050,7 +1050,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     // Connection handshake
     let msg = MsgConnectionOpenInit {
         client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint".to_string()).unwrap(),
+            ClientType::new("01-tendermint").unwrap(),
             1,
         )
         .unwrap(),
@@ -1131,7 +1131,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx);
-        actions.add_transfer_route(module.module_id(), module);
+        actions.add_transfer_module(module.module_id(), module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.execute(&tx_data).unwrap())
