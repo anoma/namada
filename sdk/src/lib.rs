@@ -217,7 +217,7 @@ pub trait Namada<'a>: Sized {
         }
     }
 
-    // Make a Tx Redelegation for the given minimum set of arguments
+    // Make a Redelegation builder for the given minimum set of arguments
     fn new_redelegation(
         &self,
         source: Address,
